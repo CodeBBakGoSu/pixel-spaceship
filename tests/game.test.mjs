@@ -187,3 +187,27 @@ test('a simultaneous fatal hit and Warden defeat ends in game over', () => {
   s = stepGame(s, idle, 1/60, ground);
   assert.equal(s.phase, 'game_over'); assert.equal(s.lives, 0);
 });
+
+test('each segment spawns a supply drone for power capsules', () => {
+  for (const segment of ['reach', 'atoll', 'canyon', 'orbit']) {
+    const s = advance(createGame(parseGameOptions(`?segment=${segment}`), ground), 2);
+    assert.ok(s.entities.some(e => e.kind === 'supply'), segment);
+  }
+});
+
+test('overhead capsules drift toward the player and 3D pickup tolerates altitude', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  s.spawnTimer = 99;
+  s.entities = [{ kind: 'capsule', x: s.player.x + 65, z: s.player.z + 50, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
+  const oldX = s.entities[0].x;
+  s = advance(s, 0.5); assert.ok(s.entities[0].x < oldX - 5);
+  s = createGame(parseGameOptions('?segment=atoll&view=chase'), ground);
+  s.entities = [{ kind: 'capsule', x: s.player.x + 15, z: s.player.z + 10, alt: s.player.altitude + 40, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
+  s = stepGame(s, idle, 1 / 60, ground); assert.equal(s.weaponLv, 2);
+});
+
+test('a full seeded autoplay run acquires weapon level three', () => {
+  let s = createGame(parseGameOptions('?segment=reach&seed=1&autoplay=1'), ground), peak = 1;
+  for (let i=0; i<300*60 && s.phase!=='win' && s.phase!=='game_over'; i++) { s=stepGame(s,idle,1/60,ground); peak=Math.max(peak,s.weaponLv); }
+  assert.equal(s.phase, 'win'); assert.equal(peak, 3);
+});

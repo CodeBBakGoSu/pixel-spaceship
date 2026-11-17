@@ -38,7 +38,7 @@ export type GameState = {
   bst: number; boosting: boolean; bombs: number; weaponLv: 1 | 2 | 3; roll: number; wipeT: number; viewTagT: number;
   dialogue: { speaker: string; text: string; timer: number } | null; beatIndex: number;
   phaseTime: number; transitionT: number; invulnTimer: number; aimX: number; aimY: number; aspect: number;
-  rng: number; seed: number; autoplay: boolean; paused: boolean; elapsed: number; spawnTimer: number; waveId: number;
+  rng: number; seed: number; autoplay: boolean; paused: boolean; elapsed: number; spawnTimer: number; supplyTimer: number; waveId: number;
   pylonsDown: number; doorsCleared: number; doorOpen: boolean; doorTimer: number;
   waves: { id: number; remaining: number; perfect: boolean }[];
   player: { x: number; y: number; z: number; altitude: number; bank: number; yaw: number; fireCooldown: number };
@@ -78,6 +78,11 @@ function spawnWave(s: GameState): void {
     e.waveId = id; e.vz = -5 - random(s) * 3; e.fireTimer = 3 + random(s) * 2; s.entities.push(e);
   }
 }
+function spawnSupply(s: GameState): void {
+  if (s.entities.some(e => e.kind === 'supply' || e.kind === 'capsule')) return;
+  const e = entity('supply', s.player.x + (random(s) - 0.5) * 24, s.player.z + 110, s.player.altitude);
+  e.vz = -3; e.fireTimer = 6; s.entities.push(e);
+}
 function spawnDoor(s: GameState): void {
   s.doorOpen = false; s.doorTimer = 0;
   const z = s.player.z + 125, alt = s.player.altitude;
@@ -92,7 +97,7 @@ function updateCamera(s: GameState): void {
 function enterSegment(s: GameState, id: SegmentId, ground: Ground, view?: Segment | null): void {
   const def = SCRIPT.find(d => d.id === id)!;
   s.scriptIndex = SCRIPT.indexOf(def); s.segment = id; s.nextSegment = id; s.biome = def.biome; s.phase = 'playing'; s.phaseTime = 0; s.transitionT = 0;
-  s.entities = []; s.bullets = []; s.effects = []; s.waves = []; s.spawnTimer = 0.8; s.beatIndex = 0; s.dialogue = null;
+  s.entities = []; s.bullets = []; s.effects = []; s.waves = []; s.spawnTimer = 0.8; s.supplyTimer = 0.6; s.beatIndex = 0; s.dialogue = null;
   s.pylonsDown = 0; s.doorsCleared = 0; s.doorOpen = false; s.doorTimer = 0; s.boss = blankBoss();
   s.player.x = 0; s.player.y = -55; s.player.yaw = 0; s.player.bank = 0;
   s.player.altitude = clamp(Math.max(s.player.altitude, ground(0, s.player.z) + 65), 65, 155);
@@ -111,7 +116,7 @@ export function createGame(options: GameOptions = parseGameOptions(''), ground: 
     loop: options.loop, loopSpeed: Math.min(1.8, 1 + (options.loop - 1) * 0.2), score: 0, salvage: 0, lives: 3, hull: 8, maxHull: 8, hitsTaken: 0, rank: null,
     bst: 1, boosting: false, bombs: 3, weaponLv: 1, roll: 0, wipeT: 0, viewTagT: 0, dialogue: null, beatIndex: 0,
     phaseTime: 0, transitionT: 0, invulnTimer: 0, aimX: 0, aimY: 0, aspect: 16 / 9, rng: options.seed >>> 0, seed: options.seed >>> 0, autoplay: options.autoplay, paused: false, elapsed: 0,
-    spawnTimer: 0.8, waveId: 0, pylonsDown: 0, doorsCleared: 0, doorOpen: false, doorTimer: 0, waves: [],
+    spawnTimer: 0.8, supplyTimer: 0.6, waveId: 0, pylonsDown: 0, doorsCleared: 0, doorOpen: false, doorTimer: 0, waves: [],
     player: { x: 0, y: -55, z: 0, altitude: 110, bank: 0, yaw: 0, fireCooldown: 0 },
     camera: { mode: 'overhead', x: 0, z: 55, yaw: 0, altitude: 110, pitch: 0, camOffset: 0, camHeightOffset: 2, crossFade: 0 },
     entities: [], bullets: [], effects: [], boss: blankBoss() };
@@ -143,7 +148,9 @@ export function wardenTargets(s: GameState): { kind: 'pod' | 'core'; index: numb
   return [{ kind: 'core', index: 0, x: b.x, z: b.z, alt: b.alt }];
 }
 function bot(s: GameState): GameInput {
-  const p = s.player, targets = s.boss.active ? wardenTargets(s) : s.entities.filter(e => ['pylon', 'lock', 'exit', 'supply', 'drone'].includes(e.kind) && e.z > p.z).sort((a, b) => a.z - b.z);
+  const p = s.player;
+  const power = s.weaponLv < 3 ? s.entities.filter(e => (e.kind === 'capsule' || e.kind === 'supply') && e.z > p.z - 30).sort((a, b) => a.z - b.z) : [];
+  const targets = power.length ? power : s.boss.active ? wardenTargets(s) : s.entities.filter(e => ['pylon', 'lock', 'exit', 'supply', 'drone'].includes(e.kind) && e.z > p.z).sort((a, b) => a.z - b.z);
   const target = targets[0];
   if (!target) return { moveX: Math.sin(s.phaseTime * 0.7) * 0.2, moveY: 0, fire: true };
   if (s.camera.mode === 'cockpit' && target.kind !== 'exit') {
@@ -212,6 +219,8 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   if (mission.goal === 'waves' && s.phaseTime >= (mission.duration || 24)) { transition(s); return s; }
   s.spawnTimer -= dt;
   if (mission.goal === 'waves' && s.spawnTimer <= 0) { spawnWave(s); s.spawnTimer = 4.5 / s.loopSpeed; }
+  s.supplyTimer -= dt;
+  if (s.supplyTimer <= 0) { spawnSupply(s); s.supplyTimer = 14; }
   if (s.boss.active) { s.boss.z = p.z + 110; s.boss.fireTimer -= dt; s.boss.hitFlash = Math.max(0, s.boss.hitFlash - dt);
     if (s.boss.fireTimer <= 0 && !bombTriggered && s.entities.filter(e => e.kind === 'boss_orb').length < 10) {
       for (let i = -1; i <= 1; i++) { const orb = entity('boss_orb', s.boss.x + i * 13, s.boss.z - 5, s.boss.alt); orb.vx = (p.x - orb.x) * 0.6 + i * 5; orb.valt = (p.altitude - orb.alt) * 0.6; orb.vz = -55; s.entities.push(orb); }
@@ -236,6 +245,10 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   for (const e of s.entities) {
     if (e.hp <= 0) continue;
     e.x += e.vx * dt; e.z += e.vz * dt; e.alt += e.valt * dt;
+    if (e.kind === 'capsule' && s.camera.mode === 'overhead') {
+      const dx = p.x - e.x, dz = p.z - e.z, distance = Math.hypot(dx, dz);
+      if (distance < 150 && distance > 0) { e.x += dx / distance * 65 * dt; e.z += dz / distance * 65 * dt; }
+    }
     if (e.kind === 'pylon' || e.kind === 'door' || e.kind === 'lock') e.z = p.z + 120;
     e.hitFlash = Math.max(0, e.hitFlash - dt); e.fireTimer -= dt;
     if ((e.kind === 'pylon' || e.kind === 'lock') && e.fireTimer <= 0 && s.bullets.filter(b => !b.friendly).length < 16) {
@@ -251,7 +264,7 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
       }
       if (Math.abs(e.z - p.z) < 9 && Math.abs(e.x - p.x) < 10 && Math.abs(e.alt - p.altitude) < 12) { damage(s); e.hp = 0; }
     } else if (e.kind === 'boss_orb' && Math.abs(e.z - p.z) < 8 && Math.abs(e.x - p.x) < 9 && Math.abs(e.alt - p.altitude) < 10) { damage(s); e.hp = 0; }
-    else if (e.kind === 'capsule' && Math.abs(e.z - p.z) < 12 && Math.abs(e.x - p.x) < 12 && Math.abs(e.alt - p.altitude) < 18) { s.weaponLv = Math.min(3, s.weaponLv + 1) as 1 | 2 | 3; s.score += 100; e.hp = 0; }
+    else if (e.kind === 'capsule' && Math.hypot(e.z - p.z, e.x - p.x) < 26 && Math.abs(e.alt - p.altitude) < (s.camera.mode === 'overhead' ? 25 : 60)) { s.weaponLv = Math.min(3, s.weaponLv + 1) as 1 | 2 | 3; s.score += 100; e.hp = 0; }
     else if (e.kind === 'exit' && oldZ <= e.z && p.z >= e.z) {
       if (Math.abs(e.x - p.x) < 18 && Math.abs(e.alt - p.altitude) < 18) { s.score += 1000; transition(s); }
       else e.z = p.z + 100;
