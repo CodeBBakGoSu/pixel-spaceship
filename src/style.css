@@ -18,10 +18,9 @@ html, body, .experience { width: 100%; height: 100%; margin: 0; overflow: hidden
 .transmission-separator { color: #817c83; padding: 0 7px; }
 .view-picker { display: flex; align-items: center; gap: 3px; pointer-events: auto; }
 .view-caption { font-size: 9px; letter-spacing: .16em; color: #aba8a8; margin-right: 9px; }
-.view-picker button { cursor: pointer; border: 1px solid rgba(239,235,221,.25); background: rgba(10,13,25,.38); color: #b9b8b5; font: 9px ui-monospace, monospace; letter-spacing: .08em; padding: 10px 11px; min-height: 33px; transition: color .18s, background .18s, border-color .18s; }
-.view-picker button:hover, .view-picker button:focus-visible { color: white; border-color: #f1b487; outline: none; }
-.view-picker button[aria-pressed="true"] { color: #121626; border-color: #f2e7cf; background: #f2e7cf; }
-.view-picker button span { margin-left: 4px; }
+.view-pill { border: 1px solid rgba(239,235,221,.25); background: rgba(10,13,25,.38); color: #b9b8b5; font-size: 9px; letter-spacing: .08em; padding: 10px 11px; min-height: 33px; white-space: nowrap; }
+.view-pill[aria-current="step"] { color: #121626; border-color: #f2e7cf; background: #f2e7cf; }
+.view-pill span { margin-left: 4px; }
 .side-label, .right-label { position: absolute; top: 50%; color: rgba(239,234,221,.55); font-size: 8px; letter-spacing: .17em; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); pointer-events: none; }
 .side-label { left: 16px; }
 .side-label span { padding: 8px 0; color: #f3a373; }
@@ -55,14 +54,43 @@ html, body, .experience { width: 100%; height: 100%; margin: 0; overflow: hidden
   .identity { min-width: 0; }
   .identity strong { font-size: 19px; }
   .identity small { font-size: 7px; }
-  .transmission, .view-caption, .view-picker button span, .side-label, .right-label { display: none; }
-  .view-picker button { min-width: 34px; padding: 9px; }
-  .planet-label { left: 25px; bottom: 50px; }
-  .telemetry { right: 25px; bottom: 50px; gap: 14px; }
-  .heading-item, .engine-status { display: none; }
+  .transmission, .view-caption, .view-pill span, .side-label, .right-label { display: none; }
+  .view-pill { min-width: 34px; padding: 9px; text-align: center; }
+  .planet-label { left: 25px; bottom: 103px; }
+  .telemetry { left: 25px; right: 25px; bottom: 50px; gap: 14px; justify-content: space-between; }
+  .heading-item { display: none; }
+  .thrust-bars { gap: 2px; }
+  .thrust-bars i { width: 3px; height: 9px; }
   .telemetry-item { min-width: 50px; padding-left: 8px; }
   .telemetry-item strong { font-size: 15px; }
   .eyebrow { font-size: 8px; }
   .help { bottom: 16px; font-size: 8px; }
 }
-@media (max-width: 420px) { .identity small, .planet-subtitle { display: none; } .planet-name { font-size: 25px; } .telemetry { gap: 8px; } .telemetry-item { min-width: 43px; } }
+@media (max-width: 420px) { .identity small { display: none; } .planet-name { font-size: 25px; } .telemetry { gap: 8px; } .telemetry-item { min-width: 43px; } }
+
+.thrust-bars.critical i.active { background: #ff6570; animation: warning 0.6s infinite alternate; }
+@keyframes warning { to { opacity: .35; } }
+.boss-hud { position: absolute; top: 87px; left: 50%; transform: translateX(-50%); width: min(320px, 44vw); pointer-events: none; font-size: 9px; letter-spacing: .14em; color: #f5d7c9; text-shadow: 0 1px 4px #10101b; }
+.boss-hud > div:first-child { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.boss-track { height: 5px; background: rgba(12,14,25,.65); border: 1px solid rgba(255,225,204,.4); }
+.boss-track i { display: block; width: 100%; height: 100%; background: #f07555; transition: width .15s; }
+.phase-banner { position: absolute; top: 19%; left: 50%; transform: translateX(-50%); padding: 10px 18px; background: rgba(12,14,26,.78); border-left: 2px solid #f39a68; text-align: center; font-size: 11px; letter-spacing: .18em; color: #fff1dc; white-space: nowrap; pointer-events: none; }
+.game-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,8,19,.4); }
+.game-overlay[hidden], .boss-hud[hidden], .phase-banner[hidden] { display: none; }
+.game-card { width: min(420px, calc(100vw - 48px)); padding: 30px 34px; background: rgba(11,15,28,.92); border: 1px solid rgba(246,233,210,.35); box-shadow: 0 18px 70px rgba(0,0,0,.35); }
+.card-kicker { color: #f7a46f; font-size: 9px; letter-spacing: .18em; }
+.game-card h1 { margin: 16px 0 10px; font: 800 clamp(34px, 5vw, 56px)/.9 Arial, sans-serif; letter-spacing: -.05em; }
+.game-card h1 span { color: #f49a6b; font-weight: 400; }
+.game-card p { color: #c9c2bd; font-size: 11px; line-height: 1.8; }
+.card-actions { display: flex; gap: 8px; margin-top: 23px; }
+.card-actions button { border: 1px solid #f4e8d3; background: #f4e8d3; color: #151725; padding: 12px 15px; font: 700 10px ui-monospace, monospace; letter-spacing: .1em; cursor: pointer; }
+.card-actions button span { margin-left: 12px; color: #c26440; }
+.card-actions button + button { background: transparent; color: #f4e8d3; }
+.card-actions button:focus-visible { outline: 2px solid #f49a6b; outline-offset: 3px; }
+.card-hint { margin-top: 16px; color: #a9a4a6; font-size: 8px; letter-spacing: .11em; }
+@media (max-width: 760px) {
+  .boss-hud { top: 72px; width: 55vw; font-size: 8px; }
+  .phase-banner { top: 15%; font-size: 9px; }
+  .game-card { padding: 24px; }
+  .engine-status > span { font-size: 7px; }
+}

@@ -104,3 +104,29 @@ test('pause freezes simulation until toggled again', () => {
   s = stepGame(s, { ...idle, pause: true }, 1 / 60, ground);
   assert.equal(s.paused, false); assert.ok(s.player.z > z);
 });
+
+test('shooting the last drone awards both the kill and full-wave bonus', () => {
+  let s = createGame(parseGameOptions('?segment=overhead'), ground);
+  s.spawnTimer = 10;
+  s.entities = [{ kind: 'drone', x: 0, z: 40, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 1, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
+  s.waves = [{ id: 1, remaining: 1, perfect: true }];
+  s.bullets = [{ x: 0, y: 0, z: 40, alt: s.player.altitude, vx: 0, vy: 0, vz: 0, friendly: true, life: 1 }];
+  s = stepGame(s, idle, 1 / 60, ground);
+  assert.equal(s.score, 400); assert.equal(s.entities.length, 0);
+});
+
+test('boss phase two fires a spread and plasma orbs can be shot', () => {
+  let s = createGame(parseGameOptions('?segment=boss'), ground);
+  s.boss.hp = 12; s.boss.fireTimer = 0;
+  s = stepGame(s, idle, 1 / 60, ground);
+  assert.equal(s.entities.filter(e => e.kind === 'boss_orb').length, 3);
+  const orb = s.entities[0];
+  s.bullets = [{ x: orb.x, y: 0, z: orb.z, alt: orb.alt, vx: 0, vy: 0, vz: 0, friendly: true, life: 1 }];
+  s = stepGame(s, idle, 1 / 60, ground);
+  assert.equal(s.score, 50); assert.equal(s.entities.filter(e => e.kind === 'boss_orb').length, 2);
+});
+
+test('the chase autopilot weaves and banks while following its first ring', () => {
+  const s = advance(createGame(parseGameOptions('?segment=chase&seed=1&autoplay=1'), ground), 2.5);
+  assert.ok(Math.abs(s.player.bank) > 0.03);
+});

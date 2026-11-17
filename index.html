@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1021" />
+    <link rel="icon" href="data:," />
     <meta name="description" content="A tiny pixel-art flight through a procedurally generated alien world." />
-    <title>ASTER // Pixel Flight</title>
+    <title>ASTER // Vesper Run</title>
   </head>
   <body>
     <main class="experience" aria-label="Pixel-art spaceship flight demo">
-      <canvas id="screen" aria-label="Fly over an alien planet. Use the mouse or touch to steer."></canvas>
+      <canvas id="screen" aria-label="Arcade flight game. Move to steer and hold Space or pointer to fire."></canvas>
       <canvas id="glow" aria-hidden="true"></canvas>
       <div class="screen-shade" aria-hidden="true"></div>
 
@@ -19,11 +20,11 @@
           <span><strong>ASTER<span class="identity-dot">.</span></strong><small>FLIGHT SYSTEMS / 01</small></span>
         </div>
         <div class="transmission"><span class="pulse"></span> LIVE TRANSMISSION <span class="transmission-separator">/</span> DEEP SPACE</div>
-        <nav class="view-picker" aria-label="Camera view">
-          <span class="view-caption">CAMERA</span>
-          <button type="button" data-view="overhead" aria-label="Overhead view">01 <span>OVERHEAD</span></button>
-          <button type="button" data-view="chase" aria-label="Chase view">02 <span>CHASE</span></button>
-          <button type="button" data-view="cockpit" aria-label="Cockpit view">03 <span>COCKPIT</span></button>
+        <nav class="view-picker" aria-label="Mission phases">
+          <span class="view-caption">PHASE</span>
+          <span class="view-pill" data-segment="overhead">01 <span>OVERHEAD</span></span>
+          <span class="view-pill" data-segment="chase">02 <span>CHASE</span></span>
+          <span class="view-pill" data-segment="cockpit">03 <span>COCKPIT</span></span>
         </nav>
       </header>
 
@@ -32,16 +33,27 @@
 
       <div class="planet-label">
         <div class="eyebrow"><span class="planet-dot"></span> NOW EXPLORING <span class="slash">/</span> SECTOR 07</div>
-        <div class="planet-name">VESPER<span>—</span>9</div>
-        <div class="planet-subtitle">UNCHARTED TERRITORY <span>·</span> LVL 01</div>
+        <div class="planet-name" id="segment-name">VESPER<span>—</span>9</div>
+        <div class="planet-subtitle" id="segment-subtitle">OVERHEAD <span>·</span> LOOP 01</div>
       </div>
 
-      <div class="telemetry" aria-label="Flight telemetry">
-        <div class="telemetry-item"><span>ALTITUDE</span><strong id="altitude">000 <small>U</small></strong></div>
-        <div class="telemetry-item"><span>AIRSPEED</span><strong id="speed">000 <small>U/S</small></strong></div>
-        <div class="telemetry-item heading-item"><span>HEADING</span><strong id="heading">000<small>°</small></strong></div>
-        <div class="engine-status"><span>THRUST</span><div class="thrust-bars" id="thrust-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="telemetry" aria-label="Mission status">
+        <div class="telemetry-item"><span>SCORE</span><strong id="score">000000</strong></div>
+        <div class="telemetry-item"><span>LIVES</span><strong id="lives">03</strong></div>
+        <div class="telemetry-item heading-item"><span id="timer-label">TIME</span><strong id="phase-time">00:30</strong></div>
+        <div class="engine-status"><span>HULL</span><div class="thrust-bars" id="thrust-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
       </div>
+      <div class="boss-hud" id="boss-hud" hidden><div><span id="boss-label">DREADNOUGHT / CORE</span><span id="boss-count">24 / 24</span></div><div class="boss-track"><i id="boss-health"></i></div></div>
+      <div class="phase-banner" id="phase-banner" aria-live="polite" hidden></div>
+      <section class="game-overlay" id="game-overlay" aria-label="Mission menu">
+        <div class="game-card">
+          <div class="card-kicker" id="card-kicker">ASTER FLIGHT SYSTEMS / MISSION 01</div>
+          <h1 id="card-title">VESPER<span>—</span>9</h1>
+          <p id="card-copy">Three phases. One flight.<br>Clear the skies and take down the dreadnought.</p>
+          <div class="card-actions"><button type="button" id="primary-action">LAUNCH MISSION <span>↗</span></button><button type="button" id="restart-action" hidden>RESTART</button></div>
+          <div class="card-hint" id="card-hint">ENTER / SPACE / CLICK TO LAUNCH</div>
+        </div>
+      </section>
       <div class="help" id="help" aria-live="polite"></div>
       <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
     </main>

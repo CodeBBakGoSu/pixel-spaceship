@@ -139,7 +139,7 @@ function bot(s: GameState): GameInput {
   if (s.segment === 'chase') {
     const ring = s.entities.filter(e => e.kind === 'ring' && e.z > s.player.z).sort((a, b) => a.z - b.z)[0];
     const pillar = s.entities.find(e => e.kind === 'pillar' && e.z > s.player.z && e.z - s.player.z < 55 && Math.abs(e.x - s.player.x) < 20);
-    return { moveX: pillar ? (pillar.x > s.player.x ? -1 : 1) : ring ? clamp((ring.x - s.player.x) / 20, -1, 1) : Math.sin(s.phaseTime * 0.6) * 0.3,
+    return { moveX: pillar ? (pillar.x > s.player.x ? -1 : 1) : ring ? clamp((ring.x - s.player.x) / 20 + Math.sin(s.phaseTime * 1.6) * 0.4, -1, 1) : Math.sin(s.phaseTime * 0.6) * 0.3,
       moveY: ring ? clamp((s.player.altitude - ring.alt) / 18, -1, 1) : 0, fire: true };
   }
   if (s.boss.active) {
