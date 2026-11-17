@@ -1,4 +1,4 @@
-import type { Flight, View } from './flight';
+import { advanceBank, rollAngle, type Flight, type View } from './flight';
 import { outlineShip } from './outline';
 
 // The model is made of solid voxels, not painted outlines. Exposed voxel faces are
@@ -34,10 +34,10 @@ export class ShipSprite {
     for (let z = 0; z < H; z++) for (let iy = 0; iy < L; iy++) for (let ix = 0; ix < W; ix++) {
       const x = ix - CENTER_X, y = iy - CENTER_Y, ax = Math.abs(x);
       let m = 0;
-      // Three-voxel wing thickness, a tapered fuselage and a rounded belly.
+      // Layered wings, a tapered fuselage and a rounded belly.
       const leading = -5 + Math.max(0, ax - 4) * 0.7;
       const trailing = 13 - Math.max(0, ax - 10) * 0.3;
-      if (ax <= 16 && y >= leading && y <= trailing && z >= 3 && z <= 5) {
+      if (ax <= 16 && y >= leading && y <= trailing && z >= 2 && z <= 6) {
         m = ax > 13 || (ax > 8 && y > 8) ? 4 : 2;
         if (ax > 7 && y === 5) m = 3;
       }
@@ -84,7 +84,7 @@ export class ShipSprite {
 
   update(dt: number, ship: Flight, turn: number): void {
     this.time += dt;
-    this.bank += (turn * 0.55 - this.bank) * Math.min(1, dt * 5);
+    this.bank = advanceBank(this.bank, turn, dt);
     this.emission += dt * (28 + ship.boost * 45);
     const fx = Math.sin(ship.yaw), fz = Math.cos(ship.yaw);
     const rx = Math.cos(ship.yaw), rz = -Math.sin(ship.yaw);
@@ -93,7 +93,7 @@ export class ShipSprite {
       for (const side of [-1, 1]) {
         const distance = 18 * 1.5, across = side * 5.5 * 1.5;
         const exhaustSpeed = 42 + ship.boost * 38;
-        const life = 0.22 + Math.random() * (0.2 + ship.boost * 0.2);
+        const life = 0.3 + Math.random() * (0.35 + ship.boost * 0.25);
         this.particles.push({ x: ship.x - fx * distance + rx * across, z: ship.z - fz * distance + rz * across,
           altitude: ship.altitude - 1.5, vx: fx * (ship.speed - exhaustSpeed), vz: fz * (ship.speed - exhaustSpeed),
           life, total: life, size: 1 + Math.random() * (1.5 + ship.boost) });
@@ -110,20 +110,21 @@ export class ShipSprite {
     this.depth = new Float32Array(w * h);
   }
 
-  draw(ctx: CanvasRenderingContext2D, ship: Flight, view: View, ground: number, demoBank: boolean): void {
+  draw(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, ship: Flight, view: View, ground: number, demoBank: boolean): void {
     if (view === 'cockpit') return;
     const w = ctx.canvas.width, h = ctx.canvas.height;
     this.resize(w, h);
-    const cx = Math.round(w / 2), cy = Math.round(view === 'overhead' ? h * 0.5 : h * 0.68);
+    const cx = Math.round(w / 2), cy = Math.round(view === 'overhead' ? h * 0.5 : h * 0.59);
     const scale = Math.max(0.8, Math.min(1.35, w / 250));
-    const pitch = (view === 'overhead' ? 68 : 19) * Math.PI / 180;
+    const pitch = (view === 'overhead' ? 65 : 36) * Math.PI / 180;
     const yaw = view === 'overhead' ? ship.yaw : -this.bank * 0.08;
-    const roll = this.bank + (demoBank ? 0.72 : 0) + (ship.roll ? (1 - ship.roll) * Math.PI * 2 : 0);
+    const roll = this.bank + (demoBank ? 0.72 : 0) + rollAngle(ship.roll);
     const cr = Math.cos(roll), sr = Math.sin(roll), ca = Math.cos(yaw), sa = Math.sin(yaw);
     const sp = Math.sin(pitch), cp = Math.cos(pitch);
-    const xx = ca * cr, xy = -sa, xz = ca * sr;
-    const yx = sa * cr * sp + sr * cp, yy = ca * sp, yz = sa * sr * sp - cr * cp;
-    const dx = sa * cr * cp - sr * sp, dy = ca * cp, dz = sa * sr * cp + cr * sp;
+    const lift = view === 'overhead' ? 1.4 : 1;
+    const xx = ca * cr, xy = -sa, xz = ca * sr * lift;
+    const yx = sa * cr * sp + sr * cp, yy = ca * sp, yz = (sa * sr * sp - cr * cp) * lift;
+    const dx = sa * cr * cp - sr * sp, dy = ca * cp, dz = (sa * sr * cp + cr * sp) * lift;
     const project = (x: number, y: number, z: number): Projection => {
       const depth = dx * x + dy * y + dz * z;
       const mag = scale * (view === 'chase' ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
@@ -133,8 +134,8 @@ export class ShipSprite {
     // Silhouette falls farther from the jet and softens as clearance increases.
     const clearance = Math.max(0, ship.altitude - ground);
     ctx.save();
-    ctx.globalAlpha = Math.max(0.12, 0.33 - clearance * 0.002);
-    ctx.translate(cx + clearance * 0.25, cy + (view === 'overhead' ? clearance * 0.29 : 15 + clearance * 0.18));
+    ctx.globalAlpha = Math.max(0.2, 0.46 - clearance * 0.0018);
+    ctx.translate(cx + clearance * (view === 'overhead' ? 0.85 : 0.38), cy + (view === 'overhead' ? clearance * 0.48 : 23 + clearance * 0.24));
     ctx.rotate(yaw);
     const shadowScale = scale * Math.max(0.58, 0.92 - clearance * 0.002);
     ctx.scale(shadowScale, shadowScale * (view === 'overhead' ? 0.82 : 0.28));
@@ -154,22 +155,44 @@ export class ShipSprite {
         ctx.fillStyle = alpha > 0.5 ? `rgba(255,168,70,${alpha * 0.8})` : `rgba(235,79,45,${alpha * 0.7})`;
         ctx.fillRect(Math.round(point.x - size / 2), Math.round(point.y - size / 2), size, size);
       }
-      const length = (11 + ship.boost * 20) * (0.9 + 0.1 * Math.sin(this.time * 34));
-      for (const side of [-1, 1]) for (let pass = 0; pass < 3; pass++) for (let t = length; t >= 0; t -= 0.8) {
-        const u = t / length;
-        if (pass === 2 && u > 0.78) continue;
-        const point = project(side * 5.5 + Math.sin(this.time * 24 + t) * u * 0.4, 18 + t, -1);
-        const radius = (2.1 + ship.boost * 1.55) * (1 - u * 0.72) * point.scale;
-        const r = Math.max(1, Math.round(radius * (pass === 0 ? 1.3 : pass === 1 ? 1 : 0.52)));
-        const x = Math.round(point.x), y = Math.round(point.y);
-        ctx.fillStyle = pass === 0 ? `rgba(236,71,32,${0.18 + (1 - u) * 0.25})`
-          : pass === 1 ? (u > 0.65 ? '#e55a30' : u > 0.3 ? '#ff8c32' : '#ffb849')
-          : u < 0.28 ? '#fff6c9' : u < 0.58 ? '#ffe778' : '#ffc45c';
-        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      const length = (13 + ship.boost * 22) * (0.88 + 0.12 * Math.sin(this.time * 34));
+      for (const side of [-1, 1]) {
+        for (let pass = 0; pass < 3; pass++) for (let t = length; t >= 0; t -= 0.8) {
+          const u = t / length;
+          if (pass === 2 && u > 0.78) continue;
+          const sway = Math.sin(this.time * 23 + t * 0.9 + side) * u * 1.1;
+          const point = project(side * 5.5 + sway, 18 + t, -1);
+          const flicker = 0.86 + 0.18 * Math.sin(this.time * 37 - t * 1.4 + side);
+          const radius = (2.3 + ship.boost * 2.1) * Math.pow(1 - u * 0.88, 0.7) * point.scale * flicker;
+          const r = Math.max(1, Math.round(radius * (pass === 0 ? 1.25 : pass === 1 ? 1 : 0.48)));
+          const x = Math.round(point.x), y = Math.round(point.y);
+          ctx.fillStyle = pass === 0 ? `rgba(220,56,31,${0.12 + (1 - u) * 0.32})`
+            : pass === 1 ? (u > 0.7 ? '#d64931' : u > 0.34 ? '#f8742e' : '#ffae43')
+            : u < 0.24 ? '#fff9d4' : u < 0.56 ? '#ffe678' : '#ffb542';
+          for (let row = -r; row <= r; row++) {
+            const span = Math.floor(Math.sqrt(r * r - row * row));
+            ctx.fillRect(x - span, y + row, span * 2 + 1, 1);
+          }
+        }
+        if (glow) {
+          glow.save();
+          glow.globalCompositeOperation = 'lighter';
+          for (let i = 0; i < 4; i++) {
+            const t = length * i * 0.23;
+            const point = project(side * 5.5, 18 + t, -1);
+            const radius = (4.5 + ship.boost * 5) * (1 - i * 0.15) * point.scale;
+            const halo = glow.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+            halo.addColorStop(0, `rgba(255,150,50,${(0.17 + ship.boost * 0.18) * (1 - i * 0.2)})`);
+            halo.addColorStop(1, 'rgba(255,65,12,0)');
+            glow.fillStyle = halo;
+            glow.fillRect(point.x - radius, point.y - radius, radius * 2, radius * 2);
+          }
+          glow.restore();
+        }
       }
       ctx.restore();
     };
-    if (view === 'overhead') drawFlames();
+    drawFlames();
 
     // Draw visible surface samples to a depth buffer. Each face has its own light level.
     const pixels = new Uint32Array(this.image.data.buffer);
@@ -192,18 +215,19 @@ export class ShipSprite {
         const x = face.x + nx * 0.5 + (nx ? 0 : a);
         const y = face.y + ny * 0.5 + (nx ? a : ny ? 0 : b);
         const z = face.z + nz * 0.5 + (nz ? 0 : b);
-        const point = project(x, y, z);
-        const px = Math.round(point.x), py = Math.round(point.y);
+        const depth = dx * x + dy * y + dz * z;
+        const mag = scale * (view === 'chase' ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
+        const px = Math.round(cx + (xx * x + xy * y + xz * z) * mag);
+        const py = Math.round(cy + (yx * x + yy * y + yz * z) * mag);
         if (px < 1 || py < 1 || px >= w - 1 || py >= h - 1) continue;
         const i = py * w + px;
-        if (point.depth > this.depth[i]) { this.depth[i] = point.depth; pixels[i] = col; }
+        if (depth > this.depth[i]) { this.depth[i] = depth; pixels[i] = col; }
       }
     }
     // One-pixel silhouette outline, written only outside the ship mask.
     outlineShip(pixels, w, h, cx - 60, cy - 60, cx + 60, cy + 60);
     this.layerCtx.putImageData(this.image, 0, 0);
     ctx.drawImage(this.layer, 0, 0);
-    if (view === 'chase') drawFlames();
   }
 }
 

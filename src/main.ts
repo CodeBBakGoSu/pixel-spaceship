@@ -1,16 +1,18 @@
 import './style.css';
-import { advanceFlight, createFlight, initialOptions, startRoll, type Input, type View } from './flight';
+import { advanceFlight, createFlight, initialOptions, rollAngle, startRoll, type Input, type View } from './flight';
 import { World } from './world';
 import { drawCockpit, ShipSprite } from './ship';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#screen')!;
 const ctx = canvas.getContext('2d', { alpha: false })!;
+const glowCanvas = document.querySelector<HTMLCanvasElement>('#glow')!;
+const glow = glowCanvas.getContext('2d');
 const rollCanvas = document.createElement('canvas');
 const rollCtx = rollCanvas.getContext('2d', { alpha: false })!;
 const world = new World();
 const sprite = new ShipSprite();
 const ship = createFlight();
-ship.altitude = Math.max(ship.altitude, world.height(ship.x, ship.z) + 42);
+ship.altitude = Math.max(ship.altitude, world.height(ship.x, ship.z) + 70);
 const views: View[] = ['overhead', 'chase', 'cockpit'];
 const options = initialOptions(location.search);
 let view = options.view;
@@ -37,6 +39,7 @@ function resize(): void {
   canvas.height = Math.round(canvas.width / aspect);
   ctx.imageSmoothingEnabled = false;
   rollCanvas.width = canvas.width; rollCanvas.height = canvas.height;
+  glowCanvas.width = canvas.width * 2; glowCanvas.height = canvas.height * 2;
   frame = ctx.createImageData(canvas.width, canvas.height);
 }
 
@@ -126,7 +129,7 @@ function animate(now: number): void {
   if (view === 'cockpit' && ship.roll > 0) {
     // Roll the outside view around the stationary cockpit frame.
     rollCtx.putImageData(frame, 0, 0);
-    const angle = (1 - ship.roll) * Math.PI * 2;
+    const angle = rollAngle(ship.roll);
     const cover = Math.abs(Math.cos(angle)) + Math.max(canvas.width / canvas.height, canvas.height / canvas.width) * Math.abs(Math.sin(angle));
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -136,7 +139,11 @@ function animate(now: number): void {
     ctx.restore();
   } else ctx.putImageData(frame, 0, 0);
   world.drawDust(ctx, ship, view, now / 1000);
-  sprite.draw(ctx, ship, view, world.height(ship.x, ship.z), options.bank);
+  if (glow) {
+    glow.setTransform(2, 0, 0, 2, 0, 0);
+    glow.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  sprite.draw(ctx, glow, ship, view, world.height(ship.x, ship.z), options.bank);
   if (view === 'cockpit') drawCockpit(ctx, ship.pitch);
   altitude.innerHTML = `${String(Math.round(ship.altitude - world.height(ship.x, ship.z))).padStart(3, '0')} <small>U</small>`;
   speed.innerHTML = `${String(Math.round(ship.speed)).padStart(3, '0')} <small>U/S</small>`;

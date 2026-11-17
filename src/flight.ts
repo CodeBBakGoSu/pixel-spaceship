@@ -13,7 +13,7 @@ export function initialView(search: string): View {
 }
 
 export function createFlight(): Flight {
-  return { x: 0, z: 0, yaw: 0, altitude: 78, speed: 24, boost: 0, pitch: 0, roll: 0 };
+  return { x: 0, z: 0, yaw: 0, altitude: 112, speed: 24, boost: 0, pitch: 0, roll: 0 };
 }
 
 export function advanceFlight(ship: Flight, input: Input, elapsed: number, ground: (x: number, z: number) => number): void {
@@ -37,4 +37,12 @@ export function startRoll(ship: Flight): void {
 export function initialOptions(search: string): { view: View; bank: boolean; boost: boolean } {
   const query = new URLSearchParams(search);
   return { view: initialView(search), bank: query.get('roll') === '1', boost: query.get('boost') === '1' };
+}
+
+export function rollAngle(remaining: number): number {
+  return remaining > 0 ? (1 - Math.cos((1 - remaining) * Math.PI)) * Math.PI : 0;
+}
+
+export function advanceBank(current: number, turn: number, dt: number): number {
+  return current + (clamp(turn, -1, 1) * 0.65 - current) * (1 - Math.exp(-clamp(dt, 0, 0.05) * 5));
 }

@@ -1,6 +1,6 @@
 # ASTER // Pixel Flight
 
-A small, self-contained flight demo built with Vite, TypeScript and Canvas 2D. The alien terrain, sky, planets, ship and exhaust are generated in code; there are no image assets, 3D libraries or network requests at runtime. The terrain uses a wrapping procedural heightmap and a column-based voxel-space renderer. The ship is generated as a solid voxel model and projected with depth-sorted, individually shaded faces; its exhaust includes world-space embers.
+A small, self-contained flight demo built with Vite, TypeScript and Canvas 2D. The alien terrain, sky, planets, ship and exhaust are generated in code; there are no image assets, 3D libraries or network requests at runtime. The terrain uses a wrapping procedural heightmap and a column-based voxel-space renderer. The ship is generated as a solid voxel model and projected with depth-sorted, individually shaded faces; its exhaust includes world-space embers and a soft additive glow. The ship banks automatically when turning.
 
 ## Run
 

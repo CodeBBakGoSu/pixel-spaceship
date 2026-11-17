@@ -24,48 +24,57 @@ function noise(x: number, y: number, scale: number): number {
 }
 
 export class World {
-  private heights = new Uint8Array(SIZE * SIZE);
+  private heights = new Float32Array(SIZE * SIZE);
   private colors = new Uint32Array(SIZE * SIZE);
   private crater = new Uint8Array(SIZE * SIZE);
   private sky = new Uint32Array(SKY_W * SKY_H);
 
   constructor() {
     for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) {
-      const n = 20 + noise(x, z, 128) * 26 + noise(x, z, 64) * 15 + noise(x, z, 32) * 6;
-      this.heights[z * SIZE + x] = Math.round(n / 3) * 3;
+      this.heights[z * SIZE + x] = 28 + noise(x, z, 256) * 14 + noise(x, z, 128) * 9 + noise(x, z, 64) * 4;
     }
     // Carved basins and raised rims, all wrapped onto the same map.
-    for (let c = 0; c < 65; c++) {
+    for (let c = 0; c < 48; c++) {
       const cx = Math.floor(hash(c, 9) * SIZE), cz = Math.floor(hash(c, 17) * SIZE);
-      const radius = 5 + Math.floor(hash(c, 23) * 17);
+      const radius = 10 + Math.floor(hash(c, 23) * 20);
       const mineral = hash(c, 41) > 0.68 ? (hash(c, 53) > 0.48 ? 1 : 2) : 0;
       for (let dz = -radius - 2; dz <= radius + 2; dz++) for (let dx = -radius - 2; dx <= radius + 2; dx++) {
         const d = Math.sqrt(dx * dx + dz * dz) / radius;
         if (d > 1.1) continue;
         const i = ((cz + dz) & MASK) * SIZE + ((cx + dx) & MASK);
-        const bowl = d < 0.82 ? (1 - (d / 0.82) ** 2) * 15 : 0;
-        const rim = Math.max(0, 1 - Math.abs(d - 0.9) / 0.2) * 6;
-        this.heights[i] = Math.max(3, Math.min(100, Math.round((this.heights[i] - bowl + rim) / 3) * 3));
+        const bowl = d < 0.85 ? (1 - (d / 0.85) ** 2) * 7 : 0;
+        const rim = Math.max(0, 1 - Math.abs(d - 0.9) / 0.22) * 2.5;
+        this.heights[i] = Math.max(3, this.heights[i] - bowl + rim);
         if (d < 0.56 && mineral) this.crater[i] = mineral;
       }
     }
+    // Smooth overlapping crater rims before projection; height bands remain in the colour map.
+    for (let pass = 0; pass < 8; pass++) {
+      const smooth = new Float32Array(SIZE * SIZE);
+      for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) {
+        const i = z * SIZE + x;
+        smooth[i] = (this.heights[i] * 4 + this.height(x - 1, z) + this.height(x + 1, z) + this.height(x, z - 1) + this.height(x, z + 1)) / 8;
+      }
+      this.heights = smooth;
+    }
     for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) {
       const i = z * SIZE + x, h = this.heights[i];
-      const slope = this.height(x - 1, z - 1) - this.height(x + 1, z + 1);
-      const light = (slope > 3 ? 24 : slope < -3 ? -25 : slope > 0 ? 7 : 0) + (Math.floor(h / 3) % 4 - 1.5) * 7;
+      const slope = this.height(x - 2, z - 2) - this.height(x + 2, z + 2);
+      const light = (slope > 0.8 ? 18 : slope < -0.8 ? -18 : 0) + (Math.floor(h / 2.5) % 4 - 1.5) * 6;
       const region = noise((x + 128) % SIZE, (z + 64) % SIZE, 128);
-      let base = h < 30 ? [52, 49, 61] : h < 39 ? [150, 119, 103] : h < 51 ? [156, 91, 76] : h < 60 ? [190, 119, 91] : [213, 162, 124];
-      if (region < 0.33) base = h < 42 ? [64, 66, 75] : [102, 95, 97];
-      else if (region > 0.67) base = h < 43 ? [174, 151, 127] : [211, 182, 150];
+      let base = h < 34 ? [54, 51, 62] : h < 40 ? [173, 145, 119] : h < 46 ? [157, 91, 75] : h < 51 ? [191, 122, 91] : [218, 169, 127];
+      if (region < 0.34) base = h < 41 ? [61, 63, 73] : [101, 90, 91];
+      else if (region > 0.64) base = h < 43 ? [179, 153, 128] : [215, 183, 150];
       let r = base[0] + light, g = base[1] + light * 0.8, b = base[2] + light * 0.7;
       if (this.crater[i] === 1) {
-        const glow = noise(x, z, 16);
-        [r, g, b] = glow > 0.52 ? [231, 110, 52] : [92, 49, 54];
-        if (glow > 0.67) [r, g, b] = [255, 186, 89];
+        const crack = Math.abs(noise(x, z, 16) - 0.52);
+        [r, g, b] = crack < 0.03 ? [255, 166, 69] : crack < 0.08 ? [204, 79, 42] : [92, 49, 54];
       } else if (this.crater[i] === 2) {
         const glow = noise(x, z, 16);
         [r, g, b] = glow > 0.54 ? [91, 187, 177] : [53, 76, 83];
         if (glow > 0.68) [r, g, b] = [161, 224, 197];
+      } else if (region < 0.36 && h < 44 && Math.abs(noise(x, z, 32) - 0.5) < 0.012 && noise(x, z, 64) > 0.5) {
+        [r, g, b] = [213, 83, 46];
       }
       this.colors[i] = rgba(r | 0, g | 0, b | 0);
     }
@@ -120,12 +129,14 @@ export class World {
       const x = Math.round(ctx.canvas.width / 2 + wrap(hash(i, 201) * 512 - ship.x * (high ? 0.68 : 0.84) + drift) / 1.4);
       const y = Math.round(ctx.canvas.height / 2 - wrap(hash(i, 202) * 512 - ship.z * (high ? 0.68 : 0.84) + drift * 0.4) / 1.4);
       const size = high ? 2 : 1;
-      ctx.globalAlpha = high ? 0.22 : 0.16;
+      ctx.globalAlpha = high ? 0.38 : 0.26;
       ctx.fillStyle = '#201e32';
       ctx.fillRect(x - size * 2 + 3, y + 4, size * 6, size * 2);
       ctx.fillStyle = high ? '#e8d5c4' : '#cbb2a9';
-      ctx.fillRect(x - size * 2, y, size * 6, size * 2);
-      ctx.fillRect(x - size, y - size, size * 3, size * 3);
+      ctx.fillRect(x - size * 3, y, size * 6, size);
+      ctx.fillRect(x - size * 2, y - size, size * 4, size * 3);
+      ctx.fillRect(x, y - size * 2, size * 2, size * 2);
+      ctx.fillRect(x + size * 2, y, size * 2, size * 2);
     }
     ctx.restore();
   }
@@ -150,31 +161,41 @@ export class World {
       for (let x = 0; x < w; x++) pixels[y * w + x] = this.sky[sy * SKY_W + ((x + offset) & (SKY_W - 1))];
     }
 
-    const horizon = h * 0.45 + ship.pitch * 15;
+    const horizon = h * 0.30 + ship.pitch * 15;
     const forwardX = Math.sin(ship.yaw), forwardZ = Math.cos(ship.yaw);
-    const cameraOffset = view === 'chase' ? 26 : 0;
+    const cameraOffset = view === 'chase' ? 38 : 0;
     const camX = ship.x - forwardX * cameraOffset, camZ = ship.z - forwardZ * cameraOffset;
-    const cameraHeight = ship.altitude + (view === 'chase' ? 7 : 2);
+    const cameraHeight = ship.altitude + (view === 'chase' ? 18 : 2);
     const hidden = new Int16Array(w);
     hidden.fill(h);
-    for (let distance = 2; distance < 300; distance += 1 + distance * 0.023) {
+    for (let distance = 2; distance < 800; distance += 1 + distance * 0.023) {
       const leftX = camX + forwardX * distance - forwardZ * distance * 0.8;
       const leftZ = camZ + forwardZ * distance + forwardX * distance * 0.8;
       const dx = forwardZ * distance * 1.6 / w, dz = -forwardX * distance * 1.6 / w;
       const scale = h * 0.95 / distance;
-      const fog = Math.min(0.78, distance / 330);
+      const fog = Math.min(0.84, Math.max(0, (distance - 55) / 650));
       for (let x = 0; x < w; x++) {
-        const wx = Math.floor(leftX + dx * x) & MASK, wz = Math.floor(leftZ + dz * x) & MASK;
-        const index = wz * SIZE + wx;
-        let top = Math.floor(horizon + (cameraHeight - this.heights[index]) * scale);
+        const px = leftX + dx * x, pz = leftZ + dz * x;
+        const ix = Math.floor(px), iz = Math.floor(pz), wx = ix & MASK, wz = iz & MASK;
+        const index = wz * SIZE + wx, fx = px - ix, fz = pz - iz;
+        const a = mix(this.heights[index], this.heights[wz * SIZE + ((wx + 1) & MASK)], fx);
+        const b0 = mix(this.heights[((wz + 1) & MASK) * SIZE + wx], this.heights[((wz + 1) & MASK) * SIZE + ((wx + 1) & MASK)], fx);
+        const elevation = mix(a, b0, fz);
+        let top = Math.floor(horizon + (cameraHeight - elevation) * scale);
         if (top >= hidden[x]) continue;
         top = Math.max(0, top);
         const color = this.colors[index];
         const r = mix(color & 255, 74, fog) | 0;
         const g = mix((color >>> 8) & 255, 57, fog) | 0;
         const b = mix((color >>> 16) & 255, 79, fog) | 0;
-        const shaded = rgba(r, g, b);
-        for (let y = top; y < hidden[x]; y++) pixels[y * w + x] = shaded;
+        const topColor = rgba(r, g, b);
+        const wall = rgba((r * 0.9) | 0, (g * 0.9) | 0, (b * 0.91) | 0);
+        const wallDark = rgba((r * 0.84) | 0, (g * 0.84) | 0, (b * 0.87) | 0);
+        const thickness = hidden[x] - top;
+        for (let y = top; y < hidden[x]; y++) {
+          const band = Math.floor((elevation - (y - top) / scale) / 4) & 1;
+          pixels[y * w + x] = thickness <= 2 || y === top ? topColor : band ? wall : wallDark;
+        }
         hidden[x] = top;
       }
     }
