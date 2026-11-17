@@ -1,6 +1,7 @@
 import './style.css';
 import { advanceFlight, createFlight, initialOptions, rollAngle, startRoll, type Input, type View } from './flight';
 import { World } from './world';
+import type { CameraState } from './camera';
 import { drawCockpit, ShipSprite } from './ship';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#screen')!;
@@ -125,7 +126,8 @@ function animate(now: number): void {
     sprite.update(1 / 60, ship, input.turn);
     accumulator -= 1 / 60;
   }
-  world.render(frame, ship, view);
+  const camera: CameraState = { mode: view, x: ship.x, z: ship.z, yaw: ship.yaw, altitude: ship.altitude, pitch: ship.pitch, camOffset: view === 'chase' ? 38 : 0, camHeightOffset: view === 'chase' ? 18 : 2, crossFade: 0 };
+  world.render(frame, camera);
   if (view === 'cockpit' && ship.roll > 0) {
     // Roll the outside view around the stationary cockpit frame.
     rollCtx.putImageData(frame, 0, 0);
@@ -138,7 +140,7 @@ function animate(now: number): void {
     ctx.drawImage(rollCanvas, -canvas.width / 2, -canvas.height / 2);
     ctx.restore();
   } else ctx.putImageData(frame, 0, 0);
-  world.drawDust(ctx, ship, view, now / 1000);
+  world.drawDust(ctx, camera, view, now / 1000);
   if (glow) {
     glow.setTransform(2, 0, 0, 2, 0, 0);
     glow.clearRect(0, 0, canvas.width, canvas.height);

@@ -1,4 +1,5 @@
-import type { Flight, View } from './flight';
+import type { View } from './flight';
+import type { CameraState } from './camera';
 
 const SIZE = 512;
 const MASK = SIZE - 1;
@@ -119,7 +120,7 @@ export class World {
     }
   }
 
-  drawDust(ctx: CanvasRenderingContext2D, ship: Flight, view: View, time: number): void {
+  drawDust(ctx: CanvasRenderingContext2D, ship: CameraState, view: View, time: number): void {
     if (view !== 'overhead') return;
     const wrap = (n: number) => ((n + 256) % 512 + 512) % 512 - 256;
     ctx.save();
@@ -141,7 +142,7 @@ export class World {
     ctx.restore();
   }
 
-  render(image: ImageData, ship: Flight, view: View): void {
+  render(image: ImageData, ship: CameraState, view: View = ship.mode): void {
     const w = image.width, h = image.height;
     const pixels = new Uint32Array(image.data.buffer);
     if (view === 'overhead') {
@@ -163,9 +164,9 @@ export class World {
 
     const horizon = h * 0.30 + ship.pitch * 15;
     const forwardX = Math.sin(ship.yaw), forwardZ = Math.cos(ship.yaw);
-    const cameraOffset = view === 'chase' ? 38 : 0;
+    const cameraOffset = ship.camOffset;
     const camX = ship.x - forwardX * cameraOffset, camZ = ship.z - forwardZ * cameraOffset;
-    const cameraHeight = ship.altitude + (view === 'chase' ? 18 : 2);
+    const cameraHeight = ship.altitude + ship.camHeightOffset;
     const hidden = new Int16Array(w);
     hidden.fill(h);
     for (let distance = 2; distance < 800; distance += 1 + distance * 0.023) {

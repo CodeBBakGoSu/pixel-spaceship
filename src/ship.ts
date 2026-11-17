@@ -1,5 +1,5 @@
 import { advanceBank, rollAngle, type Flight, type View } from './flight';
-import { outlineShip } from './outline';
+import { buildFaces, projection, projectPoint, VoxelProjector, type Face, type VoxelModel } from './voxel';
 
 // The model is made of solid voxels, not painted outlines. Exposed voxel faces are
 // projected in depth order, so the underside, tail and fins stay solid in a roll.
@@ -9,19 +9,12 @@ const palette = [
   [0, 0, 0], [195, 207, 200], [145, 164, 166], [77, 96, 110],
   [232, 126, 81], [64, 155, 167], [34, 44, 57], [255, 165, 79], [225, 231, 214],
 ];
-const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-type Face = { x: number; y: number; z: number; side: number; material: number };
 type Particle = { x: number; z: number; altitude: number; vx: number; vz: number; life: number; total: number; size: number };
-type Projection = { x: number; y: number; depth: number; scale: number };
-const pack = (r: number, g: number, b: number) => (255 << 24) | (b << 16) | (g << 8) | r;
 
 export class ShipSprite {
   private faces: Face[] = [];
   private shadow = document.createElement('canvas');
-  private layer = document.createElement('canvas');
-  private layerCtx = this.layer.getContext('2d')!;
-  private image!: ImageData;
-  private depth = new Float32Array(0);
+  private projector = new VoxelProjector();
   private particles: Particle[] = [];
   private emission = 0;
   private time = 0;
@@ -64,21 +57,13 @@ export class ShipSprite {
       }
       if (m) voxels[at(ix, iy, z)] = m;
     }
+    const model: VoxelModel = { width: W, length: L, height: H, pivot: [CENTER_X, CENTER_Y, CENTER_Z], data: voxels };
+    this.faces = buildFaces(model);
     this.shadow.width = W; this.shadow.height = L;
     const shadowCtx = this.shadow.getContext('2d')!;
     shadowCtx.fillStyle = '#10101d';
     for (let y = 0; y < L; y++) for (let x = 0; x < W; x++) {
-      let occupied = false;
-      for (let z = 0; z < H; z++) {
-        const material = get(x, y, z);
-        if (!material) continue;
-        occupied = true;
-        for (let side = 0; side < dirs.length; side++) {
-          const [dx, dy, dz] = dirs[side];
-          if (!get(x + dx, y + dy, z + dz)) this.faces.push({ x: x - CENTER_X, y: y - CENTER_Y, z: z - CENTER_Z, side, material });
-        }
-      }
-      if (occupied) shadowCtx.fillRect(x, y, 1, 1);
+      for (let z = 0; z < H; z++) if (get(x, y, z)) { shadowCtx.fillRect(x, y, 1, 1); break; }
     }
   }
 
@@ -103,33 +88,17 @@ export class ShipSprite {
     this.particles = this.particles.filter(p => p.life > 0);
   }
 
-  private resize(w: number, h: number): void {
-    if (this.layer.width === w && this.layer.height === h && this.image) return;
-    this.layer.width = w; this.layer.height = h;
-    this.image = this.layerCtx.createImageData(w, h);
-    this.depth = new Float32Array(w * h);
-  }
-
   draw(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, ship: Flight, view: View, ground: number, demoBank: boolean): void {
     if (view === 'cockpit') return;
     const w = ctx.canvas.width, h = ctx.canvas.height;
-    this.resize(w, h);
     const cx = Math.round(w / 2), cy = Math.round(view === 'overhead' ? h * 0.5 : h * 0.59);
     const scale = Math.max(0.8, Math.min(1.35, w / 250));
     const pitch = (view === 'overhead' ? 65 : 36) * Math.PI / 180;
     const yaw = view === 'overhead' ? ship.yaw : -this.bank * 0.08;
     const roll = this.bank + (demoBank ? 0.72 : 0) + rollAngle(ship.roll);
-    const cr = Math.cos(roll), sr = Math.sin(roll), ca = Math.cos(yaw), sa = Math.sin(yaw);
-    const sp = Math.sin(pitch), cp = Math.cos(pitch);
     const lift = view === 'overhead' ? 1.4 : 1;
-    const xx = ca * cr, xy = -sa, xz = ca * sr * lift;
-    const yx = sa * cr * sp + sr * cp, yy = ca * sp, yz = (sa * sr * sp - cr * cp) * lift;
-    const dx = sa * cr * cp - sr * sp, dy = ca * cp, dz = (sa * sr * cp + cr * sp) * lift;
-    const project = (x: number, y: number, z: number): Projection => {
-      const depth = dx * x + dy * y + dz * z;
-      const mag = scale * (view === 'chase' ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
-      return { x: cx + (xx * x + xy * y + xz * z) * mag, y: cy + (yx * x + yy * y + yz * z) * mag, depth, scale: mag };
-    };
+    const camera = projection({ cx, cy, scale, pitch, yaw, roll, lift, perspective: view === 'chase' });
+    const project = (x: number, y: number, z: number) => projectPoint(camera, x, y, z);
 
     // Silhouette falls farther from the jet and softens as clearance increases.
     const clearance = Math.max(0, ship.altitude - ground);
@@ -194,40 +163,7 @@ export class ShipSprite {
     };
     drawFlames();
 
-    // Draw visible surface samples to a depth buffer. Each face has its own light level.
-    const pixels = new Uint32Array(this.image.data.buffer);
-    pixels.fill(0); this.depth.fill(-Infinity);
-    const shades = dirs.map(([nx, ny, nz]) => {
-      const nDepth = dx * nx + dy * ny + dz * nz;
-      const up = cr * nz - sr * nx;
-      const left = cr * nx + sr * nz;
-      const light = Math.max(0, up * 0.85 - left * 0.36 - ny * 0.18);
-      return { visible: nDepth > 0.001, value: Math.max(0.32, Math.min(1.12, 0.43 + light * 0.72)) };
-    });
-    for (const face of this.faces) {
-      const shade = shades[face.side];
-      if (!shade.visible) continue;
-      const [nx, ny, nz] = dirs[face.side];
-      const color = palette[face.material];
-      const lighting = shade.value * (nz < 0 ? 0.65 : 1);
-      const col = pack(Math.min(255, Math.round(color[0] * lighting)), Math.min(255, Math.round(color[1] * lighting)), Math.min(255, Math.round(color[2] * lighting)));
-      for (let a = -0.375; a <= 0.375; a += 0.25) for (let b = -0.375; b <= 0.375; b += 0.25) {
-        const x = face.x + nx * 0.5 + (nx ? 0 : a);
-        const y = face.y + ny * 0.5 + (nx ? a : ny ? 0 : b);
-        const z = face.z + nz * 0.5 + (nz ? 0 : b);
-        const depth = dx * x + dy * y + dz * z;
-        const mag = scale * (view === 'chase' ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
-        const px = Math.round(cx + (xx * x + xy * y + xz * z) * mag);
-        const py = Math.round(cy + (yx * x + yy * y + yz * z) * mag);
-        if (px < 1 || py < 1 || px >= w - 1 || py >= h - 1) continue;
-        const i = py * w + px;
-        if (depth > this.depth[i]) { this.depth[i] = depth; pixels[i] = col; }
-      }
-    }
-    // One-pixel silhouette outline, written only outside the ship mask.
-    outlineShip(pixels, w, h, cx - 60, cy - 60, cx + 60, cy + 60);
-    this.layerCtx.putImageData(this.image, 0, 0);
-    ctx.drawImage(this.layer, 0, 0);
+    this.projector.draw(ctx, this.faces, palette, camera);
   }
 }
 
