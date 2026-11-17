@@ -1,6 +1,6 @@
-# ASTER // Pixel Flight
+# ASTER // Vesper Run
 
-A small, self-contained flight demo built with Vite, TypeScript and Canvas 2D. The alien terrain, sky, planets, ship and exhaust are generated in code; there are no image assets, 3D libraries or network requests at runtime. The terrain uses a wrapping procedural heightmap and a column-based voxel-space renderer. The ship is generated as a solid voxel model and projected with depth-sorted, individually shaded faces; its exhaust includes world-space embers and a soft additive glow. The ship banks automatically when turning.
+A small, self-contained arcade flight game built with Vite, TypeScript and Canvas 2D. Clear drone waves in overhead view, dodge canyon pillars and collect energy rings in chase view, then target the Dreadnought from the cockpit. A run lasts roughly 1.5–2 minutes; a win offers a faster next loop. Terrain, sprites and effects are generated in code, with no runtime assets, 3D libraries or network requests.
 
 ## Run
 
@@ -9,14 +9,13 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by Vite. `npm run build` type-checks and builds the app, and `npm run preview` serves the build. Both servers use port 5180 on `0.0.0.0` and fail if that port is occupied.
+Open the URL printed by Vite. `npm run build` type-checks and builds the app; `npm run preview` serves the build. Both servers use port 5180 on `0.0.0.0` and fail if the port is occupied.
 
-## Fly
+## Controls
 
-- Move the mouse to steer; **click** to roll and **hold** to boost.
-- Use **WASD** or the **arrow keys** to turn and climb/dive; hold **Shift** to boost.
-- Press **Space** or use the camera buttons to cycle between overhead, chase and cockpit views.
-- On touchscreens, drag to steer, tap to roll, and hold to boost. Tap the camera buttons to change view.
-- A gamepad can use its left stick, A (roll), right trigger (boost), and Y (view).
+- **Enter**, **Space**, click or tap starts; Enter restarts after a loss and starts the next loop after a win. **R** restarts from the result screen.
+- **WASD / arrows** or mouse movement steers. Hold **Space**, **J**, **Z**, or the left mouse button to fire. In the cockpit, move the reticle onto the boss core.
+- On touchscreens, drag to steer; firing is automatic. A gamepad can use its left stick and A or right trigger.
+- Press **P** to pause or resume. Collect rings for points and hull energy; avoid pillars and incoming fire.
 
-Start in a particular view with `?view=overhead`, `?view=chase`, or `?view=cockpit`. Unknown values fall back to chase. Add `&roll=1` for a sustained bank or `&boost=1` to hold the thrusters on for screenshots. The automated flight and rendering checks can be run with `npm test` on Node.js 22 or later.
+For reproducible checks, use `?segment=overhead|chase|cockpit|boss`, `?seed=1`, `?autoplay=1`, `?loop=2`, and optionally `?t=SECONDS` to fast-forward. Without a segment parameter the game opens at the title screen. `window.__game` exposes a read-only snapshot for browser checks. Run the automated state and rendering tests with `npm test` on Node.js 22 or later.
