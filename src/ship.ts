@@ -16,12 +16,18 @@ export class ShipSprite {
   private faces: Face[] = [];
   private shadow = document.createElement('canvas');
   private projector = new VoxelProjector();
-  private particles: Particle[] = [];
+  private particles: Particle[] = Array.from({ length: 96 }, () => ({ x: 0, z: 0, altitude: 0, vx: 0, vz: 0, life: 0, total: 1, size: 1 }));
+  private particleIndex = 0;
+  private halo = document.createElement('canvas');
   private emission = 0;
   private time = 0;
   private bank = 0;
 
   constructor() {
+    this.halo.width = this.halo.height = 32;
+    const halo = this.halo.getContext('2d')!, gradient = halo.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255,160,62,.42)'); gradient.addColorStop(1, 'rgba(255,65,12,0)');
+    halo.fillStyle = gradient; halo.fillRect(0, 0, 32, 32);
     const voxels = new Uint8Array(W * L * H);
     const at = (x: number, y: number, z: number) => (z * L + y) * W + x;
     const get = (x: number, y: number, z: number) => x < 0 || x >= W || y < 0 || y >= L || z < 0 || z >= H ? 0 : voxels[at(x, y, z)];
@@ -71,22 +77,19 @@ export class ShipSprite {
   update(dt: number, ship: Flight, turn: number): void {
     this.time += dt;
     this.bank = advanceBank(this.bank, turn, dt);
-    this.emission += dt * (28 + ship.boost * 45);
-    const fx = Math.sin(ship.yaw), fz = Math.cos(ship.yaw);
-    const rx = Math.cos(ship.yaw), rz = -Math.sin(ship.yaw);
+    this.emission += dt * (18 + ship.boost * 20);
+    const fx = Math.sin(ship.yaw), fz = Math.cos(ship.yaw), rx = fz, rz = -fx;
+    for (const p of this.particles) if (p.life > 0) { p.life -= dt; p.x += p.vx * dt; p.z += p.vz * dt; }
     while (this.emission >= 1) {
       this.emission--;
       for (const side of [-1, 1]) {
-        const distance = 18 * 1.5, across = side * 5.5 * 1.5;
-        const exhaustSpeed = 42 + ship.boost * 38;
-        const life = 0.3 + Math.random() * (0.35 + ship.boost * 0.25);
-        this.particles.push({ x: ship.x - fx * distance + rx * across, z: ship.z - fz * distance + rz * across,
-          altitude: ship.altitude - 1.5, vx: fx * (ship.speed - exhaustSpeed), vz: fz * (ship.speed - exhaustSpeed),
-          life, total: life, size: 1 + Math.random() * (1.5 + ship.boost) });
+        const distance = 27, across = side * 8.25, exhaustSpeed = 42 + ship.boost * 38;
+        const life = 0.3 + Math.random() * (0.35 + ship.boost * 0.25), p = this.particles[this.particleIndex++ % this.particles.length];
+        p.x = ship.x - fx * distance + rx * across; p.z = ship.z - fz * distance + rz * across;
+        p.altitude = ship.altitude - 1.5; p.vx = fx * (ship.speed - exhaustSpeed); p.vz = fz * (ship.speed - exhaustSpeed);
+        p.life = p.total = life; p.size = 1 + Math.random() * (1.5 + ship.boost);
       }
     }
-    for (const p of this.particles) { p.life -= dt; p.x += p.vx * dt; p.z += p.vz * dt; }
-    this.particles = this.particles.filter(p => p.life > 0);
   }
 
   draw(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, ship: Flight, view: View, ground: number, demoBank: boolean, pose?: ShipPose): void {
@@ -115,68 +118,39 @@ export class ShipSprite {
     ctx.drawImage(this.shadow, -CENTER_X, -CENTER_Y);
     ctx.restore();
 
-    // Fire samples follow the nozzle axis; released embers retain world coordinates.
-    const drawFlames = () => {
-      ctx.save();
-      for (const p of this.particles) {
-        const ax = p.x - ship.x, az = p.z - ship.z;
-        const localX = (ax * Math.cos(ship.yaw) - az * Math.sin(ship.yaw)) / 1.5;
-        const localY = -(ax * Math.sin(ship.yaw) + az * Math.cos(ship.yaw)) / 1.5;
-        const point = project(localX, localY, (p.altitude - ship.altitude) / 1.5 - 1);
-        const alpha = p.life / p.total;
-        const size = Math.max(1, Math.round(p.size * point.scale * alpha));
-        ctx.fillStyle = alpha > 0.5 ? `rgba(255,168,70,${alpha * 0.8})` : `rgba(235,79,45,${alpha * 0.7})`;
-        ctx.fillRect(Math.round(point.x - size / 2), Math.round(point.y - size / 2), size, size);
+    // A fixed particle pool and a cached halo avoid per-frame allocations during boost.
+    const cos = Math.cos(ship.yaw), sin = Math.sin(ship.yaw);
+    for (const p of this.particles) if (p.life > 0) {
+      const ax = p.x - ship.x, az = p.z - ship.z;
+      const point = project((ax * cos - az * sin) / 1.5, -(ax * sin + az * cos) / 1.5, (p.altitude - ship.altitude) / 1.5 - 1);
+      const alpha = p.life / p.total, size = Math.max(1, Math.round(p.size * point.scale * alpha));
+      ctx.fillStyle = alpha > 0.5 ? '#ffa846' : '#e5572d';
+      ctx.fillRect(Math.round(point.x - size / 2), Math.round(point.y - size / 2), size, size);
+    }
+    const length = (13 + ship.boost * 22) * (0.88 + 0.12 * Math.sin(this.time * 34));
+    if (ship.boost > 0.1) for (const side of [-1, 1]) {
+      ctx.strokeStyle = side < 0 ? 'rgba(255,110,185,.65)' : 'rgba(107,237,255,.65)';
+      ctx.lineWidth = Math.max(1, scale * 1.3); ctx.beginPath();
+      for (const t of [0, 25, 50]) { const q = project(side * (15 + t * 0.04), 8 + t, 1); if (!t) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y); }
+      ctx.stroke();
+    }
+    if (glow) glow.globalCompositeOperation = 'lighter';
+    for (const side of [-1, 1]) {
+      const steps = ship.boost > 0.1 ? 18 : 11;
+      for (let pass = 0; pass < 3; pass++) for (let i = steps; i >= 0; i--) {
+        const u = i / steps; if (pass === 2 && u > 0.78) continue;
+        const t = u * length, sway = Math.sin(this.time * 23 + t * 0.9 + side) * u;
+        const point = project(side * 5.5 + sway, 18 + t, -1);
+        const r = Math.max(1, Math.round((2.3 + ship.boost * 2.1) * (1 - u * 0.8) * point.scale * (pass === 0 ? 1.25 : pass === 1 ? 1 : 0.48)));
+        const x = Math.round(point.x), y = Math.round(point.y);
+        ctx.fillStyle = pass === 0 ? '#b9422e' : pass === 1 ? (u > 0.7 ? '#d64931' : u > 0.34 ? '#f8742e' : '#ffae43') : u < 0.24 ? '#fff9d4' : u < 0.56 ? '#ffe678' : '#ffb542';
+        ctx.fillRect(x - r, y - r, r * 2 + 1, r * 2 + 1);
       }
-      const length = (13 + ship.boost * 22) * (0.88 + 0.12 * Math.sin(this.time * 34));
-      for (const side of [-1, 1]) {
-        for (let pass = 0; pass < 3; pass++) for (let t = length; t >= 0; t -= 0.8) {
-          const u = t / length;
-          if (pass === 2 && u > 0.78) continue;
-          const sway = Math.sin(this.time * 23 + t * 0.9 + side) * u * 1.1;
-          const point = project(side * 5.5 + sway, 18 + t, -1);
-          const flicker = 0.86 + 0.18 * Math.sin(this.time * 37 - t * 1.4 + side);
-          const radius = (2.3 + ship.boost * 2.1) * Math.pow(1 - u * 0.88, 0.7) * point.scale * flicker;
-          const r = Math.max(1, Math.round(radius * (pass === 0 ? 1.25 : pass === 1 ? 1 : 0.48)));
-          const x = Math.round(point.x), y = Math.round(point.y);
-          ctx.fillStyle = pass === 0 ? `rgba(220,56,31,${0.12 + (1 - u) * 0.32})`
-            : pass === 1 ? (u > 0.7 ? '#d64931' : u > 0.34 ? '#f8742e' : '#ffae43')
-            : u < 0.24 ? '#fff9d4' : u < 0.56 ? '#ffe678' : '#ffb542';
-          for (let row = -r; row <= r; row++) {
-            const span = Math.floor(Math.sqrt(r * r - row * row));
-            ctx.fillRect(x - span, y + row, span * 2 + 1, 1);
-          }
-        }
-        if (glow) {
-          glow.save();
-          glow.globalCompositeOperation = 'lighter';
-          for (let i = 0; i < 4; i++) {
-            const t = length * i * 0.23;
-            const point = project(side * 5.5, 18 + t, -1);
-            const radius = (4.5 + ship.boost * 5) * (1 - i * 0.15) * point.scale;
-            const halo = glow.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
-            halo.addColorStop(0, `rgba(255,150,50,${(0.17 + ship.boost * 0.18) * (1 - i * 0.2)})`);
-            halo.addColorStop(1, 'rgba(255,65,12,0)');
-            glow.fillStyle = halo;
-            glow.fillRect(point.x - radius, point.y - radius, radius * 2, radius * 2);
-          }
-          glow.restore();
-        }
-      }
-      ctx.restore();
-    };
-    if (ship.boost > 0.1) {
-      for (const side of [-1, 1]) {
-        ctx.strokeStyle = side < 0 ? 'rgba(255,110,185,.65)' : 'rgba(107,237,255,.65)';
-        ctx.lineWidth = Math.max(1, scale * 1.3); ctx.beginPath();
-        for (let i = 0; i <= 20; i++) {
-          const q = project(side * (15 + i * 0.08), 8 + i * 2.5, 1);
-          if (i === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
-        }
-        ctx.stroke();
+      if (glow) for (const u of [0.2, 0.6]) {
+        const point = project(side * 5.5, 18 + length * u, -1), radius = (5 + ship.boost * 5) * (1 - u * 0.45) * point.scale;
+        glow.drawImage(this.halo, point.x - radius, point.y - radius, radius * 2, radius * 2);
       }
     }
-    drawFlames();
 
     this.projector.draw(ctx, this.faces, palette, camera);
     ctx.restore();
