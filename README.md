@@ -1,6 +1,6 @@
 # ASTER // Pixel Flight
 
-A small, self-contained flight demo built with Vite, TypeScript and Canvas 2D. The alien terrain, sky, planets, ship and exhaust are generated in code; there are no image assets, 3D libraries or network requests at runtime. The terrain uses a wrapping procedural heightmap and a column-based voxel-space renderer. The ship is made from eleven rotated pixel slices.
+A small, self-contained flight demo built with Vite, TypeScript and Canvas 2D. The alien terrain, sky, planets, ship and exhaust are generated in code; there are no image assets, 3D libraries or network requests at runtime. The terrain uses a wrapping procedural heightmap and a column-based voxel-space renderer. The ship is generated as a solid voxel model and projected with depth-sorted, individually shaded faces; its exhaust includes world-space embers.
 
 ## Run
 
@@ -19,4 +19,4 @@ Open the URL printed by Vite. `npm run build` type-checks and builds the app, an
 - On touchscreens, drag to steer, tap to roll, and hold to boost. Tap the camera buttons to change view.
 - A gamepad can use its left stick, A (roll), right trigger (boost), and Y (view).
 
-Start in a particular view with `?view=overhead`, `?view=chase`, or `?view=cockpit`. Unknown values fall back to chase. The automated flight checks can be run with `npm test` on Node.js 22 or later.
+Start in a particular view with `?view=overhead`, `?view=chase`, or `?view=cockpit`. Unknown values fall back to chase. Add `&roll=1` for a sustained bank or `&boost=1` to hold the thrusters on for screenshots. The automated flight and rendering checks can be run with `npm test` on Node.js 22 or later.

@@ -48,3 +48,9 @@ test('roll starts once and finishes after its animation', () => {
   for (let i = 0; i < 30; i++) advanceFlight(ship, neutral, 0.05, flatGround);
   assert.equal(ship.roll, 0);
 });
+
+test('screenshot options preserve a stable bank and held boost only when requested', async () => {
+  const { initialOptions } = await import('../src/flight.ts');
+  assert.deepEqual(initialOptions('?view=overhead&roll=1&boost=1'), { view: 'overhead', bank: true, boost: true });
+  assert.deepEqual(initialOptions('?roll=0&boost=yes'), { view: 'chase', bank: false, boost: false });
+});

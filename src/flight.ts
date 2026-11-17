@@ -33,3 +33,8 @@ export function advanceFlight(ship: Flight, input: Input, elapsed: number, groun
 export function startRoll(ship: Flight): void {
   if (ship.roll === 0) ship.roll = 1;
 }
+
+export function initialOptions(search: string): { view: View; bank: boolean; boost: boolean } {
+  const query = new URLSearchParams(search);
+  return { view: initialView(search), bank: query.get('roll') === '1', boost: query.get('boost') === '1' };
+}

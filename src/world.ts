@@ -26,36 +26,47 @@ function noise(x: number, y: number, scale: number): number {
 export class World {
   private heights = new Uint8Array(SIZE * SIZE);
   private colors = new Uint32Array(SIZE * SIZE);
+  private crater = new Uint8Array(SIZE * SIZE);
   private sky = new Uint32Array(SKY_W * SKY_H);
 
   constructor() {
     for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) {
-      const n = 20 + noise(x, z, 128) * 23 + noise(x, z, 64) * 16 + noise(x, z, 32) * 9 + noise(x, z, 16) * 4;
-      this.heights[z * SIZE + x] = n;
+      const n = 20 + noise(x, z, 128) * 26 + noise(x, z, 64) * 15 + noise(x, z, 32) * 6;
+      this.heights[z * SIZE + x] = Math.round(n / 3) * 3;
     }
     // Carved basins and raised rims, all wrapped onto the same map.
     for (let c = 0; c < 65; c++) {
       const cx = Math.floor(hash(c, 9) * SIZE), cz = Math.floor(hash(c, 17) * SIZE);
       const radius = 5 + Math.floor(hash(c, 23) * 17);
+      const mineral = hash(c, 41) > 0.68 ? (hash(c, 53) > 0.48 ? 1 : 2) : 0;
       for (let dz = -radius - 2; dz <= radius + 2; dz++) for (let dx = -radius - 2; dx <= radius + 2; dx++) {
         const d = Math.sqrt(dx * dx + dz * dz) / radius;
         if (d > 1.1) continue;
         const i = ((cz + dz) & MASK) * SIZE + ((cx + dx) & MASK);
         const bowl = d < 0.82 ? (1 - (d / 0.82) ** 2) * 15 : 0;
         const rim = Math.max(0, 1 - Math.abs(d - 0.9) / 0.2) * 6;
-        this.heights[i] = Math.max(3, Math.min(100, this.heights[i] - bowl + rim));
+        this.heights[i] = Math.max(3, Math.min(100, Math.round((this.heights[i] - bowl + rim) / 3) * 3));
+        if (d < 0.56 && mineral) this.crater[i] = mineral;
       }
     }
     for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) {
       const i = z * SIZE + x, h = this.heights[i];
-      const shade = (this.height(x - 2, z - 2) - this.height(x + 2, z + 2)) * 1.35;
-      const grain = (hash(x, z) - 0.5) * 7;
-      const high = Math.max(0, Math.min(1, (h - 29) / 38));
-      let r = mix(48, 166, high) + shade + grain;
-      let g = mix(42, 112, high) + shade * 0.8 + grain;
-      let b = mix(66, 115, high) + shade * 0.7 + grain;
-      // Occasional mineral flecks stand out against the dusty surface.
-      if (h > 47 && hash(x + 91, z - 51) > 0.997) { r = 104; g = 208; b = 195; }
+      const slope = this.height(x - 1, z - 1) - this.height(x + 1, z + 1);
+      const light = (slope > 3 ? 24 : slope < -3 ? -25 : slope > 0 ? 7 : 0) + (Math.floor(h / 3) % 4 - 1.5) * 7;
+      const region = noise((x + 128) % SIZE, (z + 64) % SIZE, 128);
+      let base = h < 30 ? [52, 49, 61] : h < 39 ? [150, 119, 103] : h < 51 ? [156, 91, 76] : h < 60 ? [190, 119, 91] : [213, 162, 124];
+      if (region < 0.33) base = h < 42 ? [64, 66, 75] : [102, 95, 97];
+      else if (region > 0.67) base = h < 43 ? [174, 151, 127] : [211, 182, 150];
+      let r = base[0] + light, g = base[1] + light * 0.8, b = base[2] + light * 0.7;
+      if (this.crater[i] === 1) {
+        const glow = noise(x, z, 16);
+        [r, g, b] = glow > 0.52 ? [231, 110, 52] : [92, 49, 54];
+        if (glow > 0.67) [r, g, b] = [255, 186, 89];
+      } else if (this.crater[i] === 2) {
+        const glow = noise(x, z, 16);
+        [r, g, b] = glow > 0.54 ? [91, 187, 177] : [53, 76, 83];
+        if (glow > 0.68) [r, g, b] = [161, 224, 197];
+      }
       this.colors[i] = rgba(r | 0, g | 0, b | 0);
     }
     this.makeSky();
@@ -99,13 +110,35 @@ export class World {
     }
   }
 
+  drawDust(ctx: CanvasRenderingContext2D, ship: Flight, view: View, time: number): void {
+    if (view !== 'overhead') return;
+    const wrap = (n: number) => ((n + 256) % 512 + 512) % 512 - 256;
+    ctx.save();
+    for (let i = 0; i < 34; i++) {
+      const high = i % 2 === 0;
+      const drift = time * (high ? 1.5 : 0.5);
+      const x = Math.round(ctx.canvas.width / 2 + wrap(hash(i, 201) * 512 - ship.x * (high ? 0.68 : 0.84) + drift) / 1.4);
+      const y = Math.round(ctx.canvas.height / 2 - wrap(hash(i, 202) * 512 - ship.z * (high ? 0.68 : 0.84) + drift * 0.4) / 1.4);
+      const size = high ? 2 : 1;
+      ctx.globalAlpha = high ? 0.22 : 0.16;
+      ctx.fillStyle = '#201e32';
+      ctx.fillRect(x - size * 2 + 3, y + 4, size * 6, size * 2);
+      ctx.fillStyle = high ? '#e8d5c4' : '#cbb2a9';
+      ctx.fillRect(x - size * 2, y, size * 6, size * 2);
+      ctx.fillRect(x - size, y - size, size * 3, size * 3);
+    }
+    ctx.restore();
+  }
+
   render(image: ImageData, ship: Flight, view: View): void {
     const w = image.width, h = image.height;
     const pixels = new Uint32Array(image.data.buffer);
     if (view === 'overhead') {
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const wx = Math.floor(ship.x + (x - w / 2) * 1.4) & MASK;
-        const wz = Math.floor(ship.z - (y - h / 2) * 1.4) & MASK;
+        const flatZ = ship.z - (y - h / 2) * 1.4;
+        const raised = this.height(wx, flatZ);
+        const wz = Math.floor(flatZ - (raised - 36) * 0.3) & MASK;
         pixels[y * w + x] = this.colors[wz * SIZE + wx];
       }
       return;

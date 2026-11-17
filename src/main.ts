@@ -1,5 +1,5 @@
 import './style.css';
-import { advanceFlight, createFlight, initialView, startRoll, type Input, type View } from './flight';
+import { advanceFlight, createFlight, initialOptions, startRoll, type Input, type View } from './flight';
 import { World } from './world';
 import { drawCockpit, ShipSprite } from './ship';
 
@@ -12,7 +12,8 @@ const sprite = new ShipSprite();
 const ship = createFlight();
 ship.altitude = Math.max(ship.altitude, world.height(ship.x, ship.z) + 42);
 const views: View[] = ['overhead', 'chase', 'cockpit'];
-let view = initialView(location.search);
+const options = initialOptions(location.search);
+let view = options.view;
 let frame: ImageData;
 let lastTime = performance.now();
 let accumulator = 0;
@@ -97,7 +98,7 @@ canvas.addEventListener('pointerleave', () => { if (!pointerDown) pointerX = poi
 function controls(): Input {
   let turn = pointerX + Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA'));
   let climb = pointerY + Number(keys.has('ArrowUp') || keys.has('KeyW')) - Number(keys.has('ArrowDown') || keys.has('KeyS'));
-  let boost = pointerDown || keys.has('ShiftLeft') || keys.has('ShiftRight');
+  let boost = options.boost || pointerDown || keys.has('ShiftLeft') || keys.has('ShiftRight');
   const pad = navigator.getGamepads?.()[0];
   if (pad) {
     const stick = (v: number) => Math.abs(v) < 0.15 ? 0 : v;
@@ -118,7 +119,7 @@ function animate(now: number): void {
   const input = controls();
   while (accumulator >= 1 / 60) {
     advanceFlight(ship, input, 1 / 60, (x, z) => world.height(x, z));
-    sprite.update(1 / 60, ship.boost);
+    sprite.update(1 / 60, ship, input.turn);
     accumulator -= 1 / 60;
   }
   world.render(frame, ship, view);
@@ -134,7 +135,8 @@ function animate(now: number): void {
     ctx.drawImage(rollCanvas, -canvas.width / 2, -canvas.height / 2);
     ctx.restore();
   } else ctx.putImageData(frame, 0, 0);
-  sprite.draw(ctx, ship, view, input.turn);
+  world.drawDust(ctx, ship, view, now / 1000);
+  sprite.draw(ctx, ship, view, world.height(ship.x, ship.z), options.bank);
   if (view === 'cockpit') drawCockpit(ctx, ship.pitch);
   altitude.innerHTML = `${String(Math.round(ship.altitude - world.height(ship.x, ship.z))).padStart(3, '0')} <small>U</small>`;
   speed.innerHTML = `${String(Math.round(ship.speed)).padStart(3, '0')} <small>U/S</small>`;
