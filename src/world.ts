@@ -1,5 +1,6 @@
 import type { View } from './flight';
 import type { CameraState } from './camera';
+import type { Biome } from './game';
 
 const SIZE = 512;
 const MASK = SIZE - 1;
@@ -26,7 +27,11 @@ function noise(x: number, y: number, scale: number): number {
 
 export class World {
   private heights = new Float32Array(SIZE * SIZE);
+  private jungleHeights = new Float32Array(SIZE * SIZE);
   private colors = new Uint32Array(SIZE * SIZE);
+  private jungle = new Uint32Array(SIZE * SIZE);
+  private daySky = new Uint32Array(SKY_W * SKY_H);
+  private biome: Biome = 'canyon';
   private crater = new Uint8Array(SIZE * SIZE);
   private sky = new Uint32Array(SKY_W * SKY_H);
 
@@ -78,12 +83,31 @@ export class World {
         [r, g, b] = [213, 83, 46];
       }
       this.colors[i] = rgba(r | 0, g | 0, b | 0);
+      // Independent, broad coastal islands avoid carrying the moon's crater rims into the jungle.
+      const jx = (x + 128) % SIZE, jz = (z + 128) % SIZE;
+      const coast = noise(jx, jz, 256) * 0.55 + noise(jx, jz, 128) * 0.45;
+      this.jungleHeights[i] = 35 + Math.max(0, coast - 0.32) * 38 + noise(jx, jz, 64) * 2;
+      const speck = hash(x * 3, z * 3);
+      let jungle: number[];
+      if (coast < 0.32) jungle = coast < 0.25 ? [28, 85, 109] : [45, 128, 140];
+      else if (coast < 0.35) jungle = [215, 191, 139];
+      else if (coast < 0.39) jungle = [117, 162, 79];
+      else jungle = region > 0.54 ? [58, 127, 57] : [75, 145, 63];
+      const dx = x % 4 - 1.5, dz = z % 4 - 1.5;
+      const tree = coast >= 0.37 && hash(Math.floor(x / 4), Math.floor(z / 4)) > 0.82 && dx * dx + dz * dz < 4 ? -25 : 0;
+      const shimmer = coast < 0.32 && speck > 0.97 ? 23 : 0;
+      const band = (Math.floor(coast * 28) % 3 - 1) * 4;
+      this.jungle[i] = rgba((jungle[0] + band + tree + shimmer) | 0, (jungle[1] + band + tree + shimmer) | 0, (jungle[2] + band + tree + shimmer) | 0);
     }
     this.makeSky();
+    this.biome = 'jungle';
   }
 
+  setBiome(biome: Biome): void { this.biome = biome; }
+
   height(x: number, z: number): number {
-    return this.heights[((Math.floor(z) & MASK) * SIZE) + (Math.floor(x) & MASK)];
+    const heights = this.biome === 'jungle' ? this.jungleHeights : this.heights;
+    return heights[((Math.floor(z) & MASK) * SIZE) + (Math.floor(x) & MASK)];
   }
 
   private makeSky(): void {
@@ -95,8 +119,11 @@ export class World {
       let g = 12 + horizon * 13 + clouds * 17;
       let b = 29 + horizon * 28 + clouds * 42;
       const star = hash(x + 301, y + 9);
-      if (star > 0.9974 && y < 150) { r = 170 + star * 70; g = 167 + star * 70; b = 184 + star * 60; }
+      if (star > 0.9974) { r = 170 + star * 70; g = 167 + star * 70; b = 184 + star * 60; }
       this.sky[y * SKY_W + x] = rgba(r | 0, g | 0, b | 0);
+      const daylight = Math.min(1, y / 135);
+      const cloud = Math.max(0, noise(x % SIZE, y, 64) - 0.57) * 24;
+      this.daySky[y * SKY_W + x] = rgba((90 + daylight * 91 + cloud) | 0, (157 + daylight * 55 + cloud) | 0, (196 + daylight * 33 + cloud) | 0);
     }
     this.planet(440, 50, 28, true);
     this.planet(648, 66, 12, false);
@@ -121,7 +148,7 @@ export class World {
   }
 
   drawDust(ctx: CanvasRenderingContext2D, ship: CameraState, view: View, time: number): void {
-    if (view !== 'overhead') return;
+    if (view !== 'overhead' || this.biome === 'space') return;
     const wrap = (n: number) => ((n + 256) % 512 + 512) % 512 - 256;
     ctx.save();
     const opacity = ctx.globalAlpha;
@@ -146,50 +173,56 @@ export class World {
   render(image: ImageData, ship: CameraState, view: View = ship.mode): void {
     const w = image.width, h = image.height;
     const pixels = new Uint32Array(image.data.buffer);
-    if (view === 'overhead') {
+    const colors = this.biome === 'jungle' ? this.jungle : this.colors;
+    const heights = this.biome === 'jungle' ? this.jungleHeights : this.heights;
+    if (view === 'overhead' && this.biome !== 'space') {
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const wx = Math.floor(ship.x + (x - w / 2) * 1.4) & MASK;
         const flatZ = ship.z - (y - h / 2) * 1.4;
         const raised = this.height(wx, flatZ);
         const wz = Math.floor(flatZ - (raised - 36) * 0.3) & MASK;
-        pixels[y * w + x] = this.colors[wz * SIZE + wx];
+        pixels[y * w + x] = colors[wz * SIZE + wx];
       }
       return;
     }
 
     const offset = Math.floor((SKY_W - w) / 2 + ship.yaw * 100);
     for (let y = 0; y < h; y++) {
-      const sy = Math.max(0, Math.min(SKY_H - 1, Math.floor(y - ship.pitch * 12)));
-      for (let x = 0; x < w; x++) pixels[y * w + x] = this.sky[sy * SKY_W + ((x + offset) & (SKY_W - 1))];
+      const sy = Math.max(0, Math.min(SKY_H - 1, Math.floor((this.biome === 'space' ? y * SKY_H / h : y) - ship.pitch * 12)));
+      for (let x = 0; x < w; x++) pixels[y * w + x] = (this.biome === 'space' ? this.sky : this.daySky)[sy * SKY_W + ((x + offset) & (SKY_W - 1))];
     }
+
+    if (this.biome === 'space') return;
 
     const horizon = h * 0.30 + ship.pitch * 15;
     const forwardX = Math.sin(ship.yaw), forwardZ = Math.cos(ship.yaw);
     const cameraOffset = ship.camOffset;
     const camX = ship.x - forwardX * cameraOffset, camZ = ship.z - forwardZ * cameraOffset;
     const cameraHeight = ship.altitude + ship.camHeightOffset;
+    const halfFov = w / (h * 1.9);
     const hidden = new Int16Array(w);
     hidden.fill(h);
     for (let distance = 2; distance < 800; distance += 1 + distance * 0.023) {
-      const leftX = camX + forwardX * distance - forwardZ * distance * 0.8;
-      const leftZ = camZ + forwardZ * distance + forwardX * distance * 0.8;
-      const dx = forwardZ * distance * 1.6 / w, dz = -forwardX * distance * 1.6 / w;
+      const leftX = camX + forwardX * distance - forwardZ * distance * halfFov;
+      const leftZ = camZ + forwardZ * distance + forwardX * distance * halfFov;
+      const dx = forwardZ * distance * 2 * halfFov / w, dz = -forwardX * distance * 2 * halfFov / w;
       const scale = h * 0.95 / distance;
       const fog = Math.min(0.84, Math.max(0, (distance - 55) / 650));
       for (let x = 0; x < w; x++) {
         const px = leftX + dx * x, pz = leftZ + dz * x;
         const ix = Math.floor(px), iz = Math.floor(pz), wx = ix & MASK, wz = iz & MASK;
         const index = wz * SIZE + wx, fx = px - ix, fz = pz - iz;
-        const a = mix(this.heights[index], this.heights[wz * SIZE + ((wx + 1) & MASK)], fx);
-        const b0 = mix(this.heights[((wz + 1) & MASK) * SIZE + wx], this.heights[((wz + 1) & MASK) * SIZE + ((wx + 1) & MASK)], fx);
-        const elevation = mix(a, b0, fz);
+        const a = mix(heights[index], heights[wz * SIZE + ((wx + 1) & MASK)], fx);
+        const b0 = mix(heights[((wz + 1) & MASK) * SIZE + wx], heights[((wz + 1) & MASK) * SIZE + ((wx + 1) & MASK)], fx);
+        const wallHeight = this.biome === 'canyon' ? Math.min(130, Math.max(0, Math.abs(px) - 70) * 1.8) : 0;
+        const elevation = mix(a, b0, fz) + wallHeight;
         let top = Math.floor(horizon + (cameraHeight - elevation) * scale);
         if (top >= hidden[x]) continue;
         top = Math.max(0, top);
-        const color = this.colors[index];
-        const r = mix(color & 255, 74, fog) | 0;
-        const g = mix((color >>> 8) & 255, 57, fog) | 0;
-        const b = mix((color >>> 16) & 255, 79, fog) | 0;
+        const color = colors[index];
+        const r = mix(color & 255, this.biome === 'jungle' ? 151 : 182, fog) | 0;
+        const g = mix((color >>> 8) & 255, this.biome === 'jungle' ? 190 : 158, fog) | 0;
+        const b = mix((color >>> 16) & 255, this.biome === 'jungle' ? 190 : 144, fog) | 0;
         const topColor = rgba(r, g, b);
         const wall = rgba((r * 0.9) | 0, (g * 0.9) | 0, (b * 0.91) | 0);
         const wallDark = rgba((r * 0.84) | 0, (g * 0.84) | 0, (b * 0.87) | 0);

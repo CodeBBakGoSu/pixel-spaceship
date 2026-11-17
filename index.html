@@ -1,62 +1,55 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1021" />
-    <link rel="icon" href="data:," />
-    <meta name="description" content="A tiny pixel-art flight through a procedurally generated alien world." />
-    <title>ASTER // Vesper Run</title>
-  </head>
-  <body>
-    <main class="experience" aria-label="Pixel-art spaceship flight demo">
-      <canvas id="screen" aria-label="Arcade flight game. Move to steer and hold Space or pointer to fire."></canvas>
-      <canvas id="glow" aria-hidden="true"></canvas>
-      <div class="screen-shade" aria-hidden="true"></div>
-
-      <header class="topbar">
-        <div class="identity">
-          <span class="identity-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span><strong>ASTER<span class="identity-dot">.</span></strong><small>FLIGHT SYSTEMS / 01</small></span>
-        </div>
-        <div class="transmission"><span class="pulse"></span> LIVE TRANSMISSION <span class="transmission-separator">/</span> DEEP SPACE</div>
-        <nav class="view-picker" aria-label="Mission phases">
-          <span class="view-caption">PHASE</span>
-          <span class="view-pill" data-segment="overhead">01 <span>OVERHEAD</span></span>
-          <span class="view-pill" data-segment="chase">02 <span>CHASE</span></span>
-          <span class="view-pill" data-segment="cockpit">03 <span>COCKPIT</span></span>
-        </nav>
-      </header>
-
-      <div class="side-label" aria-hidden="true">AN EXPLORATION IN PIXELS <span>—</span> 001</div>
-      <div class="right-label" aria-hidden="true">SIGNAL STRENGTH <span>▮▮▮▮</span></div>
-
-      <div class="planet-label">
-        <div class="eyebrow"><span class="planet-dot"></span> NOW EXPLORING <span class="slash">/</span> SECTOR 07</div>
-        <div class="planet-name" id="segment-name">VESPER<span>—</span>9</div>
-        <div class="planet-subtitle" id="segment-subtitle">OVERHEAD <span>·</span> LOOP 01</div>
-      </div>
-
-      <div class="telemetry" aria-label="Mission status">
-        <div class="telemetry-item"><span>SCORE</span><strong id="score">000000</strong></div>
-        <div class="telemetry-item"><span>LIVES</span><strong id="lives">03</strong></div>
-        <div class="telemetry-item heading-item"><span id="timer-label">TIME</span><strong id="phase-time">00:30</strong></div>
-        <div class="engine-status"><span>HULL</span><div class="thrust-bars" id="thrust-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-      </div>
-      <div class="boss-hud" id="boss-hud" hidden><div><span id="boss-label">DREADNOUGHT / CORE</span><span id="boss-count">24 / 24</span></div><div class="boss-track"><i id="boss-health"></i></div></div>
-      <div class="phase-banner" id="phase-banner" aria-live="polite" hidden></div>
-      <section class="game-overlay" id="game-overlay" aria-label="Mission menu">
-        <div class="game-card">
-          <div class="card-kicker" id="card-kicker">ASTER FLIGHT SYSTEMS / MISSION 01</div>
-          <h1 id="card-title">VESPER<span>—</span>9</h1>
-          <p id="card-copy">Three phases. One flight.<br>Clear the skies and take down the dreadnought.</p>
-          <div class="card-actions"><button type="button" id="primary-action">LAUNCH MISSION <span>↗</span></button><button type="button" id="restart-action" hidden>RESTART</button></div>
-          <div class="card-hint" id="card-hint">ENTER / SPACE / CLICK TO LAUNCH</div>
-        </div>
-      </section>
-      <div class="help" id="help" aria-live="polite"></div>
-      <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#101829" />
+  <meta name="description" content="A pixel-art courier flight through coast, canyon and orbit." />
+  <link rel="icon" href="data:," />
+  <title>ASTER // Courier Run</title>
+</head>
+<body>
+<main class="experience" aria-label="Pixel-art courier flight game">
+  <canvas id="screen" aria-label="Flight game. Steer, climb and fire."></canvas>
+  <canvas id="glow" aria-hidden="true"></canvas>
+  <div class="screen-shade" aria-hidden="true"></div>
+  <header class="hud" aria-label="Flight status">
+    <div class="status">
+      <div><span>HULL</span><b id="hull-bars" class="blocks">▮▮▮▮▮▮▮▮</b><small id="lives">×3</small></div>
+      <div><span>BST</span><i class="track"><i id="boost-bar"></i></i></div>
+      <div><span>BMB</span><b id="bombs" class="bombs">◆◆◆</b></div>
+      <div class="status-view"><strong id="view-label">TOP</strong><span id="weapon-label">TWIN 1</span></div>
+    </div>
+    <div class="scorebox"><span>SCORE</span><strong id="score">000000</strong><small id="salvage">◆ 000</small></div>
+  </header>
+  <div id="boss-hud" class="boss-hud" hidden><span>WARDEN</span><i><i id="boss-health"></i></i></div>
+  <section id="radio" class="radio" aria-live="polite" hidden>
+    <canvas id="portrait" width="32" height="32" aria-hidden="true"></canvas>
+    <div><strong id="radio-speaker"></strong><p id="radio-text"></p></div>
+  </section>
+  <div id="objective" class="objective"></div>
+  <div class="alt-ruler" aria-label="Altitude"><span>ALT</span><i></i><b id="alt-marker">◂</b><small id="alt-number">110</small></div>
+  <div id="phase-banner" class="phase-banner" hidden></div>
+  <div id="view-tag" class="view-tag" hidden></div>
+  <section class="game-overlay" id="game-overlay" aria-label="Mission menu">
+    <div class="game-card">
+      <div class="card-kicker" id="card-kicker">COURIER FLIGHT SYSTEMS</div>
+      <h1 id="card-title">ASTER <span>WING</span></h1>
+      <p id="card-copy">Clear the route. Deliver the signal.</p>
+      <div id="rank-display" class="rank-display" hidden></div>
+      <div class="card-actions"><button type="button" id="primary-action">LAUNCH MISSION</button><button type="button" id="restart-action" hidden>RESTART</button></div>
+      <div class="card-hint" id="card-hint">ENTER TO LAUNCH</div>
+    </div>
+  </section>
+  <div class="touch-controls" id="touch-controls" hidden>
+    <div class="stick" id="stick" aria-label="Virtual steering stick"><span id="stick-knob"></span><small>CLIMB / DIVE</small></div>
+    <button class="touch-button fire" id="touch-fire" type="button">FIRE</button>
+    <button class="touch-button boost" id="touch-boost" type="button">BOOST</button>
+    <button class="touch-button bomb" id="touch-bomb" type="button">BOMB</button>
+    <button class="touch-button view" id="touch-view" type="button">VIEW</button>
+  </div>
+  <div class="help" id="help" aria-live="polite"></div>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>

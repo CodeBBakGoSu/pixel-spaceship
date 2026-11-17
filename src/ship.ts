@@ -165,6 +165,17 @@ export class ShipSprite {
       }
       ctx.restore();
     };
+    if (ship.boost > 0.1) {
+      for (const side of [-1, 1]) {
+        ctx.strokeStyle = side < 0 ? 'rgba(255,110,185,.65)' : 'rgba(107,237,255,.65)';
+        ctx.lineWidth = Math.max(1, scale * 1.3); ctx.beginPath();
+        for (let i = 0; i <= 20; i++) {
+          const q = project(side * (15 + i * 0.08), 8 + i * 2.5, 1);
+          if (i === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+        }
+        ctx.stroke();
+      }
+    }
     drawFlames();
 
     this.projector.draw(ctx, this.faces, palette, camera);
@@ -173,25 +184,19 @@ export class ShipSprite {
   }
 }
 
-export function drawCockpit(ctx: CanvasRenderingContext2D, pitch: number, aimX = 0, aimY = 0, slide = 0): void {
-  const w = ctx.canvas.width, h = ctx.canvas.height, cx = Math.floor(w / 2);
-  ctx.save();
-  ctx.translate(0, slide * h * 0.45);
-  ctx.fillStyle = '#121b29';
-  ctx.fillRect(0, h - 18, w, 18);
-  ctx.fillStyle = '#334958';
-  ctx.fillRect(0, h - 19, w, 2);
-  ctx.fillRect(cx - 49, h - 15, 98, 2);
-  ctx.fillStyle = '#1c2e3a';
-  ctx.fillRect(cx - 46, h - 12, 92, 9);
-  ctx.fillStyle = '#79c5ba';
-  for (let i = 0; i < 10; i++) ctx.fillRect(cx - 42 + i * 3, h - 9, 2, i % 3 === 0 ? 4 : 2);
-  for (let i = 0; i < 5; i++) ctx.fillRect(cx + 24 + i * 4, h - 9, 2, 4);
-  ctx.fillStyle = '#f3aa75'; ctx.fillRect(cx - 3, h - 9, 6, 3);
-  const sightX = Math.round(cx + aimX * w * 0.38);
-  const sightY = Math.floor(h * 0.42 + aimY * h * 0.27 + pitch * 8);
-  ctx.fillStyle = 'rgba(169, 230, 208, .8)';
-  ctx.fillRect(sightX - 10, sightY, 6, 1); ctx.fillRect(sightX + 5, sightY, 6, 1);
-  ctx.fillRect(sightX, sightY - 9, 1, 5); ctx.fillRect(sightX, sightY + 5, 1, 5);
+export function drawCockpit(ctx: CanvasRenderingContext2D, pitch: number, aimX = 0, aimY = 0, slide = 0, altitude = 110, speed = 120): void {
+  const w=ctx.canvas.width,h=ctx.canvas.height,cx=Math.floor(w/2),panel=h-34;
+  ctx.save();ctx.translate(0,slide*h*0.45);
+  // Canopy ribs and luminous pitch ladder.
+  ctx.strokeStyle='#182635';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,h);ctx.lineTo(w*0.07,0);ctx.moveTo(w,h);ctx.lineTo(w*0.93,0);ctx.stroke();
+  ctx.strokeStyle='rgba(134,234,189,.68)';ctx.lineWidth=1;
+  for (let i=-2;i<=2;i++) { const y=Math.round(h*0.43+i*15+pitch*10);ctx.beginPath();ctx.moveTo(cx-22,y);ctx.lineTo(cx-8,y);ctx.moveTo(cx+8,y);ctx.lineTo(cx+22,y);ctx.stroke(); }
+  ctx.fillStyle='#152431';ctx.fillRect(0,panel,w,34);ctx.fillStyle='#415866';ctx.fillRect(0,panel,w,2);
+  ctx.fillStyle='#071c1b';ctx.fillRect(7,panel+5,Math.max(36,w*0.25),24);ctx.fillStyle='#0c2927';ctx.fillRect(w-70,panel+5,62,24);
+  ctx.fillStyle='#7ddf9e';ctx.font='bold 5px monospace';ctx.textAlign='left';ctx.fillText('RDR',10,panel+11);ctx.fillText('SPD '+Math.round(speed),w-66,panel+12);ctx.fillText('ALT '+Math.round(altitude),w-66,panel+21);
+  const rx=28,ry=panel+19;ctx.strokeStyle='#2c7957';ctx.beginPath();ctx.arc(rx,ry,8,0,Math.PI*2);ctx.moveTo(rx-8,ry);ctx.lineTo(rx+8,ry);ctx.moveTo(rx,ry-8);ctx.lineTo(rx,ry+8);ctx.stroke();ctx.fillStyle='#a5f0c2';ctx.fillRect(rx+3,ry-5,2,2);
+  ctx.fillStyle='#b5dbe0';ctx.fillText('TWIN',cx-15,panel+11);ctx.fillStyle='#58d5c9';for(let i=0;i<5;i++)ctx.fillRect(cx-15+i*5,panel+17,4,4);
+  const sightX=Math.round(cx+aimX*w*0.38),sightY=Math.floor(h*0.42+aimY*h*0.27+pitch*8);
+  ctx.fillStyle='rgba(169,230,208,.9)';ctx.fillRect(sightX-10,sightY,6,1);ctx.fillRect(sightX+5,sightY,6,1);ctx.fillRect(sightX,sightY-9,1,5);ctx.fillRect(sightX,sightY+5,1,5);
   ctx.restore();
 }

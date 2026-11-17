@@ -1,10 +1,10 @@
 import { buildFaces, projectModel, VoxelProjector, type VoxelModel } from './voxel';
 
 type CachedSprite = { canvas: HTMLCanvasElement; x: number; y: number };
-export type SpriteCache = { drones: CachedSprite[]; pillar: CachedSprite; ring: CachedSprite; boss: CachedSprite[] };
+export type SpriteCache = { drones: CachedSprite[]; supply: CachedSprite; pylon: CachedSprite; ring: CachedSprite; door: CachedSprite; warden: CachedSprite };
 const palette = [[0,0,0],[54,64,77],[102,121,133],[205,213,206],[225,105,70],[91,203,200],[255,213,121],[140,75,65]];
 const dronePalette = [[0,0,0],[54,39,53],[120,76,83],[197,166,161],[242,91,86],[91,203,200],[255,213,121],[140,75,65]];
-const bossPalette = [[0,0,0],[31,39,55],[69,79,96],[116,127,138],[204,82,61],[76,165,170],[255,118,69],[106,62,57]];
+const supplyPalette = [[0,0,0],[82,40,42],[181,58,53],[238,230,211],[255,104,77],[91,203,200],[255,213,121],[140,75,65]];
 
 function makeModel(w: number, l: number, h: number, pivot: [number, number, number], material: (x: number, y: number, z: number) => number): VoxelModel {
   const data = new Uint8Array(w * l * h);
@@ -29,13 +29,15 @@ export function bakeSprites(): SpriteCache {
     const d = Math.hypot(x, z);
     return Math.abs(y) <= 2 && d >= 7 && d <= 10 ? (d > 8.5 ? 5 : 6) : 0;
   }));
-  const boss = buildFaces(makeModel(48, 36, 16, [24, 18, 5], (x, y, z) => {
-    const ax = Math.abs(x);
-    if (y >= -15 && y <= 14 && ax <= (y < -8 ? 5 : 8) && z >= -4 && z <= 8 - Math.floor(ax / 4)) return z > 5 ? 3 : 2;
-    if (y >= -4 + ax * 0.38 && y <= 11 && ax <= 22 && z >= -2 && z <= 2) return ax > 16 ? 4 : 1;
-    if (y >= 9 && ax <= 5 && z >= -2 && z <= 5) return ax <= 2 && z <= 2 ? 6 : 4;
-    if (y >= 3 && y <= 12 && ax >= 9 && ax <= 12 && z >= 0 && z <= 8) return 4;
+  const door = buildFaces(makeModel(59, 5, 44, [29, 2, 20], (x, y, z) => {
+    if (Math.abs(y) > 2 || Math.abs(x) > 28 || z < -19 || z > 20) return 0;
+    if (Math.abs(x) > 23 || z > 14 || z < -16) return (Math.floor((x + z) / 5) & 1) ? 6 : 1;
     return 0;
+  }));
+  const warden = buildFaces(makeModel(57, 7, 57, [28, 3, 28], (x, y, z) => {
+    const d = Math.hypot(x, z);
+    if (d < 20 || d > 27 || Math.abs(y) > 3) return 0;
+    return d > 25 ? 1 : d < 22 ? 2 : 3;
   }));
   const renderer = new VoxelProjector();
   function bake(faces: ReturnType<typeof buildFaces>, w: number, h: number, x: number, y: number, scale: number, pitch: number, roll: number, yaw = 0, colors = palette): CachedSprite {
@@ -46,8 +48,10 @@ export function bakeSprites(): SpriteCache {
   }
   return {
     drones: Array.from({ length: 9 }, (_, i) => bake(drone, 44, 44, 22, 22, 1.65, 0.85, (i - 4) * 0.12, Math.PI, dronePalette)),
-    pillar: bake(pillar, 40, 72, 20, 65, 1.35, 0.55, 0),
+    supply: bake(drone, 44, 44, 22, 22, 1.65, 0.85, 0, Math.PI, supplyPalette),
+    pylon: bake(pillar, 40, 72, 20, 65, 1.35, 0.55, 0),
     ring: bake(ring, 48, 48, 24, 24, 1.6, 0.2, 0),
-    boss: [-0.2, 0, 0.2].map(roll => bake(boss, 96, 72, 48, 40, 1.5, 0.6, roll, 0, bossPalette)),
+    door: bake(door, 112, 90, 56, 45, 1.6, 0.13, 0),
+    warden: bake(warden, 112, 112, 56, 56, 1.65, 0.05, 0),
   };
 }
