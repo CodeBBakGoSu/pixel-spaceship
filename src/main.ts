@@ -6,6 +6,7 @@ import { bakeSprites } from './models';
 import { drawEntities, drawShots } from './render';
 import { drawCockpit, ShipSprite, type ShipPose } from './ship';
 import { World } from './world';
+import { phoneLayout as calculatePhoneLayout, type Insets, type PhoneLayout, type Rect } from './layout';
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const canvas = $<HTMLCanvasElement>('#screen'), ctx = canvas.getContext('2d', { alpha: false })!;
@@ -20,13 +21,17 @@ for (let i=0;i<Math.round(options.time*60) && game.phase!=='win' && game.phase!=
 let frame: ImageData, other: ImageData;
 let lastTime=performance.now(), accumulator=0, fps=60;
 let pointerX=0,pointerY=0,pointerActive=false,pointerDown=false;
-const touchMode=options.touch || matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints>0;
+const coarsePointer=matchMedia('(pointer: coarse)'),portraitOrientation=matchMedia('(orientation: portrait)');
+const detectTouch=()=>options.touch||coarsePointer.matches||(navigator.maxTouchPoints>0&&Math.min(innerWidth,innerHeight)<=600);
+let touchMode=detectTouch();
+let phone:PhoneLayout|null=null,phoneView:Segment|null=null,phoneSafe:Insets={top:0,right:0,bottom:0,left:0};
 let stickX=0,stickY=0,stickActive=false,touchFire=false,touchBoost=false;
 let pendingStart=false,pendingPause=false,pendingView=false,pendingBomb=false;
 let lastHelp='',helpTimer=0,lastMenu='',lastSpeaker='';
 const keys=new Set<string>();
 const help=$<HTMLElement>('#help'),banner=$<HTMLElement>('#phase-banner'),overlay=$<HTMLElement>('#game-overlay');
 const primary=$<HTMLButtonElement>('#primary-action'),restart=$<HTMLButtonElement>('#restart-action');
+const experience=$<HTMLElement>('.experience'),safeProbe=$<HTMLElement>('#safe-area-probe'),touchPause=$<HTMLButtonElement>('#touch-pause');
 const touchControls=$<HTMLElement>('#touch-controls'),stick=$<HTMLElement>('#stick'),knob=$<HTMLElement>('#stick-knob');
 touchControls.hidden=!touchMode;
 const clamp=(n:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,n));
@@ -42,10 +47,39 @@ Object.defineProperty(window,'__game',{get:()=>Object.freeze({
   phaseTime:game.phaseTime,transitionT:game.transitionT,wipeT:game.wipeT,paused:game.paused,boosting:game.boosting,pylonsDown:game.pylonsDown,doorsCleared:game.doorsCleared,
   boundaryWarning:game.boundaryWarning,arena:Object.freeze({...game.arena}),bossHp:game.boss.active?game.boss.hp:null,bossPods:Object.freeze([...game.boss.pods]),entities:game.entities.length,bullets:game.bullets.length,
   player:Object.freeze({...game.player}),aimX:game.aimX,aimY:game.aimY,
+  layout:phone?Object.freeze({orientation:phone.orientation,buffer:Object.freeze({...phone.buffer}),playfield:Object.freeze({...phone.playfield}),controls:Object.freeze({...phone.controls}),dashboard:phone.dashboard?Object.freeze({...phone.dashboard}):null}):null,
 })});
+function safeInsets():Insets {
+  const style=getComputedStyle(safeProbe),px=(value:string)=>Math.max(0,parseFloat(value)||0);
+  return{top:px(style.paddingTop),right:px(style.paddingRight),bottom:px(style.paddingBottom),left:px(style.paddingLeft)};
+}
+function intendedView():Segment {
+  const next=SCRIPT.find(d=>d.id===game.nextSegment)!.defaultView;
+  return game.camera.mode==='cockpit'||game.phase==='transition'&&next==='cockpit'?'cockpit':game.camera.mode;
+}
+function setRect(name:string,r:Rect):void {
+  const style=experience.style;style.setProperty(`--${name}-x`,`${r.x}px`);style.setProperty(`--${name}-y`,`${r.y}px`);
+  style.setProperty(`--${name}-w`,`${r.width}px`);style.setProperty(`--${name}-h`,`${r.height}px`);
+}
+function updatePhoneLayout():void {
+  if(!touchMode){phone=null;phoneView=null;return;}
+  phoneSafe=safeInsets();phoneView=intendedView();phone=calculatePhoneLayout(innerWidth,innerHeight,phoneSafe,phoneView);
+  const parts:Record<string,Rect>={hud:phone.hud,boss:phone.boss,radio:phone.radio,objective:phone.objective,field:phone.playfield,
+    controls:phone.controls,radar:phone.radar,alt:phone.alt,pause:phone.pause,stick:phone.stick,fire:phone.fire,boost:phone.boost,bomb:phone.bomb,view:phone.view};
+  for(const [name,r] of Object.entries(parts))setRect(name,r);
+  experience.classList.toggle('phone-portrait',phone.orientation==='portrait');
+  experience.classList.toggle('phone-landscape',phone.orientation==='landscape');
+}
 function resize():void{
-  const aspect=innerWidth/Math.max(1,innerHeight);canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);
-  ctx.imageSmoothingEnabled=false;document.documentElement.style.setProperty('--cockpit-panel',`${34/canvas.height*innerHeight}px`);glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
+  touchMode=detectTouch();
+  experience.classList.toggle('phone-layout',touchMode);
+  if(touchMode)updatePhoneLayout();else{phone=null;phoneView=null;experience.classList.remove('phone-portrait','phone-landscape');}
+  const aspect=innerWidth/Math.max(1,innerHeight);
+  if(phone){canvas.width=phone.buffer.width;canvas.height=phone.buffer.height;}
+  else{canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);}
+  ctx.imageSmoothingEnabled=false;document.documentElement.style.setProperty('--cockpit-panel',`${34/canvas.height*innerHeight}px`);
+  glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
+  lastHelp='';
 }
 function showHelp():void{
   const movement=game.segment==='atoll'?'SHOOT PYLONS / FIND EXIT':game.segment==='canyon'?'SHOOT BOTH LOCKS':game.segment==='orbit'?'DESTROY PODS / CORE':'CLEAR WAVES / MATCH ALTITUDE';
@@ -79,8 +113,13 @@ function updateHud():void{
   banner.hidden=!(game.phase==='transition'||game.phase==='playing'&&game.phaseTime<2);
   setText('#phase-banner',game.phase==='transition'?SCRIPT.find(d=>d.id===game.nextSegment)!.name:SCRIPT[game.scriptIndex].name);
   const tag=$<HTMLElement>('#view-tag');tag.hidden=game.viewTagT<=0;setText('#view-tag',`VIEW ${viewName(game.camera.mode)}`);
-  const menu=game.paused?'paused':game.phase;
-  if(menu!==lastMenu){lastMenu=menu;const show=['title','win','game_over','paused'].includes(menu);overlay.hidden=!show;
+  const menu=game.paused?'paused':game.phase,show=['title','win','game_over','paused'].includes(menu);
+  if(touchMode&&show&&menu!==lastMenu){
+    stickActive=false;stickX=stickY=0;touchFire=false;touchBoost=false;pointerDown=false;pointerActive=false;knob.style.transform='';
+    for(const button of touchControls.querySelectorAll('.held'))button.classList.remove('held');
+  }
+  touchControls.hidden=!touchMode||show;touchPause.hidden=!touchMode||show;experience.classList.toggle('menu-open',show);
+  if(menu!==lastMenu){lastMenu=menu;overlay.hidden=!show;
     if(show){const rank=$<HTMLElement>('#rank-display');rank.hidden=menu!=='win';restart.hidden=menu!=='win';
       if(menu==='title'){setText('#card-kicker','COURIER FLIGHT SYSTEMS / MISSION 01');setText('#card-title','ASTER WING');setText('#card-copy','Clear the reach, open the gates, and deliver the signal through orbit.');setText('#primary-action','LAUNCH MISSION');setText('#card-hint','ENTER OR TAP TO LAUNCH');}
       else if(menu==='win'){setText('#card-kicker','KESTREL ORBIT CLEAR');setText('#card-title','ROUTE COMPLETE');setText('#card-copy',`SCORE ${String(game.score).padStart(6,'0')}  ·  ${game.hitsTaken} HITS  ·  ◆ ${game.salvage}`);setText('#rank-display',`RANK ${game.rank}`);setText('#primary-action','NEXT LOOP');setText('#card-hint','ENTER FOR NEXT LOOP · R TO RESTART');}
@@ -91,8 +130,14 @@ function updateHud():void{
 }
 function action():void{if(game.paused)pendingPause=true;else if(['title','game_over','win'].includes(game.phase))pendingStart=true;}
 primary.addEventListener('click',action);restart.addEventListener('click',()=>{game=restartGame(game,ground);});
+touchPause.addEventListener('pointerdown',event=>{event.preventDefault();pendingPause=true;});
+touchPause.addEventListener('click',event=>{if(event.detail===0)pendingPause=true;});
 overlay.addEventListener('pointerdown',event=>{if(event.target===overlay)action();});
-window.addEventListener('resize',resize);
+window.addEventListener('resize',resize);window.addEventListener('orientationchange',resize);
+coarsePointer.addEventListener('change',resize);portraitOrientation.addEventListener('change',resize);
+experience.addEventListener('touchmove',event=>event.preventDefault(),{passive:false});
+experience.addEventListener('contextmenu',event=>event.preventDefault());experience.addEventListener('dblclick',event=>event.preventDefault());
+document.addEventListener('gesturestart',event=>event.preventDefault());
 window.addEventListener('keydown',event=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault();
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(event.code))pointerActive=false;
@@ -106,7 +151,7 @@ canvas.addEventListener('pointerdown',event=>{if(event.button!==0)return;if(game
 canvas.addEventListener('pointermove',event=>{if(event.pointerType!=='touch'||pointerDown)steer(event);});
 canvas.addEventListener('pointerup',event=>{pointerDown=false;if(event.pointerType==='touch')pointerActive=false;});
 canvas.addEventListener('pointercancel',()=>{pointerDown=false;pointerActive=false;});canvas.addEventListener('pointerleave',()=>{if(!pointerDown)pointerActive=false;});
-function moveStick(event:PointerEvent):void{const r=stick.getBoundingClientRect();stickX=clamp((event.clientX-(r.left+r.width/2))/(r.width/2),-1,1);stickY=clamp((event.clientY-(r.top+r.height/2))/(r.height/2),-1,1);knob.style.transform=`translate(${stickX*28}px,${stickY*28}px)`;}
+function moveStick(event:PointerEvent):void{const r=stick.getBoundingClientRect();stickX=clamp((event.clientX-(r.left+r.width/2))/(r.width/2),-1,1);stickY=clamp((event.clientY-(r.top+r.height/2))/(r.height/2),-1,1);const travel=Math.max(0,(r.width-32)/2-3);knob.style.transform=`translate(${stickX*travel}px,${stickY*travel}px)`;}
 stick.addEventListener('pointerdown',event=>{event.preventDefault();stickActive=true;stick.setPointerCapture(event.pointerId);moveStick(event);});
 stick.addEventListener('pointermove',event=>{if(stickActive)moveStick(event);});
 const releaseStick=()=>{stickActive=false;stickX=stickY=0;knob.style.transform='';};stick.addEventListener('pointerup',releaseStick);stick.addEventListener('pointercancel',releaseStick);
@@ -138,24 +183,38 @@ function drawRadar():void {
 function render():void{
   const w=canvas.width,h=canvas.height,mode=game.camera.mode,transition=game.phase==='transition',t=transition?smooth(game.transitionT):0;
   const nextView=SCRIPT.find(d=>d.id===game.nextSegment)!.defaultView;
+  if(touchMode&&phoneView!==intendedView())updatePhoneLayout();
+  let scene=game;
+  if(phone&&mode==='overhead'){
+    const desired=phone.shipY*h/innerHeight,current=h/2-(game.player.z-game.camera.z)/1.4;
+    const shift=(desired-current)*1.4*(transition?1-t:1);
+    scene={...game,camera:{...game.camera,z:game.camera.z+shift}};
+  }
   world.setBiome(game.biome,game.arena.x);
   if(transition && (mode==='overhead') !== (nextView==='overhead')){
-    world.render(frame,game.camera,mode==='overhead'?'overhead':'chase');world.render(other,game.camera,nextView==='overhead'?'overhead':'chase');
+    world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');world.render(other,scene.camera,nextView==='overhead'?'overhead':'chase');
     const from=frame.data,to=other.data;for(let i=0;i<from.length;i+=4){from[i]=mix(from[i],to[i],t);from[i+1]=mix(from[i+1],to[i+1],t);from[i+2]=mix(from[i+2],to[i+2],t);}
-  }else world.render(frame,game.camera,mode==='overhead'?'overhead':'chase');
+  }else world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');
   ctx.putImageData(frame,0,0);if(glow){glow.setTransform(1,0,0,1,0,0);glow.clearRect(0,0,w,h);}
-  if(mode==='overhead')world.drawDust(ctx,game.camera,'overhead',game.elapsed);
-  ctx.save();if(transition)ctx.globalAlpha=1-t;drawEntities(ctx,glow,sprites,game,mode,ground);ctx.restore();
+  if(mode==='overhead')world.drawDust(ctx,scene.camera,'overhead',game.elapsed);
+  ctx.save();if(transition)ctx.globalAlpha=1-t;drawEntities(ctx,glow,sprites,scene,mode,ground);ctx.restore();
   if((mode!=='cockpit'||transition&&nextView!=='cockpit') && !(game.invulnTimer>0&&Math.floor(game.elapsed*10)%2===0&&!transition)){
     const overhead=mode==='overhead',blend=transition&&overhead&&nextView!=='overhead'?t:overhead?0:1;
     const clearance=Math.max(0,game.player.altitude-ground(game.player.x,game.player.z));
-    const overheadX=w/2+(game.player.x-game.camera.x)/1.4*Math.min(1,w/240),overheadY=h/2-game.player.y/1.4;
+    const overheadX=w/2+(game.player.x-scene.camera.x)/1.4*Math.min(1,w/240),overheadY=phone?h/2-(game.player.z-scene.camera.z)/1.4:h/2-game.player.y/1.4;
+    const chaseY=phone?phone.shipY*h/innerHeight:h*.59;
     const alpha=transition&&nextView==='cockpit'?1-t:transition&&mode==='cockpit'?t:1;
-    const pose:ShipPose={x:mix(overheadX,w/2,blend),y:mix(overheadY,h*.59,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
+    const pose:ShipPose={x:mix(overheadX,w/2,blend),y:mix(overheadY,chaseY,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
     shipSprite.draw(ctx,glow,visualFlight(game),blend<.5?'overhead':'chase',game.biome==='space'?-1000:ground(game.player.x,game.player.z),false,pose);
   }
-  ctx.save();if(transition)ctx.globalAlpha=1-t;drawShots(ctx,glow,game,mode);ctx.restore();
-  if(mode==='cockpit'||transition&&nextView==='cockpit')drawCockpit(ctx,game.camera.pitch,game.aimX,game.aimY,transition?(mode==='cockpit'?t:1-t):0,game.player.altitude,game.boosting?190:120);
+  ctx.save();if(transition)ctx.globalAlpha=1-t;drawShots(ctx,glow,scene,mode);ctx.restore();
+  if(mode==='cockpit'||transition&&nextView==='cockpit'){
+    if(phone?.dashboard){
+      const inset=(innerHeight-phone.dashboard.y-phone.dashboard.height)*h/innerHeight;
+      ctx.save();if(transition)ctx.globalAlpha=mode==='cockpit'?1-t:t;
+      drawCockpit(ctx,game.camera.pitch,game.aimX,game.aimY,0,game.player.altitude,game.boosting?190:120,inset,phone.panelScale,phoneSafe.left*w/innerWidth,phoneSafe.right*w/innerWidth);ctx.restore();
+    }else drawCockpit(ctx,game.camera.pitch,game.aimX,game.aimY,transition?(mode==='cockpit'?t:1-t):0,game.player.altitude,game.boosting?190:120);
+  }
   if(game.wipeT>0){const progress=1-game.wipeT/.35,y=Math.round(progress*h);ctx.fillStyle='rgba(14,22,35,.75)';ctx.fillRect(0,y-7,w,14);ctx.fillStyle='rgba(189,246,244,.7)';for(let i=-8;i<=8;i+=3)ctx.fillRect(0,y+i,w,1);}
   updateHud();drawRadar();
 }

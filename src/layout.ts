@@ -42,5 +42,5 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const viewButton = rect(fire.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
     radar, alt, pause, stick, stickLabel, fire, boost, bomb, view: viewButton,
-    shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.68)), panelScale };
+    shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), panelScale };
 }

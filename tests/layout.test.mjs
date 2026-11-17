@@ -28,6 +28,8 @@ for (const [width,height] of sizes) for (const safe of insets) for (const view o
 test('landscape phone has usable, separated zones and controls', () => {
   const l=phoneLayout(844,390,{top:0,right:24,bottom:12,left:24},'cockpit');
   assert.equal(l.orientation,'landscape');assert.ok(l.buffer.width>l.buffer.height);
+  const chase=phoneLayout(844,390,{top:0,right:24,bottom:12,left:24},'chase');
+  assert.ok(chase.shipY+55<=chase.controls.y,'landscape ship clears the control area');
   assert.equal(intersects(l.hud,l.radio),false);assert.equal(intersects(l.radio,l.objective),false);
   assert.equal(intersects(l.playfield,l.dashboard),false);assert.equal(intersects(l.dashboard,l.controls),false);
   for(const b of [l.stick,l.fire,l.boost,l.bomb,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);

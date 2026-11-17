@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#101829" />
   <meta name="description" content="A pixel-art courier flight through coast, canyon and orbit." />
   <link rel="icon" href="data:," />
@@ -13,6 +13,8 @@
   <canvas id="screen" aria-label="Flight game. Steer, climb and fire."></canvas>
   <canvas id="glow" aria-hidden="true"></canvas>
   <div class="screen-shade" aria-hidden="true"></div>
+  <div id="safe-area-probe" aria-hidden="true"></div>
+  <div id="control-backdrop" aria-hidden="true"></div>
   <header class="hud" aria-label="Flight status">
     <div class="status">
       <div><span>HULL</span><b id="hull-bars" class="blocks">▮▮▮▮▮▮▮▮</b><small id="lives">×3</small></div>
@@ -22,6 +24,7 @@
     </div>
     <div class="scorebox"><span>SCORE</span><strong id="score">000000</strong><small id="salvage">◆ 000</small></div>
   </header>
+  <button class="touch-pause" id="touch-pause" type="button" aria-label="Pause" hidden>Ⅱ</button>
   <div id="boss-hud" class="boss-hud" hidden><span>WARDEN</span><i><i id="boss-health"></i></i></div>
   <section id="radio" class="radio" aria-live="polite" hidden>
     <canvas id="portrait" width="32" height="32" aria-hidden="true"></canvas>
