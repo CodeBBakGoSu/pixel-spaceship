@@ -32,6 +32,7 @@ export class World {
   private jungle = new Uint32Array(SIZE * SIZE);
   private daySky = new Uint32Array(SKY_W * SKY_H);
   private biome: Biome = 'canyon';
+  private canyonCenter = 0;
   private crater = new Uint8Array(SIZE * SIZE);
   private sky = new Uint32Array(SKY_W * SKY_H);
 
@@ -103,7 +104,7 @@ export class World {
     this.biome = 'jungle';
   }
 
-  setBiome(biome: Biome): void { this.biome = biome; }
+  setBiome(biome: Biome, canyonCenter = 0): void { this.biome = biome; this.canyonCenter = canyonCenter; }
 
   height(x: number, z: number): number {
     const heights = this.biome === 'jungle' ? this.jungleHeights : this.heights;
@@ -214,7 +215,7 @@ export class World {
         const index = wz * SIZE + wx, fx = px - ix, fz = pz - iz;
         const a = mix(heights[index], heights[wz * SIZE + ((wx + 1) & MASK)], fx);
         const b0 = mix(heights[((wz + 1) & MASK) * SIZE + wx], heights[((wz + 1) & MASK) * SIZE + ((wx + 1) & MASK)], fx);
-        const wallHeight = this.biome === 'canyon' ? Math.min(130, Math.max(0, Math.abs(px) - 70) * 1.8) : 0;
+        const wallHeight = this.biome === 'canyon' ? Math.min(130, Math.max(0, Math.abs(px - this.canyonCenter) - 70) * 1.8) : 0;
         const elevation = mix(a, b0, fz) + wallHeight;
         let top = Math.floor(horizon + (cameraHeight - elevation) * scale);
         if (top >= hidden[x]) continue;

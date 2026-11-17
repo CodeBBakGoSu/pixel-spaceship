@@ -18,7 +18,7 @@
       <div><span>HULL</span><b id="hull-bars" class="blocks">▮▮▮▮▮▮▮▮</b><small id="lives">×3</small></div>
       <div><span>BST</span><i class="track"><i id="boost-bar"></i></i></div>
       <div><span>BMB</span><b id="bombs" class="bombs">◆◆◆</b></div>
-      <div class="status-view"><strong id="view-label">TOP</strong><span id="weapon-label">TWIN 1</span></div>
+      <div class="status-view"><strong id="view-label">TOP</strong><span id="weapon-label">TWIN 1</span><time id="segment-timer">00:00</time></div>
     </div>
     <div class="scorebox"><span>SCORE</span><strong id="score">000000</strong><small id="salvage">◆ 000</small></div>
   </header>
@@ -28,6 +28,8 @@
     <div><strong id="radio-speaker"></strong><p id="radio-text"></p></div>
   </section>
   <div id="objective" class="objective"></div>
+  <div id="boundary-warning" class="boundary-warning" hidden>RETURN TO AIRSPACE</div>
+  <canvas id="nav-radar" width="72" height="72" aria-label="Navigation radar"></canvas>
   <div class="alt-ruler" aria-label="Altitude"><span>ALT</span><i></i><b id="alt-marker">◂</b><small id="alt-number">110</small></div>
   <div id="phase-banner" class="phase-banner" hidden></div>
   <div id="view-tag" class="view-tag" hidden></div>

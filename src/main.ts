@@ -16,7 +16,7 @@ const options = parseGameOptions(location.search), legacy = new URLSearchParams(
 let game = createGame(options, ground);
 if (legacy.get('roll') === '1') { game.roll = 0.5; game.player.bank = 0.45; }
 const neutral: GameInput = { moveX: 0, moveY: 0, fire: false, aspect: innerWidth / Math.max(1, innerHeight) };
-for (let i=0;i<Math.round(options.time*60) && game.phase!=='win' && game.phase!=='game_over';i++) game=stepGame(game,neutral,1/60,ground);
+for (let i=0;i<Math.round(options.time*60) && game.phase!=='win' && game.phase!=='game_over';i++) { world.setBiome(game.biome,game.arena.x); game=stepGame(game,neutral,1/60,ground); }
 let frame: ImageData, other: ImageData;
 let lastTime=performance.now(), accumulator=0, fps=60;
 let pointerX=0,pointerY=0,pointerActive=false,pointerDown=false;
@@ -32,23 +32,24 @@ touchControls.hidden=!touchMode;
 const clamp=(n:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,n));
 const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
 const smooth=(n:number)=>{n=clamp(n,0,1);return n*n*(3-2*n);};
-const setText=(selector:string,text:string)=>{const el=$(selector);if(el.textContent!==text)el.textContent=text;};
+const textNodes=new Map<string,HTMLElement>();
+const setText=(selector:string,text:string)=>{let el=textNodes.get(selector);if(!el){el=$(selector);textNodes.set(selector,el);}if(el.textContent!==text)el.textContent=text;};
 const viewName=(v:Segment)=>v==='overhead'?'TOP':v.toUpperCase();
 
 Object.defineProperty(window,'__game',{get:()=>Object.freeze({
   phase:game.phase,segment:game.segment,view:game.camera.mode,objective:game.objective,score:game.score,lives:game.lives,hull:game.hull,
-  weaponLv:game.weaponLv,bst:game.bst,bombs:game.bombs,rank:game.rank,salvage:game.salvage,fps:Math.round(fps),loop:game.loop,loopSpeed:game.loopSpeed,
+  weaponLv:game.weaponLv,peakWeaponLv:game.peakWeaponLv,bst:game.bst,bombs:game.bombs,rank:game.rank,salvage:game.salvage,fps:Math.round(fps),loop:game.loop,loopSpeed:game.loopSpeed,
   phaseTime:game.phaseTime,transitionT:game.transitionT,wipeT:game.wipeT,paused:game.paused,boosting:game.boosting,pylonsDown:game.pylonsDown,doorsCleared:game.doorsCleared,
-  bossHp:game.boss.active?game.boss.hp:null,bossPods:Object.freeze([...game.boss.pods]),entities:game.entities.length,bullets:game.bullets.length,
+  boundaryWarning:game.boundaryWarning,arena:Object.freeze({...game.arena}),bossHp:game.boss.active?game.boss.hp:null,bossPods:Object.freeze([...game.boss.pods]),entities:game.entities.length,bullets:game.bullets.length,
   player:Object.freeze({...game.player}),aimX:game.aimX,aimY:game.aimY,
 })});
 function resize():void{
   const aspect=innerWidth/Math.max(1,innerHeight);canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);
-  ctx.imageSmoothingEnabled=false;glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
+  ctx.imageSmoothingEnabled=false;document.documentElement.style.setProperty('--cockpit-panel',`${34/canvas.height*innerHeight}px`);glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
 }
 function showHelp():void{
   const movement=game.segment==='atoll'?'SHOOT PYLONS / FIND EXIT':game.segment==='canyon'?'SHOOT BOTH LOCKS':game.segment==='orbit'?'DESTROY PODS / CORE':'CLEAR WAVES / MATCH ALTITUDE';
-  help.textContent=touchMode?`${movement} · DRAG / FIRE / BOOST / BOMB / VIEW`:`${movement} · WASD / ARROWS · SPACE FIRE · SHIFT BOOST · X BOMB · V VIEW · P PAUSE`;
+  help.textContent=touchMode?`DRAG TO TURN / CLIMB · FIRE · BOOST · BOMB · VIEW`:`${movement} · WASD / ARROWS · SPACE FIRE · SHIFT BOOST · X BOMB · V VIEW · P PAUSE`;
   help.classList.remove('fade');clearTimeout(helpTimer);helpTimer=window.setTimeout(()=>help.classList.add('fade'),6000);
 }
 function portrait(speaker:string):void{
@@ -65,6 +66,10 @@ function updateHud():void{
   setText('#hull-bars','▮'.repeat(game.hull)+'▯'.repeat(game.maxHull-game.hull));setText('#lives',`×${game.lives}`);
   $<HTMLElement>('#boost-bar').style.width=`${game.bst*100}%`;setText('#bombs','◆'.repeat(game.bombs)||'—');
   setText('#view-label',viewName(game.camera.mode));setText('#weapon-label',`TWIN ${game.weaponLv}`);
+  const seconds=game.phase==='transition'?0:Math.floor(game.phaseTime+0.00001);
+  setText('#segment-timer',`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`);
+  help.classList.toggle('cockpit-help',game.camera.mode==='cockpit');
+  $<HTMLElement>('#boundary-warning').hidden=!game.boundaryWarning;
   setText('#score',String(game.score).padStart(6,'0'));setText('#salvage',`◆ ${String(game.salvage).padStart(3,'0')}`);
   setText('#objective',game.objective);setText('#alt-number',String(Math.round(game.player.altitude)));
   $<HTMLElement>('#alt-marker').style.top=`${clamp(85-(game.player.altitude-55)/110*70,10,85)}%`;
@@ -117,10 +122,23 @@ function controls():GameInput{
     aimX:game.camera.mode==='cockpit'&&pointerActive?pointerX:undefined,aimY:game.camera.mode==='cockpit'&&pointerActive?pointerY:undefined};
 }
 function visualFlight(s:GameState):Flight{return{x:s.player.x,z:s.player.z,yaw:s.player.yaw,altitude:s.player.altitude,speed:34*s.loopSpeed*(s.boosting?1.55:1),boost:s.boosting?1:0,pitch:0,roll:s.roll};}
+const radar=$<HTMLCanvasElement>('#nav-radar'),radarCtx=radar.getContext('2d')!;
+let radarFrame=0;
+function drawRadar():void {
+  if (++radarFrame % 4 !== 0) return;
+  const c=radarCtx,p=game.player;c.clearRect(0,0,72,72);
+  c.fillStyle='rgba(7,21,28,.8)';c.fillRect(0,0,72,72);c.strokeStyle='#619898';c.strokeRect(1,1,70,70);
+  c.strokeStyle='#31585b';c.beginPath();c.arc(36,38,27,0,Math.PI*2);c.moveTo(9,38);c.lineTo(63,38);c.moveTo(36,11);c.lineTo(36,65);c.stroke();
+  const dot=(x:number,z:number,color:string)=>{let dx=(x-p.x)*.13,dz=-(z-p.z)*.13;const d=Math.hypot(dx,dz);if(d>26){dx*=26/d;dz*=26/d;}c.fillStyle=color;c.fillRect(Math.round(35+dx),Math.round(37+dz),3,3);};
+  for(const e of game.entities){if(e.kind==='pylon'||e.kind==='lock')dot(e.x,e.z,'#ffd16b');else if(e.kind==='exit')dot(e.x,e.z,'#6affbd');else if(e.kind==='supply'||e.kind==='capsule')dot(e.x,e.z,'#71f2ff');else if(e.kind==='drone')dot(e.x,e.z,'#ff8c8c');}
+  if(game.boss.active)dot(game.boss.x,game.boss.z,'#f588af');
+  const x=36+Math.sin(p.yaw)*6,y=38-Math.cos(p.yaw)*6;c.strokeStyle='#e5fff0';c.beginPath();c.moveTo(36,38);c.lineTo(x,y);c.stroke();c.fillStyle='#e5fff0';c.fillRect(35,37,3,3);
+  c.fillStyle='#a5d5ce';c.font='bold 6px monospace';c.fillText('NAV',4,8);
+}
 function render():void{
   const w=canvas.width,h=canvas.height,mode=game.camera.mode,transition=game.phase==='transition',t=transition?smooth(game.transitionT):0;
   const nextView=SCRIPT.find(d=>d.id===game.nextSegment)!.defaultView;
-  world.setBiome(game.biome);
+  world.setBiome(game.biome,game.arena.x);
   if(transition && (mode==='overhead') !== (nextView==='overhead')){
     world.render(frame,game.camera,mode==='overhead'?'overhead':'chase');world.render(other,game.camera,nextView==='overhead'?'overhead':'chase');
     const from=frame.data,to=other.data;for(let i=0;i<from.length;i+=4){from[i]=mix(from[i],to[i],t);from[i+1]=mix(from[i+1],to[i+1],t);from[i+2]=mix(from[i+2],to[i+2],t);}
@@ -131,19 +149,19 @@ function render():void{
   if((mode!=='cockpit'||transition&&nextView!=='cockpit') && !(game.invulnTimer>0&&Math.floor(game.elapsed*10)%2===0&&!transition)){
     const overhead=mode==='overhead',blend=transition&&overhead&&nextView!=='overhead'?t:overhead?0:1;
     const clearance=Math.max(0,game.player.altitude-ground(game.player.x,game.player.z));
-    const overheadX=w/2+game.player.x/1.4*Math.min(1,w/240),overheadY=h/2-game.player.y/1.4;
+    const overheadX=w/2+(game.player.x-game.camera.x)/1.4*Math.min(1,w/240),overheadY=h/2-game.player.y/1.4;
     const alpha=transition&&nextView==='cockpit'?1-t:transition&&mode==='cockpit'?t:1;
-    const pose:ShipPose={x:mix(overheadX,w/2+game.player.x*.35,blend),y:mix(overheadY,h*.59,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
+    const pose:ShipPose={x:mix(overheadX,w/2,blend),y:mix(overheadY,h*.59,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
     shipSprite.draw(ctx,glow,visualFlight(game),blend<.5?'overhead':'chase',game.biome==='space'?-1000:ground(game.player.x,game.player.z),false,pose);
   }
   ctx.save();if(transition)ctx.globalAlpha=1-t;drawShots(ctx,glow,game,mode);ctx.restore();
   if(mode==='cockpit'||transition&&nextView==='cockpit')drawCockpit(ctx,game.camera.pitch,game.aimX,game.aimY,transition?(mode==='cockpit'?t:1-t):0,game.player.altitude,game.boosting?190:120);
   if(game.wipeT>0){const progress=1-game.wipeT/.35,y=Math.round(progress*h);ctx.fillStyle='rgba(14,22,35,.75)';ctx.fillRect(0,y-7,w,14);ctx.fillStyle='rgba(189,246,244,.7)';for(let i=-8;i<=8;i+=3)ctx.fillRect(0,y+i,w,1);}
-  updateHud();
+  updateHud();drawRadar();
 }
 function animate(now:number):void{
   const elapsed=Math.max(0,(now-lastTime)/1000);lastTime=now;if(elapsed>0&&elapsed<.25)fps+=(1/elapsed-fps)*.05;accumulator+=Math.min(.05,elapsed);
-  while(accumulator>=1/60){game=stepGame(game,controls(),1/60,ground);pendingStart=pendingPause=pendingView=pendingBomb=false;if(!game.paused)shipSprite.update(1/60,visualFlight(game),game.player.bank/.65);accumulator-=1/60;}
+  while(accumulator>=1/60){world.setBiome(game.biome,game.arena.x);game=stepGame(game,controls(),1/60,ground);pendingStart=pendingPause=pendingView=pendingBomb=false;if(!game.paused)shipSprite.update(1/60,visualFlight(game),game.player.bank/.65);accumulator-=1/60;}
   render();requestAnimationFrame(animate);
 }
 resize();requestAnimationFrame(animate);

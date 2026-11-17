@@ -73,7 +73,7 @@ test('power capsules raise weapon level to three and damage lowers it', () => {
   assert.equal(s.weaponLv, 2); assert.equal(s.hull, 6);
 });
 
-test('pylons open an exit and both blast doors need their locks destroyed', () => {
+test('pylons open an exit and all three blast doors need their locks destroyed', () => {
   let s = createGame(parseGameOptions('?segment=atoll'), ground);
   assert.equal(s.entities.filter(e => e.kind === 'pylon').length, 4);
   for (const p of [...s.entities].filter(e => e.kind === 'pylon')) s = shootAt(s, p, 12);
@@ -82,7 +82,7 @@ test('pylons open an exit and both blast doors need their locks destroyed', () =
   exit.x = s.player.x; exit.alt = s.player.altitude; exit.z = s.player.z + 0.1;
   s = stepGame(s, idle, 1 / 60, ground); assert.equal(s.phase, 'transition');
   s = advance(s, 1.6); assert.equal(s.segment, 'canyon');
-  for (let door = 0; door < 2; door++) {
+  for (let door = 0; door < 3; door++) {
     let locks = s.entities.filter(e => e.kind === 'lock'); assert.equal(locks.length, 2);
     s = shootAt(s, locks[0], 8); assert.equal(s.doorOpen, false);
     locks = s.entities.filter(e => e.kind === 'lock'); s = shootAt(s, locks[0], 8);
@@ -93,7 +93,7 @@ test('pylons open an exit and both blast doors need their locks destroyed', () =
 });
 
 test('Warden core is protected until all four pods are destroyed', () => {
-  let s = createGame(parseGameOptions('?segment=orbit'), ground);
+  let s = createGame(parseGameOptions('?segment=boss'), ground);
   const core = { x: s.boss.x, z: s.boss.z, alt: s.boss.alt };
   s = shootAt(s, core, 5); assert.equal(s.boss.coreHp, s.boss.maxCoreHp);
   for (let i = 0; i < 4; i++) {
@@ -124,7 +124,7 @@ test('seeded autoplay completes the route deterministically without mutating inp
   stepGame(first, idle, 1 / 60, ground); assert.deepEqual(first, snapshot);
   const run = () => {
     let s = createGame(options, ground); const seen = new Set();
-    for (let i = 0; i < 180 * 60 && s.phase !== 'win' && s.phase !== 'game_over'; i++) { seen.add(s.segment); s = stepGame(s, idle, 1 / 60, ground); }
+    for (let i = 0; i < 360 * 60 && s.phase !== 'win' && s.phase !== 'game_over'; i++) { seen.add(s.segment); s = stepGame(s, idle, 1 / 60, ground); }
     return { s, seen: [...seen] };
   };
   const a = run(), b = run();
@@ -168,20 +168,20 @@ test('view query is retained when starting from the title', () => {
 test('portrait aspect keeps all cockpit objectives reachable', () => {
   for (const segment of ['atoll', 'canyon', 'orbit']) {
     let s = createGame(parseGameOptions(`?segment=${segment}&view=cockpit&autoplay=1&seed=1`), ground);
-    for (let i=0; i<110*60 && s.phase!=='win' && s.phase!=='game_over'; i++) s=stepGame(s,{ ...idle, aspect: 390/844 },1/60,ground);
+    for (let i=0; i<240*60 && s.phase!=='win' && s.phase!=='game_over'; i++) s=stepGame(s,{ ...idle, aspect: 390/844 },1/60,ground);
     assert.equal(s.phase, 'win', segment);
   }
 });
 
 test('bomb removes an overlapping Warden orb before it can damage the player', () => {
-  let s = createGame(parseGameOptions('?segment=orbit'), ground);
+  let s = createGame(parseGameOptions('?segment=boss'), ground);
   s.entities = [{ kind: 'boss_orb', x: s.player.x, z: s.player.z, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
   s = stepGame(s, { ...idle, bomb: true }, 1/60, ground);
   assert.equal(s.hull, 8); assert.equal(s.entities.filter(e => e.kind === 'boss_orb').length, 0);
 });
 
 test('a simultaneous fatal hit and Warden defeat ends in game over', () => {
-  let s = createGame(parseGameOptions('?segment=orbit'), ground);
+  let s = createGame(parseGameOptions('?segment=boss'), ground);
   s.lives = 1; s.hull = 2; s.boss.pods = [0,0,0,0]; s.boss.coreHp = 1;
   s.bullets = [shot(s.player.x,s.player.z,s.player.altitude,false), shot(s.boss.x,s.boss.z,s.boss.alt)];
   s = stepGame(s, idle, 1/60, ground);
@@ -208,6 +208,73 @@ test('overhead capsules drift toward the player and 3D pickup tolerates altitude
 
 test('a full seeded autoplay run acquires weapon level three', () => {
   let s = createGame(parseGameOptions('?segment=reach&seed=1&autoplay=1'), ground), peak = 1;
-  for (let i=0; i<300*60 && s.phase!=='win' && s.phase!=='game_over'; i++) { s=stepGame(s,idle,1/60,ground); peak=Math.max(peak,s.weaponLv); }
-  assert.equal(s.phase, 'win'); assert.equal(peak, 3);
+  for (let i=0; i<360*60 && s.phase!=='win' && s.phase!=='game_over'; i++) { s=stepGame(s,idle,1/60,ground); peak=Math.max(peak,s.weaponLv); }
+  assert.equal(s.phase, 'win'); assert.equal(peak, 3); assert.equal(s.peakWeaponLv, 3);
+});
+
+test('Atoll pylons and canyon locks remain at world positions as the player flies', () => {
+  for (const [segment, kind] of [['atoll','pylon'], ['canyon','lock']]) {
+    let s = createGame(parseGameOptions(`?segment=${segment}`), ground);
+    const positions = s.entities.filter(e => e.kind === kind).map(e => [e.x,e.z]);
+    s = advance(s, 1.5);
+    assert.deepEqual(s.entities.filter(e => e.kind === kind).map(e => [e.x,e.z]), positions, segment);
+    assert.ok(s.player.z > 30);
+  }
+});
+
+test('turning changes heading and the Atoll boundary pushes the player inward', () => {
+  let s = createGame(parseGameOptions('?segment=atoll'), ground);
+  s = advance(s, 1, { ...idle, moveX: 1 });
+  assert.ok(s.player.yaw > 0.5); assert.ok(s.player.x > 5);
+  s.player.x = s.arena.x + s.arena.radius + 10; s.player.z = s.arena.z; s.player.yaw = Math.PI/2;
+  const x = s.player.x; s = advance(s, 0.5);
+  assert.ok(s.boundaryWarning); assert.ok(s.player.x < x, `${s.player.x} should be inside ${x}`);
+});
+
+test('the mission script has a longer reach, three doors, and an orbital approach', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  assert.equal(s.phaseTime, 0);
+  s.invulnTimer=999; s=advance(s, 26); assert.equal(s.segment, 'reach');
+  s=createGame(parseGameOptions('?segment=orbit'),ground);
+  assert.equal(s.phaseTime, 0); assert.equal(s.boss.active, false);
+  s=advance(s, 2); assert.equal(s.boss.active, false);
+  s=createGame(parseGameOptions('?segment=canyon'),ground);
+  assert.match(s.objective, /0\/3/);
+});
+
+test('supplies spawned near a bay edge remain inside the reachable airspace', () => {
+  let s=createGame(parseGameOptions('?segment=atoll'),ground);
+  s.player.x=s.arena.x+s.arena.radius-10; s.player.z=s.arena.z; s.player.yaw=Math.PI/2; s.supplyTimer=0;
+  s=stepGame(s,idle,1/60,ground);
+  const supply=s.entities.find(e=>e.kind==='supply'); assert.ok(supply);
+  assert.ok(Math.hypot(supply.x-s.arena.x,supply.z-s.arena.z)<s.arena.radius);
+});
+
+test('flying toward a world-placed pylon lets real projectiles destroy it', () => {
+  let s=createGame(parseGameOptions('?segment=atoll'),ground);
+  s.spawnTimer=99; s.supplyTimer=99;
+  const target=s.entities.find(e=>e.kind==='pylon' && e.z>s.player.z);
+  const x=target.x, z=target.z;
+  s.player.yaw=Math.atan2(x-s.player.x,z-s.player.z);
+  s=advance(s,2,{ ...idle,fire:true });
+  assert.ok(!s.entities.some(e=>e.kind==='pylon'&&e.x===x&&e.z===z));
+  assert.ok(s.pylonsDown>=1);
+});
+
+test('canyon walls push the player inward and set an edge warning', () => {
+  let s=createGame(parseGameOptions('?segment=canyon'),ground);
+  s.player.x=s.arena.x+s.arena.radius+8; s.player.yaw=Math.PI/2;
+  const x=s.player.x; s=advance(s,.4);
+  assert.ok(s.boundaryWarning); assert.ok(s.player.x<x);
+});
+
+test('segment clock resets exactly when the next segment begins', () => {
+  let s=createGame(parseGameOptions('?segment=canyon'),ground);
+  s.phase='transition';s.nextSegment='orbit';s.transitionT=.999;s.phaseTime=8;
+  s=stepGame(s,idle,1/60,ground);
+  assert.equal(s.segment,'orbit');assert.equal(s.phaseTime,0);
+});
+
+test('fast-forward accepts times beyond the old three-minute cap', () => {
+  assert.equal(parseGameOptions('?segment=reach&autoplay=1&t=240').time,240);
 });
