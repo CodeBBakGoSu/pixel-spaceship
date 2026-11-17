@@ -124,13 +124,14 @@ export class World {
     if (view !== 'overhead') return;
     const wrap = (n: number) => ((n + 256) % 512 + 512) % 512 - 256;
     ctx.save();
+    const opacity = ctx.globalAlpha;
     for (let i = 0; i < 34; i++) {
       const high = i % 2 === 0;
       const drift = time * (high ? 1.5 : 0.5);
       const x = Math.round(ctx.canvas.width / 2 + wrap(hash(i, 201) * 512 - ship.x * (high ? 0.68 : 0.84) + drift) / 1.4);
       const y = Math.round(ctx.canvas.height / 2 - wrap(hash(i, 202) * 512 - ship.z * (high ? 0.68 : 0.84) + drift * 0.4) / 1.4);
       const size = high ? 2 : 1;
-      ctx.globalAlpha = high ? 0.38 : 0.26;
+      ctx.globalAlpha = opacity * (high ? 0.38 : 0.26);
       ctx.fillStyle = '#201e32';
       ctx.fillRect(x - size * 2 + 3, y + 4, size * 6, size * 2);
       ctx.fillStyle = high ? '#e8d5c4' : '#cbb2a9';

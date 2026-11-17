@@ -19,7 +19,7 @@ export function buildFaces(model: VoxelModel): Face[] {
   return faces;
 }
 
-export type VoxelPose = { cx: number; cy: number; scale: number; pitch: number; yaw: number; roll: number; lift: number; perspective: boolean };
+export type VoxelPose = { cx: number; cy: number; scale: number; pitch: number; yaw: number; roll: number; lift: number; perspective: number };
 export function projection(pose: VoxelPose) {
   const { cx, cy, scale, pitch, yaw, roll, lift, perspective } = pose;
   const cr = Math.cos(roll), sr = Math.sin(roll), ca = Math.cos(yaw), sa = Math.sin(yaw);
@@ -32,7 +32,7 @@ export function projection(pose: VoxelPose) {
 export type Projection = ReturnType<typeof projection>;
 export function projectPoint(p: Projection, x: number, y: number, z: number) {
   const depth = p.dx * x + p.dy * y + p.dz * z;
-  const scale = p.scale * (p.perspective ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
+  const scale = p.scale * (p.perspective ? 1 / Math.max(0.75, 1 - depth * 0.008 * p.perspective) : 1);
   return { x: p.cx + (p.xx * x + p.xy * y + p.xz * z) * scale, y: p.cy + (p.yx * x + p.yy * y + p.yz * z) * scale, depth, scale };
 }
 
@@ -66,7 +66,7 @@ export class VoxelProjector {
       for (let a = -0.375; a <= 0.375; a += 0.25) for (let b = -0.375; b <= 0.375; b += 0.25) {
         const x = face.x + nx * 0.5 + (nx ? 0 : a), y = face.y + ny * 0.5 + (nx ? a : ny ? 0 : b), z = face.z + nz * 0.5 + (nz ? 0 : b);
         const depth = p.dx * x + p.dy * y + p.dz * z;
-        const mag = p.scale * (p.perspective ? 1 / Math.max(0.75, 1 - depth * 0.008) : 1);
+        const mag = p.scale * (p.perspective ? 1 / Math.max(0.75, 1 - depth * 0.008 * p.perspective) : 1);
         const px = Math.round(p.cx + (p.xx * x + p.xy * y + p.xz * z) * mag), py = Math.round(p.cy + (p.yx * x + p.yy * y + p.yz * z) * mag);
         if (px < 1 || py < 1 || px >= w - 1 || py >= h - 1) continue;
         const i = py * w + px;

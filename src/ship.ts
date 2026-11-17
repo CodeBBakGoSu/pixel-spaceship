@@ -10,6 +10,7 @@ const palette = [
   [232, 126, 81], [64, 155, 167], [34, 44, 57], [255, 165, 79], [225, 231, 214],
 ];
 type Particle = { x: number; z: number; altitude: number; vx: number; vz: number; life: number; total: number; size: number };
+export type ShipPose = { x: number; y: number; scale: number; pitch: number; lift: number; bank: number; alpha: number; perspective: number; shadowSquash: number; shadowY: number };
 
 export class ShipSprite {
   private faces: Face[] = [];
@@ -88,26 +89,29 @@ export class ShipSprite {
     this.particles = this.particles.filter(p => p.life > 0);
   }
 
-  draw(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, ship: Flight, view: View, ground: number, demoBank: boolean): void {
+  draw(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, ship: Flight, view: View, ground: number, demoBank: boolean, pose?: ShipPose): void {
     if (view === 'cockpit') return;
     const w = ctx.canvas.width, h = ctx.canvas.height;
-    const cx = Math.round(w / 2), cy = Math.round(view === 'overhead' ? h * 0.5 : h * 0.59);
-    const scale = Math.max(0.8, Math.min(1.35, w / 250));
-    const pitch = (view === 'overhead' ? 65 : 36) * Math.PI / 180;
+    const cx = Math.round(pose?.x ?? w / 2), cy = Math.round(pose?.y ?? (view === 'overhead' ? h * 0.5 : h * 0.59));
+    const scale = Math.max(0.8, Math.min(1.35, w / 250)) * (pose?.scale ?? 1);
+    const pitch = (pose?.pitch ?? (view === 'overhead' ? 65 : 36)) * Math.PI / 180;
     const yaw = view === 'overhead' ? ship.yaw : -this.bank * 0.08;
-    const roll = this.bank + (demoBank ? 0.72 : 0) + rollAngle(ship.roll);
-    const lift = view === 'overhead' ? 1.4 : 1;
-    const camera = projection({ cx, cy, scale, pitch, yaw, roll, lift, perspective: view === 'chase' });
+    const roll = (pose?.bank ?? this.bank) + (demoBank ? 0.72 : 0) + rollAngle(ship.roll);
+    const lift = pose?.lift ?? (view === 'overhead' ? 1.4 : 1);
+    const camera = projection({ cx, cy, scale, pitch, yaw, roll, lift, perspective: pose?.perspective ?? (view === 'chase' ? 1 : 0) });
     const project = (x: number, y: number, z: number) => projectPoint(camera, x, y, z);
 
+    ctx.save();
+    ctx.globalAlpha *= pose?.alpha ?? 1;
+    if (glow) { glow.save(); glow.globalAlpha *= pose?.alpha ?? 1; }
     // Silhouette falls farther from the jet and softens as clearance increases.
     const clearance = Math.max(0, ship.altitude - ground);
     ctx.save();
-    ctx.globalAlpha = Math.max(0.2, 0.46 - clearance * 0.0018);
-    ctx.translate(cx + clearance * (view === 'overhead' ? 0.85 : 0.38), cy + (view === 'overhead' ? clearance * 0.48 : 23 + clearance * 0.24));
+    ctx.globalAlpha *= Math.max(0.2, 0.46 - clearance * 0.0018);
+    ctx.translate(cx + clearance * (view === 'overhead' ? 0.85 : 0.38), cy + (pose?.shadowY ?? (view === 'overhead' ? clearance * 0.48 : 23 + clearance * 0.24)));
     ctx.rotate(yaw);
     const shadowScale = scale * Math.max(0.58, 0.92 - clearance * 0.002);
-    ctx.scale(shadowScale, shadowScale * (view === 'overhead' ? 0.82 : 0.28));
+    ctx.scale(shadowScale, shadowScale * (pose?.shadowSquash ?? (view === 'overhead' ? 0.82 : 0.28)));
     ctx.drawImage(this.shadow, -CENTER_X, -CENTER_Y);
     ctx.restore();
 
@@ -164,12 +168,15 @@ export class ShipSprite {
     drawFlames();
 
     this.projector.draw(ctx, this.faces, palette, camera);
+    ctx.restore();
+    if (glow) glow.restore();
   }
 }
 
-export function drawCockpit(ctx: CanvasRenderingContext2D, pitch: number): void {
+export function drawCockpit(ctx: CanvasRenderingContext2D, pitch: number, aimX = 0, aimY = 0, slide = 0): void {
   const w = ctx.canvas.width, h = ctx.canvas.height, cx = Math.floor(w / 2);
   ctx.save();
+  ctx.translate(0, slide * h * 0.45);
   ctx.fillStyle = '#121b29';
   ctx.fillRect(0, h - 18, w, 18);
   ctx.fillStyle = '#334958';
@@ -181,9 +188,10 @@ export function drawCockpit(ctx: CanvasRenderingContext2D, pitch: number): void 
   for (let i = 0; i < 10; i++) ctx.fillRect(cx - 42 + i * 3, h - 9, 2, i % 3 === 0 ? 4 : 2);
   for (let i = 0; i < 5; i++) ctx.fillRect(cx + 24 + i * 4, h - 9, 2, 4);
   ctx.fillStyle = '#f3aa75'; ctx.fillRect(cx - 3, h - 9, 6, 3);
-  const sightY = Math.floor(h * 0.48 + pitch * 8);
+  const sightX = Math.round(cx + aimX * w * 0.38);
+  const sightY = Math.floor(h * 0.42 + aimY * h * 0.27 + pitch * 8);
   ctx.fillStyle = 'rgba(169, 230, 208, .8)';
-  ctx.fillRect(cx - 10, sightY, 6, 1); ctx.fillRect(cx + 5, sightY, 6, 1);
-  ctx.fillRect(cx, sightY - 9, 1, 5); ctx.fillRect(cx, sightY + 5, 1, 5);
+  ctx.fillRect(sightX - 10, sightY, 6, 1); ctx.fillRect(sightX + 5, sightY, 6, 1);
+  ctx.fillRect(sightX, sightY - 9, 1, 5); ctx.fillRect(sightX, sightY + 5, 1, 5);
   ctx.restore();
 }

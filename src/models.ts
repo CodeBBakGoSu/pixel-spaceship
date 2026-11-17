@@ -3,6 +3,8 @@ import { buildFaces, projectModel, VoxelProjector, type VoxelModel } from './vox
 type CachedSprite = { canvas: HTMLCanvasElement; x: number; y: number };
 export type SpriteCache = { drones: CachedSprite[]; pillar: CachedSprite; ring: CachedSprite; boss: CachedSprite[] };
 const palette = [[0,0,0],[54,64,77],[102,121,133],[205,213,206],[225,105,70],[91,203,200],[255,213,121],[140,75,65]];
+const dronePalette = [[0,0,0],[54,39,53],[120,76,83],[197,166,161],[242,91,86],[91,203,200],[255,213,121],[140,75,65]];
+const bossPalette = [[0,0,0],[31,39,55],[69,79,96],[116,127,138],[204,82,61],[76,165,170],[255,118,69],[106,62,57]];
 
 function makeModel(w: number, l: number, h: number, pivot: [number, number, number], material: (x: number, y: number, z: number) => number): VoxelModel {
   const data = new Uint8Array(w * l * h);
@@ -36,16 +38,16 @@ export function bakeSprites(): SpriteCache {
     return 0;
   }));
   const renderer = new VoxelProjector();
-  function bake(faces: ReturnType<typeof buildFaces>, w: number, h: number, x: number, y: number, scale: number, pitch: number, roll: number, yaw = 0): CachedSprite {
+  function bake(faces: ReturnType<typeof buildFaces>, w: number, h: number, x: number, y: number, scale: number, pitch: number, roll: number, yaw = 0, colors = palette): CachedSprite {
     const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d')!; ctx.imageSmoothingEnabled = false;
-    projectModel(renderer, ctx, faces, palette, { cx: x, cy: y, scale, pitch, yaw, roll, lift: 1, perspective: false });
+    projectModel(renderer, ctx, faces, colors, { cx: x, cy: y, scale, pitch, yaw, roll, lift: 1, perspective: 0 });
     return { canvas, x, y };
   }
   return {
-    drones: Array.from({ length: 9 }, (_, i) => bake(drone, 44, 44, 22, 22, 1.65, 0.85, (i - 4) * 0.12, Math.PI)),
+    drones: Array.from({ length: 9 }, (_, i) => bake(drone, 44, 44, 22, 22, 1.65, 0.85, (i - 4) * 0.12, Math.PI, dronePalette)),
     pillar: bake(pillar, 40, 72, 20, 65, 1.35, 0.55, 0),
     ring: bake(ring, 48, 48, 24, 24, 1.6, 0.2, 0),
-    boss: [-0.2, 0, 0.2].map(roll => bake(boss, 96, 72, 48, 40, 1.5, 0.6, roll)),
+    boss: [-0.2, 0, 0.2].map(roll => bake(boss, 96, 72, 48, 40, 1.5, 0.6, roll, 0, bossPalette)),
   };
 }
