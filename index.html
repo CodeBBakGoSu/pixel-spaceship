@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1021" />
+    <meta name="description" content="A tiny pixel-art flight through a procedurally generated alien world." />
+    <title>ASTER // Pixel Flight</title>
+  </head>
+  <body>
+    <main class="experience" aria-label="Pixel-art spaceship flight demo">
+      <canvas id="screen" aria-label="Fly over an alien planet. Use the mouse or touch to steer."></canvas>
+      <div class="screen-shade" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <div class="identity">
+          <span class="identity-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>ASTER<span class="identity-dot">.</span></strong><small>FLIGHT SYSTEMS / 01</small></span>
+        </div>
+        <div class="transmission"><span class="pulse"></span> LIVE TRANSMISSION <span class="transmission-separator">/</span> DEEP SPACE</div>
+        <nav class="view-picker" aria-label="Camera view">
+          <span class="view-caption">CAMERA</span>
+          <button type="button" data-view="overhead" aria-label="Overhead view">01 <span>OVERHEAD</span></button>
+          <button type="button" data-view="chase" aria-label="Chase view">02 <span>CHASE</span></button>
+          <button type="button" data-view="cockpit" aria-label="Cockpit view">03 <span>COCKPIT</span></button>
+        </nav>
+      </header>
+
+      <div class="side-label" aria-hidden="true">AN EXPLORATION IN PIXELS <span>—</span> 001</div>
+      <div class="right-label" aria-hidden="true">SIGNAL STRENGTH <span>▮▮▮▮</span></div>
+
+      <div class="planet-label">
+        <div class="eyebrow"><span class="planet-dot"></span> NOW EXPLORING <span class="slash">/</span> SECTOR 07</div>
+        <div class="planet-name">VESPER<span>—</span>9</div>
+        <div class="planet-subtitle">UNCHARTED TERRITORY <span>·</span> LVL 01</div>
+      </div>
+
+      <div class="telemetry" aria-label="Flight telemetry">
+        <div class="telemetry-item"><span>ALTITUDE</span><strong id="altitude">000 <small>U</small></strong></div>
+        <div class="telemetry-item"><span>AIRSPEED</span><strong id="speed">000 <small>U/S</small></strong></div>
+        <div class="telemetry-item heading-item"><span>HEADING</span><strong id="heading">000<small>°</small></strong></div>
+        <div class="engine-status"><span>THRUST</span><div class="thrust-bars" id="thrust-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      </div>
+      <div class="help" id="help" aria-live="polite"></div>
+      <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+:root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #f8f4e8; background: #0a0b18; font-synthesis: none; }
+* { box-sizing: border-box; }
+html, body, .experience { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.experience { position: relative; isolation: isolate; background: #0a0b18; }
+#screen { position: absolute; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
+.screen-shade { pointer-events: none; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,8,20,.68), transparent 23%, transparent 69%, rgba(6,8,20,.72)), linear-gradient(90deg, rgba(6,8,20,.22), transparent 22%, transparent 78%, rgba(6,8,20,.20)); }
+.topbar { position: absolute; top: 29px; left: 38px; right: 38px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; pointer-events: none; }
+.identity { display: flex; align-items: center; gap: 11px; min-width: 200px; }
+.identity-mark { width: 33px; height: 33px; border: 1px solid rgba(245,239,219,.65); display: flex; align-items: center; justify-content: center; gap: 2px; transform: rotate(45deg); }
+.identity-mark i { display: block; width: 2px; background: #e0e0ca; height: 14px; }
+.identity-mark i:nth-child(2) { height: 21px; background: #fb9a66; }
+.identity strong { display: block; font: 800 22px/.95 Arial, sans-serif; letter-spacing: .15em; }
+.identity-dot { color: #f39766; }
+.identity small { display: block; margin-top: 6px; font-size: 8px; letter-spacing: .15em; color: #b6b5b4; }
+.transmission { padding-top: 12px; font-size: 9px; letter-spacing: .13em; color: #c9c4bb; white-space: nowrap; }
+.pulse, .planet-dot { display: inline-block; width: 6px; height: 6px; background: #f89e6a; margin-right: 7px; box-shadow: 0 0 9px #ffad6f; vertical-align: 1px; }
+.transmission-separator { color: #817c83; padding: 0 7px; }
+.view-picker { display: flex; align-items: center; gap: 3px; pointer-events: auto; }
+.view-caption { font-size: 9px; letter-spacing: .16em; color: #aba8a8; margin-right: 9px; }
+.view-picker button { cursor: pointer; border: 1px solid rgba(239,235,221,.25); background: rgba(10,13,25,.38); color: #b9b8b5; font: 9px ui-monospace, monospace; letter-spacing: .08em; padding: 10px 11px; min-height: 33px; transition: color .18s, background .18s, border-color .18s; }
+.view-picker button:hover, .view-picker button:focus-visible { color: white; border-color: #f1b487; outline: none; }
+.view-picker button[aria-pressed="true"] { color: #121626; border-color: #f2e7cf; background: #f2e7cf; }
+.view-picker button span { margin-left: 4px; }
+.side-label, .right-label { position: absolute; top: 50%; color: rgba(239,234,221,.55); font-size: 8px; letter-spacing: .17em; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); pointer-events: none; }
+.side-label { left: 16px; }
+.side-label span { padding: 8px 0; color: #f3a373; }
+.right-label { right: 16px; transform: translateY(-50%); }
+.right-label span { color: #ef9d70; margin-top: 10px; letter-spacing: 2px; }
+.planet-label { position: absolute; left: 38px; bottom: 43px; pointer-events: none; }
+.eyebrow, .planet-subtitle, .telemetry-item > span, .engine-status > span { color: #c0b9b6; font-size: 9px; letter-spacing: .15em; white-space: nowrap; }
+.slash { color: #f0a16f; padding: 0 4px; }
+.planet-name { margin: 9px 0 7px; font: 800 clamp(26px, 3vw, 40px)/.85 Arial, sans-serif; letter-spacing: -.035em; }
+.planet-name span { font-weight: 400; color: #f6a675; padding: 0 3px; }
+.planet-subtitle { font-size: 8px; color: #aaa6a5; }
+.planet-subtitle span { color: #f6a675; padding: 0 4px; }
+.telemetry { position: absolute; right: 38px; bottom: 45px; display: flex; align-items: flex-end; gap: 26px; pointer-events: none; }
+.telemetry-item { min-width: 66px; border-left: 1px solid rgba(243,237,222,.35); padding-left: 11px; }
+.telemetry-item > span, .engine-status > span { display: block; font-size: 8px; color: #b6afb0; }
+.telemetry-item strong { display: block; margin-top: 7px; color: #f3ede0; font-size: 18px; font-weight: 500; letter-spacing: -.04em; }
+.telemetry-item strong small { color: #bbb4ae; font-size: 8px; font-weight: 400; letter-spacing: 0; }
+.engine-status { padding-bottom: 3px; }
+.thrust-bars { display: flex; gap: 3px; margin-top: 10px; }
+.thrust-bars i { width: 5px; height: 11px; background: rgba(237,226,207,.24); }
+.thrust-bars i.active { background: #f5a36f; }
+.help { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; font-size: 9px; line-height: 1.6; letter-spacing: .105em; color: #f6e9dc; text-shadow: 0 1px 5px #070812; opacity: 1; transition: opacity 1.4s ease; pointer-events: none; }
+.help.fade { opacity: 0; }
+.corner { position: absolute; width: 10px; height: 10px; opacity: .55; pointer-events: none; }
+.corner-tl { top: 12px; left: 12px; border-top: 1px solid; border-left: 1px solid; }
+.corner-tr { top: 12px; right: 12px; border-top: 1px solid; border-right: 1px solid; }
+.corner-bl { bottom: 12px; left: 12px; border-bottom: 1px solid; border-left: 1px solid; }
+.corner-br { bottom: 12px; right: 12px; border-bottom: 1px solid; border-right: 1px solid; }
+@media (max-width: 760px) {
+  .topbar { top: 24px; left: 25px; right: 25px; }
+  .identity { min-width: 0; }
+  .identity strong { font-size: 19px; }
+  .identity small { font-size: 7px; }
+  .transmission, .view-caption, .view-picker button span, .side-label, .right-label { display: none; }
+  .view-picker button { min-width: 34px; padding: 9px; }
+  .planet-label { left: 25px; bottom: 50px; }
+  .telemetry { right: 25px; bottom: 50px; gap: 14px; }
+  .heading-item, .engine-status { display: none; }
+  .telemetry-item { min-width: 50px; padding-left: 8px; }
+  .telemetry-item strong { font-size: 15px; }
+  .eyebrow { font-size: 8px; }
+  .help { bottom: 16px; font-size: 8px; }
+}
+@media (max-width: 420px) { .identity small, .planet-subtitle { display: none; } .planet-name { font-size: 25px; } .telemetry { gap: 8px; } .telemetry-item { min-width: 43px; } }
