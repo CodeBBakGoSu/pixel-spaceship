@@ -1,154 +1,156 @@
 import { advanceBank } from './flight.ts';
 import type { CameraState, Segment } from './camera.ts';
 export type { CameraState, Segment } from './camera.ts';
+
+export type SegmentId = 'reach' | 'atoll' | 'canyon' | 'orbit';
+export type Biome = 'jungle' | 'canyon' | 'space';
+export type Rank = 'S' | 'A' | 'B' | 'C';
+export type DialogueBeat = { at: number; speaker: 'OPAL' | 'GALE' | 'WARDEN'; text: string };
+export type SegmentDef = { id: SegmentId; name: string; defaultView: Segment; biome: Biome; goal: 'waves' | 'pylons' | 'doors' | 'boss'; duration?: number; beats: DialogueBeat[] };
+export const SCRIPT: readonly SegmentDef[] = [
+  { id: 'reach', name: 'KESTREL REACH', defaultView: 'overhead', biome: 'jungle', goal: 'waves', duration: 24, beats: [
+    { at: 0, speaker: 'OPAL', text: 'Kestrel Reach ahead. Watch your altitude, courier.' },
+    { at: 10, speaker: 'GALE', text: 'Supply drones carry power capsules. Grab what you can.' },
+  ] },
+  { id: 'atoll', name: 'THE ATOLL', defaultView: 'chase', biome: 'jungle', goal: 'pylons', beats: [
+    { at: 0, speaker: 'OPAL', text: 'Four relay pylons guard the exit. Take them down.' },
+  ] },
+  { id: 'canyon', name: 'BASE CANYON', defaultView: 'chase', biome: 'canyon', goal: 'doors', beats: [
+    { at: 0, speaker: 'GALE', text: 'Blast doors ahead. Shoot both locks to open each gate.' },
+  ] },
+  { id: 'orbit', name: 'KESTREL ORBIT', defaultView: 'cockpit', biome: 'space', goal: 'boss', beats: [
+    { at: 0, speaker: 'WARDEN', text: 'Unregistered courier. This lane is closed.' },
+    { at: 7, speaker: 'OPAL', text: 'Break the four outer pods. Then hit the eye.' },
+  ] },
+];
 export type GamePhase = 'title' | 'playing' | 'transition' | 'win' | 'game_over';
-export type GameOptions = { segment: Segment | 'boss' | null; seed: number; autoplay: boolean; loop: number; time: number };
-export type GameInput = { moveX: number; moveY: number; fire: boolean; aimX?: number; aimY?: number; start?: boolean; restart?: boolean; next?: boolean; pause?: boolean };
+export type GameOptions = { segment: SegmentId | null; view: Segment | null; seed: number; autoplay: boolean; loop: number; time: number; touch: boolean };
+export type GameInput = { moveX: number; moveY: number; fire: boolean; aimX?: number; aimY?: number; start?: boolean; restart?: boolean; next?: boolean; pause?: boolean; boost?: boolean; bomb?: boolean; toggleView?: boolean };
 export type Entity = {
-  kind: 'drone' | 'pillar' | 'ring' | 'boss_orb'; x: number; z: number; alt: number; vx: number; vz: number;
-  hp: number; waveId: number; bank: number; hitFlash: number; fireTimer: number; valt: number; shotDown?: boolean;
+  kind: 'drone' | 'supply' | 'pylon' | 'exit' | 'door' | 'lock' | 'capsule' | 'boss_orb';
+  x: number; z: number; alt: number; vx: number; vz: number; hp: number; waveId: number; bank: number;
+  hitFlash: number; fireTimer: number; valt: number; shotDown?: boolean;
 };
 export type Bullet = { x: number; y: number; z: number; alt: number; vx: number; vy: number; vz: number; friendly: boolean; life: number };
 export type GameState = {
-  phase: GamePhase; segment: Segment; nextSegment: Segment; loop: number; loopSpeed: number; score: number;
-  lives: number; hull: number; phaseTime: number; transitionT: number; invulnTimer: number; aimX: number; aimY: number;
+  phase: GamePhase; segment: SegmentId; nextSegment: SegmentId; scriptIndex: number; biome: Biome; objective: string;
+  loop: number; loopSpeed: number; score: number; salvage: number; lives: number; hull: number; maxHull: number; hitsTaken: number; rank: Rank | null;
+  bst: number; boosting: boolean; bombs: number; weaponLv: 1 | 2 | 3; roll: number; wipeT: number; viewTagT: number;
+  dialogue: { speaker: string; text: string; timer: number } | null; beatIndex: number;
+  phaseTime: number; transitionT: number; invulnTimer: number; aimX: number; aimY: number;
   rng: number; seed: number; autoplay: boolean; paused: boolean; elapsed: number; spawnTimer: number; waveId: number;
+  pylonsDown: number; doorsCleared: number; doorOpen: boolean; doorTimer: number;
   waves: { id: number; remaining: number; perfect: boolean }[];
   player: { x: number; y: number; z: number; altitude: number; bank: number; yaw: number; fireCooldown: number };
   camera: CameraState; entities: Entity[]; bullets: Bullet[];
   effects: { x: number; z: number; alt: number; life: number; kind: 'hit' | 'ring' | 'burst' }[];
-  boss: { active: boolean; hp: number; maxHp: number; x: number; z: number; alt: number; fireTimer: number; hitFlash: number; hitCooldown: number };
+  boss: { active: boolean; hp: number; maxHp: number; pods: number[]; coreHp: number; maxCoreHp: number; x: number; z: number; alt: number; fireTimer: number; hitFlash: number };
 };
 type Ground = (x: number, z: number) => number;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
-const smooth = (n: number) => { n = clamp(n, 0, 1); return n * n * (3 - 2 * n); };
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const blankBoss = () => ({ active: false, hp: 24, maxHp: 24, x: 0, z: 110, alt: 90, fireTimer: 1.3, hitFlash: 0, hitCooldown: 0 });
+const blankBoss = () => ({ active: false, hp: 28, maxHp: 28, pods: [4, 4, 4, 4], coreHp: 12, maxCoreHp: 12, x: 0, z: 110, alt: 110, fireTimer: 2.5, hitFlash: 0 });
+export const elevationBracket = (target: number, player: number): 'inline' | 'above' | 'below' => Math.abs(target - player) < 18 ? 'inline' : target > player ? 'above' : 'below';
+export const calculateRank = (hits: number): Rank => hits === 0 ? 'S' : hits <= 2 ? 'A' : hits <= 5 ? 'B' : 'C';
 
 export function parseGameOptions(search: string): GameOptions {
   const q = new URLSearchParams(search), raw = q.get('segment');
-  const segment = raw === 'overhead' || raw === 'chase' || raw === 'cockpit' || raw === 'boss' ? raw : null;
+  const aliases: Record<string, SegmentId> = { reach: 'reach', atoll: 'atoll', canyon: 'canyon', orbit: 'orbit', overhead: 'reach', chase: 'atoll', cockpit: 'orbit', boss: 'orbit' };
+  const v = q.get('view'), view = v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null;
   const seedValue = q.get('seed'), seed = seedValue !== null && /^-?\d+$/.test(seedValue) ? Number(seedValue) >>> 0 : 1;
   const loopValue = Number(q.get('loop')), timeValue = Number(q.get('t'));
-  return { segment, seed, autoplay: q.get('autoplay') === '1', loop: Number.isFinite(loopValue) && loopValue >= 1 ? Math.min(99, Math.floor(loopValue)) : 1, time: Number.isFinite(timeValue) ? clamp(timeValue, 0, 180) : 0 };
+  return { segment: raw ? aliases[raw] || null : null, view, seed, autoplay: q.get('autoplay') === '1', loop: Number.isFinite(loopValue) && loopValue >= 1 ? Math.min(99, Math.floor(loopValue)) : 1, time: Number.isFinite(timeValue) ? clamp(timeValue, 0, 180) : 0, touch: q.get('touch') === '1' };
 }
-
-// Mulberry32 advances only the state supplied by the caller.
+// Mulberry32 state belongs entirely to the simulation.
 function random(s: GameState): number {
   s.rng = (s.rng + 0x6d2b79f5) >>> 0;
-  let n = s.rng;
-  n = Math.imul(n ^ n >>> 15, n | 1);
-  n ^= n + Math.imul(n ^ n >>> 7, n | 61);
+  let n = s.rng; n = Math.imul(n ^ n >>> 15, n | 1); n ^= n + Math.imul(n ^ n >>> 7, n | 61);
   return ((n ^ n >>> 14) >>> 0) / 4294967296;
 }
 function entity(kind: Entity['kind'], x: number, z: number, alt: number): Entity {
-  return { kind, x, z, alt, vx: 0, vz: 0, hp: kind === 'drone' ? 2 : 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 2, valt: 0 };
+  return { kind, x, z, alt, vx: 0, vz: 0, hp: kind === 'pylon' || kind === 'lock' ? 4 : kind === 'drone' || kind === 'supply' ? 2 : 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 3, valt: 0 };
 }
 function spawnWave(s: GameState): void {
-  if (s.entities.filter(e => e.kind === 'drone').length > 4) return;
-  const id = ++s.waveId, center = (random(s) - 0.5) * 60;
-  s.waves.push({ id, remaining: 4, perfect: true });
-  for (let i = 0; i < 4; i++) {
-    const e = entity('drone', center + (i - 1.5) * 31, s.camera.z + 112 + (i % 2) * 13, s.player.altitude);
-    e.waveId = id; e.vz = -8 - random(s) * 5; e.fireTimer = 2.5 + random(s) * 1.5;
-    s.entities.push(e);
+  if (s.entities.filter(e => e.kind === 'drone' || e.kind === 'supply').length >= 7) return;
+  const id = ++s.waveId, center = (random(s) - 0.5) * 70;
+  s.waves.push({ id, remaining: 3, perfect: true });
+  for (let i = 0; i < 3; i++) {
+    const e = entity(i === 1 && id % 2 === 0 ? 'supply' : 'drone', center + (i - 1) * 32, s.player.z + 145 + i * 14, clamp(s.player.altitude + (i - 1) * 12, 65, 155));
+    e.waveId = id; e.vz = -5 - random(s) * 3; e.fireTimer = 3 + random(s) * 2; s.entities.push(e);
   }
 }
-function spawnCanyon(s: GameState, ground: Ground, first = false): void {
-  const base = s.player.z + (first ? 145 : 240);
-  if (s.entities.filter(e => e.kind === 'ring').length < 4) {
-    const ring = entity('ring', first ? 0 : (random(s) - 0.5) * 80, base, clamp(s.player.altitude + (first ? 0 : (random(s) - 0.5) * 25), 65, 145));
-    s.entities.push(ring);
-  }
-  for (let i = 0; i < 2 && s.entities.filter(e => e.kind === 'pillar').length < 8; i++) {
-    const x = first ? (i ? 38 : -38) : (random(s) - 0.5) * 100;
-    const z = base + 30 + i * 35;
-    s.entities.push(entity('pillar', x, z, ground(x, z)));
-  }
-  if (s.entities.filter(e => e.kind === 'drone').length < 8) {
-    const drone = entity('drone', first ? 27 : (random(s) - 0.5) * 90, base + 65, s.player.altitude + 5);
-    drone.vz = -7; drone.fireTimer = 2.3; s.entities.push(drone);
-  }
+function spawnDoor(s: GameState): void {
+  s.doorOpen = false; s.doorTimer = 0;
+  const z = s.player.z + 125, alt = s.player.altitude;
+  s.entities.push(entity('door', 0, z, alt), entity('lock', -18, z, alt), entity('lock', 18, z, alt));
 }
-function enterSegment(s: GameState, segment: Segment, ground: Ground): void {
-  s.segment = segment; s.nextSegment = segment; s.phase = 'playing'; s.phaseTime = 0; s.transitionT = 0;
-  s.entities = []; s.bullets = []; s.effects = []; s.waves = []; s.spawnTimer = segment === 'overhead' ? 0.6 : 7;
-  s.player.x = 0; s.player.y = -65; s.player.yaw = 0; s.player.bank = 0;
-  s.player.altitude = clamp(Math.max(s.player.altitude, ground(0, s.player.z) + 65), 65, 150);
-  s.camera = { mode: segment, x: 0, z: segment === 'overhead' ? s.player.z - s.player.y : s.player.z, yaw: 0,
-    altitude: s.player.altitude, pitch: 0, camOffset: segment === 'chase' ? 38 : 0, camHeightOffset: segment === 'chase' ? 18 : 2, crossFade: segment === 'overhead' ? 0 : 1 };
-  if (segment === 'chase') spawnCanyon(s, ground, true);
+function updateCamera(s: GameState): void {
+  const p = s.player, c = s.camera, mode = c.mode;
+  c.altitude = p.altitude; c.pitch = 0;
+  if (mode === 'overhead') { c.x = 0; c.z = p.z - p.y; c.yaw = 0; c.camOffset = 0; c.camHeightOffset = 2; c.crossFade = 0; }
+  else { c.x = p.x * 0.45; c.z = p.z; c.yaw = p.yaw; c.camOffset = mode === 'chase' ? 38 : 0; c.camHeightOffset = mode === 'chase' ? 18 : 2; c.crossFade = 1; }
 }
-
+function enterSegment(s: GameState, id: SegmentId, ground: Ground, view?: Segment | null): void {
+  const def = SCRIPT.find(d => d.id === id)!;
+  s.scriptIndex = SCRIPT.indexOf(def); s.segment = id; s.nextSegment = id; s.biome = def.biome; s.phase = 'playing'; s.phaseTime = 0; s.transitionT = 0;
+  s.entities = []; s.bullets = []; s.effects = []; s.waves = []; s.spawnTimer = 0.8; s.beatIndex = 0; s.dialogue = null;
+  s.pylonsDown = 0; s.doorsCleared = 0; s.doorOpen = false; s.doorTimer = 0; s.boss = blankBoss();
+  s.player.x = 0; s.player.y = -55; s.player.yaw = 0; s.player.bank = 0;
+  s.player.altitude = clamp(Math.max(s.player.altitude, ground(0, s.player.z) + 65), 65, 155);
+  s.camera.mode = view || def.defaultView; updateCamera(s);
+  if (id === 'reach') s.objective = 'CLEAR THE APPROACH';
+  if (id === 'atoll') {
+    s.objective = 'DESTROY THE RELAY PYLONS  0/4';
+    for (const x of [-42, -14, 14, 42]) s.entities.push(entity('pylon', x, s.player.z + 120, s.player.altitude));
+  }
+  if (id === 'canyon') { s.objective = 'BLAST DOORS // SHOOT THE LOCKS  0/2'; spawnDoor(s); }
+  if (id === 'orbit') { s.objective = 'WARDEN // DESTROY THE FOUR PODS'; s.boss.active = true; s.boss.z = s.player.z + 110; s.boss.alt = s.player.altitude; }
+}
 export function createGame(options: GameOptions = parseGameOptions(''), ground: Ground = () => 30): GameState {
-  const segment: Segment = options.segment === 'boss' ? 'cockpit' : options.segment || 'overhead';
-  const s: GameState = { phase: options.segment ? 'playing' : 'title', segment, nextSegment: segment,
-    loop: options.loop, loopSpeed: Math.min(1.8, 1 + (options.loop - 1) * 0.2), score: 0, lives: 3, hull: 8,
-    phaseTime: 0, transitionT: 0, invulnTimer: 0, aimX: 0, aimY: 0, rng: options.seed >>> 0, seed: options.seed >>> 0,
-    autoplay: options.autoplay, paused: false, elapsed: 0, spawnTimer: 0.6, waveId: 0, waves: [],
-    player: { x: 0, y: -65, z: 0, altitude: 110, bank: 0, yaw: 0, fireCooldown: 0 },
-    camera: { mode: segment, x: 0, z: 65, yaw: 0, altitude: 110, pitch: 0, camOffset: 0, camHeightOffset: 2, crossFade: 0 },
+  const id = options.segment || 'reach';
+  const s: GameState = { phase: options.segment ? 'playing' : 'title', segment: id, nextSegment: id, scriptIndex: 0, biome: 'jungle', objective: '',
+    loop: options.loop, loopSpeed: Math.min(1.8, 1 + (options.loop - 1) * 0.2), score: 0, salvage: 0, lives: 3, hull: 8, maxHull: 8, hitsTaken: 0, rank: null,
+    bst: 1, boosting: false, bombs: 3, weaponLv: 1, roll: 0, wipeT: 0, viewTagT: 0, dialogue: null, beatIndex: 0,
+    phaseTime: 0, transitionT: 0, invulnTimer: 0, aimX: 0, aimY: 0, rng: options.seed >>> 0, seed: options.seed >>> 0, autoplay: options.autoplay, paused: false, elapsed: 0,
+    spawnTimer: 0.8, waveId: 0, pylonsDown: 0, doorsCleared: 0, doorOpen: false, doorTimer: 0, waves: [],
+    player: { x: 0, y: -55, z: 0, altitude: 110, bank: 0, yaw: 0, fireCooldown: 0 },
+    camera: { mode: 'overhead', x: 0, z: 55, yaw: 0, altitude: 110, pitch: 0, camOffset: 0, camHeightOffset: 2, crossFade: 0 },
     entities: [], bullets: [], effects: [], boss: blankBoss() };
-  if (options.segment) enterSegment(s, segment, ground);
-  if (options.segment === 'boss') { s.boss.active = true; s.boss.x = 0; s.boss.z = s.player.z + 110; s.boss.alt = s.player.altitude - 8; }
-  return s;
+  enterSegment(s, id, ground, options.view); if (!options.segment) s.phase = 'title'; return s;
 }
 export function restartGame(s: GameState, ground: Ground = () => 30): GameState {
-  return createGame({ segment: 'overhead', seed: s.seed, autoplay: s.autoplay, loop: 1, time: 0 }, ground);
+  return createGame({ segment: 'reach', view: null, seed: s.seed, autoplay: s.autoplay, loop: 1, time: 0, touch: false }, ground);
 }
 export function nextLoop(s: GameState, ground: Ground = () => 30): GameState {
-  const next = createGame({ segment: 'overhead', seed: s.seed, autoplay: s.autoplay, loop: s.loop + 1, time: 0 }, ground);
-  next.score = s.score; next.lives = s.lives; return next;
+  const next = createGame({ segment: 'reach', view: null, seed: s.seed, autoplay: s.autoplay, loop: s.loop + 1, time: 0, touch: false }, ground);
+  next.score = s.score; next.salvage = s.salvage; next.lives = s.lives; return next;
 }
 function copy(s: GameState): GameState {
-  return { ...s, player: { ...s.player }, camera: { ...s.camera }, boss: { ...s.boss }, entities: s.entities.map(e => ({ ...e })), bullets: s.bullets.map(b => ({ ...b })), effects: s.effects.map(e => ({ ...e })), waves: s.waves.map(w => ({ ...w })) };
+  return { ...s, dialogue: s.dialogue && { ...s.dialogue }, player: { ...s.player }, camera: { ...s.camera }, boss: { ...s.boss, pods: [...s.boss.pods] }, entities: s.entities.map(e => ({ ...e })), bullets: s.bullets.map(b => ({ ...b })), effects: s.effects.map(e => ({ ...e })), waves: s.waves.map(w => ({ ...w })) };
 }
 function damage(s: GameState): void {
   if (s.invulnTimer > 0 || s.phase !== 'playing') return;
-  s.hull -= 2; s.invulnTimer = 1;
+  s.hull -= 2; s.hitsTaken++; s.weaponLv = Math.max(1, s.weaponLv - 1) as 1 | 2 | 3; s.invulnTimer = 1;
   s.effects.push({ x: s.player.x, z: s.player.z, alt: s.player.altitude, life: 0.5, kind: 'hit' });
-  if (s.hull <= 0) {
-    s.lives--;
-    if (s.lives <= 0) { s.lives = 0; s.hull = 0; s.phase = 'game_over'; }
-    else { s.hull = 8; s.invulnTimer = 2; }
-  }
+  if (s.hull <= 0) { s.lives--; if (s.lives <= 0) { s.lives = 0; s.hull = 0; s.phase = 'game_over'; } else { s.hull = s.maxHull; s.invulnTimer = 2; } }
 }
-function updateCamera(s: GameState): void {
-  const p = s.player, c = s.camera;
-  c.altitude = p.altitude; c.pitch = 0;
-  if (s.phase === 'transition') {
-    const t = smooth(s.transitionT);
-    if (s.segment === 'overhead') {
-      c.mode = 'chase'; c.x = p.x * 0.45 * t; c.z = lerp(p.z - p.y, p.z, t); c.yaw = p.yaw * t;
-      c.camOffset = 38 * t; c.camHeightOffset = lerp(2, 18, t); c.crossFade = smooth((s.transitionT - 0.2) / 0.4);
-    } else {
-      c.mode = 'cockpit'; c.x = p.x * 0.45; c.z = p.z; c.yaw = p.yaw;
-      c.camOffset = 38 * (1 - t); c.camHeightOffset = lerp(18, 2, t); c.crossFade = 1;
-    }
-  } else if (s.segment === 'overhead') {
-    c.mode = 'overhead'; c.x = 0; c.z = p.z - p.y; c.yaw = 0; c.camOffset = 0; c.camHeightOffset = 2; c.crossFade = 0;
-  } else {
-    c.mode = s.segment; c.x = p.x * 0.45; c.z = p.z; c.yaw = p.yaw; c.camOffset = s.segment === 'chase' ? 38 : 0; c.camHeightOffset = s.segment === 'chase' ? 18 : 2; c.crossFade = 1;
-  }
+function transition(s: GameState): void {
+  const next = SCRIPT[s.scriptIndex + 1]; if (!next) return;
+  s.phase = 'transition'; s.nextSegment = next.id; s.transitionT = 0; s.invulnTimer = Math.max(s.invulnTimer, 1.5); s.boosting = false;
+}
+export function wardenTargets(s: GameState): { kind: 'pod' | 'core'; index: number; x: number; z: number; alt: number }[] {
+  const b = s.boss, offsets = [[-18, 0], [0, 18], [18, 0], [0, -18]];
+  if (b.pods.some(hp => hp > 0)) return offsets.flatMap(([x, alt], index) => b.pods[index] > 0 ? [{ kind: 'pod' as const, index, x: b.x + x, z: b.z, alt: b.alt + alt }] : []);
+  return [{ kind: 'core', index: 0, x: b.x, z: b.z, alt: b.alt }];
 }
 function bot(s: GameState): GameInput {
-  if (s.segment === 'overhead') {
-    const target = s.entities.filter(e => e.kind === 'drone' && e.z > s.player.z).sort((a, b) => a.z - b.z)[0];
-    return { moveX: target ? clamp((target.x - s.player.x) / 25, -1, 1) : Math.sin(s.phaseTime * 0.7) * 0.4, moveY: 0, fire: true };
+  const p = s.player, targets = s.boss.active ? wardenTargets(s) : s.entities.filter(e => ['pylon', 'lock', 'exit', 'supply', 'drone'].includes(e.kind) && e.z > p.z).sort((a, b) => a.z - b.z);
+  const target = targets[0];
+  if (!target) return { moveX: Math.sin(s.phaseTime * 0.7) * 0.2, moveY: 0, fire: true };
+  if (s.camera.mode === 'cockpit' && s.boss.active) {
+    const depth = Math.max(40, target.z - p.z), right = target.x - s.camera.x - Math.sin(s.camera.yaw) * depth;
+    return { moveX: 0, moveY: 0, fire: true, aimX: clamp(right / (0.608 * depth), -1, 1), aimY: clamp((0.95 * (s.camera.altitude + s.camera.camHeightOffset - target.alt) / depth - 0.12) / 0.27, -1, 1) };
   }
-  if (s.segment === 'chase') {
-    const ring = s.entities.filter(e => e.kind === 'ring' && e.z > s.player.z).sort((a, b) => a.z - b.z)[0];
-    const pillar = s.entities.find(e => e.kind === 'pillar' && e.z > s.player.z && e.z - s.player.z < 55 && Math.abs(e.x - s.player.x) < 20);
-    return { moveX: pillar ? (pillar.x > s.player.x ? -1 : 1) : ring ? clamp((ring.x - s.player.x) / 20 + Math.sin(s.phaseTime * 1.6) * 0.4, -1, 1) : Math.sin(s.phaseTime * 0.6) * 0.3,
-      moveY: ring ? clamp((s.player.altitude - ring.alt) / 18, -1, 1) : 0, fire: true };
-  }
-  if (s.boss.active) {
-    const depth = Math.max(40, s.boss.z - s.player.z), right = (s.boss.x - s.camera.x) - Math.sin(s.camera.yaw) * depth;
-    const aimX = clamp(right / (0.608 * depth), -1, 1);
-    const aimY = clamp((0.3 + 0.95 * (s.camera.altitude + s.camera.camHeightOffset - s.boss.alt) / depth - 0.42) / 0.27, -1, 1);
-    return { moveX: 0, moveY: 0, aimX, aimY, fire: true };
-  }
-  return { moveX: 0, moveY: 0, aimX: Math.sin(s.phaseTime) * 0.18, aimY: -0.1, fire: true };
+  return { moveX: clamp((target.x - p.x) / 15, -1, 1), moveY: clamp((p.altitude - target.alt) / 12, -1, 1), fire: true };
 }
 
 export function stepGame(previous: GameState, input: GameInput, elapsed: number, ground: Ground = () => 30): GameState {
@@ -156,120 +158,135 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   if (input.restart) return restartGame(s, ground);
   if (s.phase === 'win' && (input.next || input.start)) return nextLoop(s, ground);
   if (s.phase === 'game_over' && input.start) return restartGame(s, ground);
-  if (s.phase === 'title') {
-    if (input.start) return restartGame(s, ground);
-    s.player.z += dt * 8; updateCamera(s); return s;
-  }
+  if (s.phase === 'title') { if (input.start) return restartGame(s, ground); s.player.z += dt * 8; updateCamera(s); return s; }
   if (s.phase === 'win' || s.phase === 'game_over') return s;
   if (input.pause) s.paused = !s.paused;
   if (s.paused) return s;
-  s.elapsed += dt; s.invulnTimer = Math.max(0, s.invulnTimer - dt);
+  s.elapsed += dt; s.invulnTimer = Math.max(0, s.invulnTimer - dt); s.wipeT = Math.max(0, s.wipeT - dt); s.viewTagT = Math.max(0, s.viewTagT - dt); s.roll = Math.max(0, s.roll - dt / 0.85);
+  if (input.toggleView) {
+    const views: Segment[] = ['overhead', 'chase', 'cockpit']; s.camera.mode = views[(views.indexOf(s.camera.mode) + 1) % views.length]; s.wipeT = 0.35; s.viewTagT = 1.4; updateCamera(s);
+  }
   if (s.phase === 'transition') {
-    s.transitionT = Math.min(1, s.transitionT + dt / 1.5); updateCamera(s);
-    if (s.transitionT >= 1) enterSegment(s, s.nextSegment, ground);
+    s.transitionT = Math.min(1, s.transitionT + dt / 1.5);
+    if (s.transitionT >= 1) { enterSegment(s, s.nextSegment, ground); s.wipeT = 0.35; s.viewTagT = 1.4; }
     return s;
   }
-  const control = s.autoplay ? bot(s) : input;
+  const control = s.autoplay ? { ...bot(s), boost: input.boost, bomb: input.bomb } : input;
   const mx = clamp(control.moveX, -1, 1), my = clamp(control.moveY, -1, 1), p = s.player;
   s.phaseTime += dt;
-  p.bank = advanceBank(p.bank, mx, dt);
-  if (s.segment === 'overhead') {
-    p.x = clamp(p.x + mx * 100 * dt, -110, 110); p.y = clamp(p.y - my * 100 * dt, -95, 55);
-    s.camera.z += 34 * s.loopSpeed * dt; p.z = s.camera.z + p.y; p.yaw = 0;
-  } else {
-    p.x = clamp(p.x + mx * 42 * dt, -55, 55);
-    p.z += 38 * s.loopSpeed * dt;
-    p.altitude = clamp(p.altitude - my * 32 * dt, ground(p.x, p.z) + 22, 160);
-    p.yaw += (mx * 0.16 - p.yaw) * Math.min(1, dt * 3);
-    if (s.segment === 'cockpit') {
-      s.aimX = control.aimX !== undefined ? clamp(control.aimX, -1, 1) : clamp(s.aimX + mx * dt * 1.4, -1, 1);
-      s.aimY = control.aimY !== undefined ? clamp(control.aimY, -1, 1) : clamp(s.aimY + my * dt * 1.4, -1, 1);
-    }
+  const beat = SCRIPT[s.scriptIndex].beats[s.beatIndex];
+  if (beat && s.phaseTime >= beat.at) { s.dialogue = { speaker: beat.speaker, text: beat.text, timer: 5 }; s.beatIndex++; }
+  if (s.dialogue) { s.dialogue.timer -= dt; if (s.dialogue.timer <= 0) s.dialogue = null; }
+  s.boosting = !!control.boost && s.bst > 0;
+  s.bst = clamp(s.bst + (s.boosting ? -0.5 : 0.35) * dt, 0, 1);
+  if (control.bomb && s.bombs > 0) {
+    s.bombs--; s.roll = 1; s.bullets = s.bullets.filter(b => b.friendly);
+    for (const e of s.entities) if (['drone', 'supply', 'boss_orb', 'pylon', 'lock'].includes(e.kind) && Math.abs(e.x - p.x) < 90 && e.z > p.z && e.z < p.z + 180) { e.hp -= 2; e.shotDown = true; e.hitFlash = 0.15; }
+    if (s.boss.active) { const target = wardenTargets(s)[0]; if (target.kind === 'pod') s.boss.pods[target.index] = Math.max(0, s.boss.pods[target.index] - 2); else s.boss.coreHp = Math.max(0, s.boss.coreHp - 2); }
+    s.effects.push({ x: p.x, z: p.z + 40, alt: p.altitude, life: 0.8, kind: 'ring' });
+  }
+  p.bank = advanceBank(p.bank, mx, dt); p.x = clamp(p.x + mx * 45 * dt, -70, 70);
+  const speed = 34 * s.loopSpeed * (s.boosting ? 1.55 : 1);
+  p.z += speed * dt; p.altitude = clamp(p.altitude - my * 32 * dt, s.biome === 'space' ? 55 : ground(p.x, p.z) + 22, 165);
+  p.yaw += (mx * 0.08 - p.yaw) * Math.min(1, dt * 3);
+  if (s.camera.mode === 'cockpit') {
+    s.aimX = control.aimX !== undefined ? clamp(control.aimX, -1, 1) : clamp(s.aimX + mx * dt, -1, 1);
+    s.aimY = control.aimY !== undefined ? clamp(control.aimY, -1, 1) : clamp(s.aimY + my * dt, -1, 1);
   }
   updateCamera(s);
-  if (s.segment === 'overhead' && s.phaseTime >= 30 || s.segment === 'chase' && s.phaseTime >= 35) {
-    s.phase = 'transition'; s.nextSegment = s.segment === 'overhead' ? 'chase' : 'cockpit'; s.transitionT = 0; s.invulnTimer = Math.max(s.invulnTimer, 1.5); updateCamera(s); return s;
-  }
+  if (s.segment === 'reach' && s.phaseTime >= (SCRIPT[s.scriptIndex].duration || 24)) { transition(s); return s; }
   s.spawnTimer -= dt;
-  if (s.spawnTimer <= 0 && s.segment === 'overhead') { spawnWave(s); s.spawnTimer = 5 / s.loopSpeed; }
-  if (s.spawnTimer <= 0 && s.segment === 'chase') { spawnCanyon(s, ground); s.spawnTimer = 7 / s.loopSpeed; }
-  if (s.segment === 'cockpit' && !s.boss.active && s.phaseTime >= 12) { s.boss.active = true; s.boss.fireTimer = 1.3; }
-  if (s.boss.active) {
-    const phase2 = s.boss.hp <= 12, t = s.phaseTime;
-    s.boss.x = Math.sin(t * (phase2 ? 1.05 : 0.65)) * (phase2 ? 28 : 18);
-    s.boss.z = p.z + 110; s.boss.alt = p.altitude - 8 + Math.sin(t * 0.9) * (phase2 ? 12 : 7);
-    s.boss.fireTimer -= dt; s.boss.hitFlash = Math.max(0, s.boss.hitFlash - dt); s.boss.hitCooldown = Math.max(0, s.boss.hitCooldown - dt);
-    if (s.boss.fireTimer <= 0) {
-      for (let i = phase2 ? -1 : 0; i <= (phase2 ? 1 : 0); i++) {
-        const orb = entity('boss_orb', s.boss.x + i * 7, s.boss.z - 5, s.boss.alt);
-        const travel = Math.max(1, orb.z - p.z), velocity = 75;
-        orb.vx = (p.x - orb.x) / travel * velocity + i * 8; orb.valt = (p.altitude - orb.alt) / travel * velocity; orb.vz = -velocity;
-        s.entities.push(orb);
-      }
-      s.boss.fireTimer = (phase2 ? 1.7 : 2.5) / s.loopSpeed;
+  if (s.segment === 'reach' && s.spawnTimer <= 0) { spawnWave(s); s.spawnTimer = 4.5 / s.loopSpeed; }
+  if (s.boss.active) { s.boss.z = p.z + 110; s.boss.fireTimer -= dt; s.boss.hitFlash = Math.max(0, s.boss.hitFlash - dt);
+    if (s.boss.fireTimer <= 0 && s.entities.filter(e => e.kind === 'boss_orb').length < 10) {
+      for (let i = -1; i <= 1; i++) { const orb = entity('boss_orb', s.boss.x + i * 13, s.boss.z - 5, s.boss.alt); orb.vx = (p.x - orb.x) * 0.6 + i * 5; orb.valt = (p.altitude - orb.alt) * 0.6; orb.vz = -55; s.entities.push(orb); }
+      s.boss.fireTimer = 3.2 / s.loopSpeed;
     }
   }
   p.fireCooldown -= dt;
-  if (control.fire && p.fireCooldown <= 0 && s.bullets.filter(b => b.friendly).length <= 30) {
-    for (const side of [-1, 1]) {
-      let vx = 0, vy = 0, vz = 230;
-      if (s.segment === 'cockpit') {
-        const depth = 110, camX = s.camera.x, angle = s.camera.yaw;
-        const targetX = camX + Math.sin(angle) * depth + Math.cos(angle) * s.aimX * 0.608 * depth;
+  if (control.fire && p.fireCooldown <= 0 && s.bullets.filter(b => b.friendly).length < 40) {
+    const offsets = s.weaponLv === 1 ? [-3, 3] : s.weaponLv === 2 ? [-8, -3, 3, 8] : [-12, -7, -2, 2, 7, 12];
+    for (const side of offsets) {
+      let vx = 0, vy = 0; const vz = 230;
+      if (s.camera.mode === 'cockpit') {
+        const depth = 110, targetX = s.camera.x + Math.sin(s.camera.yaw) * depth + s.aimX * 0.608 * depth;
         const targetAlt = s.camera.altitude + s.camera.camHeightOffset - (0.12 + s.aimY * 0.27) * depth / 0.95;
-        vx = (targetX - p.x) / depth * vz; vy = (targetAlt - p.altitude) / depth * vz;
+        vx = (targetX - p.x) / depth * (vz - speed); vy = (targetAlt - p.altitude) / depth * (vz - speed);
       }
-      s.bullets.push({ x: p.x + side * 3, y: 0, z: p.z + 8, alt: p.altitude, vx, vy, vz, friendly: true, life: 2 });
+      s.bullets.push({ x: p.x + side, y: 0, z: p.z + 8, alt: p.altitude, vx, vy, vz, friendly: true, life: 2 });
     }
     p.fireCooldown = 0.2;
   }
   const oldZ = previous.player.z;
   for (const e of s.entities) {
     e.x += e.vx * dt; e.z += e.vz * dt; e.alt += e.valt * dt;
+    if (e.kind === 'pylon' || e.kind === 'door' || e.kind === 'lock') e.z = p.z + 120;
     e.hitFlash = Math.max(0, e.hitFlash - dt); e.fireTimer -= dt;
-    if (e.kind === 'drone') {
+    if (e.kind === 'drone' || e.kind === 'supply') {
       e.bank = Math.sin(s.elapsed * 2 + e.waveId) * 0.35;
-      if (e.fireTimer <= 0 && s.bullets.filter(b => !b.friendly).length < 48) {
-        const dz = Math.max(1, e.z - p.z), speed = 55;
-        s.bullets.push({ x: e.x, y: 0, z: e.z - 3, alt: e.alt, vx: (p.x - e.x) / dz * speed, vy: (p.altitude - e.alt) / dz * speed, vz: -speed, friendly: false, life: 4 });
-        e.fireTimer = 3 + random(s) * 2;
+      if (e.fireTimer <= 0 && s.bullets.filter(b => !b.friendly).length < 25) {
+        const dz = Math.max(1, e.z - p.z), velocity = 55;
+        s.bullets.push({ x: e.x, y: 0, z: e.z - 3, alt: e.alt, vx: (p.x - e.x) / dz * velocity, vy: (p.altitude - e.alt) / dz * velocity, vz: -velocity, friendly: false, life: 4 }); e.fireTimer = 3 + random(s) * 2;
       }
-      if (Math.abs(e.z - p.z) < 9 && Math.abs(e.x - p.x) < 10 && (s.segment === 'overhead' || Math.abs(e.alt - p.altitude) < 12)) { damage(s); e.hp = 0; }
-    } else if (e.kind === 'boss_orb') {
-      if (Math.abs(e.z - p.z) < 8 && Math.abs(e.x - p.x) < 9 && Math.abs(e.alt - p.altitude) < 10) { damage(s); e.hp = 0; }
-    } else if (oldZ <= e.z && p.z >= e.z) {
-      if (e.kind === 'ring' && Math.abs(e.x - p.x) < 14 && Math.abs(e.alt - p.altitude) < 14) {
-        s.score += 250; s.hull = Math.min(8, s.hull + 1); e.hp = 0;
-        s.effects.push({ x: e.x, z: e.z, alt: e.alt, life: 0.7, kind: 'ring' });
-      } else if (e.kind === 'pillar' && Math.abs(e.x - p.x) < 10 && p.altitude < e.alt + 55) { damage(s); e.hp = 0; }
+      if (Math.abs(e.z - p.z) < 9 && Math.abs(e.x - p.x) < 10 && Math.abs(e.alt - p.altitude) < 12) { damage(s); e.hp = 0; }
+    } else if (e.kind === 'boss_orb' && Math.abs(e.z - p.z) < 8 && Math.abs(e.x - p.x) < 9 && Math.abs(e.alt - p.altitude) < 10) { damage(s); e.hp = 0; }
+    else if (e.kind === 'capsule' && Math.abs(e.z - p.z) < 12 && Math.abs(e.x - p.x) < 12 && Math.abs(e.alt - p.altitude) < 18) { s.weaponLv = Math.min(3, s.weaponLv + 1) as 1 | 2 | 3; s.score += 100; e.hp = 0; }
+    else if (e.kind === 'exit' && oldZ <= e.z && p.z >= e.z) {
+      if (Math.abs(e.x - p.x) < 18 && Math.abs(e.alt - p.altitude) < 18) { s.score += 1000; transition(s); }
+      else e.z = p.z + 100;
     }
   }
   for (const b of s.bullets) {
     b.x += b.vx * dt; b.z += b.vz * dt; b.alt += b.vy * dt; b.life -= dt;
     if (!b.friendly) {
-      if (Math.abs(b.x - p.x) < 8 && Math.abs(b.z - p.z) < 8 && (s.segment === 'overhead' || Math.abs(b.alt - p.altitude) < 9)) { damage(s); b.life = 0; }
+      if (Math.abs(b.x - p.x) < 8 && Math.abs(b.z - p.z) < 8 && Math.abs(b.alt - p.altitude) < 12) { damage(s); b.life = 0; }
       continue;
     }
     for (const e of s.entities) {
-      if ((e.kind !== 'drone' && e.kind !== 'boss_orb') || e.hp <= 0) continue;
-      if (Math.abs(b.x - e.x) < 10 && Math.abs(b.z - e.z) < 10 && (s.segment === 'overhead' || Math.abs(b.alt - e.alt) < 10)) { e.hp--; if (e.hp <= 0) e.shotDown = true; e.hitFlash = 0.12; b.life = 0; break; }
+      if (!['drone', 'supply', 'boss_orb', 'pylon', 'lock'].includes(e.kind) || e.hp <= 0) continue;
+      if (Math.abs(b.x - e.x) < 9 && Math.abs(b.z - e.z) < 10 && Math.abs(b.alt - e.alt) < (s.camera.mode === 'overhead' ? 18 : 12)) { e.hp--; if (e.hp <= 0) e.shotDown = true; e.hitFlash = 0.12; b.life = 0; break; }
     }
-    if (b.life > 0 && s.boss.active && s.boss.hitCooldown <= 0 && Math.abs(b.x - s.boss.x) < (s.boss.hp <= 12 ? 9 : 16) && Math.abs(b.z - s.boss.z) < 9 && Math.abs(b.alt - s.boss.alt) < (s.boss.hp <= 12 ? 8 : 12)) {
-      s.boss.hp--; s.boss.hitFlash = 0.12; s.boss.hitCooldown = 0.45; b.life = 0;
-      if (s.boss.hp <= 0) { s.score += 2000 + 500 * s.lives; s.phase = 'win'; s.boss.active = false; s.effects.push({ x: s.boss.x, z: s.boss.z, alt: s.boss.alt, life: 1, kind: 'burst' }); }
+    if (b.life > 0 && s.boss.active) for (const target of wardenTargets(s)) {
+      if (Math.abs(b.x - target.x) < 8 && Math.abs(b.z - target.z) < 10 && Math.abs(b.alt - target.alt) < 10) {
+        if (target.kind === 'pod') s.boss.pods[target.index] = Math.max(0, s.boss.pods[target.index] - 1); else s.boss.coreHp = Math.max(0, s.boss.coreHp - 1);
+        s.boss.hitFlash = 0.12; b.life = 0; break;
+      }
     }
   }
   for (const e of s.entities) if (e.hp <= 0 || e.z < p.z - 100) {
-    const destroyed = e.hp <= 0;
-    if (destroyed && e.kind === 'drone') { if (e.shotDown) s.score += 100; s.effects.push({ x: e.x, z: e.z, alt: e.alt, life: 0.45, kind: 'burst' }); }
-    if (destroyed && e.kind === 'boss_orb') { if (e.shotDown) s.score += 50; s.effects.push({ x: e.x, z: e.z, alt: e.alt, life: 0.3, kind: 'hit' }); }
+    const destroyed = e.hp <= 0 && e.shotDown;
+    if (destroyed && (e.kind === 'drone' || e.kind === 'supply')) {
+      s.score += 100; s.salvage += 10; s.effects.push({ x: e.x, z: e.z, alt: e.alt, life: 0.45, kind: 'burst' });
+      if (e.kind === 'supply') s.entities.push(entity('capsule', e.x, e.z, e.alt));
+    }
+    if (destroyed && e.kind === 'pylon') { s.pylonsDown++; s.score += 1500; s.salvage += 50; }
     const wave = s.waves.find(w => w.id === e.waveId && e.waveId !== 0);
-    if (wave) { wave.remaining--; if (!e.shotDown) wave.perfect = false; if (wave.remaining === 0 && wave.perfect) s.score += 300; }
+    if (wave) { wave.remaining--; if (!destroyed) wave.perfect = false; if (wave.remaining === 0 && wave.perfect) s.score += 300; }
   }
   s.entities = s.entities.filter(e => e.hp > 0 && e.z >= p.z - 100);
+  if (s.segment === 'atoll') {
+    if (s.pylonsDown === 4 && !s.entities.some(e => e.kind === 'exit')) { s.entities.push(entity('exit', 0, p.z + 130, p.altitude)); s.dialogue = { speaker: 'OPAL', text: 'Pylons down. Follow the gold exit ring.', timer: 5 }; }
+    s.objective = s.pylonsDown === 4 ? 'PYLONS DOWN // FLY THROUGH EXIT' : `DESTROY THE RELAY PYLONS  ${s.pylonsDown}/4`;
+  }
+  if (s.segment === 'canyon') {
+    if (!s.doorOpen && !s.entities.some(e => e.kind === 'lock')) { s.doorOpen = true; s.doorTimer = 1; s.objective = 'DOOR OPEN'; }
+    else if (s.doorOpen) {
+      s.doorTimer -= dt;
+      if (s.doorTimer <= 0) { s.doorsCleared++; s.entities = s.entities.filter(e => e.kind !== 'door');
+        if (s.doorsCleared >= 2) transition(s); else { s.objective = `BLAST DOORS // SHOOT THE LOCKS  ${s.doorsCleared}/2`; spawnDoor(s); }
+      }
+    }
+  }
+  if (s.boss.active) {
+    s.boss.hp = s.boss.pods.reduce((sum, hp) => sum + hp, 0) + s.boss.coreHp;
+    if (!s.boss.pods.some(hp => hp > 0)) s.objective = 'THE EYE IS OPEN // HIT THE CORE';
+    if (s.boss.coreHp <= 0) {
+      s.score += 25000; s.rank = calculateRank(s.hitsTaken); s.salvage += { S: 500, A: 300, B: 150, C: 50 }[s.rank];
+      s.phase = 'win'; s.boss.active = false; s.effects.push({ x: s.boss.x, z: s.boss.z, alt: s.boss.alt, life: 1, kind: 'burst' });
+    }
+  }
   s.bullets = s.bullets.filter(b => b.life > 0);
   for (const fx of s.effects) fx.life -= dt;
-  s.effects = s.effects.filter(fx => fx.life > 0);
-  s.waves = s.waves.filter(w => w.remaining > 0);
+  s.effects = s.effects.filter(fx => fx.life > 0); s.waves = s.waves.filter(w => w.remaining > 0);
   return s;
 }

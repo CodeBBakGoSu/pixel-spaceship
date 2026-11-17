@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, stepGame, parseGameOptions, restartGame, nextLoop } from '../src/game.ts';
+import { createGame, stepGame, parseGameOptions, restartGame, nextLoop, elevationBracket, calculateRank, wardenTargets } from '../src/game.ts';
 
 const ground = () => 30;
 const idle = { moveX: 0, moveY: 0, fire: false };
@@ -8,125 +8,131 @@ function advance(state, seconds, input = idle) {
   for (let i = 0; i < Math.round(seconds * 60); i++) state = stepGame(state, input, 1 / 60, ground);
   return state;
 }
+const shot = (x, z, alt, friendly = true) => ({ x, y: 0, z, alt, vx: 0, vy: 0, vz: 0, friendly, life: 1 });
+const shootAt = (s, target, count = 1) => {
+  s.bullets = Array.from({ length: count }, () => shot(target.x, target.z, target.alt));
+  return stepGame(s, idle, 1 / 60, ground);
+};
 
-test('URL options validate segments, seed, loop and autoplay', () => {
-  assert.deepEqual(parseGameOptions('?segment=boss&seed=42&autoplay=1&loop=3&t=8'), { segment: 'boss', seed: 42, autoplay: true, loop: 3, time: 8 });
-  assert.deepEqual(parseGameOptions('?segment=invalid&seed=no&loop=-2&t=-1'), { segment: null, seed: 1, autoplay: false, loop: 1, time: 0 });
+test('URL hooks validate route, view, seed, touch and autoplay', () => {
+  const o = parseGameOptions('?segment=atoll&view=cockpit&seed=42&autoplay=1&loop=3&t=8&touch=1');
+  assert.deepEqual(o, { segment: 'atoll', view: 'cockpit', seed: 42, autoplay: true, loop: 3, time: 8, touch: true });
+  const bad = parseGameOptions('?segment=no&view=no&seed=no&loop=-2&t=-1');
+  assert.equal(bad.segment, null); assert.equal(bad.view, null); assert.equal(bad.seed, 1); assert.equal(bad.loop, 1); assert.equal(bad.time, 0);
+  assert.equal(parseGameOptions('?segment=boss').segment, 'orbit');
 });
 
-test('segments progress through both transitions to the boss and win', () => {
-  let s = createGame(parseGameOptions('?segment=overhead&seed=1'), ground);
-  s.invulnTimer = 999;
-  s = advance(s, 30.05);
-  assert.equal(s.phase, 'transition'); assert.equal(s.segment, 'overhead');
-  s = advance(s, 0.7);
-  assert.ok(s.transitionT > 0 && s.transitionT < 1);
-  assert.ok(s.camera.crossFade >= 0 && s.camera.crossFade <= 1);
-  s = advance(s, 0.9);
-  assert.equal(s.phase, 'playing'); assert.equal(s.segment, 'chase');
-  s = advance(s, 35.05);
-  assert.equal(s.phase, 'transition'); assert.equal(s.segment, 'chase');
-  s = advance(s, 1.6);
-  assert.equal(s.phase, 'playing'); assert.equal(s.segment, 'cockpit');
-  s = advance(s, 12.1);
-  assert.equal(s.boss.active, true); assert.equal(s.boss.hp, 24);
-  s.boss.hp = 1; s.boss.hitCooldown = 0;
-  s.bullets = [{ x: s.boss.x, y: 0, z: s.boss.z, alt: s.boss.alt, vx: 0, vy: 0, vz: 0, friendly: true, life: 1 }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.phase, 'win'); assert.ok(s.score >= 2000);
-});
-
-test('damage costs hull, then a life, and eventually ends the game', () => {
-  let s = createGame(parseGameOptions('?segment=overhead'), ground);
-  function hit(state) {
-    state.invulnTimer = 0;
-    state.bullets = [{ x: state.player.x, y: 0, z: state.player.z, alt: state.player.altitude, vx: 0, vy: 0, vz: 0, friendly: false, life: 1 }];
-    return stepGame(state, idle, 1 / 60, ground);
+test('manual view cycles with a wipe and altitude works in every view', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  for (const mode of ['chase', 'cockpit', 'overhead']) {
+    s = stepGame(s, { ...idle, toggleView: true }, 1 / 60, ground);
+    assert.equal(s.camera.mode, mode); assert.ok(s.wipeT > 0);
+    const alt = s.player.altitude;
+    s = advance(s, 0.5, { ...idle, moveY: -1 });
+    assert.ok(s.player.altitude > alt); assert.equal(s.wipeT, 0);
   }
-  s = hit(s); assert.equal(s.hull, 6); assert.equal(s.lives, 3);
-  s.hull = 2; s = hit(s); assert.equal(s.lives, 2); assert.equal(s.hull, 8); assert.ok(s.invulnTimer > 1);
-  s.lives = 1; s.hull = 2; s = hit(s); assert.equal(s.lives, 0); assert.equal(s.phase, 'game_over');
-  s = restartGame(s, ground); assert.equal(s.phase, 'playing'); assert.equal(s.segment, 'overhead'); assert.equal(s.lives, 3); assert.equal(s.score, 0);
+  assert.equal(elevationBracket(117, 100), 'inline');
+  assert.equal(elevationBracket(118, 100), 'above');
+  assert.equal(elevationBracket(82, 100), 'below');
 });
 
-test('next loop retains score and increases speed with a cap', () => {
-  let s = createGame(parseGameOptions('?segment=boss&seed=7'), ground);
-  s.phase = 'win'; s.score = 1234;
-  s = nextLoop(s, ground);
+test('overhead fire respects altitude, including the boundary', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  s.spawnTimer = 10;
+  s.entities = [{ kind: 'drone', x: 0, z: 40, alt: s.player.altitude + 18, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
+  s = shootAt(s, { x: 0, z: 40, alt: s.player.altitude });
+  assert.equal(s.entities[0].hp, 1);
+  s.entities[0].alt = s.player.altitude + 17;
+  s = shootAt(s, { x: 0, z: 40, alt: s.player.altitude });
+  assert.equal(s.entities.length, 0);
+});
+
+test('boost drains and refills, bomb clears hostile fire and starts a roll', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  s = advance(s, 1, { ...idle, boost: true });
+  assert.ok(s.bst > 0.48 && s.bst < 0.52);
+  s = advance(s, 1);
+  assert.ok(s.bst > 0.82 && s.bst < 0.88);
+  s.bullets = [shot(80, s.player.z + 40, s.player.altitude, false), shot(0, s.player.z + 40, s.player.altitude)];
+  const stock = s.bombs;
+  s = stepGame(s, { ...idle, bomb: true }, 1 / 60, ground);
+  assert.equal(s.bombs, stock - 1); assert.equal(s.bullets.filter(b => !b.friendly).length, 0); assert.ok(s.roll > 0);
+});
+
+test('power capsules raise weapon level to three and damage lowers it', () => {
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  for (let i = 0; i < 3; i++) {
+    s.entities.push({ kind: 'capsule', x: s.player.x, z: s.player.z + 1, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 });
+    s = stepGame(s, idle, 1 / 60, ground);
+  }
+  assert.equal(s.weaponLv, 3);
+  s.bullets = [shot(s.player.x, s.player.z, s.player.altitude, false)];
+  s = stepGame(s, idle, 1 / 60, ground);
+  assert.equal(s.weaponLv, 2); assert.equal(s.hull, 6);
+});
+
+test('pylons open an exit and both blast doors need their locks destroyed', () => {
+  let s = createGame(parseGameOptions('?segment=atoll'), ground);
+  assert.equal(s.entities.filter(e => e.kind === 'pylon').length, 4);
+  for (const p of [...s.entities].filter(e => e.kind === 'pylon')) s = shootAt(s, p, 4);
+  assert.equal(s.pylonsDown, 4); assert.ok(s.entities.some(e => e.kind === 'exit'));
+  const exit = s.entities.find(e => e.kind === 'exit');
+  exit.x = s.player.x; exit.alt = s.player.altitude; exit.z = s.player.z + 0.1;
+  s = stepGame(s, idle, 1 / 60, ground); assert.equal(s.phase, 'transition');
+  s = advance(s, 1.6); assert.equal(s.segment, 'canyon');
+  for (let door = 0; door < 2; door++) {
+    let locks = s.entities.filter(e => e.kind === 'lock'); assert.equal(locks.length, 2);
+    s = shootAt(s, locks[0], 4); assert.equal(s.doorOpen, false);
+    locks = s.entities.filter(e => e.kind === 'lock'); s = shootAt(s, locks[0], 4);
+    assert.equal(s.doorOpen, true);
+    s = advance(s, 1.1);
+  }
+  assert.equal(s.phase, 'transition'); s = advance(s, 1.6); assert.equal(s.segment, 'orbit');
+});
+
+test('Warden core is protected until all four pods are destroyed', () => {
+  let s = createGame(parseGameOptions('?segment=orbit'), ground);
+  const core = { x: s.boss.x, z: s.boss.z, alt: s.boss.alt };
+  s = shootAt(s, core, 5); assert.equal(s.boss.coreHp, s.boss.maxCoreHp);
+  for (let i = 0; i < 4; i++) {
+    const pod = wardenTargets(s).find(t => t.kind === 'pod'); assert.ok(pod);
+    s = shootAt(s, pod, 4);
+  }
+  assert.deepEqual(s.boss.pods, [0, 0, 0, 0]); assert.equal(s.phase, 'playing');
+  s = shootAt(s, wardenTargets(s)[0], s.boss.maxCoreHp);
+  assert.equal(s.phase, 'win'); assert.ok(s.rank); assert.ok(s.score > 0);
+});
+
+test('rank, lives, restart and faster next loop', () => {
+  assert.deepEqual([0, 1, 2, 3, 5, 6].map(calculateRank), ['S', 'A', 'A', 'B', 'B', 'C']);
+  let s = createGame(parseGameOptions('?segment=reach'), ground);
+  for (let i = 0; i < 12; i++) {
+    s.invulnTimer = 0; s.bullets = [shot(s.player.x, s.player.z, s.player.altitude, false)];
+    s = stepGame(s, idle, 1 / 60, ground);
+  }
+  assert.equal(s.phase, 'game_over'); assert.equal(s.lives, 0);
+  s = restartGame(s, ground); assert.equal(s.segment, 'reach'); assert.equal(s.lives, 3);
+  s.phase = 'win'; s.score = 1234; s = nextLoop(s, ground);
   assert.equal(s.loop, 2); assert.equal(s.score, 1234); assert.equal(s.loopSpeed, 1.2);
-  s.phase = 'win'; s.loop = 8;
-  assert.equal(nextLoop(s, ground).loopSpeed, 1.8);
 });
 
-test('seeded simulations are deterministic and the input state is not mutated', () => {
-  const options = parseGameOptions('?segment=overhead&seed=123&autoplay=1');
-  const original = createGame(options, ground);
-  const snapshot = structuredClone(original);
-  const one = stepGame(original, idle, 1 / 60, ground);
-  assert.deepEqual(original, snapshot); assert.notEqual(one, original);
-  const a = advance(original, 8); const b = advance(createGame(options, ground), 8);
-  assert.deepEqual(a, b);
-  const c = advance(createGame({ ...options, seed: 124 }, ground), 8);
-  assert.notDeepEqual(a.entities, c.entities);
-});
-
-test('rings repair hull and pillars inflict collision damage', () => {
-  let s = createGame(parseGameOptions('?segment=chase'), ground);
-  s.hull = 5; s.invulnTimer = 0;
-  s.entities = [{ kind: 'ring', x: s.player.x, z: s.player.z + 0.1, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 0, valt: 0 }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.hull, 6); assert.equal(s.score, 250);
-  s.entities = [{ kind: 'pillar', x: s.player.x, z: s.player.z + 0.1, alt: s.player.altitude - 30, vx: 0, vz: 0, hp: 1, waveId: 0, bank: 0, hitFlash: 0, fireTimer: 0, valt: 0 }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.hull, 4);
-});
-
-test('a drone collision damages the player without awarding a kill or wave bonus', () => {
-  let s = createGame(parseGameOptions('?segment=overhead'), ground);
-  s.entities = [{ kind: 'drone', x: s.player.x, z: s.player.z, alt: s.player.altitude, vx: 0, vz: 0, hp: 2, waveId: 1, bank: 0, hitFlash: 0, fireTimer: 3, valt: 0 }];
-  s.waves = [{ id: 1, remaining: 1, perfect: true }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.hull, 6); assert.equal(s.score, 0);
-});
-
-test('autoplay can complete a seeded loop without forced damage or victory', () => {
-  let s = createGame(parseGameOptions('?segment=overhead&seed=1&autoplay=1'), ground);
-  for (let i = 0; i < 120 * 60 && s.phase !== 'win' && s.phase !== 'game_over'; i++) s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.phase, 'win'); assert.ok(s.elapsed >= 90 && s.elapsed <= 120);
+test('seeded autoplay completes the route deterministically without mutating input', () => {
+  const options = parseGameOptions('?segment=reach&seed=1&autoplay=1');
+  const first = createGame(options, ground), snapshot = structuredClone(first);
+  stepGame(first, idle, 1 / 60, ground); assert.deepEqual(first, snapshot);
+  const run = () => {
+    let s = createGame(options, ground); const seen = new Set();
+    for (let i = 0; i < 180 * 60 && s.phase !== 'win' && s.phase !== 'game_over'; i++) { seen.add(s.segment); s = stepGame(s, idle, 1 / 60, ground); }
+    return { s, seen: [...seen] };
+  };
+  const a = run(), b = run();
+  assert.equal(a.s.phase, 'win'); assert.deepEqual(a.seen, ['reach', 'atoll', 'canyon', 'orbit']); assert.deepEqual(a, b);
 });
 
 test('pause freezes simulation until toggled again', () => {
-  let s = createGame(parseGameOptions('?segment=chase'), ground);
+  let s = createGame(parseGameOptions('?segment=atoll'), ground);
   s = stepGame(s, { ...idle, pause: true }, 1 / 60, ground);
   const time = s.phaseTime, z = s.player.z;
-  s = advance(s, 2);
-  assert.equal(s.phaseTime, time); assert.equal(s.player.z, z);
-  s = stepGame(s, { ...idle, pause: true }, 1 / 60, ground);
-  assert.equal(s.paused, false); assert.ok(s.player.z > z);
-});
-
-test('shooting the last drone awards both the kill and full-wave bonus', () => {
-  let s = createGame(parseGameOptions('?segment=overhead'), ground);
-  s.spawnTimer = 10;
-  s.entities = [{ kind: 'drone', x: 0, z: 40, alt: s.player.altitude, vx: 0, vz: 0, hp: 1, waveId: 1, bank: 0, hitFlash: 0, fireTimer: 9, valt: 0 }];
-  s.waves = [{ id: 1, remaining: 1, perfect: true }];
-  s.bullets = [{ x: 0, y: 0, z: 40, alt: s.player.altitude, vx: 0, vy: 0, vz: 0, friendly: true, life: 1 }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.score, 400); assert.equal(s.entities.length, 0);
-});
-
-test('boss phase two fires a spread and plasma orbs can be shot', () => {
-  let s = createGame(parseGameOptions('?segment=boss'), ground);
-  s.boss.hp = 12; s.boss.fireTimer = 0;
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.entities.filter(e => e.kind === 'boss_orb').length, 3);
-  const orb = s.entities[0];
-  s.bullets = [{ x: orb.x, y: 0, z: orb.z, alt: orb.alt, vx: 0, vy: 0, vz: 0, friendly: true, life: 1 }];
-  s = stepGame(s, idle, 1 / 60, ground);
-  assert.equal(s.score, 50); assert.equal(s.entities.filter(e => e.kind === 'boss_orb').length, 2);
-});
-
-test('the chase autopilot weaves and banks while following its first ring', () => {
-  const s = advance(createGame(parseGameOptions('?segment=chase&seed=1&autoplay=1'), ground), 2.5);
-  assert.ok(Math.abs(s.player.bank) > 0.03);
+  s = advance(s, 2); assert.equal(s.phaseTime, time); assert.equal(s.player.z, z);
+  s = stepGame(s, { ...idle, pause: true }, 1 / 60, ground); assert.equal(s.paused, false); assert.ok(s.player.z > z);
 });
