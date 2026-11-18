@@ -13,7 +13,7 @@
   font-synthesis: none;
 }
 *{box-sizing:border-box}html,body,.experience{width:100%;height:100%;margin:0;overflow:hidden;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.experience{position:relative;isolation:isolate;background:#101827;touch-action:none}
-#screen,#glow{position:absolute;inset:0;display:block;width:100%;height:100%}#screen{image-rendering:pixelated;touch-action:none;cursor:crosshair}#glow{pointer-events:none}.screen-shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(5,10,19,.32),transparent 19%,transparent 79%,rgba(5,10,19,.15))}
+#screen{position:absolute;inset:0;display:block;width:100%;height:100%}#screen{image-rendering:pixelated;touch-action:none;cursor:crosshair}.screen-shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(5,10,19,.32),transparent 19%,transparent 79%,rgba(5,10,19,.15))}
 .hud {
   position: absolute;
   left: var(--hud-x);
@@ -80,10 +80,47 @@
   text-shadow: 1px 1px #0a0e1b;
   pointer-events: none;
 }
-.alt-ruler{position:absolute;left:var(--alt-x);top:var(--alt-y);width:var(--alt-w);height:var(--alt-h);text-align:center;font-size:10px;font-weight:bold;color:#e7f3e9;pointer-events:none;text-shadow:1px 1px #151624}.alt-ruler i{display:block;position:absolute;right:7px;top:17px;bottom:18px;width:4px;background:#151b25;border:1px solid #617580}.alt-ruler b{position:absolute;right:1px;color:#6be5f0;font-size:13px}.alt-ruler small{position:absolute;bottom:0;right:0;font-size:9px}
+.alt-ruler {
+  position: absolute;
+  left: var(--alt-x);
+  top: var(--alt-y);
+  width: var(--alt-w);
+  height: var(--alt-h);
+  color: #c7ffe1;
+  font-size: 10px;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 1px 1px #15241f;
+}
+
+.alt-ruler > span, .alt-ruler > strong { display: block; padding: 3px 0; background: #102924; }
+.alt-ruler > strong { color: #e0ffe7; font-size: 13px; border-bottom: 1px solid #7aab88; }
+.alt-scale { position: absolute; inset: 37px 0 8px; background: rgba(12, 35, 33, .86); }
+.alt-scale i { position: absolute; top: 0; bottom: 0; right: 7px; width: 1px; background: #588273; }
+.alt-scale small { position: absolute; left: 2px; right: 6px; border-bottom: 1px solid #496b61; color: #91baa7; font-size: 8px; line-height: 8px; transform: translateY(-100%); }
+.alt-scale small:nth-of-type(1) { top: 18.18%; }
+.alt-scale small:nth-of-type(2) { top: 50%; }
+.alt-scale small:nth-of-type(3) { top: 81.82%; }
+.alt-scale b { position: absolute; right: 1px; color: #a2ffc5; font-size: 13px; line-height: 10px; transform: translateY(-50%); }
+.experience[data-view="overhead"] .alt-scale { display: none; }
+
 .boss-hud{position:absolute;left:var(--boss-x);top:var(--boss-y);width:var(--boss-w);height:var(--boss-h);display:flex;gap:8px;align-items:center;color:#ff9572;font-size:10px;line-height:1;font-weight:bold;text-shadow:1px 1px #111}.boss-hud>i{flex:1;height:8px;background:#33202c;border:1px solid #1d1723}.boss-hud>i>i{display:block;height:100%;width:100%;background:#e96d4f}
-.boss-hud[hidden],.phase-banner[hidden],.view-tag[hidden],.game-overlay[hidden],.game-card[hidden],.touch-controls[hidden],.rank-display[hidden]{display:none}
-.phase-banner,.view-tag{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;text-align:center;text-shadow:2px 2px #0b1019;font-weight:900;white-space:nowrap;max-width:calc(100% - 36px);overflow:hidden;text-overflow:ellipsis}.phase-banner{top:39%;padding:9px 22px;color:#ffe1a2;background:rgba(9,15,27,.86);border-top:2px solid #f3a957;border-bottom:2px solid #f3a957;font-size:16px;letter-spacing:.12em}.view-tag{top:52%;font-size:14px;color:#fff}
+.boss-hud[hidden],.view-tag[hidden],.game-overlay[hidden],.game-card[hidden],.touch-controls[hidden],.rank-display[hidden]{display:none}
+.view-tag {
+  position: absolute;
+  top: calc(var(--objective-y) + var(--objective-h) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 4px 9px;
+  color: #c5ffe0;
+  border: 1px solid #426d5b;
+  background: #13272a;
+  font-size: 11px;
+  text-shadow: 1px 1px #0b1019;
+}
+
 .game-overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(6,8,19,.52);z-index:5}.game-card{width:min(420px,calc(100% - 48px));padding:28px;background:#0b111d;border:2px solid #71848c;box-shadow:6px 6px #0a101a;max-height:calc(100% - 24px);overflow:auto;overscroll-behavior:contain;touch-action:pan-y}.card-kicker{color:#f6bb72;font-size:10px;letter-spacing:.14em}.game-card h1{margin:14px 0;font-size:clamp(30px,6vw,50px);line-height:1.2;letter-spacing:-.05em}.game-card p{color:#e0e5d9;font-size:12px;line-height:1.6}.rank-display{margin:15px 0;color:#ffcf66;font-size:30px;font-weight:900}.card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.card-actions button{border:2px solid #e7ddc6;background:#f5c06f;color:#17202a;padding:11px 13px;font:700 12px var(--game-font);cursor:pointer}.card-actions button+button{background:transparent;color:#e7ddc6}.card-hint{margin-top:15px;color:#b9c8c5;font-size:9px;letter-spacing:.08em}.help{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:max-content;max-width:95%;text-align:center;font-size:10px;line-height:1.4;color:#f6f0dd;text-shadow:1px 2px #0a111a;transition:opacity 1.3s;pointer-events:none}.help.fade{opacity:0}
 .touch-controls{position:absolute;inset:0;z-index:4;pointer-events:none}.stick{position:absolute;left:20px;bottom:34px;width:96px;height:96px;border:2px dotted rgba(131,224,240,.75);border-radius:50%;pointer-events:auto;touch-action:none}.stick span{position:absolute;left:30px;top:30px;width:32px;height:32px;background:#6ac9db;border:4px solid #2c7384;border-radius:50%;box-shadow:0 0 0 2px #173d4e}.stick small{position:absolute;left:0;right:0;top:-17px;text-align:center;font-size:8px;color:#b5d6db;text-shadow:1px 1px #111}.touch-button{position:absolute;padding:0;border-radius:50%;font:900 11px var(--game-font);letter-spacing:.03em;color:#fff;pointer-events:auto;touch-action:none;background:rgba(20,16,35,.86);box-shadow:0 0 0 2px rgba(12,12,23,.8)}.touch-button:active,.touch-button.held{filter:brightness(1.7)}.fire{right:20px;bottom:26px;width:74px;height:74px;background:#ef8a39;border:3px solid #ffb55a;color:#24151d}.boost{right:28px;bottom:115px;width:56px;height:56px;border:2px solid #e6b34f;color:#f2ce67}.bomb{right:31px;bottom:185px;width:50px;height:50px;border:2px solid #ee719e;color:#ffa5c6}.view{right:105px;bottom:88px;width:52px;height:52px;border:2px solid #ac83e3;color:#d7b6ff}
 @media (max-width: 600px) {
@@ -103,7 +140,7 @@
   .game-card { padding: 22px; }
 }
 
-.status-view time{color:#dce6de;font-size:10px;margin-left:3px}.boundary-warning{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.boundary-warning[hidden]{display:none}
+.status-view time{color:#dce6de;font-size:10px;margin-left:3px}.flight-message{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.flight-message[hidden]{display:none}
 #nav-radar{position:absolute;left:var(--radar-x);top:var(--radar-y);width:var(--radar-w);height:var(--radar-h);image-rendering:pixelated;pointer-events:none;opacity:.9}
 
 /* Safe-area measurements are read by the pure layout adapter. */
@@ -111,7 +148,7 @@
 #control-backdrop,.touch-pause[hidden]{display:none}
 .experience.phone-layout #control-backdrop{display:block;position:absolute;left:0;right:0;top:var(--controls-y);bottom:0;pointer-events:none;background:linear-gradient(180deg,rgba(7,15,26,.82),rgba(9,15,28,.96));border-top:1px solid rgba(128,192,194,.35)}
 .experience.phone-layout .hud{font-size:11px}
-.experience.phone-layout .status{width:155px}.experience.phone-layout .status>div{min-height:14px}.experience.phone-layout .status>div>span:first-child{width:30px}.experience.phone-layout .blocks{font-size:12px;letter-spacing:0}.experience.phone-layout .track{width:90px}
+.experience.phone-layout .status{width:184px}.experience.phone-layout .status>div{min-height:14px}.experience.phone-layout .status>div>span:first-child{width:30px}.experience.phone-layout .blocks{font-size:12px;letter-spacing:0}.experience.phone-layout .track{width:90px}
 .experience.phone-layout .scorebox{padding-right:52px}.experience.phone-layout .scorebox strong{font-size:16px}
 .experience.phone-layout .touch-pause{display:block;position:absolute;left:var(--pause-x);top:var(--pause-y);width:var(--pause-w);height:var(--pause-h);z-index:4;pointer-events:auto;touch-action:none;border:1px solid #799399;background:#101a29;color:#e8eee3;font:900 17px var(--game-font)}
 .experience.phone-layout .touch-pause[hidden]{display:none}
@@ -120,7 +157,7 @@
 .experience.phone-layout .radio canvas{width:40px;height:40px}.experience.phone-layout .radio strong{font-size:11px;line-height:12px;margin:1px 0 3px}.experience.phone-layout .radio p{font-size:11px;line-height:14px;-webkit-line-clamp:2}
 .experience.phone-layout .objective{left:var(--objective-x);width:var(--objective-w);transform:none;font-size:11px}
 .experience.phone-layout .alt-ruler{font-size:9px}
-.experience.phone-layout .boundary-warning{top:calc(var(--field-y) + 5px);font-size:9px}
+.experience.phone-layout .flight-message{top:calc(var(--playfield-y) + 5px);font-size:9px}
 .experience.phone-layout .help{display:none}
 .experience.phone-layout .stick{left:var(--stick-x);top:var(--stick-y);bottom:auto;width:var(--stick-w);height:var(--stick-h)}
 .experience.phone-layout .stick span{left:calc(50% - 16px);top:calc(50% - 16px)}.experience.phone-layout .stick small{top:-14px;font-size:8px}
@@ -129,8 +166,7 @@
 .experience.phone-layout .game-overlay{padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 8px)}
 .experience.phone-layout .game-card{width:min(420px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain}.experience.phone-layout .card-actions button{min-width:44px;min-height:44px}
 .experience.phone-layout.menu-open #control-backdrop{display:none}
-.experience.phone-landscape .phase-banner{top:calc(var(--field-y) + 6px);padding:5px 14px;font-size:12px}
-.experience.phone-landscape .view-tag{top:calc(var(--field-y) + 42px);font-size:11px}
+
 
 #cockpit-display {
   position: absolute;
@@ -151,7 +187,7 @@
 
 .experience.cockpit-view :is(#nav-radar, .alt-ruler) { display: none; }
 
-.experience.cockpit-view :is(.boundary-warning, .phase-banner, .view-tag) {
+.experience.cockpit-view :is(.flight-message, .view-tag) {
   top: var(--cockpit-message-y);
   height: var(--cockpit-message-h);
   max-width: var(--cockpit-message-w);
@@ -336,7 +372,75 @@
 .guide-body:focus-visible { outline: 2px solid #bceff0; outline-offset: -2px; }
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
-.menu-open :is(.objective, .boundary-warning, .phase-banner, .view-tag, .help),
+.menu-open :is(.objective, .flight-message, .view-tag, .scene-cue, .help),
 .guide-open :is(.hud, .boss-hud, .radio, #nav-radar, .alt-ruler) {
   visibility: hidden;
+}
+
+
+#xp-label {
+  flex: none;
+  white-space: nowrap;
+  padding: 2px 2px 4px;
+  background: linear-gradient(to right, #8fd69c var(--xp-fill, 0%), #213c39 0) bottom / 100% 2px no-repeat;
+}
+
+#view-wipe {
+  position: absolute;
+  inset-inline: 0;
+  height: 14px;
+  pointer-events: none;
+  transform: translateY(-50%);
+  background: repeating-linear-gradient(0deg, #bdf6f3a0 0 1px, #111f2cb0 1px 4px);
+}
+
+.flight-message { z-index: 1; }
+.flight-message, .view-tag { max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; }
+.scene-cue {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -100%);
+  padding: 3px 5px;
+  border: 1px solid #678f76;
+  background: #0e2523;
+  color: #c5ffe0;
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.screen-reader { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.draft-card { width: min(650px, calc(100% - 36px)); }
+.draft-card h2 { margin: 10px 0 18px; color: #f5c06f; font-size: clamp(20px, 4vw, 31px); }
+.draft-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.draft-options button {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 9px;
+  min-height: 116px;
+  padding: 12px;
+  color: #dff8e4;
+  background: #152427;
+  border: 1px solid #6c918a;
+  text-align: left;
+  font: 13px/1.3 var(--game-font);
+  cursor: pointer;
+}
+.draft-options button:hover, .draft-options button:focus-visible { background: #21433b; }
+.draft-options small { color: #cfdfd6; font-size: 11px; line-height: 1.4; }
+.draft-options kbd { color: #ffd68d; font: inherit; }
+.experience.phone-layout .draft-card { width: min(650px, 100%); }
+.experience.phone-layout .draft-options kbd { display: none; }
+
+@media (max-width: 600px) {
+  .draft-options { grid-template-columns: 1fr; }
+  .draft-options button { min-height: 58px; gap: 4px; }
+  .draft-options kbd { display: none; }
+  .flight-message { font-size: 10px; }
+}
+
+.experience.phone-layout:not(.cockpit-view) :is(.flight-message, .view-tag) {
+  top: auto;
+  bottom: calc(100% - var(--controls-y) + 8px);
 }

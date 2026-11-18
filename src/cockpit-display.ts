@@ -1,18 +1,19 @@
 import type { Point } from './camera';
 import {
-  cockpitAim, cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel, pitchLadder, selectCockpitTarget,
-  type CockpitMotion, type CockpitTarget, type CockpitView, type CockpitWarnings,
+  cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel, pitchLadder,
+  type CockpitMotion, type CockpitTarget, type CockpitWarnings,
 } from './cockpit';
 import {
   CockpitLabelAtlas, CockpitLineRaster, cockpitPixel, cockpitSurface, drawCockpitLabel, type CockpitLabel,
 } from './cockpit-pixels';
-import type { GameState } from './game';
+import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
+import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
 
 type Context = CanvasRenderingContext2D;
 type Translate = ReturnType<typeof createTranslator>;
-type WeaponReadout = { gun: string; ammo: string; bombs: string; missiles: string };
+type WeaponReadout = { gun: string; pods: string; bombs: string };
 const green = '#a3ffc0', dimGreen = '#65927a', amber = '#ffce7e', ink = '#0d1d20';
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const middle = (r: Rect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
@@ -153,6 +154,7 @@ class GlassLabels {
   private readonly atlas: CockpitLabelAtlas;
   private readonly numbers = new Map<number, CockpitLabel>();
   private readonly gLoads = new Map<number, CockpitLabel>();
+  private readonly deltas = new Map<string, CockpitLabel>();
   private readonly tracked = new Map<number, CockpitLabel>();
   private readonly locked = new Map<number, CockpitLabel>();
   readonly bearings: CockpitLabel[];
@@ -171,9 +173,6 @@ class GlassLabels {
     });
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
-    // Typical contact ranges are bounded by the radar and weapon range.
-    for (let n = 0; n <= 500; n++) this.contact(n, false);
-    for (let n = 0; n <= 230; n++) this.contact(n, true);
   }
 
   number(value: number): CockpitLabel {
@@ -181,6 +180,16 @@ class GlassLabels {
     if (cached) return cached;
     const label = this.atlas.add(String(value), green, 'center');
     this.numbers.set(value, label);
+    return label;
+  }
+
+  delta(value: number): CockpitLabel {
+    const copy = altitudeDeltaText(value, this.t);
+    let label = this.deltas.get(copy);
+    if (!label) {
+      label = this.atlas.add(copy, amber, 'center');
+      this.deltas.set(copy, label);
+    }
     return label;
   }
 
@@ -235,10 +244,10 @@ function drawHeading(c: Context, r: Rect, yaw: number, compact: boolean, labels:
 function drawTapePlate(c: Context, r: Rect, label: string, altitude: boolean): void {
   fill(c, 'rgba(7,24,27,.8)', r.x, r.y, r.width, r.height);
   outline(c, '#53766a', r);
-  if (r.height < 37) return;
+  if (r.height < (altitude ? 57 : 37)) return;
   const pivot = Math.round(r.y + r.height / 2);
   const axis = altitude ? r.x + 5 : right(r) - 6;
-  const chartTop = r.y + 23, chartBottom = bottom(r) - 8;
+  const chartTop = r.y + 23, chartBottom = bottom(r) - (altitude ? 22 : 8);
   text(c, label, r.x + r.width / 2, r.y + 9, green, 'center');
   fill(c, dimGreen, axis, chartTop, 1, chartBottom - chartTop + 1);
   const box = { x: r.x + 3, y: pivot - 9, width: r.width - 6, height: 18 };
@@ -247,10 +256,11 @@ function drawTapePlate(c: Context, r: Rect, label: string, altitude: boolean): v
 }
 
 function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact: boolean, labels: GlassLabels, target?: number): void {
-  const pivot = Math.round(r.y + r.height / 2), scale = compact ? 1.3 : 2.0;
+  const shortAltitude = altitude && r.height < 57 && target !== undefined;
+  const pivot = Math.round(r.y + r.height * (shortAltitude ? 0.29 : 0.5)), scale = compact ? 1.3 : 2.0;
   const axis = altitude ? r.x + 5 : right(r) - 6;
-  if (r.height >= 37) {
-    const chartTop = r.y + 23, chartBottom = bottom(r) - 8;
+  if (r.height >= (altitude ? 57 : 37)) {
+    const chartTop = r.y + 23, chartBottom = bottom(r) - (altitude ? 22 : 8);
     const start = Math.ceil((value + (pivot - chartBottom) / scale) / 5) * 5;
     const end = value + (pivot - chartTop) / scale;
     for (let tick = Math.max(0, start); tick <= end; tick += 5) {
@@ -271,17 +281,22 @@ function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact
     }
   }
   drawCockpitLabel(c, labels.number(Math.round(value)), r.x + r.width / 2, pivot);
+  if (target !== undefined && r.height >= 20) {
+    const y = shortAltitude ? r.y + Math.round(r.height * 0.76) : bottom(r) - 9;
+    fill(c, '#173735', r.x + 2, y - 7, r.width - 4, 14);
+    drawCockpitLabel(c, labels.delta(target - value), r.x + r.width / 2, y);
+  }
 }
 
 const ladderOutline = cockpitPixel(0x183f39), horizonColor = cockpitPixel(0x9befb2), ladderColor = cockpitPixel(0x73bb93);
 
-function drawLadder(c: Context, layout: CockpitLayout, view: CockpitView, motion: CockpitMotion,
+function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: CockpitMotion,
   labels: GlassLabels, raster: CockpitLineRaster, marks: ReturnType<typeof pitchLadder>, anchor: Point): void {
   const area = layout.aiming, compact = layout.compact;
   const span = Math.min(compact ? 51 : 105, area.width * 0.31), scale = compact ? 2 : 3;
   const slope = Math.atan2(motion.climb, Math.max(12, motion.speed));
   const pitch = clamp(slope * 180 / Math.PI, -32, 32);
-  const horizon = view.screen.height * 0.3 + view.camera.pitch * 15 * view.screen.height / view.buffer.height;
+  const horizon = aim.y;
   anchor.x = area.x + area.width / 2 - motion.turn * (compact ? 7 : 14);
   anchor.y = area.y + area.height / 2 - area.height * 0.03;
   pitchLadder(anchor, pitch, motion.bank, span, scale, marks);
@@ -360,7 +375,11 @@ function drawAim(c: Context, area: Rect, aim: Point, target: CockpitTarget | nul
   }
   const label = labels.contact(target.range, target.locked);
   const width = Math.ceil(label.advance) + 10;
-  const below = targetTop + size * 2 + 5;
+  if (target.progress > 0 && !target.locked) {
+    fill(c, ink, p.x - size, targetTop + 24, size * 2, 3);
+    fill(c, green, p.x - size, targetTop + 24, Math.max(1, Math.round(size * 2 * target.progress)), 2);
+  }
+  const below = targetTop + size * 2 + 8;
   const labelY = below + 15 <= bottom(area) ? below : Math.max(area.y, targetTop - 19);
   const labelX = clamp(p.x - width / 2, area.x, right(area) - width);
   fill(c, pulse ? '#204335' : ink, labelX, labelY, width, 15);
@@ -408,66 +427,15 @@ function drawStores(c: Context, r: Rect, weapons: WeaponReadout): void {
   const cell = r.width / 3, y = r.y + r.height / 2;
   fill(c, 'rgba(9,26,28,.83)', r.x, r.y, r.width, r.height);
   outline(c, '#53766a', r);
-  for (const [i, label] of [weapons.ammo, weapons.missiles, weapons.bombs].entries()) {
+  for (const [i, label] of [weapons.gun, weapons.pods, weapons.bombs].entries()) {
     if (i > 0) fill(c, '#38554e', r.x + i * cell, r.y + 3, 1, r.height - 6);
-    text(c, label, r.x + (i + 0.5) * cell, y, i === 1 ? dimGreen : green, 'center');
+    text(c, label, r.x + (i + 0.5) * cell, y, green, 'center');
   }
-}
-
-type RadarScope = { x: number; y: number; radius: number };
-function radarScope(r: Rect, compact: boolean): RadarScope {
-  const short = r.height < 40;
-  return {
-    x: compact ? r.x + r.width / 2 : r.x + r.width * 0.52,
-    y: r.y + r.height / 2 + (short ? 1 : compact ? 5 : 3),
-    radius: Math.max(5, Math.min(r.height / 2 - (short ? 4 : compact ? 13 : 16), r.width * 0.39)),
-  };
-}
-
-function drawRadarFace(c: Context, r: Rect, scope: RadarScope, compact: boolean, t: Translate): void {
-  const { x, y, radius } = scope;
-  text(c, t('hud.radar'), r.x + (compact ? 6 : 12), r.y + (r.height < 40 ? 8 : 11));
-  if (!compact) text(c, t('cockpit.range', { value: 240 }), right(r) - 14, r.y + 11, dimGreen, 'right');
-  c.strokeStyle = '#285747';
-  c.lineWidth = 1;
-  for (const ratio of [0.5, 1]) {
-    c.beginPath(); c.arc(x, y, radius * ratio, 0, Math.PI * 2); c.stroke();
-  }
-  fill(c, '#244a40', x - radius, y, radius * 2, 1);
-  fill(c, '#244a40', x, y - radius, 1, radius * 2);
-}
-
-function drawRadarSweep(c: Context, scope: RadarScope, elapsed: number): void {
-  const { x, y, radius } = scope;
-  const beam = (elapsed * 2.6) % (Math.PI * 2);
-  c.fillStyle = 'rgba(96,232,133,.13)';
-  c.beginPath(); c.moveTo(x, y); c.arc(x, y, radius, beam - 0.47, beam); c.closePath(); c.fill();
-  pixelLine(c, '#488c66', x, y, x + Math.cos(beam) * radius, y + Math.sin(beam) * radius);
-}
-
-function drawRadarBlips(c: Context, scope: RadarScope, state: GameState, compact: boolean): void {
-  const { x, y, radius } = scope, player = state.player;
-  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
-  const scale = (radius - 2) / 240, size = compact ? 2 : 3;
-  const dot = (wx: number, wz: number, color: string) => {
-    const dx = wx - player.x, dz = wz - player.z;
-    if (dx * dx + dz * dz > 240 * 240) return;
-    const across = (dx * cos - dz * sin) * scale, ahead = (dx * sin + dz * cos) * scale;
-    fill(c, color, x + across - 1, y - ahead - 1, size, size);
-  };
-  for (const e of state.entities) {
-    if (e.kind === 'drone' || e.kind === 'boss_orb') dot(e.x, e.z, '#f29080');
-    else if (e.kind === 'supply' || e.kind === 'capsule') dot(e.x, e.z, '#8ed9df');
-    else if (e.kind === 'pylon' || e.kind === 'lock') dot(e.x, e.z, amber);
-    else if (e.kind === 'exit') dot(e.x, e.z, green);
-  }
-  if (state.boss.active) dot(state.boss.x, state.boss.z, '#ffb0d5');
-  fill(c, '#caffd8', x - 1, y - 1, 3, 3);
 }
 
 const wing = ['      +      ', '      +      ', '     +++     ', ' +   +++   + ', ' ++ +++++ ++ ', ' +++++++++++ ', '+++++++++++++', '  +++ + +++  ', '      +      '];
 
-function drawDamage(c: Context, r: Rect, state: GameState, compact: boolean, hit: boolean): void {
+function drawDamage(c: Context, r: Rect, state: StageState, compact: boolean, hit: boolean): void {
   const color = state.hull <= state.maxHull / 4 || hit ? amber : green;
   const center = middle(r), unit = r.height < 40 ? 1 : compact ? 2 : 5;
   const spriteTop = Math.round(center.y - wing.length * unit / 2 - (compact ? 1 : 0));
@@ -489,21 +457,20 @@ function drawDamage(c: Context, r: Rect, state: GameState, compact: boolean, hit
   }
 }
 
-function weaponReadouts(level: number, bombs: number, t: Translate): WeaponReadout {
-  return { gun: t('hud.weapon', { level }), ammo: t('cockpit.ammo', { count: '∞' }),
-    bombs: t('cockpit.bombs', { count: bombs }), missiles: t('cockpit.missiles', { count: 0 }) };
+function weaponReadouts(level: number, pods: number, bombs: number, t: Translate): WeaponReadout {
+  return { gun: t('hud.weapon', { level }), pods: t('hud.pods', { level: pods }), bombs: t('cockpit.bombs', { count: bombs }) };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string, font: string): void {
   const left = r.x + (compact ? 6 : 12), y = r.y + (r.height < 40 ? 8 : 11);
   text(c, title, left, y);
-  const labels = [weapons.gun, weapons.ammo, weapons.bombs, weapons.missiles];
-  const columns = r.height < 40 ? 4 : 2;
+  const labels = [weapons.gun, weapons.pods, weapons.bombs];
+  const columns = r.height < 40 ? 3 : 2;
   const cell = (r.width - (compact ? 12 : 24)) / columns;
   const row = compact ? 13 : 23, firstRow = r.y + (r.height < 40 ? 20 : compact ? 26 : 43);
   for (const [i, label] of labels.entries()) {
     const x = left + i % columns * cell + cell / 2;
-    fittedText(c, label, x, firstRow + Math.floor(i / columns) * row, i === 3 ? dimGreen : green, cell - 2, font, compact ? 10 : 14);
+    fittedText(c, label, x, firstRow + Math.floor(i / columns) * row, green, cell - 2, font, compact ? 10 : 14);
   }
   if (!compact) {
     for (let i = 0; i < 3; i++) {
@@ -564,10 +531,8 @@ export class CockpitDisplay {
   private readonly host: HTMLElement;
   private readonly hud = cockpitSurface(1, 1).context;
   private readonly panels = cockpitSurface(1, 1).context;
-  private readonly aim: Point = { x: 0, y: 0 };
   private readonly anchor: Point = { x: 0, y: 0 };
   private readonly marks: ReturnType<typeof pitchLadder> = [];
-  private readonly contact: CockpitTarget = { kind: 'drone', point: { x: 0, y: 0 }, altitude: 0, range: 0, locked: false };
   private readonly readout: { target: CockpitTarget | null; warnings: CockpitWarnings } = {
     target: null, warnings: { master: false, lowHull: false, terrain: null, boost: null },
   };
@@ -576,23 +541,20 @@ export class CockpitDisplay {
   private key = '';
   private labels!: GlassLabels;
   private ladder: CockpitLineRaster | null = null;
-  private radar!: { face: HTMLCanvasElement; scope: RadarScope; blips: Context };
+  private readonly radar = new RadarDisplay();
   private airframeLabel!: HTMLCanvasElement;
   private gauges!: { face: HTMLCanvasElement; row: GaugeRow };
   private caution: WarningCell[] = [];
   private readonly stores = new Map<number, HTMLCanvasElement>();
   private readonly weapons = new Map<number, HTMLCanvasElement>();
 
-  private lastOpacity = 1;
   private lastMfd: number | null = null;
-  private lastRadar = -1;
-  private lastRadarFlicker = -1;
   private lastFlicker = -1;
   private lastHit = false;
   private lastHull = -1;
   private lastMaxHull = -1;
   private lastWeapon = -1;
-  private lastBombs = -1;
+  private lastStores = -1;
   private lastSpeed = -1;
   private lastBoost = -1;
   private lastGaugeHull = -1;
@@ -639,13 +601,8 @@ export class CockpitDisplay {
       ? new CockpitLineRaster({ x: ladderX, y: aiming.y, width: ladderRight - ladderX, height: aiming.height })
       : null;
 
-    const scope = radarScope(layout.radar, compact), row = gaugeRow(layout.gauges, compact);
-    const blips = cockpitSurface(layout.radar.width, layout.radar.height).context;
-    blips.translate(-layout.radar.x, -layout.radar.y);
-    this.radar = { scope, blips, face: plate(layout.radar, c => {
-      c.font = font;
-      drawRadarFace(c, layout.radar, scope, compact, t);
-    }) };
+    const row = gaugeRow(layout.gauges, compact);
+    this.radar.resize(layout.radar.width, layout.radar.height, this.font, t('hud.radar'));
     this.gauges = { row, face: plate(layout.gauges, c => drawGaugeFaces(c, row, layout.gauges.height >= 40, compact, t, this.font)) };
     this.airframeLabel = plate(layout.damage, c => {
       c.font = font;
@@ -654,77 +611,66 @@ export class CockpitDisplay {
     this.caution = warningCells(layout, t, this.font);
     this.weapons.clear();
     this.stores.clear();
-    for (let bombs = 0; bombs <= 3; bombs++) {
-      for (let level = 1; level <= 3; level++) this.cacheWeapons(layout, level, bombs, t);
-    }
-
     this.lastMfd = null;
-    this.lastFlicker = this.lastHull = this.lastMaxHull = this.lastWeapon = this.lastBombs = -1;
+    this.lastFlicker = this.lastHull = this.lastMaxHull = this.lastWeapon = this.lastStores = -1;
     this.lastSpeed = this.lastBoost = this.lastGaugeHull = this.lastGaugeFlicker = this.lastG = -1;
   }
 
-  private cacheWeapons(layout: CockpitLayout, level: number, bombs: number, t: Translate): void {
+  private cacheWeapons(layout: CockpitLayout, level: number, pods: number, bombs: number, t: Translate): void {
     const { compact, stores, weapons } = layout;
-    const readouts = weaponReadouts(level, bombs, t);
+    const readouts = weaponReadouts(level, pods, bombs, t);
+    const key = bombs * 12 + pods * 4 + level;
     const font = (compact ? 10 : 12) + 'px ' + this.font, title = t('cockpit.weapons');
-    this.weapons.set(bombs * 4 + level, plate(weapons, c => {
+    this.weapons.set(key, plate(weapons, c => {
       c.font = font;
       drawWeapons(c, weapons, readouts, level, compact, title, this.font);
     }));
-    if (stores && !this.stores.has(bombs)) this.stores.set(bombs, plate(stores, c => {
+    if (stores && !this.stores.has(key)) this.stores.set(key, plate(stores, c => {
       c.font = font;
       drawStores(c, stores, readouts);
     }));
   }
 
-  draw(state: GameState, view: CockpitView, motion: CockpitMotion, clearance: number, impact: number, opacity: number, language: Language, t: Translate) {
+  draw(state: StageState, aim: Point, motion: CockpitMotion, clearance: number, impact: number,
+    readout: RadarReadout, target: CockpitTarget | null, language: Language, t: Translate) {
     const layout = this.layout;
     if (!layout) return null;
     if (language !== this.language) this.resize(layout, this.frame.width, this.frame.height, language, t);
-    if (opacity !== this.lastOpacity) {
-      this.host.style.opacity = String(opacity);
-      this.lastOpacity = opacity;
-    }
-    const aim = cockpitAim(view, state, this.aim);
-    const target = this.readout.target = selectCockpitTarget(state, view, layout.aiming, aim, this.contact);
+    const elapsed = state.tick / 60;
+    this.readout.target = target;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.readout.warnings);
-    this.drawGlass(layout, view, state, motion, target);
+    this.drawGlass(layout, aim, state, motion, target, readout.priority?.alt);
 
-    const amberPulse = Math.floor(state.elapsed * 4) % 2 === 0 ? 1 : 0;
-    const boostPulse = Math.floor(state.elapsed * 3) % 2 === 0 ? 1 : 0;
+    const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
+    const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
     updateWarning(this.panels, this.caution[0], warnings.master ? 1 + amberPulse : 0);
     updateWarning(this.panels, this.caution[1], warnings.lowHull ? 1 + amberPulse : 0);
     updateWarning(this.panels, this.caution[2], warnings.terrain ? (warnings.terrain === 'pullUp' ? 3 : 1) + amberPulse : 0);
     updateWarning(this.panels, this.caution[3], warnings.boost === 'active' ? 3 + boostPulse : warnings.boost === 'low' ? 1 + amberPulse : 0);
 
     const flicker = impact > 0.45 && Math.floor(impact * 12) % 2 === 0 ? 0.6 : 1;
-    const refresh = cockpitMfdDue(this.lastMfd, state.elapsed);
+    const refresh = cockpitMfdDue(this.lastMfd, elapsed);
     if (refresh) {
-      this.lastMfd = state.elapsed;
+      this.lastMfd = elapsed;
       this.drawMfds(layout, state, impact > 0, flicker, t);
-    }
-    if (refresh || state.elapsed !== this.lastRadar || flicker !== this.lastRadarFlicker) {
-      const c = this.panels, r = layout.radar;
-      c.globalAlpha = flicker;
-      blitPlate(c, r, this.radar.face);
-      drawRadarSweep(c, this.radar.scope, state.elapsed);
-      c.drawImage(this.radar.blips.canvas, r.x, r.y);
-      c.globalAlpha = 1;
-      this.lastRadar = state.elapsed;
-      this.lastRadarFlicker = flicker;
+      const { radar } = layout;
+      this.panels.globalAlpha = flicker;
+      clearZone(this.panels, radar);
+      this.radar.draw(this.panels, radar.x, radar.y, readout, state.player.yaw, state.tick);
+      this.panels.globalAlpha = 1;
     }
     this.drawGauges(layout, state, motion, flicker);
     return this.readout;
   }
 
-  private drawGlass(layout: CockpitLayout, view: CockpitView, state: GameState, motion: CockpitMotion, target: CockpitTarget | null): void {
+  private drawGlass(layout: CockpitLayout, aim: Point, state: StageState, motion: CockpitMotion, target: CockpitTarget | null, targetAltitude?: number): void {
     const c = this.hud, { compact, speed, heading, altitude, aiming } = layout;
     clearZone(c, heading);
     drawHeading(c, heading, state.player.yaw, compact, this.labels);
     clearZone(c, speed);
     drawTape(c, speed, motion.speed, false, compact, this.labels);
     clearZone(c, altitude);
-    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, target?.altitude);
+    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude);
 
     const g = Math.round((1 + 0.47 * Math.abs(motion.turn) + 0.013 * Math.abs(motion.climb)) * 10), y = bottom(speed) + 4;
     if (g !== this.lastG && aiming.height > 35 && y + 15 <= bottom(layout.glass)) {
@@ -736,15 +682,13 @@ export class CockpitDisplay {
     }
     if (this.ladder) {
       clearZone(c, aiming);
-      drawLadder(c, layout, view, motion, this.labels, this.ladder, this.marks, this.anchor);
-      drawAim(c, aiming, this.aim, target, state.elapsed, this.labels);
+      drawLadder(c, layout, aim, motion, this.labels, this.ladder, this.marks, this.anchor);
+      drawAim(c, aiming, aim, target, state.tick / 60, this.labels);
     }
   }
 
-  private drawMfds(layout: CockpitLayout, state: GameState, hit: boolean, flicker: number, t: Translate): void {
-    const c = this.panels, { compact, radar, damage, stores, weapons } = layout;
-    clearZone(this.radar.blips, radar);
-    drawRadarBlips(this.radar.blips, this.radar.scope, state, compact);
+  private drawMfds(layout: CockpitLayout, state: StageState, hit: boolean, flicker: number, t: Translate): void {
+    const c = this.panels, { compact, damage, stores, weapons } = layout;
     c.globalAlpha = flicker;
     if (state.hull !== this.lastHull || state.maxHull !== this.lastMaxHull || hit !== this.lastHit || flicker !== this.lastFlicker) {
       blitPlate(c, damage, this.airframeLabel);
@@ -753,23 +697,23 @@ export class CockpitDisplay {
       this.lastMaxHull = state.maxHull;
       this.lastHit = hit;
     }
-    const weapon = state.bombs * 4 + state.weaponLv;
+    const weapon = state.bombs * 12 + state.podRank * 4 + state.twinRank;
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
-      if (!this.weapons.has(weapon)) this.cacheWeapons(layout, state.weaponLv, state.bombs, t);
+      if (!this.weapons.has(weapon)) this.cacheWeapons(layout, state.twinRank, state.podRank, state.bombs, t);
       blitPlate(c, weapons, this.weapons.get(weapon)!);
       this.lastWeapon = weapon;
     }
-    if (stores && state.bombs !== this.lastBombs) {
-      blitPlate(this.hud, stores, this.stores.get(state.bombs)!);
-      this.lastBombs = state.bombs;
+    if (stores && weapon !== this.lastStores) {
+      blitPlate(this.hud, stores, this.stores.get(weapon)!);
+      this.lastStores = weapon;
     }
     this.lastFlicker = flicker;
     c.globalAlpha = 1;
   }
 
-  private drawGauges(layout: CockpitLayout, state: GameState, motion: CockpitMotion, flicker: number): void {
+  private drawGauges(layout: CockpitLayout, state: StageState, motion: CockpitMotion, flicker: number): void {
     // A steady instrument retains its pixels. Clamp away drift past the ends of the dial.
-    const speed = clamp(motion.speed / 100, 0, 1), boost = state.bst, hull = state.hull / state.maxHull;
+    const speed = clamp(motion.speed / 100, 0, 1), boost = state.boost, hull = state.hull / state.maxHull;
     if (Math.abs(speed - this.lastSpeed) < 1e-6 && boost === this.lastBoost && hull === this.lastGaugeHull && flicker === this.lastGaugeFlicker) return;
     this.lastSpeed = speed;
     this.lastBoost = boost;

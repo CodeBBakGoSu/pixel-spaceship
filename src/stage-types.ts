@@ -65,12 +65,16 @@ export type WeakPoint = Position & {
   maxHp: number;
   hits: number;
   window: number;
+  vx: number;
+  vz: number;
 };
 export type Boss = {
   x: number;
   z: number;
   alt: number;
   weakPoints: WeakPoint[];
+  orbitAngle: number;
+  orbitStartTick: number;
   index: number;
   exposeTick: number;
   changedTick: number;

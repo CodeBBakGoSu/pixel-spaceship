@@ -4,41 +4,41 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#101829" />
-  <meta name="description" content="시점 3개 우주 스페이스 슈팅 · 브라우저에서 바로 플레이" />
-  <title>ASTER WING — 픽셀 우주 슈팅</title>
+  <meta name="description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
+  <title>아스터 윙 | 케스트럴 해역</title>
   <link rel="canonical" href="https://codebbakgosu.github.io/pixel-spaceship/" />
   <link rel="icon" type="image/png" href="%BASE_URL%favicon.png" />
   <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ASTER WING" />
-  <meta property="og:title" content="ASTER WING — 픽셀 우주 슈팅" />
-  <meta property="og:description" content="시점 3개 우주 스페이스 슈팅 · 브라우저에서 바로 플레이" />
+  <meta property="og:title" content="아스터 윙 | 케스트럴 해역" />
+  <meta property="og:description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
   <meta property="og:url" content="https://codebbakgosu.github.io/pixel-spaceship/" />
   <meta property="og:image" content="https://codebbakgosu.github.io/pixel-spaceship/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="ASTER WING 협곡 추격 시점 플레이 화면" />
+  <meta property="og:image:alt" content="ASTER WING 플레이 화면" />
   <meta property="og:locale" content="ko_KR" />
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="ASTER WING — 픽셀 우주 슈팅" />
-  <meta name="twitter:description" content="시점 3개 우주 스페이스 슈팅 · 브라우저에서 바로 플레이" />
+  <meta name="twitter:title" content="아스터 윙 | 케스트럴 해역" />
+  <meta name="twitter:description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
   <meta name="twitter:image" content="https://codebbakgosu.github.io/pixel-spaceship/og.png" />
 </head>
 <body>
 <main class="experience" data-label="aria.game">
   <canvas id="screen" data-label="aria.flight"></canvas>
-  <canvas id="glow" aria-hidden="true"></canvas>
+  <div id="view-wipe" aria-hidden="true" hidden></div>
   <div class="screen-shade" aria-hidden="true"></div>
   <div id="cockpit-display" aria-hidden="true" hidden><canvas id="cockpit-overlay"></canvas></div>
   <div id="safe-area-probe" aria-hidden="true"></div>
   <div id="control-backdrop" aria-hidden="true"></div>
   <header class="hud" data-label="aria.hud">
     <div class="status">
-      <div><span data-i18n="hud.hull"></span><b id="hull-bars" class="blocks"></b><small id="lives"></small></div>
+      <div><span data-i18n="hud.hull"></span><b id="hull-bars" class="blocks"></b></div>
       <div><span data-i18n="hud.boost"></span><i class="track"><i id="boost-bar"></i></i></div>
       <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b></div>
-      <div class="status-view"><strong id="view-label"></strong><span id="weapon-label"></span><time id="segment-timer"></time></div>
+      <div class="status-view"><strong id="view-label"></strong><span id="xp-label"></span><time id="segment-timer"></time></div>
     </div>
     <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small></div>
   </header>
@@ -49,10 +49,14 @@
     <div><strong id="radio-speaker"></strong><p id="radio-text"></p></div>
   </section>
   <div id="objective" class="objective"></div>
-  <div id="boundary-warning" class="boundary-warning" data-i18n="hud.boundary" hidden></div>
-  <canvas id="nav-radar" width="72" height="72" data-label="aria.radar"></canvas>
-  <div class="alt-ruler" data-label="hud.altitude"><span data-i18n="hud.altitude"></span><i></i><b id="alt-marker">◂</b><small id="alt-number"></small></div>
-  <div id="phase-banner" class="phase-banner" hidden></div>
+  <canvas id="nav-radar" data-label="aria.radar"></canvas>
+  <div class="alt-ruler" data-label="hud.altitude">
+    <span data-i18n="hud.altitude"></span><strong id="alt-number"></strong>
+    <div class="alt-scale" aria-hidden="true"><i></i><small>145</small><small>110</small><small>75</small><b id="alt-marker">◂</b></div>
+  </div>
+  <div id="flight-message" class="flight-message" hidden></div>
+  <div id="scene-cue" class="scene-cue" aria-hidden="true" hidden></div>
+  <samp id="cockpit-delta" class="screen-reader" hidden></samp>
   <div id="view-tag" class="view-tag" hidden></div>
   <section class="game-overlay" id="game-overlay" data-label="aria.menu" hidden>
     <div class="game-card">
@@ -60,7 +64,7 @@
       <h1 id="card-title"></h1>
       <p id="card-copy"></p>
       <div id="rank-display" class="rank-display" hidden></div>
-      <div class="card-actions"><button type="button" id="primary-action"></button><button type="button" id="restart-action" data-i18n="menu.restart" hidden></button></div>
+      <div class="card-actions"><button type="button" id="primary-action"></button></div>
       <div class="card-hint" id="card-hint"></div>
       <div class="card-options" id="card-options" hidden>
         <button class="help-action" id="help-action" type="button"><b aria-hidden="true">?</b><span id="help-action-label"></span></button>
@@ -70,6 +74,15 @@
         </div>
       </div>
     </div>
+    <section class="game-card draft-card" id="draft-card" role="dialog" aria-modal="true" aria-labelledby="draft-heading" hidden>
+      <div class="card-kicker" id="draft-detail"></div>
+      <h2 id="draft-heading" data-i18n="draft.title"></h2>
+      <div class="draft-options">
+        <button type="button" data-pick="0"><kbd>1</kbd><strong></strong><small></small></button>
+        <button type="button" data-pick="1"><kbd>2</kbd><strong></strong><small></small></button>
+        <button type="button" data-pick="2"><kbd>3</kbd><strong></strong><small></small></button>
+      </div>
+    </section>
     <section class="guide-card" id="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-heading" hidden>
       <header class="guide-heading"><h2 id="guide-heading" data-i18n="guide.title"></h2></header>
       <div class="guide-body" tabindex="0">
@@ -100,19 +113,17 @@
         <section class="guide-pane guide-hud">
           <h3 data-i18n="guide.hud"></h3>
           <dl class="guide-list">
-            <dt data-i18n="guide.hull"></dt><dd data-i18n="guide.armorHint"></dd>
-            <dt data-i18n="guide.bst"></dt><dd data-i18n="guide.boostHint"></dd>
-            <dt data-i18n="guide.bmb"></dt><dd data-i18n="guide.bombHint"></dd>
+            <dt data-i18n="hud.bombs"></dt><dd data-i18n="guide.bombHint"></dd>
             <dt data-i18n="guide.twin"></dt><dd data-i18n="guide.gunHint"></dd>
-            <dt data-i18n="hud.score"></dt><dd data-i18n="guide.scoreHint"></dd>
             <dt class="guide-salvage">◆</dt><dd data-i18n="guide.salvageHint"></dd>
-            <dt data-i18n="guide.alt"></dt><dd data-i18n="guide.altitudeHint"></dd>
-            <dt data-i18n="guide.radar"></dt><dd data-i18n="guide.radarHint"></dd>
+            <dt data-i18n="hud.altitude"></dt><dd data-i18n="guide.altitudeHint"></dd>
+            <dt data-i18n="aria.radar"></dt><dd data-i18n="guide.radarHint"></dd>
+            <dt data-i18n="guide.boss"></dt><dd data-i18n="guide.bossHint"></dd>
           </dl>
           <p class="guide-markers">
-            <span><b>[ ]</b> <span data-i18n="guide.aligned"></span></span>
-            <span><b>^</b> <span data-i18n="guide.climb"></span></span>
-            <span><b>v</b> <span data-i18n="guide.dive"></span></span>
+            <span><b>△ ^</b> <span data-i18n="guide.climb"></span></span>
+            <span><b>■ =</b> <span data-i18n="guide.aligned"></span></span>
+            <span><b>▽ v</b> <span data-i18n="guide.dive"></span></span>
           </p>
         </section>
       </div>

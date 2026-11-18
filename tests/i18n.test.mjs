@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, parseGameOptions, SCRIPT, stepGame } from '../src/game.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { createTranslator, detectLanguage, initialLanguage, saveLanguage, strings } from '../src/i18n.ts';
 
 const placeholders = text => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
@@ -14,10 +14,12 @@ test('every translation is nonempty and uses the same placeholders in both langu
   }
 });
 
-test('translations format mission progress in either language', () => {
-  const progress = { cleared: 2, total: 3 };
-  assert.equal(createTranslator('en')('objective.doors', progress), 'BLAST DOORS // SHOOT THE LOCKS  2/3');
-  assert.equal(createTranslator('ko')('objective.doors', progress), '방폭문 잠금장치 파괴  2/3');
+test('translations format draft and weak-point countdowns in both languages', () => {
+  const en = createTranslator('en'), ko = createTranslator('ko');
+  assert.equal(en('draft.detail', { level: 2 }), 'LEVEL 2 · CHOOSE ONE');
+  assert.equal(ko('draft.detail', { level: 2 }), '레벨 2 · 하나 선택');
+  assert.equal(en('objective.bandSignal', { part: en('boss.low'), seconds: 3 }), 'LOW POD OPENS IN 3s');
+  assert.equal(ko('objective.bandSignal', { part: ko('boss.low'), seconds: 3 }), '3초 후 저고도 포드 노출');
 });
 
 test('language defaults to Korean for Korean browser locales', () => {
@@ -49,29 +51,21 @@ test('unavailable storage leaves the browser default usable', () => {
   assert.doesNotThrow(() => saveLanguage('ko', storage));
 });
 
-test('scripted and event-driven mission messages have translations', () => {
-  const keys = new Set();
-  for (const segment of SCRIPT) {
-    keys.add(`segment.${segment.id}`);
-    for (const beat of segment.beats) {
-      keys.add(beat.key);
-      keys.add(`speaker.${beat.speaker}`);
+test('every upgrade offered by either draft has a translated title and detail', () => {
+  const checks = new Set();
+  for (let pick = 0; pick < 3; pick++) {
+    const state = createStage(parseStageOptions('?fixture=draft'));
+    for (const id of state.draft) checks.add(id);
+    stepStage(state, { pick: state.draft[pick] });
+    state.xp = 10;
+    stepStage(state);
+    for (const id of state.draft) checks.add(id);
+  }
+  assert.equal(checks.size, 5);
+  for (const id of checks) {
+    for (const language of ['en', 'ko']) {
+      assert.ok(strings[language][`draft.${id}.title`]?.trim());
+      assert.ok(strings[language][`draft.${id}.copy`]?.trim());
     }
-    keys.add(createGame(parseGameOptions(`?segment=${segment.id}`)).objective);
-  }
-  let game = createGame(parseGameOptions('?segment=reach&autoplay=1'));
-  const idle = { moveX: 0, moveY: 0, fire: false };
-  for (let i = 0; i < 360 * 60 && (game.phase === 'playing' || game.phase === 'transition'); i++) {
-    keys.add(game.objective);
-    if (game.dialogue) keys.add(game.dialogue.key);
-    game = stepGame(game, idle, 1 / 60);
-  }
-  assert.equal(game.phase, 'win');
-  for (const key of ['objective.exit', 'objective.doorOpen', 'objective.pods', 'objective.core', 'dialogue.pylonsDown']) {
-    assert.ok(keys.has(key), `run did not exercise ${key}`);
-  }
-  for (const key of keys) {
-    assert.ok(strings.en[key]?.trim(), `missing English mission message ${key}`);
-    assert.ok(strings.ko[key]?.trim(), `missing Korean mission message ${key}`);
   }
 });

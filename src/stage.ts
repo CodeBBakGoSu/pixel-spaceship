@@ -9,6 +9,7 @@ export { activeWeakPoint } from './stage-combat.ts';
 export const END_TICK = 180 * TICKS_PER_SECOND;
 export const BOSS_TICK = 105 * TICKS_PER_SECOND;
 const BOSS_SIGNAL = 3 * TICKS_PER_SECOND;
+const BOSS_ORBIT_PER_TICK = 0.010;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
 const ARENA = { x: -96, z: -96, radius: 240 };
 const seaLevel: Ground = () => 35;
@@ -101,19 +102,35 @@ function makeBoss(state: StageState, x: number, z: number): Boss {
   const low = BANDS[0] + (random(state) - 0.5) * 11;
   const core = BANDS[1] + (random(state) < 0.5 ? -1 : 1) * (4.5 + random(state) * 1.5);
   return {
-    x, z, alt: BANDS[1], index: 0, changedTick: state.tick, exposeTick: state.tick + BOSS_SIGNAL,
+    x, z, alt: BANDS[1], orbitAngle: state.seed * 1.79, orbitStartTick: state.tick, index: 0, changedTick: state.tick, exposeTick: state.tick + BOSS_SIGNAL,
     shotAt: state.tick + BOSS_SIGNAL + 90,
     weakPoints: [
-      { id: ++state.nextId, kind: 'pod', band: 2, x, z, alt: high, hp: 10, maxHp: 10, hits: 0, window: 8 },
-      { id: ++state.nextId, kind: 'pod', band: 0, x: x - 11, z: z + 4, alt: low, hp: 10, maxHp: 10, hits: 0, window: 8 },
-      { id: ++state.nextId, kind: 'core', band: 1, x, z, alt: core, hp: 8, maxHp: 8, hits: 0, window: 3 },
+      { id: ++state.nextId, kind: 'pod', band: 2, x, z, alt: high, hp: 10, maxHp: 10, hits: 0, window: 8, vx: 0, vz: 0 },
+      { id: ++state.nextId, kind: 'pod', band: 0, x, z, alt: low, hp: 10, maxHp: 10, hits: 0, window: 8, vx: 0, vz: 0 },
+      { id: ++state.nextId, kind: 'core', band: 1, x, z, alt: core, hp: 8, maxHp: 8, hits: 0, window: 3, vx: 0, vz: 0 },
     ],
   };
+}
+
+function positionWeakPoints(boss: Boss, tick: number): void {
+  const travel = Math.max(0, tick - boss.orbitStartTick) * BOSS_ORBIT_PER_TICK;
+  const speed = tick < boss.orbitStartTick ? 0 : BOSS_ORBIT_PER_TICK * TICKS_PER_SECOND;
+  for (const [index, point] of boss.weakPoints.entries()) {
+    // A rotating gantry carries the exposed hardware, with altitude fixed for each seeded part.
+    const radius = point.kind === 'core' ? 17 : 41;
+    const angle = boss.orbitAngle + travel + [0, Math.PI, 0.8][index];
+    const sin = Math.sin(angle), cos = Math.cos(angle);
+    point.x = boss.x + radius * sin;
+    point.z = boss.z + radius * cos;
+    point.vx = radius * speed * cos;
+    point.vz = -radius * speed * sin;
+  }
 }
 
 function updateBoss(state: StageState): void {
   const boss = state.boss;
   if (!boss) return;
+  positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
   if (state.tick >= boss.shotAt && point?.hp) {
     for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 54, spread);
@@ -189,7 +206,10 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture']): void
     openDraft(state, null);
   } else {
     // Keep the fixture clear for a reproducible approach to the first weak point.
-    state.boss = makeBoss(state, state.player.x, state.player.z + 68);
+    state.boss = makeBoss(state, state.player.x, state.player.z + 109);
+    state.boss.orbitAngle = Math.PI;
+    state.boss.orbitStartTick = state.tick + 4 * TICKS_PER_SECOND;
+    positionWeakPoints(state.boss, state.tick);
     state.boss.changedTick = BOSS_TICK;
     state.boss.exposeTick = state.tick;
     state.boss.shotAt = state.tick + 90;
@@ -218,13 +238,13 @@ function finish(state: StageState, outcome: Outcome): void {
   state.phase = outcome;
   state.boosting = false;
   const hits = state.hitsTaken;
-  state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits <= 5 ? 'B' : 'C';
+  state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits === 3 ? 'B' : 'C';
   if (outcome === 'clear') state.score += 2500;
 }
 
-function fly(state: StageState, input: StageInput, ground: Ground): void {
+function fly(state: StageState, input: StageInput, ground: Ground, grace: boolean): void {
   if (!input.boost) state.boostRelease = false;
-  const boostHeld = !!input.boost && !state.boostRelease;
+  const boostHeld = !grace && !!input.boost && !state.boostRelease;
   state.boosting = boostHeld && state.boost > 0;
   state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35) * STEP, 0, 1);
   const p = state.player, a = state.arena;
@@ -360,7 +380,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   state.invulnerability = Math.max(0, state.invulnerability - STEP);
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
-  fly(state, input, ground);
+  fly(state, input, ground, grace);
 
   if (state.tick === BOSS_TICK && !state.boss) {
     state.boss = makeBoss(state, state.arena.x, state.arena.z + 12);

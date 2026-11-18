@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeWeakPoint, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput, seekStage } from '../src/autoplay.ts';
+import { relativeMark } from '../src/instruments.ts';
 import { World } from '../src/world.ts';
 
 const world = new World();
@@ -199,6 +200,7 @@ test('last-tick damage, weak-point hits and an earned draft resolve before the r
   function finalTick(hull) {
     const state = stage('?fixture=boss');
     state.tick = 180 * 60 - 1;
+    state.boss.orbitStartTick = state.tick + 2;
     state.hull = hull;
     state.xp = 5;
     const point = state.boss.weakPoints[0];
@@ -293,14 +295,85 @@ test('Wing Pods cover a side contact at launch height and upgrades improve both 
   assert.equal(state.twinRank, 1);
 });
 
+// The TOP pilot may use learned band centers, the health bar and the timing of
+// the coarse radar glyph. It avoids bolts from their visible planar paths.
+function radarOnlyPilot() {
+  let contactId, entryDirection = 0, wantAltitude = null;
+  let radar = null, dodgeUntil = 0, dodgeDirection = 0, nextDodge = 0, coreSeen = null;
+  const clampStick = value => Math.max(-1, Math.min(1, value));
+  const nearest = (items, p) => items.reduce((best, item) =>
+    best && Math.hypot(best.x - p.x, best.z - p.z) <= Math.hypot(item.x - p.x, item.z - p.z) ? best : item, null);
+
+  return state => {
+    const pilot = autopilotInput(state, 'top');
+    if (state.phase !== 'playing') return pilot;
+    const p = state.player, alt = Math.round(p.altitude);
+    let climb = 0;
+    if (state.boss) {
+      const life = state.boss.weakPoints.reduce((hp, part) => hp + part.hp, 0);
+      if (life <= 8) coreSeen ??= state.tick;
+      const memorizedAltitude = life > 18 ? 145 : life > 8 ? 75
+        : Math.floor((state.tick - coreSeen) / 260) % 2 === 0 ? 105 : 115;
+      climb = clampStick((memorizedAltitude - alt) / 4);
+    } else {
+      const salvage = nearest(state.pickups, p);
+      const track = salvage && Math.hypot(salvage.x - p.x, salvage.z - p.z) <= 150
+        ? salvage : nearest(state.enemies, p);
+      if (state.tick % 3 === 0) {
+        radar = track && Math.hypot(track.x - p.x, track.z - p.z) <= 160
+          ? { id: track.id, mark: relativeMark(track.alt - p.altitude, true) } : null;
+      }
+      if (radar) {
+        if (radar.id !== contactId) {
+          contactId = radar.id;
+          entryDirection = 0;
+          wantAltitude = null;
+        }
+        if (radar.mark !== '■') {
+          entryDirection = radar.mark === '△' ? 1 : -1;
+          climb = entryDirection;
+          wantAltitude = null;
+        } else {
+          wantAltitude ??= alt + 7.2 * entryDirection;
+          climb = clampStick((wantAltitude - alt) / 4);
+        }
+      }
+    }
+
+    pilot.bomb = false;
+    if (state.tick >= nextDodge && state.invulnerability === 0) {
+      for (const shot of state.shots) {
+        if (shot.kind !== 'hostile') continue;
+        const x = shot.x - p.x, z = shot.z - p.z;
+        if (Math.hypot(x, z) > 55) continue;
+        const vx = shot.vx - Math.sin(p.yaw) * state.speed, vz = shot.vz - Math.cos(p.yaw) * state.speed;
+        const time = -(x * vx + z * vz) / (vx * vx + vz * vz);
+        if (time < 0.18 || time > 0.55 || Math.hypot(x + vx * time, z + vz * time) > 9) continue;
+        if (state.hull <= 4 && state.bombs > 0) {
+          pilot.bomb = true;
+          nextDodge = state.tick + 45;
+        } else {
+          dodgeUntil = state.tick + Math.ceil((time + 0.06) * 60);
+          nextDodge = dodgeUntil + 25;
+          dodgeDirection = alt > 142 ? -1 : alt < 80 || climb >= 0 ? 1 : -1;
+        }
+        break;
+      }
+    }
+    pilot.climb = state.tick < dodgeUntil ? dodgeDirection : climb;
+    return pilot;
+  };
+}
+
 test('the six-seed replay gate clears with all views and produces no good TOP-only clears', () => {
   let clearWithAllViews = 0, goodTopOnly = 0;
   for (const seed of [1, 11, 27, 42, 128, 2026]) {
     for (const mode of ['full', 'top']) {
       const state = stage('?autoplay=1&seed=' + seed);
       const views = new Set([state.view]);
+      const pilot = mode === 'full' ? autopilotInput : radarOnlyPilot();
       for (let i = 0; i < 10810 && ['playing', 'draft'].includes(state.phase); i++) {
-        stepStage(state, autopilotInput(state, mode), ground);
+        stepStage(state, pilot(state), ground);
         views.add(state.view);
       }
       assert.ok(['clear', 'timeout', 'lost'].includes(state.phase));
@@ -311,4 +384,42 @@ test('the six-seed replay gate clears with all views and produces no good TOP-on
   }
   assert.ok(clearWithAllViews >= 4);
   assert.equal(goodTopOnly, 0);
+});
+
+test('a late seek reaches its absolute active tick and returns a live sortie for manual controls', () => {
+  const state = seekStage(parseStageOptions('?seed=1&t=179&view=chase'), ground);
+  assert.equal(state.tick, 10740);
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.view, 'chase');
+  const yaw = state.player.yaw;
+  run(state, 1, { turn: 1 });
+  assert.notEqual(state.player.yaw, yaw);
+  const end = seekStage(parseStageOptions('?fixture=boss&t=180&seed=11'), ground);
+  assert.equal(end.tick, 10800);
+  assert.equal(end.phase, 'timeout');
+});
+
+test('fresh boost is ignored during the draft input grace', () => {
+  const state = stage('?fixture=draft');
+  run(state, 1, { pick: state.draft[0] });
+  run(state, 1);
+  run(state, 17, { boost: true });
+  assert.equal(state.tick, 2718);
+  assert.equal(state.boost, 1);
+  run(state, 1, { boost: true });
+  assert.ok(state.boost < 1);
+});
+
+test('four damaging hits exhaust the one life and earn Rank C', () => {
+  const state = stage('?fixture=boss');
+  state.enemies = [];
+  for (let i = 0; i < 4; i++) {
+    state.invulnerability = 0;
+    state.shots = [atPlayer(state, state.player.altitude)];
+    run(state, 1);
+  }
+  assert.equal(state.phase, 'lost');
+  assert.equal(state.hull, 0);
+  assert.equal(state.hitsTaken, 4);
+  assert.equal(state.rank, 'C');
 });

@@ -27,12 +27,12 @@ export function desktopLayout(width: number, height: number, safe: Insets): HudL
   const hud = rect(left, safe.top + (compact ? 9 : 14), usableWidth, compact ? 56 : 64);
   const boss = rect(left, hud.y + hud.height + 3, Math.min(460, usableWidth * 0.65), 12);
   const radioY = boss.y + boss.height + 6;
-  const radarSize = compact ? 48 : 72;
+  const radarSize = compact ? 62 : 88;
   const radar = rect(right - radarSize, radioY, radarSize, radarSize);
-  const radio = rect(left, radioY, Math.min(510, Math.max(0, radar.x - left - 8)), compact ? 76 : 72);
+  const radio = rect(left, radioY, Math.min(510, Math.max(0, radar.x - left - 8)), compact ? 70 : 88);
   const objectiveWidth = Math.min(500, usableWidth);
   const objective = rect(left + (usableWidth - objectiveWidth) / 2, radio.y + radio.height + 5, objectiveWidth, 24);
-  const altY = objective.y + objective.height + 6, altWidth = compact ? 18 : 24;
+  const altY = objective.y + objective.height + 6, altWidth = compact ? 34 : 46;
   const altHeight = Math.min(height * 0.42, Math.max(0, height - safe.bottom - altY - 4));
   const alt = rect(right - altWidth, altY, altWidth, altHeight);
   return { hud, boss, radio, objective, radar, alt };
@@ -115,8 +115,8 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const dashboard = cockpit?.dashboard ?? null;
   const fieldTop = objective.y + objective.height + 4, fieldBottom = dashboard ? dashboard.y : controls.y;
   const playfield = rect(left, fieldTop, usableWidth, Math.max(0, fieldBottom - fieldTop));
-  const radarSize = Math.min(48, Math.max(20, playfield.height - 8));
-  const alt = rect(right - 18, fieldTop + 2, 18, Math.max(0, playfield.height - 4));
+  const radarSize = Math.min(76, Math.max(20, playfield.height - 8));
+  const alt = rect(right - 30, fieldTop + 2, 30, Math.max(0, playfield.height - 4));
   const radar = rect(alt.x - 4 - radarSize, fieldTop + 4, radarSize, radarSize);
   const pause = rect(hud.x + hud.width - 44, hud.y + 6, 44, 44);
   const stickSize = portrait ? clamp(Math.round(width * 0.25), 88, 100) : 80;

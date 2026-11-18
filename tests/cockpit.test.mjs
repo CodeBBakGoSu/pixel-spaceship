@@ -1,15 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, parseGameOptions } from '../src/game.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { buildRadar } from '../src/instruments.ts';
 import { createTranslator, strings } from '../src/i18n.ts';
-import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, measureCockpitMotion, pitchLadder, selectCockpitTarget } from '../src/cockpit.ts';
+import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, cockpitTarget, pitchLadder } from '../src/cockpit.ts';
 import { phoneLayout } from '../src/layout.ts';
 
-const screen = { width: 1280, height: 720 };
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
-const target = (kind, x, z, alt, hp = 1) => ({ kind, x, z, alt, hp });
-const projection = state => ({ camera: state.camera, buffer: { width: 320, height: 180 }, screen });
-
 test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
   const safe = { top: 0, right: 0, bottom: 0, left: 0 };
   const layout = phoneLayout(390, 844, safe, 'cockpit').cockpit;
@@ -53,83 +50,47 @@ test('heading tape wraps through north and localizes cardinal labels and degrees
   assert.equal(headingTape(359.7 * Math.PI / 180, 15, en).bearing, '000°');
 });
 
-test('cockpit motion measures actual travel and handles yaw wrap and pause', () => {
-  const before = createGame(parseGameOptions('?segment=orbit'));
-  before.player.yaw = Math.PI - 0.01;
-  const tick = 0.02;
-  const after = {
-    ...before, elapsed: tick,
-    player: { ...before.player, z: before.player.z + 0.68, altitude: before.player.altitude + 0.4, bank: 0.3, yaw: -Math.PI + 0.01 },
-  };
-  const motion = measureCockpitMotion(before, after, { speed: 0, climb: 0, turn: 0, bank: 0 }, tick);
-  assert.ok(Math.abs(motion.speed - 34) < 1e-6);
-  assert.ok(Math.abs(motion.climb - 20) < 1e-6);
-  assert.ok(Math.abs(motion.turn - 1) < 1e-6);
-  assert.equal(motion.bank, 0.3);
-  assert.deepEqual(measureCockpitMotion(after, { ...after, paused: true }, motion, tick), motion);
-});
-
-test('designator takes the nearest live, visible combat target and locks within the sight cone', () => {
-  const state = createGame(parseGameOptions('?segment=canyon&view=cockpit'));
-  const { x, z, altitude } = state.player;
-  state.aimY = -0.26;
-  state.entities = [
-    target('drone', x, z - 20, altitude),
-    target('lock', x, z + 40, altitude - 10, 0),
-    target('capsule', x, z + 48, altitude - 10),
-    target('door', x, z + 55, altitude - 10),
-    target('drone', x + 180, z + 70, altitude - 10),
-    target('supply', x + 1, z + 135, altitude - 10),
-    target('lock', x + 2, z + 100, altitude - 10),
-  ];
-  const result = selectCockpitTarget(state, projection(state), aiming);
-  assert.equal(result.kind, 'lock');
-  assert.equal(result.range, 101);
-  assert.equal(result.locked, true);
-  state.aimX = -1;
-  assert.equal(selectCockpitTarget(state, projection(state), aiming).locked, false);
-  state.entities = state.entities.slice(0, 5);
-  assert.equal(selectCockpitTarget(state, projection(state), aiming), null);
-});
-
-test('Warden lock tracks a live pod until the core is exposed', () => {
-  const state = createGame(parseGameOptions('?segment=boss'));
-  state.entities = [];
-  state.boss.alt -= 12;
-  state.aimY = -0.18;
-  const aimArea = { ...aiming, y: 200 };
-  assert.equal(selectCockpitTarget(state, projection(state), aimArea).kind, 'pod');
-  state.boss.pods = [0, 0, 0, 0];
-  assert.equal(selectCockpitTarget(state, projection(state), aimArea).kind, 'core');
-  state.boss.coreHp = 0;
-  assert.equal(selectCockpitTarget(state, projection(state), aimArea), null);
+test('the reticle reflects simulation dwell for the instrument track and stays in bounds', () => {
+  const state = createStage(parseStageOptions('?fixture=boss&view=cockpit'));
+  const radar = buildRadar(state);
+  const track = radar.priority;
+  const center = { x: 640, y: 340 };
+  assert.equal(cockpitTarget(track, center, aiming, state.lock).locked, false);
+  assert.equal(cockpitTarget(track, { x: aiming.x + 3, y: center.y }, aiming, state.lock), null);
+  state.player.altitude = track.alt;
+  for (let i = 0; i < 12; i++) stepStage(state);
+  const inProgress = cockpitTarget(track, center, aiming, state.lock);
+  assert.ok(inProgress.progress > 0 && inProgress.progress < 1);
+  assert.equal(inProgress.locked, false);
+  for (let i = 0; i < 9; i++) stepStage(state);
+  const acquired = cockpitTarget(track, center, aiming, state.lock);
+  assert.equal(acquired.progress, 1);
+  assert.equal(acquired.locked, true);
 });
 
 test('caution lights respond to hull, ground clearance, descent and boost charge', () => {
-  const state = createGame(parseGameOptions('?segment=canyon'));
+  const state = createStage(parseStageOptions(''));
   assert.deepEqual(cockpitWarnings(state, 50, 0), {
     master: false, lowHull: false, terrain: null, boost: null,
   });
   state.hull = 2;
   state.boosting = true;
-  state.bst = 0.8;
+  state.boost = 0.8;
   assert.deepEqual(cockpitWarnings(state, 36, 0), {
     master: true, lowHull: true, terrain: 'altLow', boost: 'active',
   });
   state.hull = 8;
-  state.bst = 0.2;
+  state.boost = 0.2;
   assert.deepEqual(cockpitWarnings(state, 30, -12), {
     master: true, lowHull: false, terrain: 'pullUp', boost: 'low',
   });
-  state.biome = 'space';
-  assert.equal(cockpitWarnings(state, 22, -12).terrain, null);
 });
 
 test('cockpit copy covers warnings, instruments and targeting in both languages', () => {
   for (const suffix of [
     'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'track', 'gLoad',
     'masterCaution', 'cautionShort', 'lowHull', 'altLow', 'pullUp',
-    'airframe', 'weapons', 'ammo', 'missiles', 'bombs',
+    'airframe', 'weapons', 'altDelta', 'bombs',
   ]) {
     const key = `cockpit.${suffix}`;
     assert.ok(strings.en[key]?.trim(), key);

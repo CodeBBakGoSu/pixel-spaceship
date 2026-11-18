@@ -8,6 +8,8 @@ const pagesBase =
 
 export default defineConfig({
   base: pagesBase,
+  resolve: { dedupe: ['three'] },
+  build: { rollupOptions: { output: { manualChunks: { three: ['three'] } } } },
   server: { host: '0.0.0.0', port: 5180, strictPort: true },
   preview: { host: '0.0.0.0', port: 5180, strictPort: true },
 });
