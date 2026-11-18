@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Fog, InstancedMesh, Object3D,
+  BoxGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Fog, InstancedBufferAttribute, InstancedMesh, Object3D,
   Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RepeatWrapping, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
   type BufferGeometry, type Camera,
@@ -7,10 +7,11 @@ import {
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
+import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
 import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
-import { wardenFaces, wardenPalette } from './models.ts';
+import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, MAX_BOMBS, SHOT_LIMIT } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
@@ -35,6 +36,7 @@ function makeTerrain(world: World): Mesh {
 function instances(geometry: BufferGeometry, capacity: number, material = new MeshBasicMaterial()): InstancedMesh {
   const mesh = new InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+  mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(DynamicDrawUsage);
   mesh.frustumCulled = false;
   mesh.count = 0;
   return mesh;
@@ -77,13 +79,18 @@ export class FlightScene {
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
   private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial);
   private readonly exhaust = new EngineExhaust(this.ship);
-  private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), 16, this.voxelMaterial);
+  private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
+  private readonly airframes = NEW_ENEMY_KINDS.map(kind => {
+    const { faces, palette, size } = enemyAirframe(kind);
+    return { kind, mesh: instances(bakeVoxels(faces, palette, size), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0 };
+  });
+  private readonly airframeByKind = new Map<EnemyKind, (typeof this.airframes)[number]>(this.airframes.map(batch => [batch.kind, batch]));
   private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial);
   private readonly weakPoints = instances(new BoxGeometry(), 10);
   private readonly pickups = instances(new BoxGeometry(), 80);
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
-  private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 24,
+  private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   private readonly bombs = instances(new BoxGeometry(), MAX_BOMBS);
   private readonly blast = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), MAX_BOMBS,
@@ -102,6 +109,7 @@ export class FlightScene {
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast);
+    for (const { mesh } of this.airframes) this.scene.add(mesh);
     this.top.up.set(0, 0, -1);
     this.screenCamera.position.z = 1;
     this.screen.add(new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial({
@@ -177,6 +185,10 @@ export class FlightScene {
     mesh.setColorAt(index, this.color.setHex(0x607887));
   }
 
+  private writeShadow(index: number, x: number, z: number, sx: number, sz: number, yaw: number): void {
+    this.write(this.shadows, index, x, z, this.ground(x, z) + 0.9, yaw, sx, 1, sz);
+  }
+
   private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): PitchMark[] {
     const { width, height, phone } = this.framing;
     const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
@@ -245,19 +257,21 @@ export class FlightScene {
     this.ship.rotation.set(flat ? 0 : (attitude?.pitch ?? state.climbRate * 0.004), -p.yaw, flat ? 0 : (attitude?.roll ?? -p.bank), 'YXZ');
     this.exhaust.update(state, this.camera);
 
-    let shadows = 0;
-    const contactShadow = (x: number, z: number, sx: number, sz: number, yaw: number) => {
-      if (!flat) this.write(this.shadows, shadows++, x, z, this.world.height(x, z) + 0.9, yaw, sx, 1, sz);
-    };
-    if (external) contactShadow(p.x, p.z, 8.8, 10.8, p.yaw);
-    for (const [i, enemy] of state.enemies.entries()) {
+    let shadows = 0, drones = 0;
+    if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
+    for (const batch of this.airframes) batch.count = 0;
+    for (const enemy of state.enemies) {
+      const batch = this.airframeByKind.get(enemy.kind);
       const size = enemy.kind === 'interceptor' ? 1.18 : 1;
-      const warning = enemy.maneuver && Math.floor(state.tick / 7) % 2;
-      const paint = enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069 : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
-      this.write(this.drones, i, enemy.x, enemy.z, flat ? 101 : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
-      contactShadow(enemy.x, enemy.z, 6.5, 6, enemy.yaw);
+      const warning = (enemy.tell || enemy.maneuver?.phase === 'warning') && Math.floor(state.tick / 7) % 2;
+      const paint = enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069
+        : batch ? 0xffffff : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
+      const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
+      this.write(mesh, index, enemy.x, enemy.z, flat ? 101 : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
+      if (!flat) this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
     }
-    upload(this.drones, state.enemies.length);
+    upload(this.drones, drones);
+    for (const { mesh, count } of this.airframes) upload(mesh, count);
 
     const boss = state.boss;
     const active = activeWeakPoint(state);
@@ -268,7 +282,7 @@ export class FlightScene {
       this.warden.position.set(boss.x, flat ? 96 : boss.alt, -boss.z);
       this.warden.rotation.y = -yaw;
       if (!flat) {
-        contactShadow(boss.x, boss.z, 22, 8, yaw);
+        this.writeShadow(shadows++, boss.x, boss.z, 22, 8, yaw);
         for (const point of boss.weakPoints) {
           if (!point.hp) continue;
           const highlighted = point.id === active.id;

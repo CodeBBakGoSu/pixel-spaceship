@@ -1,7 +1,8 @@
 import type { Segment } from './camera.ts';
+import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | LandmarkId;
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | LandmarkId | NewEnemyKind;
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -39,7 +40,7 @@ export type Ground = (x: number, z: number) => number;
 export type Band = 0 | 1 | 2;
 export type Enemy = Position & {
   id: number;
-  kind: 'patrol' | 'interceptor';
+  kind: EnemyKind;
   hp: number;
   yaw: number;
   vx: number;
@@ -52,6 +53,7 @@ export type Enemy = Position & {
   offset: number;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
+  tell?: { kind: 'snipe'; until: number };
   course?: { target: Point; pass?: Point; speed: number; until: number };
 };
 export type Pickup = Position & { id: number; xp: number; born: number };

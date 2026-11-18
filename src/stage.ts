@@ -1,11 +1,14 @@
 import { advanceBank } from './flight.ts';
-import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS, nearestBand } from './maneuvers.ts';
+import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS } from './maneuvers.ts';
+import { ENEMY_KINDS, isNewEnemyKind, type EnemyKind } from './enemy-kinds.ts';
+import { advanceEnemies, makeEnemy } from './stage-enemies.ts';
+import { random } from './stage-random.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
   acquireAndFire, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
   hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { Band, Boss, DraftId, Enemy, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 export { activeWeakPoint } from './stage-combat.ts';
 export const END_TICK = 180 * TICKS_PER_SECOND;
@@ -25,49 +28,31 @@ export function parseStageOptions(search: string): StageOptions {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
     fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit'
-      || isLandmarkId(fixture) ? fixture : null,
+      || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
   };
 }
 
-// Mulberry32, with the seed and current state kept in the sortie.
-function random(state: StageState): number {
-  state.rng = (state.rng + 0x6d2b79f5) >>> 0;
-  let n = state.rng;
-  n = Math.imul(n ^ n >>> 15, n | 1);
-  n ^= n + Math.imul(n ^ n >>> 7, n | 61);
-  return ((n ^ n >>> 14) >>> 0) / 4294967296;
-}
-
-type Spawn = { band: Band; bearing: number; distance: number; interceptor?: boolean };
+type Spawn = { band: Band; bearing: number; distance: number; kind?: EnemyKind };
 type Wave = { time: number; members: Spawn[] };
 const escort: Spawn[] = [
   { band: 0, bearing: -0.7, distance: 110 },
   { band: 1, bearing: 1.1, distance: 116 },
-  { band: 2, bearing: -1.8, distance: 102, interceptor: true },
+  { band: 2, bearing: -1.8, distance: 102, kind: 'interceptor' },
 ];
 const WAVES: Wave[] = [
   { time: 2, members: [{ band: 1, bearing: 0, distance: 82 }, { band: 1, bearing: -0.36, distance: 100 }] },
   { time: 13, members: [{ band: 1, bearing: 0.18, distance: 74 }] },
   { time: 22, members: [{ band: 0, bearing: 0.08, distance: 91 }, { band: 2, bearing: 0.11, distance: 94 }] },
   { time: 38, members: [{ band: 1, bearing: -0.43, distance: 90 }, { band: 0, bearing: 0.31, distance: 103 }] },
-  { time: 40, members: [{ band: 2, bearing: 0.38, distance: 98, interceptor: true }, { band: 0, bearing: -0.8, distance: 101 }, { band: 1, bearing: 0, distance: 94 }] },
+  { time: 40, members: [{ band: 2, bearing: 0.38, distance: 98, kind: 'interceptor' }, { band: 0, bearing: -0.8, distance: 101 }, { band: 1, bearing: 0, distance: 94 }] },
   ...[48, 56, 64, 71, 78, 85, 92, 99, 111, 122, 133, 144, 155, 166, 175].map((time, index) => ({
     time,
     members: escort.map(member => ({ ...member, bearing: member.bearing * (index % 2 === 0 ? -1 : 1) })),
   })),
 ];
-
-function makeEnemy(state: StageState, x: number, z: number, band: Band, interceptor = false, offset = 0): Enemy {
-  return {
-    id: ++state.nextId, kind: interceptor ? 'interceptor' : 'patrol', x, z, alt: BANDS[band] + offset,
-    hp: interceptor ? 4 : 2, yaw: Math.PI, vx: 0, vz: 0, bank: 0, band, offset,
-    shotAt: state.tick + (interceptor ? 345 : 260),
-    maneuverAt: state.tick + 102, maneuver: null, hitUntil: 0, shotDown: false,
-  };
-}
 
 function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
   const { arena: a, player: p, enemies } = state;
@@ -85,7 +70,7 @@ function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
       z = a.z + (z - a.z) * limit / distance;
     }
     const offset = (random(state) - 0.5) * 12;
-    const e = makeEnemy(state, x, z, member.band, member.interceptor, offset);
+    const e = makeEnemy(state, x, z, member.band, member.kind, offset);
     if (e.band === 0 && ground(x, z) >= 39) {
       // Pull low entries back to the coast when the bearing lands on the island.
       const coastX = a.x - 50, coastZ = a.z - 24;
@@ -201,6 +186,11 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture']): void
   state.nextWave = WAVES.findIndex(wave => wave.time > seconds);
   if (landmark) {
     Object.assign(state.player, { x: landmark.x, z: landmark.z - 70, altitude: landmark.alt });
+  } else if (isNewEnemyKind(fixture)) {
+    const p = state.player, band = fixture === 'skimmer' ? 0 : fixture === 'spotter' ? 2 : 1;
+    if (fixture === 'skimmer') Object.assign(p, { x: LANDMARKS.strait.x, z: LANDMARKS.strait.z - 48 });
+    const enemy = makeEnemy(state, p.x + (fixture === 'hound' ? 0 : 12), p.z + (fixture === 'spotter' ? 90 : 62), band, fixture);
+    state.enemies.push(enemy);
   } else if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
       state.enemies.push(makeEnemy(state, state.player.x, state.player.z + 60, band));
@@ -341,77 +331,14 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   state.climbRate = (p.altitude - prior) / STEP;
 }
 
-function moveInterceptor(state: StageState, e: Enemy): void {
-  if (!e.maneuver && state.tick >= e.maneuverAt) {
-    const bias = nearestBand(state.player.altitude);
-    const neighboring = (e.band === bias ? (e.band > 0 ? e.band - 1 : 1) : e.band + Math.sign(bias - e.band)) as Band;
-    e.maneuver = { phase: 'warning', band: neighboring, diveAt: state.tick + 75 };
-  }
-  const move = e.maneuver;
-  if (!move || state.tick < move.diveAt) return;
-  move.phase = 'diving';
-  const target = BANDS[move.band] + e.offset;
-  const maxMove = 29 * STEP;
-  const error = target - e.alt;
-  if (Math.abs(error) <= maxMove) {
-    e.alt = target;
-    e.band = move.band;
-    e.maneuver = null;
-    e.maneuverAt = state.tick + 540;
-    e.shotAt = Math.max(e.shotAt, state.tick + 24);
-  } else {
-    e.alt += Math.sign(error) * maxMove;
-  }
-}
-
-function advanceEnemies(state: StageState): void {
-  const p = state.player;
-  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  for (const enemy of state.enemies) {
-    if (enemy.kind === 'interceptor') moveInterceptor(state, enemy);
-    const dx = p.x - enemy.x, dz = p.z - enemy.z;
-    const range = Math.hypot(dx, dz);
-    if (enemy.course && state.tick >= enemy.course.until) delete enemy.course;
-    const course = enemy.course;
-    if (course) {
-      const tx = course.target.x - enemy.x, tz = course.target.z - enemy.z;
-      const remaining = Math.hypot(tx, tz);
-      const speed = Math.min(course.speed, remaining / STEP);
-      if (remaining > 0.001) enemy.yaw = Math.atan2(tx, tz);
-      enemy.vx = Math.sin(enemy.yaw) * speed;
-      enemy.vz = Math.cos(enemy.yaw) * speed;
-      enemy.bank = 0;
-      if (remaining <= course.speed * STEP && course.pass) {
-        course.target = course.pass;
-        delete course.pass;
-      }
-    } else if (range > 0.001) {
-      const angle = Math.atan2(dx, dz);
-      const trailing = range > 50 && dx * fx + dz * fz > 0;
-      const weave = Math.sin(state.tick / 91 + enemy.id * 1.79) * (trailing ? 0.112 : 0.32);
-      const standoff = enemy.kind === 'interceptor' ? 32 : 14;
-      enemy.yaw = angle + (range < standoff ? 1.45 : weave);
-      enemy.bank = -weave;
-      const speed = enemy.kind === 'interceptor' ? (trailing ? 30 : 23) : (trailing ? 23 : 16);
-      enemy.vx = Math.sin(enemy.yaw) * speed;
-      enemy.vz = Math.cos(enemy.yaw) * speed;
-    }
-    enemy.x += enemy.vx * STEP;
-    enemy.z += enemy.vz * STEP;
-    if (range < 155 && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
-      fireHostile(state, enemy, enemy.kind === 'interceptor' ? 60 : 46);
-      enemy.shotAt = state.tick + 255 + Math.floor(random(state) * 105);
-    }
-  }
-}
-
 function advanceSalvage(state: StageState): void {
   const p = state.player;
   for (const enemy of state.enemies) {
     if (!enemy.shotDown) continue;
-    state.score += enemy.kind === 'interceptor' ? 200 : 100;
+    const xp = ENEMY_KINDS[enemy.kind].xp;
+    state.score += xp * 100;
     state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z, alt: enemy.alt,
-      xp: enemy.kind === 'interceptor' ? 2 : 1, born: state.tick });
+      xp, born: state.tick });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
   }
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
@@ -482,7 +409,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.nextWave++;
   }
 
-  advanceEnemies(state);
+  advanceEnemies(state, ground);
   updateBoss(state);
   advanceRearBombs(state, ground);
   if (!maneuver) {

@@ -1,4 +1,5 @@
 import type { createTranslator } from './i18n.ts';
+import type { EnemyKind } from './enemy-kinds.ts';
 import { exitAltitude } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, LANDMARKS, RIM_WARNING } from './reach.ts';
 import { activeWeakPoint, angleTo, HIT_WINDOW, inBand, TICKS_PER_SECOND } from './stage-combat.ts';
@@ -6,7 +7,7 @@ import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 160;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
-export type Track = Position & { id: number; kind: 'patrol' | 'interceptor' | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
+export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null };
 type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
 export type RadarReadout = {
