@@ -7,6 +7,8 @@ import {
   CockpitLabelAtlas, CockpitLineRaster, cockpitPixel, cockpitSurface, drawCockpitLabel, type CockpitLabel,
 } from './cockpit-pixels';
 import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
+import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
+import { MAX_BOMBS, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
@@ -160,6 +162,8 @@ class GlassLabels {
   readonly bearings: CockpitLabel[];
   readonly headingTicks: CockpitLabel[];
   readonly pitch: { left: CockpitLabel; right: CockpitLabel }[];
+  readonly inverted: CockpitLabel;
+  readonly stall: CockpitLabel;
 
   constructor(font: string, private readonly t: Translate) {
     const atlas = this.atlas = new CockpitLabelAtlas(font);
@@ -167,10 +171,12 @@ class GlassLabels {
       value: String(n).padStart(3, '0'),
     }), green, 'center'));
     this.headingTicks = Array.from({ length: 24 }, (_, n) => atlas.add(headingTickLabel(n * 15, t), green, 'center'));
-    this.pitch = Array.from({ length: 13 }, (_, n) => {
-      const label = String(n * 10 - 60);
+    this.pitch = Array.from({ length: 19 }, (_, n) => {
+      const label = String(n * 10 - 90);
       return { left: atlas.add(label, green, 'right', '#16312b'), right: atlas.add(label, green, 'left', '#16312b') };
     });
+    this.inverted = atlas.add(t('cockpit.inverted'), amber, 'center');
+    this.stall = atlas.add(t('cockpit.stall'), amber, 'center');
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
   }
@@ -291,20 +297,28 @@ function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact
 const ladderOutline = cockpitPixel(0x183f39), horizonColor = cockpitPixel(0x9befb2), ladderColor = cockpitPixel(0x73bb93);
 
 function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: CockpitMotion,
-  labels: GlassLabels, raster: CockpitLineRaster, marks: ReturnType<typeof pitchLadder>, anchor: Point): void {
+  labels: GlassLabels, raster: CockpitLineRaster, marks: ReturnType<typeof pitchLadder>, anchor: Point,
+  attitude: ReturnType<typeof maneuverAttitude> | null, horizon: Point | null): void {
   const area = layout.aiming, compact = layout.compact;
   const span = Math.min(compact ? 51 : 105, area.width * 0.31), scale = compact ? 2 : 3;
   const slope = Math.atan2(motion.climb, Math.max(12, motion.speed));
-  const pitch = clamp(slope * 180 / Math.PI, -32, 32);
-  const horizon = aim.y;
+  const pitch = attitude ? attitude.cockpitPitch * 180 / Math.PI : clamp(slope * 180 / Math.PI, -32, 32);
   anchor.x = area.x + area.width / 2 - motion.turn * (compact ? 7 : 14);
   anchor.y = area.y + area.height / 2 - area.height * 0.03;
-  pitchLadder(anchor, pitch, motion.bank, span, scale, marks);
+  pitchLadder(anchor, pitch, attitude ? -attitude.cameraBank : motion.bank, span, scale, marks);
   raster.clear();
   for (const mark of marks) {
+    if (horizon && mark.angle === 0) continue;
     const weight = mark.angle === 0 ? 2 : 1, color = mark.angle === 0 ? horizonColor : ladderColor;
     rasterLadderSegment(raster, mark.left, mark.angle < 0, color, weight);
     rasterLadderSegment(raster, mark.right, mark.angle < 0, color, weight);
+  }
+  if (horizon && attitude) {
+    const slope = Math.tan(attitude.cameraBank);
+    const point = (x: number): Point => ({ x, y: horizon.y + (x - horizon.x) * slope });
+    const { x } = anchor, gap = span * 0.3;
+    rasterLadderSegment(raster, { from: point(x - span), to: point(x - gap) }, false, horizonColor, 2);
+    rasterLadderSegment(raster, { from: point(x + gap), to: point(x + span) }, false, horizonColor, 2);
   }
   raster.draw(c, layout.glass);
 
@@ -313,13 +327,18 @@ function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: Cockp
   c.rect(area.x, area.y, area.width, area.height);
   c.clip();
   for (const mark of marks) {
-    if (mark.angle === 0 || (compact && mark.angle % 20 !== 0)) continue;
-    const sprites = labels.pitch[(mark.angle + 60) / 10];
+    if (mark.angle === 0 || (compact && mark.angle % 20 !== 0 && Math.abs(mark.angle) !== 90)) continue;
+    const sprites = labels.pitch[(mark.angle + 90) / 10];
     const left = mark.left.from, right = mark.right.to;
     if (left.y >= area.y + 7 && left.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.left, left.x - 7, left.y);
     if (!compact && right.y >= area.y + 7 && right.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.right, right.x + 8, right.y);
   }
-  const pathY = clamp(horizon - Math.sin(slope) * 54, area.y + 10, bottom(area) - 10);
+  const tag = attitude?.inverted ? labels.inverted : attitude?.stalled ? labels.stall : null;
+  if (tag) {
+    fill(c, ink, anchor.x - tag.advance / 2 - 4, area.y + 3, tag.advance + 8, 13);
+    drawCockpitLabel(c, tag, anchor.x, area.y + 9);
+  }
+  const pathY = clamp((horizon?.y ?? aim.y) - Math.sin(slope) * 54, area.y + 10, bottom(area) - 10);
   const pathX = anchor.x + motion.turn * (compact ? 3 : 6);
   for (let side = -1; side <= 1; side += 2) {
     fill(c, green, pathX - 2, pathY + side * 4, 5, 1);
@@ -398,7 +417,7 @@ type WarningCell = { rect: Rect; variants: HTMLCanvasElement[]; painted: number 
 function warningCells(layout: CockpitLayout, t: Translate, font: string): WarningCell[] {
   const r = layout.warnings, compact = layout.compact;
   const names = [t(compact ? 'cockpit.cautionShort' : 'cockpit.masterCaution'), t('cockpit.lowHull'),
-    t('cockpit.altLow'), t('control.boost')];
+    t('cockpit.altLow'), t('control.boost'), t('control.loop')];
   return names.map((label, i) => {
     const x = r.x + Math.round(r.width * i / names.length);
     const width = r.x + Math.round(r.width * (i + 1) / names.length) - x - 2;
@@ -413,6 +432,13 @@ function warningCells(layout: CockpitLayout, t: Translate, font: string): Warnin
     const variants = [variant(label, false, true, false), variant(label, true, true, false), variant(label, true, true, true)];
     if (i === 2) variants.push(variant(t('cockpit.pullUp'), true, true, false), variant(t('cockpit.pullUp'), true, true, true));
     if (i === 3) variants.push(variant(label, true, false, false), variant(label, true, false, true));
+    if (i === 4) {
+      variants.push(variant(t('hud.loopReadyShort'), true, false, true));
+      const maxSeconds = MANEUVERS['j-turn'].cooldown / TICKS_PER_SECOND;
+      for (let seconds = 1; seconds <= maxSeconds; seconds++) {
+        variants.push(variant(t('hud.loopCooldown', { seconds }), true, true, false));
+      }
+    }
     return { rect: area, variants, painted: -1 };
   });
 }
@@ -458,7 +484,8 @@ function drawDamage(c: Context, r: Rect, state: StageState, compact: boolean, hi
 }
 
 function weaponReadouts(level: number, pods: number, bombs: number, t: Translate): WeaponReadout {
-  return { gun: t('hud.weapon', { level }), pods: t('hud.pods', { level: pods }), bombs: t('cockpit.bombs', { count: bombs }) };
+  return { gun: t('hud.weapon', { level }), pods: t('hud.pods', { level: pods }),
+    bombs: t('cockpit.bombs', { count: bombs, max: MAX_BOMBS }) };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string, font: string): void {
@@ -631,7 +658,7 @@ export class CockpitDisplay {
     }));
   }
 
-  draw(state: StageState, aim: Point, motion: CockpitMotion, clearance: number, impact: number,
+  draw(state: StageState, aim: Point, horizon: Point | null, motion: CockpitMotion, clearance: number, impact: number,
     readout: RadarReadout, target: CockpitTarget | null, language: Language, t: Translate) {
     const layout = this.layout;
     if (!layout) return null;
@@ -639,7 +666,7 @@ export class CockpitDisplay {
     const elapsed = state.tick / 60;
     this.readout.target = target;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.readout.warnings);
-    this.drawGlass(layout, aim, state, motion, target, readout.priority?.alt);
+    this.drawGlass(layout, aim, horizon, state, motion, target, state.maneuver ? undefined : readout.priority?.alt);
 
     const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
     const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
@@ -647,6 +674,8 @@ export class CockpitDisplay {
     updateWarning(this.panels, this.caution[1], warnings.lowHull ? 1 + amberPulse : 0);
     updateWarning(this.panels, this.caution[2], warnings.terrain ? (warnings.terrain === 'pullUp' ? 3 : 1) + amberPulse : 0);
     updateWarning(this.panels, this.caution[3], warnings.boost === 'active' ? 3 + boostPulse : warnings.boost === 'low' ? 1 + amberPulse : 0);
+    const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
+    updateWarning(this.panels, this.caution[4], state.maneuver ? 2 : state.tick <= state.graceUntil ? 0 : 3 + loopSeconds);
 
     const flicker = impact > 0.45 && Math.floor(impact * 12) % 2 === 0 ? 0.6 : 1;
     const refresh = cockpitMfdDue(this.lastMfd, elapsed);
@@ -663,7 +692,8 @@ export class CockpitDisplay {
     return this.readout;
   }
 
-  private drawGlass(layout: CockpitLayout, aim: Point, state: StageState, motion: CockpitMotion, target: CockpitTarget | null, targetAltitude?: number): void {
+  private drawGlass(layout: CockpitLayout, aim: Point, horizon: Point | null, state: StageState, motion: CockpitMotion,
+    target: CockpitTarget | null, targetAltitude?: number): void {
     const c = this.hud, { compact, speed, heading, altitude, aiming } = layout;
     clearZone(c, heading);
     drawHeading(c, heading, state.player.yaw, compact, this.labels);
@@ -682,7 +712,8 @@ export class CockpitDisplay {
     }
     if (this.ladder) {
       clearZone(c, aiming);
-      drawLadder(c, layout, aim, motion, this.labels, this.ladder, this.marks, this.anchor);
+      drawLadder(c, layout, aim, motion, this.labels, this.ladder, this.marks, this.anchor,
+        state.maneuver ? maneuverAttitude(state.maneuver) : null, horizon);
       drawAim(c, aiming, aim, target, state.tick / 60, this.labels);
     }
   }

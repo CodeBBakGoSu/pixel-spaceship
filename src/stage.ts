@@ -1,9 +1,10 @@
 import { advanceBank } from './flight.ts';
+import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS, nearestBand } from './maneuvers.ts';
 import {
-  acquireAndFire, advanceShots, angleTo, BANDS, clamp, detonate, fireHostile,
-  hurtPlayer, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
+  acquireAndFire, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
+  hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { Band, Boss, DraftId, Enemy, Ground, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { Band, Boss, DraftId, Enemy, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 export { activeWeakPoint } from './stage-combat.ts';
 export const END_TICK = 180 * TICKS_PER_SECOND;
@@ -23,7 +24,7 @@ export function parseStageOptions(search: string): StageOptions {
   return {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
-    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' ? fixture : null,
+    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
@@ -193,12 +194,19 @@ function selectDraft(state: StageState, id: DraftId): void {
 
 function applyFixture(state: StageState, fixture: StageOptions['fixture']): void {
   if (!fixture) return;
-  const seconds = fixture === 'stack' ? 30 : fixture === 'draft' ? 45 : 108;
+  const seconds = fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
   state.tick = seconds * TICKS_PER_SECOND;
   state.nextWave = WAVES.findIndex(wave => wave.time > seconds);
   if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
       state.enemies.push(makeEnemy(state, state.player.x, state.player.z + 60, band));
+    }
+  } else if (fixture === 'pursuit') {
+    const p = state.player;
+    for (const [band, lateral, aft] of [[0, -10, 73], [1, -5, 66], [1, 5, 74], [2, 8, 81]] as const) {
+      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band);
+      enemy.yaw = p.yaw;
+      state.enemies.push(enemy);
     }
   } else if (fixture === 'draft') {
     state.xp = state.salvage = 6;
@@ -221,11 +229,12 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    view: options.view ?? 'overhead', initialView: options.view, wipe: 0, viewTag: 0,
+    view: options.view ?? (options.fixture === 'pursuit' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
     speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
-    boost: 1, boosting: false, bombs: 2, roll: 0, xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
+    boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [],
+    maneuver: null, maneuverReadyAt: 0, xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
@@ -242,36 +251,92 @@ function finish(state: StageState, outcome: Outcome): void {
   if (outcome === 'clear') state.score += 2500;
 }
 
+function startManeuver(state: StageState, kind: ManeuverKind): void {
+  const p = state.player, spec = MANEUVERS[kind];
+  const maneuver: Maneuver = {
+    kind, elapsed: 0, yaw: p.yaw, speed: state.speed,
+    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind),
+  };
+  state.maneuver = maneuver;
+  state.boost -= spec.boost;
+  state.boostRelease = true;
+  state.lock = state.wrongLayer = state.altitudeHint = null;
+
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  const until = state.tick + spec.ticks + 30;
+  for (const enemy of state.enemies) {
+    if (enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
+    const dx = enemy.x - p.x, dz = enemy.z - p.z;
+    const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
+    if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
+    if (kind === 'cobra' && aft >= 10 && aft <= 24) {
+      const lane = lateral < 0 ? -9 : 9;
+      enemy.course = {
+        target: { x: p.x - fx * aft + fz * lane, z: p.z - fz * aft - fx * lane },
+        pass: { x: p.x + fx * 30 + fz * lane, z: p.z + fz * 30 - fx * lane },
+        speed: 60, until,
+      };
+    } else if (kind !== 'cobra' && aft >= 65 && aft <= 115) {
+      const lane = (enemy.id % 3 - 1) * 5;
+      enemy.course = { target: { x: p.x - fx * 64 + fz * lane, z: p.z - fz * 64 - fx * lane },
+        speed: enemy.kind === 'interceptor' ? 30 : 23, until };
+    }
+    if (enemy.course) enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
+  }
+}
+
+function reverseHeading(state: StageState, entryYaw: number): void {
+  const p = state.player, fx = Math.sin(entryYaw), fz = Math.cos(entryYaw);
+  p.yaw = Math.atan2(-fx, -fz);
+  if (state.view !== 'overhead') state.wipe = WIPE_DURATION;
+  for (const enemy of state.enemies) {
+    const dx = enemy.x - p.x, dz = enemy.z - p.z;
+    if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= 160) enemy.shotAt = Math.max(enemy.shotAt, state.tick + 25);
+  }
+}
+
 function fly(state: StageState, input: StageInput, ground: Ground, grace: boolean): void {
+  const p = state.player, a = state.arena, maneuver = state.maneuver;
   if (!input.boost) state.boostRelease = false;
-  const boostHeld = !grace && !!input.boost && !state.boostRelease;
+  const boostHeld = !maneuver && !grace && !!input.boost && !state.boostRelease;
   state.boosting = boostHeld && state.boost > 0;
-  state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35) * STEP, 0, 1);
-  const p = state.player, a = state.arena;
-  const turn = clamp(input.turn ?? 0, -1, 1);
-  p.bank = advanceBank(p.bank, turn, STEP);
-  p.yaw = angleTo(0, Math.sin(p.yaw + turn * 1.55 * STEP), Math.cos(p.yaw + turn * 1.55 * STEP));
-  state.speed = 34 * (state.boosting ? 1.55 : 1) * (1 - Math.abs(turn) * 0.25);
-  p.x += Math.sin(p.yaw) * state.speed * STEP;
-  p.z += Math.cos(p.yaw) * state.speed * STEP;
+  if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35) * STEP, 0, 1);
+  let altitude: number;
+  if (maneuver) {
+    const motion = advanceManeuver(maneuver);
+    state.speed = motion.speed;
+    p.bank = 0;
+    p.x += Math.sin(maneuver.yaw) * motion.distance;
+    p.z += Math.cos(maneuver.yaw) * motion.distance;
+    altitude = motion.altitude;
+    if (motion.reverse) reverseHeading(state, maneuver.yaw);
+  } else {
+    const turn = clamp(input.turn ?? 0, -1, 1);
+    p.bank = advanceBank(p.bank, turn, STEP);
+    p.yaw = angleTo(0, Math.sin(p.yaw + turn * 1.55 * STEP), Math.cos(p.yaw + turn * 1.55 * STEP));
+    state.speed = CRUISE_SPEED * (state.boosting ? 1.55 : 1) * (1 - Math.abs(turn) * 0.25);
+    p.x += Math.sin(p.yaw) * state.speed * STEP;
+    p.z += Math.cos(p.yaw) * state.speed * STEP;
+    altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * STEP;
+  }
   const dx = p.x - a.x, dz = p.z - a.z;
   const distance = Math.hypot(dx, dz);
   state.boundaryWarning = distance > a.radius - 35;
-  if (distance > a.radius - 28) {
+  if (distance > a.radius - 28 && maneuver?.kind !== 'j-turn') {
     const inward = Math.min(96, (distance - a.radius + 28) * 2.2) * STEP;
     const bound = Math.min(a.radius, distance - inward);
     p.x = a.x + dx * bound / distance;
     p.z = a.z + dz * bound / distance;
   }
   const prior = p.altitude;
-  p.altitude = clamp(prior + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * STEP,
-    Math.max(MIN_ALTITUDE, ground(p.x, p.z) + 22), MAX_ALTITUDE);
+  p.altitude = clamp(altitude, Math.max(MIN_ALTITUDE, ground(p.x, p.z) + 22), MAX_ALTITUDE);
   state.climbRate = (p.altitude - prior) / STEP;
 }
 
 function moveInterceptor(state: StageState, e: Enemy): void {
   if (!e.maneuver && state.tick >= e.maneuverAt) {
-    const neighboring = (e.band > 0 ? e.band - 1 : 2) as Band;
+    const bias = nearestBand(state.player.altitude);
+    const neighboring = (e.band === bias ? (e.band > 0 ? e.band - 1 : 1) : e.band + Math.sign(bias - e.band)) as Band;
     e.maneuver = { phase: 'warning', band: neighboring, diveAt: state.tick + 75 };
   }
   const move = e.maneuver;
@@ -293,22 +358,38 @@ function moveInterceptor(state: StageState, e: Enemy): void {
 
 function advanceEnemies(state: StageState): void {
   const p = state.player;
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const enemy of state.enemies) {
     if (enemy.kind === 'interceptor') moveInterceptor(state, enemy);
     const dx = p.x - enemy.x, dz = p.z - enemy.z;
     const range = Math.hypot(dx, dz);
-    if (range > 0.001) {
+    if (enemy.course && state.tick >= enemy.course.until) delete enemy.course;
+    const course = enemy.course;
+    if (course) {
+      const tx = course.target.x - enemy.x, tz = course.target.z - enemy.z;
+      const remaining = Math.hypot(tx, tz);
+      const speed = Math.min(course.speed, remaining / STEP);
+      if (remaining > 0.001) enemy.yaw = Math.atan2(tx, tz);
+      enemy.vx = Math.sin(enemy.yaw) * speed;
+      enemy.vz = Math.cos(enemy.yaw) * speed;
+      enemy.bank = 0;
+      if (remaining <= course.speed * STEP && course.pass) {
+        course.target = course.pass;
+        delete course.pass;
+      }
+    } else if (range > 0.001) {
       const angle = Math.atan2(dx, dz);
-      const weave = Math.sin(state.tick / 91 + enemy.id * 1.79) * 0.32;
+      const trailing = range > 50 && dx * fx + dz * fz > 0;
+      const weave = Math.sin(state.tick / 91 + enemy.id * 1.79) * (trailing ? 0.112 : 0.32);
       const standoff = enemy.kind === 'interceptor' ? 32 : 14;
       enemy.yaw = angle + (range < standoff ? 1.45 : weave);
       enemy.bank = -weave;
-      const speed = enemy.kind === 'interceptor' ? 22 : 13;
+      const speed = enemy.kind === 'interceptor' ? (trailing ? 30 : 23) : (trailing ? 23 : 16);
       enemy.vx = Math.sin(enemy.yaw) * speed;
       enemy.vz = Math.cos(enemy.yaw) * speed;
-      enemy.x += enemy.vx * STEP;
-      enemy.z += enemy.vz * STEP;
     }
+    enemy.x += enemy.vx * STEP;
+    enemy.z += enemy.vz * STEP;
     if (range < 155 && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
       fireHostile(state, enemy, enemy.kind === 'interceptor' ? 60 : 46);
       enemy.shotAt = state.tick + 255 + Math.floor(random(state) * 105);
@@ -376,10 +457,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.wipe = Math.max(0, state.wipe - STEP);
     state.viewTag = Math.max(0, state.viewTag - STEP);
   }
-  state.roll = Math.max(0, state.roll - STEP / 0.85);
   state.invulnerability = Math.max(0, state.invulnerability - STEP);
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
+  if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver);
+  const maneuver = state.maneuver;
   fly(state, input, ground, grace);
 
   if (state.tick === BOSS_TICK && !state.boss) {
@@ -394,8 +476,14 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
 
   advanceEnemies(state);
   updateBoss(state);
-  if (input.bomb && state.bombs && !grace) detonate(state);
-  acquireAndFire(state, !!input.fire);
+  advanceRearBombs(state, ground);
+  if (!maneuver) {
+    if (input.bomb && !grace) dropRearBomb(state);
+    acquireAndFire(state);
+  } else if (maneuver.elapsed === MANEUVERS[maneuver.kind].ticks) {
+    state.maneuver = null;
+    state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
+  }
   advanceShots(state);
 
   const p = state.player;

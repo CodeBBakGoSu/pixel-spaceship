@@ -39,6 +39,14 @@ test('pitch ladder shifts with climb and rotates its marks with bank', () => {
   assert.equal(Math.round(bank.right.to.y), 80);
 });
 
+test('the pitch ladder has a valid set of marks at either vertical attitude', () => {
+  for (const pitch of [-90, 90]) {
+    const marks = pitchLadder({ x: 100, y: 120 }, pitch, Math.PI / 9, 40, 2);
+    assert.ok(marks.some(mark => mark.angle === pitch));
+    assert.ok(marks.every(mark => Math.abs(mark.angle) <= 90));
+  }
+});
+
 test('heading tape wraps through north and localizes cardinal labels and degrees', () => {
   const en = createTranslator('en'), ko = createTranslator('ko');
   const nearNorth = headingTape(-Math.PI / 180, 15, en);
@@ -90,7 +98,7 @@ test('cockpit copy covers warnings, instruments and targeting in both languages'
   for (const suffix of [
     'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'track', 'gLoad',
     'masterCaution', 'cautionShort', 'lowHull', 'altLow', 'pullUp',
-    'airframe', 'weapons', 'altDelta', 'bombs',
+    'airframe', 'weapons', 'altDelta', 'bombs', 'inverted', 'stall',
   ]) {
     const key = `cockpit.${suffix}`;
     assert.ok(strings.en[key]?.trim(), key);

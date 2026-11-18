@@ -1,4 +1,4 @@
-import type { Boss, Effect, Enemy, Position, Shot, StageState, WeakPoint } from './stage-types.ts';
+import type { Boss, Effect, Enemy, Ground, Position, RearBomb, Shot, StageState, WeakPoint } from './stage-types.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -10,6 +10,14 @@ export const VERTICAL_SPEED = 40;
 export const WIPE_DURATION = 0.15;
 export const BOLT_SPEED = 230;
 export const SHOT_LIMIT = 192;
+export const MAX_BOMBS = 3;
+export const BOMB_RELOAD_TICKS = 450;
+export const BOMB_BLAST_RADIUS = 34;
+const BOMB_DROP_TICKS = 24;
+const BOMB_HOLD_TICKS = 27;
+const BOMB_FALL_SPEED = 24;
+const BOMB_PROXIMITY = 16;
+const BOMB_CLEAR_RADIUS = 40;
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
 const TWIN_CONE = Math.PI / 6;
@@ -90,7 +98,7 @@ function fireFriendly(
   }
 }
 
-export function acquireAndFire(state: StageState, manualFire: boolean): void {
+export function acquireAndFire(state: StageState): void {
   const p = state.player;
   const weak = activeWeakPoint(state);
   const weakRange = weak ? Math.hypot(weak.x - p.x, weak.z - p.z) : Infinity;
@@ -143,7 +151,7 @@ export function acquireAndFire(state: StageState, manualFire: boolean): void {
     state.altitudeHint = null;
   }
 
-  if (state.tick >= state.twinAt && (twin || manualFire)) {
+  if (state.tick >= state.twinAt && twin) {
     fireFriendly(state, 'twin', state.twinRank === 3 ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], twin, locked && weak ? weak.id : null);
     state.twinAt = state.tick + (state.twinRank === 1 ? 21 : 13);
   }
@@ -154,20 +162,54 @@ export function acquireAndFire(state: StageState, manualFire: boolean): void {
   }
 }
 
-export function detonate(state: StageState): void {
+export function dropRearBomb(state: StageState): void {
+  if (!state.bombs || state.tick < state.bombReadyAt) return;
   const p = state.player;
-  const nearby = (x: number, z: number, radius: number) => Math.hypot(x - p.x, z - p.z) <= radius;
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  state.rearBombs.push({ x: p.x - fx * 12, z: p.z - fz * 12, alt: p.altitude,
+    vx: -fx * 8, vz: -fz * 8, born: state.tick });
   state.bombs--;
-  state.roll = 1;
-  state.effects.push({ kind: 'nova', x: p.x, z: p.z, alt: p.altitude, life: 0.8 });
-  state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearby(shot.x, shot.z, 104));
+  state.bombReadyAt = state.tick + BOMB_DROP_TICKS;
+  state.bombReloadAt ??= state.tick + BOMB_RELOAD_TICKS;
+}
+
+function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
+  return Math.hypot(target.x - bomb.x, target.z - bomb.z) <= radius;
+}
+
+function blast(state: StageState, bomb: RearBomb): void {
+  state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8 });
+  state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, BOMB_CLEAR_RADIUS));
   for (const enemy of state.enemies) {
-    if (enemy.hp && nearby(enemy.x, enemy.z, 104) && inBand(enemy.alt, p.altitude)) hurtEnemy(state, enemy, 2);
+    if (enemy.hp && nearBomb(bomb, enemy, BOMB_BLAST_RADIUS) && inBand(enemy.alt, bomb.alt)) hurtEnemy(state, enemy, 4);
   }
   const point = activeWeakPoint(state);
-  if (state.boss && point?.exposed && nearby(point.x, point.z, 104) && inBand(point.alt, p.altitude, point.window)) {
-    hurtWeakPoint(state, state.boss, 2);
+  if (state.boss && point?.exposed && nearBomb(bomb, point, BOMB_BLAST_RADIUS) && inBand(point.alt, bomb.alt, point.window)) {
+    hurtWeakPoint(state, state.boss, 4);
   }
+}
+
+export function advanceRearBombs(state: StageState, ground: Ground): void {
+  if (state.bombReloadAt !== null && state.tick >= state.bombReloadAt) {
+    state.bombs = Math.min(MAX_BOMBS, state.bombs + 1);
+    state.bombReloadAt = state.bombs < MAX_BOMBS ? state.tick + BOMB_RELOAD_TICKS : null;
+  }
+  if (!state.rearBombs.length) return;
+  state.rearBombs = state.rearBombs.filter(bomb => {
+    const age = state.tick - bomb.born;
+    const drift = Math.max(0, 1 - age / BOMB_HOLD_TICKS) * STEP;
+    bomb.x += bomb.vx * drift;
+    bomb.z += bomb.vz * drift;
+    const impactHeight = ground(bomb.x, bomb.z) + 1;
+    if (age > BOMB_HOLD_TICKS) bomb.alt = Math.max(impactHeight, bomb.alt - BOMB_FALL_SPEED * STEP);
+    const point = activeWeakPoint(state);
+    const close = (target: Position, window = HIT_WINDOW): boolean =>
+      inBand(target.alt, bomb.alt, window) && nearBomb(bomb, target, BOMB_PROXIMITY);
+    if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && close(enemy))
+      && !(point?.exposed && close(point, point.window))) return true;
+    blast(state, bomb);
+    return false;
+  });
 }
 
 // Check the thin per-tick segment so fast bolts cannot skip over small weak points.

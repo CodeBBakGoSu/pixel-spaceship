@@ -1,13 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceBank, rollAngle } from '../src/flight.ts';
-
-test('a roll eases in and out instead of snapping to full speed', () => {
-  assert.equal(rollAngle(0), 0);
-  assert.ok(rollAngle(0.95) < 0.05);
-  assert.ok(Math.abs(rollAngle(0.5) - Math.PI) < 0.001);
-  assert.ok(Math.PI * 2 - rollAngle(0.05) < 0.05);
-});
+import { advanceBank } from '../src/flight.ts';
 
 test('steering banks the ship smoothly and releasing the turn levels it', () => {
   const first = advanceBank(0, 1, 1 / 60);

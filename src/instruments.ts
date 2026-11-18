@@ -1,12 +1,17 @@
 import type { createTranslator } from './i18n.ts';
-import { activeWeakPoint, HIT_WINDOW } from './stage-combat.ts';
+import { exitAltitude } from './maneuvers.ts';
+import { activeWeakPoint, HIT_WINDOW, inBand } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 160;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
 export type Track = Position & { id: number; kind: 'patrol' | 'interceptor' | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null };
-export type RadarReadout = { contacts: Blip[]; priority: Track | null; salvage: Track | null; rear: boolean };
+export type RadarReadout = {
+  contacts: Blip[]; priority: Track | null; salvage: Track | null;
+  rear: boolean; rearCount: number; rearClose: boolean; rearBandMatch: boolean;
+  rearMarks: AltitudeMark[];
+};
 
 export function relativeMark(delta: number, coarse: boolean): AltitudeMark {
   if (delta > HIT_WINDOW) return coarse ? '△' : '^';
@@ -24,7 +29,9 @@ export function buildRadar(state: StageState): RadarReadout {
   const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
   const top = state.view === 'overhead';
   const contacts: Blip[] = [];
-  let rear = false;
+  let rearCount = 0, rearClose = false, rearBandMatch = false;
+  let rearHigher = false, rearLower = false;
+  const up = exitAltitude(p.altitude, 'immelmann'), down = exitAltitude(p.altitude, 'split-s');
   const active = activeWeakPoint(state);
   const visible: { track: Track; across: number }[] = [];
   const hostiles: Track[] = [];
@@ -35,18 +42,28 @@ export function buildRadar(state: StageState): RadarReadout {
     if (!top && kind !== 'salvage') hostiles.push(track);
     if (range > RADAR_RANGE) return;
     if (!top && ahead < 0) {
-      if (kind !== 'salvage') rear = true;
+      if (kind !== 'salvage') {
+        rearCount++;
+        rearClose ||= range < 95;
+        rearBandMatch ||= inBand(item.alt, p.altitude);
+        rearHigher ||= item.alt - p.altitude > HIT_WINDOW && inBand(item.alt, up);
+        rearLower ||= p.altitude - item.alt > HIT_WINDOW && inBand(item.alt, down);
+      }
       return;
     }
     visible.push({ track, across: dx * cos - dz * sin });
   };
-  for (const enemy of state.enemies) scan(enemy, enemy.kind);
+  for (const enemy of state.enemies) if (enemy.hp) scan(enemy, enemy.kind);
   // The flat radar resolves the Warden as one airframe. The forward views resolve its exposed hardware.
   if (active && state.boss) {
     if (top) scan({ id: -1, x: state.boss.x, z: state.boss.z, alt: state.boss.alt }, 'warden');
     else scan(active, active.kind);
   }
   for (const pickup of state.pickups) scan(pickup, 'salvage');
+  if (!top && !rearClose) rearClose = state.shots.some(shot => {
+    const dx = shot.x - p.x, dz = shot.z - p.z;
+    return shot.kind === 'hostile' && dx * sin + dz * cos < 0 && Math.hypot(dx, dz) < 90;
+  });
   const nearest = (tracks: Track[]): Track | null =>
     tracks.reduce<Track | null>((best, track) => !best || track.range < best.range ? track : best, null);
   const forward = visible.map(({ track }) => track);
@@ -62,7 +79,12 @@ export function buildRadar(state: StageState): RadarReadout {
       mark: marked ? relativeMark(track.alt - p.altitude, top) : null,
     });
   }
-  return { contacts, priority: priority ?? nearest(hostiles), salvage, rear };
+  const rearMarks: AltitudeMark[] = [];
+  if (rearHigher) rearMarks.push('△');
+  if (rearBandMatch) rearMarks.push('■');
+  if (rearLower) rearMarks.push('▽');
+  return { contacts, priority: priority ?? nearest(hostiles), salvage,
+    rear: rearCount > 0 || rearClose, rearCount, rearClose, rearBandMatch, rearMarks };
 }
 
 export class RadarDisplay {
@@ -131,9 +153,16 @@ export class RadarDisplay {
       this.drawBlip(c, px, py, contact);
     }
     if (readout.rear) {
-      c.fillStyle = '#ffb064';
-      c.fillRect(x - 4, y + radius - 2, 9, 2);
-      c.fillRect(x - 2, y + radius, 5, 2);
+      const pulse = readout.rearClose && Math.floor(tick / 12) % 2 === 0;
+      c.strokeStyle = pulse ? '#ff7965' : '#ffb064';
+      c.lineWidth = readout.rearBandMatch ? 2 : 1;
+      c.beginPath();
+      c.arc(x, y, radius, Math.PI * 0.35, Math.PI * 0.65);
+      c.moveTo(x - 4, y + radius - 4);
+      c.lineTo(x, y + radius - 1);
+      c.lineTo(x + 4, y + radius - 4);
+      c.stroke();
+      c.lineWidth = 1;
     }
   }
 

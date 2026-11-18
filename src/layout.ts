@@ -12,7 +12,7 @@ export type CockpitLayout = {
 export type PhoneLayout = HudLayout & {
   orientation: 'portrait' | 'landscape'; buffer: { width: number; height: number };
   playfield: Rect; dashboard: Rect | null; controls: Rect;
-  pause: Rect; stick: Rect; stickLabel: Rect; fire: Rect; boost: Rect; bomb: Rect; view: Rect;
+  pause: Rect; stick: Rect; stickLabel: Rect; loop: Rect; boost: Rect; bomb: Rect; view: Rect;
   shipY: number; cockpit: CockpitLayout | null;
 };
 export type GuideLayout = { card: Rect; heading: Rect; body: Rect; actions: Rect; columns: 1 | 2 };
@@ -122,13 +122,13 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const stickSize = portrait ? clamp(Math.round(width * 0.25), 88, 100) : 80;
   const stick = rect(controls.x + 12, controls.y + (controls.height - stickSize) / 2 + 3, stickSize, stickSize);
   const stickLabel = rect(stick.x, stick.y - 14, stick.width, 10);
-  const fireSize = portrait ? clamp(Math.round(width * 0.2), 68, 78) : 64;
+  const loopSize = portrait ? clamp(Math.round(width * 0.2), 68, 78) : 64;
   const side = controls.x + controls.width - 8;
-  const fire = rect(side - fireSize, controls.y + controls.height - 8 - fireSize, fireSize, fireSize);
+  const loop = rect(side - loopSize, controls.y + controls.height - 8 - loopSize, loopSize, loopSize);
   const boost = rect(side - 52, controls.y + 6, 52, 52);
   const bomb = rect(boost.x - 8 - 48, controls.y + 8, 48, 48);
-  const viewButton = rect(fire.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
+  const viewButton = rect(loop.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
-    radar, alt, pause, stick, stickLabel, fire, boost, bomb, view: viewButton,
+    radar, alt, pause, stick, stickLabel, loop, boost, bomb, view: viewButton,
     shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), cockpit };
 }

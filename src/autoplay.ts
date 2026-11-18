@@ -1,6 +1,7 @@
-import { activeWeakPoint, angleTo, BANDS, clamp, HIT_WINDOW, MAX_ALTITUDE, TICKS_PER_SECOND } from './stage-combat.ts';
+import { canManeuver, exitAltitude } from './maneuvers.ts';
+import { activeWeakPoint, angleTo, BANDS, clamp, HIT_WINDOW, inBand, MAX_ALTITUDE, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
-import type { Ground, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
 type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'home' };
@@ -32,25 +33,66 @@ function routeFor(state: StageState, mode: PilotMode): Route {
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
 
-function dodgeDirection(state: StageState, mode: PilotMode): number {
+function dodgeClimb(state: StageState, mode: PilotMode, climb: number): number | undefined {
   const p = state.player;
-  for (const shot of state.shots) {
-    if (shot.kind !== 'hostile' || (mode === 'full' && Math.abs(shot.alt - p.altitude) > HIT_WINDOW + 4)) continue;
-    const x = shot.x - p.x, z = shot.z - p.z;
-    const vx = shot.vx - Math.sin(p.yaw) * state.speed, vz = shot.vz - Math.cos(p.yaw) * state.speed;
+  const ownX = Math.sin(p.yaw) * state.speed, ownZ = Math.cos(p.yaw) * state.speed;
+  const avoid = (threat: Position & { vx: number; vz: number }, radius: number): number | undefined => {
+    const x = threat.x - p.x, z = threat.z - p.z;
+    const vx = threat.vx - ownX, vz = threat.vz - ownZ;
     const vv = vx * vx + vz * vz;
-    const closest = vv > 0 ? -(x * vx + z * vz) / vv : -1;
-    if (closest >= 0 && closest < 0.55 && Math.hypot(x + vx * closest, z + vz * closest) < 8) {
-      if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
-      return p.altitude > 151 || (p.altitude > 84 && p.altitude < shot.alt) ? -1 : 1;
+    const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, 0.6) : 0;
+    if (Math.hypot(x + vx * closest, z + vz * closest) >= radius) return;
+    if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
+    const approach = p.altitude + climb * VERTICAL_SPEED * Math.max(closest, 0.2);
+    if (Math.min(p.altitude, approach) > threat.alt + 13 || Math.max(p.altitude, approach) < threat.alt - 13) return;
+    const up = threat.alt < 86 || (threat.alt <= 150 && p.altitude >= threat.alt);
+    const safe = threat.alt + (up ? 12 : -12);
+    return up ? clamp((safe - p.altitude) / 2, 0, 1) : clamp((safe - p.altitude) / 2, -1, 0);
+  };
+  for (const shot of state.shots) {
+    if (shot.kind === 'hostile') {
+      const dodge = avoid(shot, mode === 'full' ? 11 : 8);
+      if (dodge !== undefined) return dodge;
     }
   }
-  return 0;
+  if (mode === 'full') {
+    for (const enemy of state.enemies) {
+      const dodge = avoid(enemy, 15);
+      if (dodge !== undefined) return dodge;
+    }
+  }
+}
+
+function rearManeuver(state: StageState, target: Route, angle: number, range: number): ManeuverKind | undefined {
+  if (target.kind !== 'enemy' || Math.abs(angle) < Math.PI * 155 / 180) return;
+  const { altitude } = state.player;
+  if (inBand(altitude, target.alt)) {
+    if (range >= 10 && range <= 24 && canManeuver(state, 'cobra')) return 'cobra';
+    if (range >= 65 && range <= 115 && canManeuver(state, 'j-turn')) return 'j-turn';
+  }
+  if (range < 65 || range > 115) return;
+  const kind = target.alt > altitude ? 'immelmann' : 'split-s';
+  if (canManeuver(state, kind) && inBand(exitAltitude(altitude, kind), target.alt)) return kind;
+}
+
+function hasRearBombTarget(state: StageState): boolean {
+  if (!state.bombs || state.tick < state.bombReadyAt) return false;
+  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  return state.enemies.some(enemy => {
+    const x = enemy.x - p.x, z = enemy.z - p.z;
+    if (x * fx + z * fz >= 0) return false;
+    const dx = x + 14 * fx, dz = z + 14 * fz;
+    const vv = enemy.vx ** 2 + enemy.vz ** 2;
+    const time = vv > 0 ? clamp(-(dx * enemy.vx + dz * enemy.vz) / vv, 0, 2) : 0;
+    const altitude = p.altitude - Math.max(0, time - 0.45) * 24;
+    return inBand(altitude, enemy.alt) && Math.hypot(dx + time * enemy.vx, dz + time * enemy.vz) <= 16;
+  });
 }
 
 export function autopilotInput(state: StageState, mode: PilotMode = 'full'): StageInput {
   if (state.phase === 'draft') return { pick: state.draft[0] };
   if (state.phase !== 'playing' || state.paused) return {};
+  if (state.maneuver) return {};
   const p = state.player, target = routeFor(state, mode);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
@@ -66,12 +108,15 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full'): Sta
     if (Math.abs(delta) > 12) view = 'chase';
     else if (target.kind === 'weak' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
   }
-  const boost = range > 155 && Math.abs(angle) < 0.2 && state.level < 3;
-  const dodge = state.invulnerability === 0 ? dodgeDirection(state, mode) : 0;
+  const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb) : undefined;
+  const maneuver = mode === 'full' && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
+  const extend = mode === 'full' && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
+    && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
+  const boost = extend || (range > 155 && Math.abs(angle) < 0.2 && state.level < 3);
   return {
-    turn, climb: dodge || climb, boost,
+    turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
-    bomb: dodge !== 0 && state.hull <= 4 && state.bombs > 0,
+    bomb: mode === 'full' && !maneuver && hasRearBombTarget(state),
   };
 }
 

@@ -43,7 +43,7 @@ export function headingTape(yaw: number, step: 15 | 30, t: ReturnType<typeof cre
 
 export function pitchLadder(center: Point, pitch: number, bank: number, span: number, pixelsPerDegree: number, marks: PitchMark[] = []): PitchMark[] {
   const cos = Math.cos(bank), sin = Math.sin(bank);
-  const middle = Math.round(pitch / 10) * 10;
+  const middle = Math.max(-60, Math.min(60, Math.round(pitch / 10) * 10));
   const gap = span * 0.3;
   for (let i = 0; i < 7; i++) {
     const angle = middle - 30 + i * 10;

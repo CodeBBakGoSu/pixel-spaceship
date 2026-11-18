@@ -29,7 +29,27 @@ test('forward radar gives one precise hostile track, one salvage mark and one re
   assert.equal(radar.priority.id, high.id);
   assert.equal(radar.salvage.id, 5);
   assert.equal(radar.rear, true);
+  assert.equal(radar.rearCount, 1);
+  assert.equal(radar.rearClose, true);
+  assert.equal(radar.rearBandMatch, true);
   assert.deepEqual(radar.contacts.filter(contact => contact.mark).map(contact => contact.mark), ['^', '=']);
+});
+
+test('a rear shot warns inside 90 m without increasing the aircraft count', () => {
+  const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'));
+  state.enemies.length = 0;
+  state.shots.push({ x: state.player.x, z: state.player.z - 89, alt: 145, kind: 'hostile' });
+  const radar = buildRadar(state);
+  assert.equal(radar.rearCount, 0);
+  assert.equal(radar.rearClose, true);
+  assert.equal(radar.rearBandMatch, false);
+});
+
+test('the pursuit warning marks reachable higher, level and lower rear contacts', () => {
+  const state = createStage(parseStageOptions('?fixture=pursuit'));
+  assert.deepEqual(buildRadar(state).rearMarks, ['△', '■', '▽']);
+  state.view = 'overhead';
+  assert.deepEqual(buildRadar(state).rearMarks, []);
 });
 
 test('instruments use the inclusive altitude window and format a signed compact cockpit delta', () => {

@@ -16,7 +16,7 @@ for (const [width,height] of sizes) for (const safe of insets) for (const view o
     for(let i=0;i<zones.length;i++)for(let j=i+1;j<zones.length;j++)assert.equal(intersects(zones[i],zones[j]),false,`zone ${i} overlaps ${j}`);
     assert.ok(l.playfield.height>l.playfield.width,'content playfield is tall');
     assert.ok(contains(l.playfield,l.radar));assert.ok(contains(l.playfield,l.alt));assert.equal(intersects(l.radar,l.alt),false);
-    const buttons=[l.stick,l.fire,l.boost,l.bomb,l.view];
+    const buttons=[l.stick,l.loop,l.boost,l.bomb,l.view];
     for(const b of buttons){assert.ok(contains(l.controls,b));assert.ok(b.width>=44 && b.height>=44);}
     for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false,`control ${i} overlaps ${j}`);
     assert.ok(contains(l.controls,l.stickLabel));assert.equal(intersects(l.stick,l.stickLabel),false);
@@ -32,8 +32,8 @@ test('landscape phone has usable, separated zones and controls', () => {
   assert.ok(chase.shipY+55<=chase.controls.y,'landscape ship clears the control area');
   assert.equal(intersects(l.hud,l.radio),false);assert.equal(intersects(l.radio,l.objective),false);
   assert.equal(intersects(l.playfield,l.dashboard),false);assert.equal(intersects(l.dashboard,l.controls),false);
-  for(const b of [l.stick,l.fire,l.boost,l.bomb,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
-  const buttons=[l.stick,l.fire,l.boost,l.bomb,l.view];
+  for(const b of [l.stick,l.loop,l.boost,l.bomb,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
+  const buttons=[l.stick,l.loop,l.boost,l.bomb,l.view];
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 

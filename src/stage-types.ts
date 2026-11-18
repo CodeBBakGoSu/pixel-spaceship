@@ -1,6 +1,6 @@
 import type { Segment } from './camera.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss';
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit';
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -11,10 +11,19 @@ export type StageOptions = {
 };
 export type DraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
 export type Outcome = 'clear' | 'timeout' | 'lost';
+export type ManeuverKind = 'immelmann' | 'split-s' | 'cobra' | 'j-turn';
+export type Maneuver = {
+  kind: ManeuverKind;
+  elapsed: number;
+  yaw: number;
+  altitude: number;
+  exitAltitude: number;
+  speed: number;
+};
 export type StageInput = {
   turn?: number;
   climb?: number;
-  fire?: boolean;
+  maneuver?: ManeuverKind;
   boost?: boolean;
   bomb?: boolean;
   toggleView?: boolean;
@@ -23,7 +32,8 @@ export type StageInput = {
   pick?: DraftId;
 };
 
-export type Position = { x: number; z: number; alt: number };
+export type Point = { x: number; z: number };
+export type Position = Point & { alt: number };
 export type Ground = (x: number, z: number) => number;
 export type Band = 0 | 1 | 2;
 export type Enemy = Position & {
@@ -41,6 +51,7 @@ export type Enemy = Position & {
   offset: number;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
+  course?: { target: Point; pass?: Point; speed: number; until: number };
 };
 export type Pickup = Position & { id: number; xp: number; born: number };
 export type Shot = Position & {
@@ -53,8 +64,9 @@ export type Shot = Position & {
   nearMiss: boolean;
   lockId: number | null;
 };
+export type RearBomb = Position & { born: number; vx: number; vz: number };
 export type Effect = Position & (
-  { kind: 'hit' | 'burst' | 'nova'; life: number } |
+  { kind: 'hit' | 'burst' | 'bomb-blast'; life: number } |
   { kind: 'miss'; life: number; delta: number; vx: number; vz: number }
 );
 export type WeakPoint = Position & {
@@ -108,7 +120,11 @@ export type StageState = {
   boost: number;
   boosting: boolean;
   bombs: number;
-  roll: number;
+  bombReadyAt: number;
+  bombReloadAt: number | null;
+  rearBombs: RearBomb[];
+  maneuver: Maneuver | null;
+  maneuverReadyAt: number;
   xp: number;
   level: 1 | 2 | 3;
   salvage: number;

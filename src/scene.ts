@@ -6,10 +6,10 @@ import {
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
-import { rollAngle } from './flight.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
+import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { wardenFaces, wardenPalette } from './models.ts';
-import { activeWeakPoint, clamp, SHOT_LIMIT } from './stage-combat.ts';
+import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, MAX_BOMBS, SHOT_LIMIT } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 import { TERRAIN_SIZE, World } from './world.ts';
 
@@ -81,7 +81,8 @@ export class FlightScene {
   private readonly engines = instances(new BoxGeometry(), 2);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 24,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-  private readonly nova = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), 2,
+  private readonly bombs = instances(new BoxGeometry(), MAX_BOMBS);
+  private readonly blast = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), MAX_BOMBS,
     new MeshBasicMaterial({ color: 0xffb957 }));
   private readonly dummy = new Object3D();
   private readonly color = new Color();
@@ -95,7 +96,8 @@ export class FlightScene {
     this.scene.background = sky;
     this.scene.fog = new Fog(sky, 245, 875);
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
-    this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks, this.engines, this.shadows, this.nova);
+    this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks, this.engines,
+      this.shadows, this.bombs, this.blast);
     this.top.up.set(0, 0, -1);
     this.screenCamera.position.z = 1;
     this.screen.add(new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial({
@@ -169,7 +171,7 @@ export class FlightScene {
     mesh.setColorAt(index, this.color.setHex(0x607887));
   }
 
-  private updateCamera(state: StageState): void {
+  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): void {
     const { width, height, phone, cockpit } = this.framing;
     const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
     const aspect = width / Math.max(1, height);
@@ -189,18 +191,34 @@ export class FlightScene {
       const chase = state.view === 'chase';
       const camera = chase ? this.chase : this.cockpit;
       const field = phone?.playfield;
-      const setback = chase ? 46 + Math.max(0, 1 - aspect) * 30 : -5;
-      const elevation = chase ? 15 : 2.7;
-      const lookAltitude = chase ? p.altitude + 1 : p.altitude + 2.7;
+      const m = state.maneuver;
+      const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
+      const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : -12;
+      const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
+      const setback = chase ? 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat : -5;
+      const elevation = chase ? 15 + motion * lift : 2.7;
+      const slide = chase && m?.kind === 'cobra' ? motion * 8 : 0;
+      const pitch = chase ? 0 : attitude?.cameraPitch ?? 0;
+      const lookAltitude = chase ? p.altitude + 1 : p.altitude + elevation + Math.tan(pitch) * (105 + setback);
       const center = chase
         ? field ? (field.y + field.height * 0.39) / height : 0.43
         : cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
-      const shift = clamp(center, 0.29, 0.64);
       const minimumHorizontalFov = (chase ? 16 : 20) * Math.PI / 180;
-      camera.fov = Math.max(60, 2 * Math.atan(Math.tan(minimumHorizontalFov) / aspect) * 180 / Math.PI);
+      camera.fov = Math.max(60 + Math.abs(pitch) * 66, 2 * Math.atan(Math.tan(minimumHorizontalFov) / aspect) * 180 / Math.PI);
+      let shift = clamp(center, 0.29, 0.64);
+      if (cockpit && pitch) {
+        // Keep sky and terrain in the canopy even while the ladder shows a vertical attitude.
+        const skyMargin = Math.min(0.19, cockpit.aiming.height / height * 0.42);
+        const horizonOffset = Math.tan(pitch) / (2 * Math.tan(camera.fov * Math.PI / 360));
+        const edge = pitch > 0 ? (cockpit.aiming.y + cockpit.aiming.height) / height - skyMargin
+          : cockpit.aiming.y / height + skyMargin;
+        shift = clamp(pitch > 0 ? Math.min(shift, edge - horizonOffset)
+          : Math.max(shift, edge - horizonOffset), 0.14, 0.82);
+      }
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
-      camera.position.set(p.x - fx * setback, p.altitude + elevation, -(p.z - fz * setback));
+      camera.position.set(p.x - fx * setback + fz * slide, p.altitude + elevation, -(p.z - fz * setback - fx * slide));
       camera.lookAt(p.x + fx * 105, lookAltitude, -(p.z + fz * 105));
+      if (!chase && attitude) camera.rotateZ(attitude.cameraBank);
       this.camera = camera;
     }
     this.camera.updateMatrixWorld();
@@ -216,14 +234,21 @@ export class FlightScene {
     };
   }
 
+  projectHorizon(yaw: number): Projection {
+    const eye = this.camera.position;
+    const point = this.vector.set(eye.x + Math.sin(yaw) * 100, eye.y, eye.z - Math.cos(yaw) * 100).project(this.camera);
+    return { x: (point.x + 1) * this.framing.width / 2, y: (1 - point.y) * this.framing.height / 2 };
+  }
+
   draw(state: StageState): void {
-    this.updateCamera(state);
+    const attitude = state.maneuver ? maneuverAttitude(state.maneuver) : null;
+    this.updateCamera(state, attitude);
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
     this.ship.visible = external && !(state.invulnerability > 0 && Math.floor(state.tick / 5) % 2);
     this.ship.position.set(p.x, flat ? 104 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
-    this.ship.rotation.set(flat ? 0 : state.climbRate * 0.004, -p.yaw, (flat ? 0 : -p.bank) + rollAngle(state.roll), 'YXZ');
+    this.ship.rotation.set(flat ? 0 : (attitude?.pitch ?? state.climbRate * 0.004), -p.yaw, flat ? 0 : (attitude?.roll ?? -p.bank), 'YXZ');
 
     let shadows = 0;
     const contactShadow = (x: number, z: number, sx: number, sz: number, yaw: number) => {
@@ -280,7 +305,15 @@ export class FlightScene {
     }
     upload(this.bullets, state.shots.length);
 
-    let sparks = 0, novas = 0;
+    let sparks = 0, blasts = 0;
+    for (const [i, bomb] of state.rearBombs.entries()) {
+      const yaw = Math.atan2(bomb.vx, bomb.vz), age = state.tick - bomb.born;
+      this.write(this.bombs, i, bomb.x, bomb.z, flat ? 105 : bomb.alt, yaw, 3.7, 3.7, 5.4, 0xff91a8, age * 0.07);
+      if (age > 0 && sparks < 240) {
+        this.write(this.sparks, sparks++, bomb.x, bomb.z, flat ? 105 : bomb.alt + 3.5, yaw, 1, 2, 1, 0xffb957);
+      }
+    }
+    upload(this.bombs, state.rearBombs.length);
     for (const effect of state.effects) {
       if (effect.kind === 'miss') {
         if (!flat && sparks < 240) {
@@ -289,9 +322,9 @@ export class FlightScene {
           this.write(this.sparks, sparks++, effect.x + effect.vx * travel, effect.z + effect.vz * travel, effect.alt,
             Math.atan2(effect.vx, effect.vz), scale + 0.35, scale + 0.2, 10 + scale * 6, effect.delta > 0 ? 0x8e93ad : 0xb48b79);
         }
-      } else if (effect.kind === 'nova' && novas < 2) {
-        const radius = 8 + (1 - effect.life / 0.8) * 96;
-        this.write(this.nova, novas++, effect.x, effect.z, flat ? 107 : effect.alt, 0, radius, 12, radius);
+      } else if (effect.kind === 'bomb-blast' && blasts < MAX_BOMBS) {
+        const radius = 5 + (1 - effect.life / 0.8) * (BOMB_BLAST_RADIUS - 5);
+        this.write(this.blast, blasts++, effect.x, effect.z, flat ? 107 : effect.alt, 0, radius, 1, radius);
       } else if (effect.kind === 'hit' || effect.kind === 'burst') {
         const burst = effect.kind === 'burst';
         const spread = (burst ? 0.52 : 0.36) - effect.life;
@@ -305,9 +338,10 @@ export class FlightScene {
       }
     }
     upload(this.sparks, sparks);
-    upload(this.nova, novas);
+    upload(this.blast, blasts);
 
-    if (this.ship.visible) {
+    const enginesVisible = this.ship.visible && (flat || !attitude);
+    if (enginesVisible) {
       const sx = Math.cos(p.yaw), sz = -Math.sin(p.yaw);
       const length = (state.boosting ? 8 : 3.1) + (Math.sin(state.tick * 0.95) + 1) * 0.8;
       for (const [i, side] of [-3.4, 3.4].entries()) {
@@ -317,7 +351,7 @@ export class FlightScene {
           1.25, 1.25, length, state.boosting ? 0xffbd6c : 0xe88952);
       }
     }
-    upload(this.engines, this.ship.visible ? 2 : 0);
+    upload(this.engines, enginesVisible ? 2 : 0);
 
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);

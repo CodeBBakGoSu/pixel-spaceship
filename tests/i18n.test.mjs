@@ -22,6 +22,15 @@ test('translations format draft and weak-point countdowns in both languages', ()
   assert.equal(ko('objective.bandSignal', { part: ko('boss.low'), seconds: 3 }), '3초 후 저고도 포드 노출');
 });
 
+test('maneuver guidance gives distinct keyboard selectors and a mobile brake gesture', () => {
+  for (const t of [createTranslator('en'), createTranslator('ko')]) {
+    assert.match(t('guide.keysLoop'), /Space.*C/);
+    assert.match(t('guide.touchLoop'), /LOOP|반전/);
+    assert.ok(t('hud.rear')?.trim());
+    assert.ok(t('hud.loopReady')?.trim());
+  }
+});
+
 test('language defaults to Korean for Korean browser locales', () => {
   for (const locale of ['ko', 'ko-KR', 'KO-kr']) assert.equal(detectLanguage(locale), 'ko');
   for (const locale of ['', 'en-US', 'ja-JP']) assert.equal(detectLanguage(locale), 'en');

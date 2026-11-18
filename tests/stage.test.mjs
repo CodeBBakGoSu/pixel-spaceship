@@ -21,7 +21,7 @@ function atPlayer(state, alt, friendly = false) {
   };
 }
 
-test('the title launches a one-life sortie in cruise with both weapons and two bombs', () => {
+test('the title launches a one-life sortie in cruise with both weapons and three bombs', () => {
   const state = stage('?seed=22');
   assert.equal(state.phase, 'title');
   run(state, 1, { start: true });
@@ -30,7 +30,7 @@ test('the title launches a one-life sortie in cruise with both weapons and two b
   assert.equal(state.player.altitude, 110);
   assert.equal(state.hull, 8);
   assert.equal(state.boost, 1);
-  assert.equal(state.bombs, 2);
+  assert.equal(state.bombs, 3);
   assert.equal(state.twinRank, 1);
   assert.equal(state.podRank, 1);
 });
@@ -54,9 +54,13 @@ test('hit and miss feedback use the bolt launch height and emit one miss for a p
   assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 0);
   assert.equal(state.altitudeHint.delta, 35);
   run(state, 1, { fire: true });
+  assert.equal(state.shots.length, 0, 'legacy manual fire cannot bypass acquisition');
+  state.enemies[0].alt = 110;
+  run(state, 1);
   const bolts = state.shots.filter(shot => shot.kind === 'twin');
   assert.equal(bolts.length, 2);
   assert.ok(bolts.every(shot => shot.alt === 110));
+  state.enemies[0].alt = 145;
   run(state, 25, { climb: 1 });
   assert.equal(state.enemies[0].hp, 2);
   assert.equal(state.effects.filter(effect => effect.kind === 'miss').length, 1);
@@ -114,7 +118,7 @@ test('the three draft cards pause active time, apply once and keep three legal c
     const { x, z } = state.player;
     run(state, 120, { boost: true, bomb: true, toggleView: true, climb: 1 });
     assert.equal(state.tick, 45 * 60);
-    assert.deepEqual([state.player.x, state.player.z, state.bombs, state.boost], [x, z, 2, 1]);
+    assert.deepEqual([state.player.x, state.player.z, state.bombs, state.boost], [x, z, 3, 1]);
     run(state, 1, { pick: 'twin-3' });
     assert.equal(state.phase, 'draft');
     run(state, 1, { pick: state.draft[pick], boost: true, bomb: true, toggleView: true });
@@ -126,7 +130,7 @@ test('the three draft cards pause active time, apply once and keep three legal c
     assert.equal(state.twinDamage, pick === 2 ? 2 : 1);
     run(state, 18, { boost: true, bomb: true, toggleView: true });
     assert.equal(state.boost, 1);
-    assert.equal(state.bombs, 2);
+    assert.equal(state.bombs, 3);
     assert.equal(state.view, 'overhead');
     run(state, 1, { boost: true });
     assert.equal(state.boost, 1);
@@ -151,9 +155,9 @@ test('the boss fixture opens on a high weak point and rejects cruise bolts', () 
   const point = activeWeakPoint(state);
   assert.ok(point.exposed);
   assert.ok(point.alt >= 139);
-  run(state, 32, { fire: true });
+  run(state, 32);
   assert.equal(state.boss.weakPoints[0].hits, 0);
-  assert.ok(state.effects.some(effect => effect.kind === 'miss' && effect.delta > 0));
+  assert.ok(state.altitudeHint.delta > 0);
 
   state.player.altitude = point.alt;
   run(state, 12);
@@ -164,7 +168,7 @@ test('the boss fixture opens on a high weak point and rejects cruise bolts', () 
   run(state, 65);
   assert.ok(state.boss.weakPoints[0].hits > 0);
   assert.equal(state.boss.weakPoints[1].hits, 0);
-  for (let i = 0; i < 480 && state.boss.index === 0; i++) stepStage(state, autopilotInput(state), ground);
+  for (let i = 0; i < 600 && state.boss.index === 0; i++) stepStage(state, autopilotInput(state), ground);
   const next = activeWeakPoint(state);
   assert.ok(next.alt < 81);
   assert.equal(next.exposed, false);
@@ -221,19 +225,6 @@ test('last-tick damage, weak-point hits and an earned draft resolve before the r
   const dead = finalTick(2);
   assert.equal(dead.phase, 'lost');
   assert.equal(dead.boss.weakPoints[0].hits, 1);
-});
-
-test('Nova clears nearby shots in all bands and only damages craft in-band', () => {
-  const state = stage('?fixture=stack');
-  for (const alt of [75, 110, 145]) state.shots.push(atPlayer(state, alt));
-  state.shots.push({ ...atPlayer(state, 110), x: state.player.x + 180 });
-  run(state, 1, { bomb: true, toggleView: true });
-  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 1);
-  assert.deepEqual(state.enemies.map(enemy => enemy.alt), [75, 145]);
-  assert.equal(state.bombs, 1);
-  assert.ok(state.roll > 0);
-  assert.ok(state.wipe > 0);
-  assert.equal(state.invulnerability, 0);
 });
 
 test('an explicit view sets the camera after a deterministic absolute seek', () => {
@@ -365,8 +356,8 @@ function radarOnlyPilot() {
   };
 }
 
-test('the six-seed replay gate clears with all views and produces no good TOP-only clears', () => {
-  let clearWithAllViews = 0, goodTopOnly = 0;
+test('the six-seed replay gate clears with all views and produces no TOP-only clears', () => {
+  let clearWithAllViews = 0, topOnlyClears = 0;
   for (const seed of [1, 11, 27, 42, 128, 2026]) {
     for (const mode of ['full', 'top']) {
       const state = stage('?autoplay=1&seed=' + seed);
@@ -379,11 +370,11 @@ test('the six-seed replay gate clears with all views and produces no good TOP-on
       assert.ok(['clear', 'timeout', 'lost'].includes(state.phase));
       const good = state.phase === 'clear' && state.level === 3 && state.salvageBands.filter(Boolean).length >= 2;
       if (mode === 'full' && good && views.size === 3) clearWithAllViews++;
-      if (mode === 'top' && good) goodTopOnly++;
+      if (mode === 'top' && state.phase === 'clear') topOnlyClears++;
     }
   }
   assert.ok(clearWithAllViews >= 4);
-  assert.equal(goodTopOnly, 0);
+  assert.equal(topOnlyClears, 0);
 });
 
 test('a late seek reaches its absolute active tick and returns a live sortie for manual controls', () => {
