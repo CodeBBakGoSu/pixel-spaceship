@@ -245,7 +245,7 @@ test('seeded waves respect phase caps and warn before interceptor altitude chang
   const warnings = new Map();
   for (let i = 0; i < 180 * 60 + 30 && ['playing', 'draft'].includes(state.phase); i++) {
     stepStage(state, autopilotInput(state), ground);
-    assert.ok(state.enemies.length <= (state.tick < 2400 ? 6 : state.tick < 6300 ? 16 : 10));
+    assert.ok(state.enemies.length <= (state.tick < 2400 ? 8 : state.tick < 4200 ? 16 : state.tick < 6300 ? 24 : 14));
     for (const enemy of state.enemies.filter(enemy => enemy.kind === 'interceptor')) {
       if (enemy.maneuver?.phase === 'warning') {
         if (!warnings.has(enemy.id)) warnings.set(enemy.id, [state.tick, enemy.alt]);
@@ -362,7 +362,7 @@ test('the six-seed replay gate clears with all views and produces no TOP-only cl
     for (const mode of ['full', 'top']) {
       const state = stage('?autoplay=1&seed=' + seed);
       const views = new Set([state.view]);
-      const pilot = mode === 'full' ? autopilotInput : radarOnlyPilot();
+      const pilot = mode === 'full' ? state => autopilotInput(state, 'full', ground) : radarOnlyPilot();
       for (let i = 0; i < 10810 && ['playing', 'draft'].includes(state.phase); i++) {
         stepStage(state, pilot(state), ground);
         views.add(state.view);

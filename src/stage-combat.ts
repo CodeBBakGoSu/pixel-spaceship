@@ -10,6 +10,10 @@ export const VERTICAL_SPEED = 40;
 export const WIPE_DURATION = 0.15;
 export const BOLT_SPEED = 230;
 export const SHOT_LIMIT = 192;
+export const MINE_LIMIT = 16;
+export const MINE_RADIUS = 12;
+export const FLAK_RADIUS = 22;
+export const FLAK_LIFE = 0.65;
 export const MAX_BOMBS = 3;
 export const BOMB_RELOAD_TICKS = 450;
 export const BOMB_BLAST_RADIUS = 34;
@@ -180,12 +184,30 @@ function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
 function blast(state: StageState, bomb: RearBomb): void {
   state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8 });
   state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, BOMB_CLEAR_RADIUS));
+  state.enemyMines = state.enemyMines.filter(mine => !nearBomb(bomb, mine, BOMB_CLEAR_RADIUS));
   for (const enemy of state.enemies) {
     if (enemy.hp && nearBomb(bomb, enemy, BOMB_BLAST_RADIUS) && inBand(enemy.alt, bomb.alt)) hurtEnemy(state, enemy, 4);
   }
   const point = activeWeakPoint(state);
   if (state.boss && point?.exposed && nearBomb(bomb, point, BOMB_BLAST_RADIUS) && inBand(point.alt, bomb.alt, point.window)) {
     hurtWeakPoint(state, state.boss, 4);
+  }
+}
+
+export function advanceEnemyHazards(state: StageState, ground: Ground): void {
+  const p = state.player;
+  let alive = 0;
+  for (const mine of state.enemyMines) {
+    mine.alt = Math.max(BANDS[0], mine.alt - 14 * STEP);
+    if (state.tick - mine.born >= 6 * TICKS_PER_SECOND || mine.alt <= ground(mine.x, mine.z)) continue;
+    if (inBand(mine.alt, p.altitude) && Math.hypot(mine.x - p.x, mine.z - p.z) <= MINE_RADIUS) {
+      hurtPlayer(state);
+      state.effects.push({ kind: 'burst', x: mine.x, z: mine.z, alt: mine.alt, life: 0.52 });
+    } else state.enemyMines[alive++] = mine;
+  }
+  state.enemyMines.length = alive;
+  for (const puff of state.effects) {
+    if (puff.kind === 'flak' && inBand(puff.alt, p.altitude) && Math.hypot(puff.x - p.x, puff.z - p.z) <= FLAK_RADIUS) hurtPlayer(state);
   }
 }
 
@@ -225,23 +247,37 @@ function impactTime(shot: Shot, dx: number, dz: number, target: Position, radius
   return time <= 1 ? time : Infinity;
 }
 
-export function advanceShots(state: StageState): void {
+function groundImpact(shot: Shot, dx: number, dz: number, ground: Ground): number {
+  if (ground(shot.x, shot.z) >= shot.alt) return 0;
+  let first = ground(shot.x + dx / 2, shot.z + dz / 2) >= shot.alt ? 0.5 : 1;
+  if (first === 1 && ground(shot.x + dx, shot.z + dz) < shot.alt) return Infinity;
+  let last = first - 0.5;
+  for (let i = 0; i < 5; i++) {
+    const middle = (last + first) / 2;
+    if (ground(shot.x + dx * middle, shot.z + dz * middle) >= shot.alt) first = middle;
+    else last = middle;
+  }
+  return first;
+}
+
+export function advanceShots(state: StageState, ground: Ground): void {
   const p = state.player;
   const player = { x: p.x, z: p.z, alt: p.altitude };
   const resolved = new Set<number>();
   const misses = new Map<number, Effect>();
   for (const shot of state.shots) {
     const dx = shot.vx * STEP, dz = shot.vz * STEP;
+    const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
-      if (inBand(shot.alt, player.alt) && impactTime(shot, dx, dz, player, 5.5) !== Infinity) {
+      if (inBand(shot.alt, player.alt) && impactTime(shot, dx, dz, player, 5.5) < terrain) {
         hurtPlayer(state);
         shot.life = 0;
       }
     } else {
       let enemyHit: Enemy | null = null;
       let bossHit = false;
-      let first = Infinity;
-      let miss = Infinity, delta = 0;
+      let first = terrain;
+      let miss = terrain, delta = 0;
       for (const enemy of state.enemies) {
         if (!enemy.hp) continue;
         const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
@@ -275,7 +311,7 @@ export function advanceShots(state: StageState): void {
         hurtEnemy(state, enemyHit, shot.damage);
         shot.life = 0;
         resolved.add(shot.volley);
-      } else if (miss < Infinity && !shot.nearMiss && !misses.has(shot.volley)) {
+      } else if (miss < terrain && !shot.nearMiss && !misses.has(shot.volley)) {
         misses.set(shot.volley, {
           kind: 'miss', x: shot.x + dx * miss, z: shot.z + dz * miss, alt: shot.alt,
           vx: shot.vx, vz: shot.vz, delta, life: 0.55,
@@ -284,7 +320,7 @@ export function advanceShots(state: StageState): void {
     }
     shot.x += dx;
     shot.z += dz;
-    shot.life -= STEP;
+    shot.life = terrain < Infinity ? 0 : shot.life - STEP;
   }
   // A hit wins when both bolts in a volley cross overlapping contacts on this tick.
   for (const [volley, effect] of misses) {

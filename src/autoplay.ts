@@ -1,5 +1,5 @@
 import { canManeuver, exitAltitude } from './maneuvers.ts';
-import { activeWeakPoint, angleTo, BANDS, clamp, HIT_WINDOW, inBand, MAX_ALTITUDE, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
+import { activeWeakPoint, angleTo, BANDS, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
 import type { Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
@@ -33,19 +33,20 @@ function routeFor(state: StageState, mode: PilotMode): Route {
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
 
-function dodgeClimb(state: StageState, mode: PilotMode, climb: number): number | undefined {
+function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: Ground): number | undefined {
   const p = state.player;
   const ownX = Math.sin(p.yaw) * state.speed, ownZ = Math.cos(p.yaw) * state.speed;
-  const avoid = (threat: Position & { vx: number; vz: number }, radius: number): number | undefined => {
+  const avoid = (threat: Position & { vx?: number; vz?: number }, radius: number): number | undefined => {
     const x = threat.x - p.x, z = threat.z - p.z;
-    const vx = threat.vx - ownX, vz = threat.vz - ownZ;
+    const vx = (threat.vx ?? 0) - ownX, vz = (threat.vz ?? 0) - ownZ;
     const vv = vx * vx + vz * vz;
     const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, 0.6) : 0;
     if (Math.hypot(x + vx * closest, z + vz * closest) >= radius) return;
     if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
-    const approach = p.altitude + climb * VERTICAL_SPEED * Math.max(closest, 0.2);
+    const floor = ground ? ground(p.x + ownX * closest, p.z + ownZ * closest) + 22 : 55;
+    const approach = Math.max(floor, p.altitude + climb * VERTICAL_SPEED * Math.max(closest, 0.2));
     if (Math.min(p.altitude, approach) > threat.alt + 13 || Math.max(p.altitude, approach) < threat.alt - 13) return;
-    const up = threat.alt < 86 || (threat.alt <= 150 && p.altitude >= threat.alt);
+    const up = floor > threat.alt - 12 || threat.alt < 86 || (threat.alt <= 150 && p.altitude >= threat.alt);
     const safe = threat.alt + (up ? 12 : -12);
     return up ? clamp((safe - p.altitude) / 2, 0, 1) : clamp((safe - p.altitude) / 2, -1, 0);
   };
@@ -56,7 +57,20 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number): number |
     }
   }
   if (mode === 'full') {
+    for (const mine of state.enemyMines) {
+      const dodge = avoid(mine, MINE_RADIUS + 5);
+      if (dodge !== undefined) return dodge;
+    }
+    for (const effect of state.effects) {
+      if (effect.kind !== 'flak') continue;
+      const dodge = avoid(effect, FLAK_RADIUS + 4);
+      if (dodge !== undefined) return dodge;
+    }
     for (const enemy of state.enemies) {
+      if (enemy.tell?.kind === 'flak' && enemy.tell.until - state.tick <= 45) {
+        const dodge = avoid(enemy.tell, FLAK_RADIUS + 5);
+        if (dodge !== undefined) return dodge;
+      }
       const dodge = avoid(enemy, 15);
       if (dodge !== undefined) return dodge;
     }
@@ -89,7 +103,7 @@ function hasRearBombTarget(state: StageState): boolean {
   });
 }
 
-export function autopilotInput(state: StageState, mode: PilotMode = 'full'): StageInput {
+export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
   if (state.phase === 'draft') return { pick: state.draft[0] };
   if (state.phase !== 'playing' || state.paused) return {};
   if (state.maneuver) return {};
@@ -108,7 +122,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full'): Sta
     if (Math.abs(delta) > 12) view = 'chase';
     else if (target.kind === 'weak' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
   }
-  const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb) : undefined;
+  const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb, ground) : undefined;
   const maneuver = mode === 'full' && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
@@ -138,7 +152,7 @@ export function seekStage(options: StageOptions, ground: Ground): StageState {
   const replay = (flight: StageState, conservative: boolean): StageState => {
     while (flight.tick < target && (flight.phase === 'playing' || flight.phase === 'draft')) {
       const holding = conservative || flight.boss?.weakPoints[flight.boss.index]?.kind === 'core';
-      stepStage(flight, flight.phase === 'playing' && holding ? holdAboveTraffic(flight) : autopilotInput(flight), ground);
+      stepStage(flight, flight.phase === 'playing' && holding ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
     }
     return flight;
   };

@@ -59,3 +59,86 @@ test('Cobra sends a close Hound past the nose without changing its CRUISE band',
   assert.ok(hound.z > state.player.z);
   assert.equal(hound.alt, 110);
 });
+
+test('Flankers hold to the side at their assigned weapon height', () => {
+  const state = fixture('flanker');
+  const flanker = state.enemies[0];
+  assert.equal(flanker?.kind, 'flanker');
+  advance(state, 180);
+  const angle = Math.abs(Math.atan2(flanker.x - state.player.x, flanker.z - state.player.z));
+  assert.ok(angle >= 70 * Math.PI / 180 && angle <= 100 * Math.PI / 180);
+  assert.ok([75, 145].includes(flanker.alt));
+});
+
+test('a rear Harrier telegraphs one adjacent hop in answer to an Immelmann', () => {
+  const state = fixture('harrier');
+  const harrier = state.enemies[0];
+  assert.equal(harrier?.kind, 'harrier');
+  harrier.x = state.player.x;
+  harrier.z = state.player.z - 78;
+  advance(state, 1, { maneuver: 'immelmann' });
+  assert.equal(harrier.maneuver?.band, 2);
+  assert.equal(harrier.maneuver?.diveAt - state.tick, 75);
+  advance(state, 75);
+  assert.equal(harrier.maneuver?.phase, 'diving');
+  advance(state, 75);
+  assert.equal(harrier.alt, 145);
+  assert.equal(harrier.maneuver, null);
+});
+
+test('a Diver flashes for 1.2 s and fires one three-way fan during its plunge', () => {
+  const state = fixture('diver');
+  const diver = state.enemies[0];
+  assert.equal(diver?.kind, 'diver');
+  diver.maneuverAt = state.tick + 1;
+  advance(state, 1);
+  assert.equal(diver.maneuver?.diveAt - state.tick, 72);
+  advance(state, 72);
+  assert.ok(diver.alt < 145);
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
+  for (let i = 0; i < 65 && !state.shots.some(shot => shot.kind === 'hostile'); i++) advance(state, 1);
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 3);
+});
+
+test('a Bomber has two patrol escorts and its mines fall from CRUISE to LOW', () => {
+  const state = fixture('bomber');
+  const bomber = state.enemies[0];
+  assert.equal(bomber?.kind, 'bomber');
+  assert.equal(bomber.hp, 10);
+  assert.equal(state.enemies.filter(enemy => enemy.formation?.leader === bomber.id).length, 2);
+  bomber.shotAt = state.tick + 1;
+  advance(state, 1);
+  assert.equal(state.enemyMines.length, 1);
+  const mine = state.enemyMines[0];
+  assert.ok(mine.alt > 109 && mine.alt <= 110);
+  advance(state, 160, { turn: 1 });
+  assert.equal(mine.alt, 75);
+});
+
+test('a landmark turret fixes a single-band flak position after a 1.4 s warning', () => {
+  const state = fixture('turret');
+  const turret = state.enemies[0];
+  assert.equal(turret?.kind, 'turret');
+  assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
+  turret.shotAt = state.tick + 1;
+  advance(state, 1);
+  assert.equal(turret.tell?.until - state.tick, 84);
+  const warning = { ...turret.tell };
+  advance(state, 84);
+  const puff = state.effects.find(effect => effect.kind === 'flak');
+  assert.deepEqual([puff.x, puff.z, puff.alt], [warning.x, warning.z, warning.alt]);
+});
+
+test('an airborne straggler relocates ahead after six seconds without dropping salvage', () => {
+  const state = fixture('hound');
+  const hound = state.enemies[0];
+  hound.z = -553;
+  hound.hp = 2;
+  hound.shotAt = state.tick + 1800;
+  advance(state, 359);
+  assert.ok(hound.z < state.player.z - 380);
+  advance(state, 1);
+  assert.ok(hound.z > state.player.z + 100);
+  assert.equal(hound.hp, 2);
+  assert.equal(state.pickups.length, 0);
+});

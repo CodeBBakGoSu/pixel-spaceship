@@ -4,6 +4,11 @@ export const ENEMY_KINDS = {
   skimmer: { hp: 2, xp: 1, cap: 4, firstShot: 150 },
   spotter: { hp: 4, xp: 2, cap: 2, firstShot: 100 },
   hound: { hp: 3, xp: 1, cap: 3, firstShot: 180 },
+  flanker: { hp: 3, xp: 1, cap: 2, firstShot: 175 },
+  harrier: { hp: 4, xp: 2, cap: 1, firstShot: 180 },
+  diver: { hp: 4, xp: 2, cap: 2, firstShot: 120 },
+  bomber: { hp: 10, xp: 3, cap: 6, firstShot: 145 },
+  turret: { hp: 4, xp: 1, cap: 12, firstShot: 162 },
 } as const;
 
 export type EnemyKind = keyof typeof ENEMY_KINDS;

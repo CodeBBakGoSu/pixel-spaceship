@@ -53,7 +53,10 @@ export type Enemy = Position & {
   offset: number;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
-  tell?: { kind: 'snipe'; until: number };
+  tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
+  formation?: { leader: number; side: number };
+  fanFired?: boolean;
+  farTicks?: number;
   course?: { target: Point; pass?: Point; speed: number; until: number };
 };
 export type Pickup = Position & { id: number; xp: number; born: number };
@@ -68,8 +71,10 @@ export type Shot = Position & {
   lockId: number | null;
 };
 export type RearBomb = Position & { born: number; vx: number; vz: number };
+export type EnemyMine = Position & { born: number };
 export type Effect = Position & (
   { kind: 'hit' | 'burst' | 'bomb-blast'; life: number } |
+  { kind: 'flak'; life: number } |
   { kind: 'miss'; life: number; delta: number; vx: number; vz: number }
 );
 export type WeakPoint = Position & {
@@ -126,6 +131,7 @@ export type StageState = {
   bombReadyAt: number;
   bombReloadAt: number | null;
   rearBombs: RearBomb[];
+  enemyMines: EnemyMine[];
   maneuver: Maneuver | null;
   maneuverReadyAt: number;
   xp: number;

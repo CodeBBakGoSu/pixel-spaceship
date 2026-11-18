@@ -32,6 +32,32 @@ const enemyAirframes: Record<NewEnemyKind, Airframe> = {
     rows: ['.....C.....', '.....C.....', '....bCb....', '....bCb....', '...bbCbb...', '..bbbbbbb..',
       '.bbbbbbbbb.', 'bbb.bbb.bbb', 'Ab..bbb..bA', '....bAb....'],
   },
+  flanker: {
+    size: 1.38, palette: [[0, 0, 0], [22, 48, 53], [46, 161, 155], [141, 237, 222], [210, 244, 201]],
+    rows: ['bbb.......bbb', 'bAb.......bAb', 'bbb...C...bbb', 'bbb..bCb..bbb', 'bbbbbbCbbbbbb',
+      'bbbbbCCCbbbbb', 'bbb..bbb..bbb', 'bbb.......bbb', 'bAb.......bAb'],
+  },
+  harrier: {
+    size: 1.36, palette: [[0, 0, 0], [48, 43, 59], [211, 218, 214], [136, 134, 222], [255, 238, 169]],
+    rows: ['Ab...AbA...bA', 'bbb..bCb..bbb', '.bbb.bCb.bbb.', '.bbb.bCb.bbb.', '..bbbbbbbbb..',
+      '..bbbbbbbbb..', '...bbAbAbb...', '....bbbbb....', '.....bbb.....'],
+  },
+  diver: {
+    size: 1.34, palette: [[0, 0, 0], [33, 43, 55], [105, 128, 155], [249, 181, 78], [255, 224, 132]],
+    rows: ['......C......', '.....bCb.....', '....bbCbb....', '..bbbbCbbbb..', 'bbbbbbCbbbbbb',
+      'AbbbbbbbbbbA', '..bbbbbbbbb..', '....bbAbb....', '.....bbb.....'],
+  },
+  bomber: {
+    size: 1.62, palette: [[0, 0, 0], [41, 43, 37], [119, 145, 106], [235, 133, 184], [255, 195, 221]],
+    rows: ['.......CCCCC.......', '....bbbCCCCCbbb....', '..bbbbbCCCCCbbbbb..', 'bbbbbbbCCCCCbbbbbbb',
+      'bbbAbbbbbbbbbbbAbbb', 'bbbbbbbbbbbbbbbbbbb', 'bbbbb.bbbbbbb.bbbbb', 'bAbbb.bbbbbbb.bbbAb',
+      '..bbb..bbbbb..bbb..'],
+  },
+  turret: {
+    size: 1.5, palette: [[0, 0, 0], [43, 47, 49], [154, 152, 139], [249, 101, 83], [255, 184, 132]],
+    rows: ['...C...C...', '...C...C...', '..bCbbbCb..', '.bbCbAbCbb.', 'bbbbbbbbbbb',
+      'bbbbAbAbbbb', 'bbbbbbbbbbb', '.bbbbbbbbb.'],
+  },
 };
 
 export function enemyAirframe(kind: NewEnemyKind) {

@@ -618,7 +618,7 @@ function advance(): void {
   const before = state.tick, yaw = state.player.yaw;
   const wasManeuvering = !!state.maneuver;
   const previousPhase = state.phase, previouslyPaused = state.paused, previousLevel = state.level;
-  const control = options.autoplay ? autopilotInput(state) : flightInput();
+  const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
     ...control,
     start: pendingStart,

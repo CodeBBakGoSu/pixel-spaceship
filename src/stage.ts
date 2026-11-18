@@ -1,11 +1,12 @@
 import { advanceBank } from './flight.ts';
 import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS } from './maneuvers.ts';
-import { ENEMY_KINDS, isNewEnemyKind, type EnemyKind } from './enemy-kinds.ts';
-import { advanceEnemies, makeEnemy } from './stage-enemies.ts';
+import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
+import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage-enemies.ts';
+import { relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { random } from './stage-random.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
-  acquireAndFire, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
+  acquireAndFire, advanceEnemyHazards, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
   hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -33,55 +34,6 @@ export function parseStageOptions(search: string): StageOptions {
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
   };
-}
-
-type Spawn = { band: Band; bearing: number; distance: number; kind?: EnemyKind };
-type Wave = { time: number; members: Spawn[] };
-const escort: Spawn[] = [
-  { band: 0, bearing: -0.7, distance: 110 },
-  { band: 1, bearing: 1.1, distance: 116 },
-  { band: 2, bearing: -1.8, distance: 102, kind: 'interceptor' },
-];
-const WAVES: Wave[] = [
-  { time: 2, members: [{ band: 1, bearing: 0, distance: 82 }, { band: 1, bearing: -0.36, distance: 100 }] },
-  { time: 13, members: [{ band: 1, bearing: 0.18, distance: 74 }] },
-  { time: 22, members: [{ band: 0, bearing: 0.08, distance: 91 }, { band: 2, bearing: 0.11, distance: 94 }] },
-  { time: 38, members: [{ band: 1, bearing: -0.43, distance: 90 }, { band: 0, bearing: 0.31, distance: 103 }] },
-  { time: 40, members: [{ band: 2, bearing: 0.38, distance: 98, kind: 'interceptor' }, { band: 0, bearing: -0.8, distance: 101 }, { band: 1, bearing: 0, distance: 94 }] },
-  ...[48, 56, 64, 71, 78, 85, 92, 99, 111, 122, 133, 144, 155, 166, 175].map((time, index) => ({
-    time,
-    members: escort.map(member => ({ ...member, bearing: member.bearing * (index % 2 === 0 ? -1 : 1) })),
-  })),
-];
-
-function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
-  const { arena: a, player: p, enemies } = state;
-  const cap = state.tick < 40 * TICKS_PER_SECOND ? 6 : state.boss ? 10 : 16;
-  const rotation = (random(state) - 0.5) * 0.29;
-  for (const member of wave.members) {
-    if (enemies.length >= cap) break;
-    const bearing = p.yaw + member.bearing + rotation;
-    let x = p.x + Math.sin(bearing) * member.distance;
-    let z = p.z + Math.cos(bearing) * member.distance;
-    const limit = a.radius - 17;
-    const distance = Math.hypot(x - a.x, z - a.z);
-    if (distance > limit) {
-      x = a.x + (x - a.x) * limit / distance;
-      z = a.z + (z - a.z) * limit / distance;
-    }
-    const offset = (random(state) - 0.5) * 12;
-    const e = makeEnemy(state, x, z, member.band, member.kind, offset);
-    if (e.band === 0 && ground(x, z) >= 39) {
-      // Pull low entries back to the coast when the bearing lands on the island.
-      const coastX = a.x - 50, coastZ = a.z - 24;
-      for (let i = 0; i < 4 && ground(e.x, e.z) >= 39; i++) {
-        e.x += (coastX - e.x) * 0.22;
-        e.z += (coastZ - e.z) * 0.22;
-      }
-    }
-    e.shotAt += Math.floor(random(state) * 125);
-    enemies.push(e);
-  }
 }
 
 function makeBoss(state: StageState, x: number, z: number): Boss {
@@ -178,7 +130,11 @@ function selectDraft(state: StageState, id: DraftId): void {
   }
 }
 
-function applyFixture(state: StageState, fixture: StageOptions['fixture']): void {
+const fixtureBands: Record<NewEnemyKind, Band> = {
+  skimmer: 0, spotter: 2, hound: 1, flanker: 2, harrier: 1, diver: 2, bomber: 1, turret: 1,
+};
+
+function applyFixture(state: StageState, fixture: StageOptions['fixture'], ground: Ground): void {
   if (!fixture) return;
   const landmark = isLandmarkId(fixture) ? LANDMARKS[fixture] : null;
   const seconds = landmark ? BEACON_SIGNAL_SECONDS : fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
@@ -187,10 +143,16 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture']): void
   if (landmark) {
     Object.assign(state.player, { x: landmark.x, z: landmark.z - 70, altitude: landmark.alt });
   } else if (isNewEnemyKind(fixture)) {
-    const p = state.player, band = fixture === 'skimmer' ? 0 : fixture === 'spotter' ? 2 : 1;
+    state.nextWave = WAVES.length;
+    const p = state.player;
     if (fixture === 'skimmer') Object.assign(p, { x: LANDMARKS.strait.x, z: LANDMARKS.strait.z - 48 });
-    const enemy = makeEnemy(state, p.x + (fixture === 'hound' ? 0 : 12), p.z + (fixture === 'spotter' ? 90 : 62), band, fixture);
+    if (fixture === 'turret') Object.assign(p, { x: LANDMARKS.ridge.x, z: LANDMARKS.ridge.z - 65 });
+    const x = p.x + (fixture === 'hound' || fixture === 'turret' ? 0 : 12);
+    const z = p.z + (fixture === 'spotter' ? 90 : fixture === 'turret' ? 65 : 62);
+    const enemy = makeEnemy(state, x, z, fixtureBands[fixture], fixture);
+    if (fixture === 'turret') enemy.alt = ground(x, z) + 5;
     state.enemies.push(enemy);
+    if (fixture === 'bomber') addBomberEscort(state, enemy, ground);
   } else if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
       state.enemies.push(makeEnemy(state, state.player.x, state.player.z + 60, band));
@@ -227,13 +189,13 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
     speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
-    boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [],
+    boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
     maneuver: null, maneuverReadyAt: 0, xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
   };
-  applyFixture(state, options.fixture);
+  applyFixture(state, options.fixture, ground);
   return state;
 }
 
@@ -259,9 +221,10 @@ function startManeuver(state: StageState, kind: ManeuverKind): void {
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const until = state.tick + spec.ticks + 30;
   for (const enemy of state.enemies) {
-    if (enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
+    warnHarrier(state, enemy, maneuver, aft, lateral);
+    if (enemy.kind === 'turret' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
     if (kind === 'cobra' && aft >= 10 && aft <= 24) {
       const lane = lateral < 0 ? -9 : 9;
@@ -331,13 +294,14 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   state.climbRate = (p.altitude - prior) / STEP;
 }
 
-function advanceSalvage(state: StageState): void {
+function advanceSalvage(state: StageState, ground: Ground): void {
   const p = state.player;
   for (const enemy of state.enemies) {
     if (!enemy.shotDown) continue;
     const xp = ENEMY_KINDS[enemy.kind].xp;
     state.score += xp * 100;
-    state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z, alt: enemy.alt,
+    state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
+      alt: enemy.kind === 'turret' ? Math.max(BANDS[0], ground(enemy.x, enemy.z) + 22) : enemy.alt,
       xp, born: state.tick });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
   }
@@ -401,7 +365,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
 
   if (state.tick === BOSS_TICK && !state.boss) {
     state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
-    state.enemies.length = Math.min(state.enemies.length, 10);
+    trimEscorts(state);
   }
   const wave = WAVES[state.nextWave];
   if (wave && state.tick === wave.time * TICKS_PER_SECOND) {
@@ -409,6 +373,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.nextWave++;
   }
 
+  relocateStragglers(state, ground);
   advanceEnemies(state, ground);
   updateBoss(state);
   advanceRearBombs(state, ground);
@@ -419,7 +384,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.maneuver = null;
     state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
   }
-  advanceShots(state);
+  advanceShots(state, ground);
+  advanceEnemyHazards(state, ground);
 
   const p = state.player;
   for (const enemy of state.enemies) {
@@ -428,7 +394,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       enemy.hp = 0;
     }
   }
-  advanceSalvage(state);
+  advanceSalvage(state, ground);
   const defeated = advanceWeakPoint(state);
   const outcome = defeated ? 'clear' : state.tick >= END_TICK ? 'timeout' : null;
   const cost = requiredXp(state.level);

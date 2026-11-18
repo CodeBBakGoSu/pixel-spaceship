@@ -12,7 +12,7 @@ import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
 import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
-import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, MAX_BOMBS, SHOT_LIMIT } from './stage-combat.ts';
+import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MAX_BOMBS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
@@ -57,6 +57,9 @@ function upload(mesh: InstancedMesh, count: number): void {
 }
 
 type Projection = { x: number; y: number };
+const TOP_FLIGHT = 152;
+const PICKUP_LIMIT = 80;
+const FLAK_RING_LIMIT = 24;
 type Framing = {
   width: number;
   height: number;
@@ -87,12 +90,14 @@ export class FlightScene {
   private readonly airframeByKind = new Map<EnemyKind, (typeof this.airframes)[number]>(this.airframes.map(batch => [batch.kind, batch]));
   private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial);
   private readonly weakPoints = instances(new BoxGeometry(), 10);
-  private readonly pickups = instances(new BoxGeometry(), 80);
+  private readonly pickups = instances(new BoxGeometry(), PICKUP_LIMIT);
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   private readonly bombs = instances(new BoxGeometry(), MAX_BOMBS);
+  private readonly mines = instances(new BoxGeometry(), MINE_LIMIT);
+  private readonly flak = instances(new TorusGeometry(1, 0.025, 4, 28).rotateX(-Math.PI / 2), FLAK_RING_LIMIT);
   private readonly blast = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), MAX_BOMBS,
     new MeshBasicMaterial({ color: 0xffb957 }));
   private readonly dummy = new Object3D();
@@ -108,7 +113,7 @@ export class FlightScene {
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
-      this.shadows, this.bombs, this.blast);
+      this.shadows, this.bombs, this.blast, this.mines, this.flak);
     for (const { mesh } of this.airframes) this.scene.add(mesh);
     this.top.up.set(0, 0, -1);
     this.screenCamera.position.z = 1;
@@ -252,12 +257,12 @@ export class FlightScene {
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
     this.ship.visible = external && !(state.invulnerability > 0 && Math.floor(state.tick / 5) % 2);
-    this.ship.position.set(p.x, flat ? 104 : p.altitude, -p.z);
+    this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
     this.ship.rotation.set(flat ? 0 : (attitude?.pitch ?? state.climbRate * 0.004), -p.yaw, flat ? 0 : (attitude?.roll ?? -p.bank), 'YXZ');
     this.exhaust.update(state, this.camera);
 
-    let shadows = 0, drones = 0;
+    let shadows = 0, drones = 0, rings = 0;
     if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
@@ -267,8 +272,13 @@ export class FlightScene {
       const paint = enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069
         : batch ? 0xffffff : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
-      this.write(mesh, index, enemy.x, enemy.z, flat ? 101 : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
-      if (!flat) this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
+      this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
+      if (!flat && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
+      const tell = enemy.tell;
+      if (tell?.kind === 'flak' && rings < FLAK_RING_LIMIT) {
+        this.write(this.flak, rings++, tell.x, tell.z, flat ? TOP_FLIGHT + 4 : tell.alt, 0,
+          FLAK_RADIUS, 1.6, FLAK_RADIUS, warning ? 0xffc879 : 0xd66c50);
+      }
     }
     upload(this.drones, drones);
     for (const { mesh, count } of this.airframes) upload(mesh, count);
@@ -279,7 +289,7 @@ export class FlightScene {
     this.warden.visible = !!active && !!boss;
     if (boss && active) {
       const yaw = Math.atan2(p.x - boss.x, p.z - boss.z);
-      this.warden.position.set(boss.x, flat ? 96 : boss.alt, -boss.z);
+      this.warden.position.set(boss.x, flat ? TOP_FLIGHT - 5 : boss.alt, -boss.z);
       this.warden.rotation.y = -yaw;
       if (!flat) {
         this.writeShadow(shadows++, boss.x, boss.z, 22, 8, yaw);
@@ -298,28 +308,35 @@ export class FlightScene {
 
     let salvage = 0;
     for (const pickup of state.pickups) {
-      if (salvage === 80) break;
-      const size = pickup.xp === 2 ? 4.6 : 3.8;
-      this.write(this.pickups, salvage++, pickup.x, pickup.z, flat ? 106 : pickup.alt, state.tick / 37, size, size, size,
-        pickup.xp === 2 ? 0xffe49c : 0x8efbe8, Math.PI / 4);
+      if (salvage === PICKUP_LIMIT) break;
+      const size = 3 + pickup.xp * 0.8;
+      this.write(this.pickups, salvage++, pickup.x, pickup.z, flat ? TOP_FLIGHT + 5 : pickup.alt, state.tick / 37, size, size, size,
+        pickup.xp >= 2 ? 0xffe49c : 0x8efbe8, Math.PI / 4);
     }
     upload(this.pickups, salvage);
 
     for (const [i, shot] of state.shots.entries()) {
       const hostile = shot.kind === 'hostile';
       const yaw = Math.atan2(shot.vx, shot.vz);
-      this.write(this.bullets, i, shot.x, shot.z, flat ? 103 : shot.alt, yaw,
+      this.write(this.bullets, i, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         hostile ? 2.4 : 1.15, hostile ? 2.4 : 1.15, hostile ? 4.3 : 7.2,
         hostile ? 0xff7152 : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
     }
     upload(this.bullets, state.shots.length);
 
+    let mines = 0;
+    for (const mine of state.enemyMines) {
+      this.write(this.mines, mines++, mine.x, mine.z, flat ? TOP_FLIGHT + 4 : mine.alt, state.tick / 21,
+        4.8, 3.4, 4.8, Math.floor(state.tick / 8) % 2 ? 0xffbd77 : 0xe46151, Math.PI / 4);
+    }
+    upload(this.mines, mines);
+
     let sparks = 0, blasts = 0;
     for (const [i, bomb] of state.rearBombs.entries()) {
       const yaw = Math.atan2(bomb.vx, bomb.vz), age = state.tick - bomb.born;
-      this.write(this.bombs, i, bomb.x, bomb.z, flat ? 105 : bomb.alt, yaw, 3.7, 3.7, 5.4, 0xff91a8, age * 0.07);
+      this.write(this.bombs, i, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt, yaw, 3.7, 3.7, 5.4, 0xff91a8, age * 0.07);
       if (age > 0 && sparks < 240) {
-        this.write(this.sparks, sparks++, bomb.x, bomb.z, flat ? 105 : bomb.alt + 3.5, yaw, 1, 2, 1, 0xffb957);
+        this.write(this.sparks, sparks++, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt + 3.5, yaw, 1, 2, 1, 0xffb957);
       }
     }
     upload(this.bombs, state.rearBombs.length);
@@ -333,7 +350,16 @@ export class FlightScene {
         }
       } else if (effect.kind === 'bomb-blast' && blasts < MAX_BOMBS) {
         const radius = 5 + (1 - effect.life / 0.8) * (BOMB_BLAST_RADIUS - 5);
-        this.write(this.blast, blasts++, effect.x, effect.z, flat ? 107 : effect.alt, 0, radius, 1, radius);
+        this.write(this.blast, blasts++, effect.x, effect.z, flat ? TOP_FLIGHT + 6 : effect.alt, 0, radius, 1, radius);
+      } else if (effect.kind === 'flak' && rings < FLAK_RING_LIMIT) {
+        const radius = FLAK_RADIUS * (1.1 - 0.3 * effect.life / FLAK_LIFE);
+        this.write(this.flak, rings++, effect.x, effect.z, flat ? TOP_FLIGHT + 6 : effect.alt, 0, radius, 3.2, radius, 0xffdbc0);
+        for (let i = 0; i < 7 && sparks < 240; i++) {
+          const angle = i * 2.4 + effect.life * 4;
+          this.write(this.sparks, sparks++, effect.x + Math.sin(angle) * radius * 0.75,
+            effect.z + Math.cos(angle) * radius * 0.75, flat ? TOP_FLIGHT + 6 : effect.alt + Math.sin(i * 4) * 5,
+            angle, 3.5, 2.6, 4.4, i % 2 ? 0xffb86d : 0xb56d58);
+        }
       } else if (effect.kind === 'hit' || effect.kind === 'burst') {
         const burst = effect.kind === 'burst';
         const spread = (burst ? 0.52 : 0.36) - effect.life;
@@ -342,12 +368,13 @@ export class FlightScene {
           const reach = 2 + spread * 23;
           const size = Math.max(0.7, effect.life * 6);
           this.write(this.sparks, sparks++, effect.x + Math.sin(angle) * reach, effect.z + Math.cos(angle) * reach,
-            flat ? 108 : effect.alt + Math.cos(angle) * reach, angle, size, size, size * 2.2, i % 2 ? 0xffaa59 : 0xffffb1);
+            flat ? TOP_FLIGHT + 7 : effect.alt + Math.cos(angle) * reach, angle, size, size, size * 2.2, i % 2 ? 0xffaa59 : 0xffffb1);
         }
       }
     }
     upload(this.sparks, sparks);
     upload(this.blast, blasts);
+    upload(this.flak, rings);
 
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
