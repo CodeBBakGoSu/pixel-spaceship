@@ -2,6 +2,8 @@
 
 A small pixel-art courier shooter made with Vite, TypeScript and Canvas 2D. Fight through Kestrel Reach's waves, roam the Atoll to destroy four pylons and find the exit, open three canyon blast doors, and reach orbit to defeat the Warden's four pods and exposed core. The stage-clear card ranks the run; the next loop is faster. Terrain, voxel ships and effects are generated in code, with no runtime dependencies or external art.
 
+Play the current build at [codebbakgosu.github.io/pixel-spaceship](https://codebbakgosu.github.io/pixel-spaceship/).
+
 ## Run
 
 ```sh
