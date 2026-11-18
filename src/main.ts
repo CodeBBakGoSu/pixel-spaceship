@@ -33,6 +33,7 @@ const stick = $('#stick'), knob = $('#stick-knob');
 const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-lang]')];
 const safeProbe = $('#safe-area-probe');
 const wipe = $('#view-wipe');
+const rearBombMarker = $('#rear-bomb-marker');
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
 const navRadar = new RadarDisplay();
@@ -74,7 +75,7 @@ let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
 let helpTimer = 0, lastHelp = '';
-let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0, bank: 0 };
+let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
 const textNodes = new Map<string, HTMLElement>();
 
@@ -614,7 +615,7 @@ function advance(): void {
   if (pendingViews) pendingViews--;
   pendingPick = undefined;
   pendingManeuver = undefined;
-  if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0, bank: 0 };
+  if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
     const ease = (from: number, to: number) => from + (to - from) * 0.19;
     const delta = state.player.yaw - yaw;
@@ -622,7 +623,6 @@ function advance(): void {
     motion = {
       speed: ease(motion.speed, state.speed),
       climb: ease(motion.climb, state.climbRate),
-      bank: state.player.bank,
       turn: wasManeuvering || state.maneuver || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
   }
@@ -634,11 +634,22 @@ function advance(): void {
   }
 }
 
+function updateRearBombMarker(): void {
+  const field = phone?.playfield;
+  const offscreen = state.view === 'chase' && state.rearBombs.some(bomb => {
+    const point = scene?.project(bomb);
+    return !point || (field && (point.x < field.x || point.x > field.x + field.width
+      || point.y < field.y || point.y > field.y + field.height));
+  });
+  rearBombMarker.hidden = !offscreen;
+}
+
 function render(): void {
   if (layoutView !== state.view) layoutFlight();
-  scene?.draw(state);
+  const ladder = scene?.draw(state) ?? [];
   const readout = buildRadar(state);
   updateHud(readout);
+  updateRearBombMarker();
   const progress = 1 - state.wipe / WIPE_DURATION;
   wipe.hidden = state.wipe <= 0;
   if (!wipe.hidden) wipe.style.top = `${progress * 100}%`;
@@ -659,7 +670,7 @@ function render(): void {
     const point = track && scene.project(track);
     const target = track && point ? cockpitTarget(track, point, cockpit.aiming, state.lock) : null;
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
-    cockpitDisplay.draw(state, aim, state.maneuver ? scene.projectHorizon(p.yaw) : null,
+    cockpitDisplay.draw(state, aim, ladder,
       motion, clearance, impact, readout, target, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
     navRadar.draw(radarContext, 0, 0, readout, p.yaw, state.tick);

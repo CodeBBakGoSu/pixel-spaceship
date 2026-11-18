@@ -6,12 +6,13 @@ import {
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { frameCockpit, type PitchMark } from './camera.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
 import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { wardenFaces, wardenPalette } from './models.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, MAX_BOMBS, SHOT_LIMIT } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
-import { TERRAIN_SIZE, World } from './world.ts';
+import { TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
 function makeTerrain(world: World): Mesh {
   const map = new DataTexture(world.texture, TERRAIN_SIZE, TERRAIN_SIZE);
@@ -19,7 +20,8 @@ function makeTerrain(world: World): Mesh {
   map.magFilter = map.minFilter = NearestFilter;
   map.wrapS = map.wrapT = RepeatWrapping;
   map.needsUpdate = true;
-  const geometry = new PlaneGeometry(1600, 1600, 160, 160).rotateX(-Math.PI / 2);
+  const size = 2 * TERRAIN_HALF_WIDTH, cells = size / TERRAIN_MESH_STEP;
+  const geometry = new PlaneGeometry(size, size, cells, cells).rotateX(-Math.PI / 2);
   const { position, uv } = geometry.attributes;
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i), z = -position.getZ(i);
@@ -62,6 +64,7 @@ type Framing = {
 export class FlightScene {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
+  private readonly fog = new Fog(0x9cbfcc, 245, 875);
   private readonly screen = new Scene();
   private readonly screenCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 2);
   private readonly target = new WebGLRenderTarget(1, 1, { magFilter: NearestFilter, minFilter: NearestFilter });
@@ -92,9 +95,8 @@ export class FlightScene {
   constructor(canvas: HTMLCanvasElement, private readonly world: World, arena: StageState['arena']) {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x081424);
-    const sky = new Color(0x9cbfcc);
-    this.scene.background = sky;
-    this.scene.fog = new Fog(sky, 245, 875);
+    this.scene.background = this.fog.color;
+    this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks, this.engines,
       this.shadows, this.bombs, this.blast);
@@ -171,8 +173,8 @@ export class FlightScene {
     mesh.setColorAt(index, this.color.setHex(0x607887));
   }
 
-  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): void {
-    const { width, height, phone, cockpit } = this.framing;
+  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): PitchMark[] {
+    const { width, height, phone } = this.framing;
     const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
     const aspect = width / Math.max(1, height);
     if (state.view === 'overhead') {
@@ -187,41 +189,31 @@ export class FlightScene {
       this.top.lookAt(p.x, 0, -z);
       this.top.updateProjectionMatrix();
       this.camera = this.top;
+    } else if (state.view === 'cockpit') {
+      this.camera = this.cockpit;
+      // The last ~5% of terrain contrast blends into the sky under Three's smoothstep fog.
+      const visibleDepth = this.fog.near + (this.fog.far - this.fog.near) * 0.865;
+      return frameCockpit(this.cockpit, p, this.framing, attitude, (x, z) => this.world.height(x, z), visibleDepth);
     } else {
-      const chase = state.view === 'chase';
-      const camera = chase ? this.chase : this.cockpit;
+      const camera = this.chase;
       const field = phone?.playfield;
       const m = state.maneuver;
       const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
       const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : -12;
       const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
-      const setback = chase ? 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat : -5;
-      const elevation = chase ? 15 + motion * lift : 2.7;
-      const slide = chase && m?.kind === 'cobra' ? motion * 8 : 0;
-      const pitch = chase ? 0 : attitude?.cameraPitch ?? 0;
-      const lookAltitude = chase ? p.altitude + 1 : p.altitude + elevation + Math.tan(pitch) * (105 + setback);
-      const center = chase
-        ? field ? (field.y + field.height * 0.39) / height : 0.43
-        : cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
-      const minimumHorizontalFov = (chase ? 16 : 20) * Math.PI / 180;
-      camera.fov = Math.max(60 + Math.abs(pitch) * 66, 2 * Math.atan(Math.tan(minimumHorizontalFov) / aspect) * 180 / Math.PI);
-      let shift = clamp(center, 0.29, 0.64);
-      if (cockpit && pitch) {
-        // Keep sky and terrain in the canopy even while the ladder shows a vertical attitude.
-        const skyMargin = Math.min(0.19, cockpit.aiming.height / height * 0.42);
-        const horizonOffset = Math.tan(pitch) / (2 * Math.tan(camera.fov * Math.PI / 360));
-        const edge = pitch > 0 ? (cockpit.aiming.y + cockpit.aiming.height) / height - skyMargin
-          : cockpit.aiming.y / height + skyMargin;
-        shift = clamp(pitch > 0 ? Math.min(shift, edge - horizonOffset)
-          : Math.max(shift, edge - horizonOffset), 0.14, 0.82);
-      }
+      const setback = 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat;
+      const elevation = 15 + motion * lift;
+      const slide = m?.kind === 'cobra' ? motion * 8 : 0;
+      const center = field ? (field.y + field.height * 0.39) / height : 0.43;
+      const shift = clamp(center, 0.29, 0.64);
+      camera.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI);
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
       camera.position.set(p.x - fx * setback + fz * slide, p.altitude + elevation, -(p.z - fz * setback - fx * slide));
-      camera.lookAt(p.x + fx * 105, lookAltitude, -(p.z + fz * 105));
-      if (!chase && attitude) camera.rotateZ(attitude.cameraBank);
+      camera.lookAt(p.x + fx * 105, p.altitude + 1, -(p.z + fz * 105));
       this.camera = camera;
     }
     this.camera.updateMatrixWorld();
+    return [];
   }
 
   // Coordinates are in CSS pixels, so scene cues share the cockpit/portrait layout.
@@ -234,15 +226,9 @@ export class FlightScene {
     };
   }
 
-  projectHorizon(yaw: number): Projection {
-    const eye = this.camera.position;
-    const point = this.vector.set(eye.x + Math.sin(yaw) * 100, eye.y, eye.z - Math.cos(yaw) * 100).project(this.camera);
-    return { x: (point.x + 1) * this.framing.width / 2, y: (1 - point.y) * this.framing.height / 2 };
-  }
-
-  draw(state: StageState): void {
+  draw(state: StageState): PitchMark[] {
     const attitude = state.maneuver ? maneuverAttitude(state.maneuver) : null;
-    this.updateCamera(state, attitude);
+    const ladder = this.updateCamera(state, attitude);
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
     this.ship.visible = external && !(state.invulnerability > 0 && Math.floor(state.tick / 5) % 2);
@@ -357,5 +343,6 @@ export class FlightScene {
     this.renderer.render(this.scene, this.camera);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
+    return ladder;
   }
 }

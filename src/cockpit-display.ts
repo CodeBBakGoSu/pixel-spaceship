@@ -1,6 +1,6 @@
-import type { Point } from './camera';
+import { cockpitLadderSpan, type Line, type PitchMark, type Point } from './camera.ts';
 import {
-  cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel, pitchLadder,
+  cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel,
   type CockpitMotion, type CockpitTarget, type CockpitWarnings,
 } from './cockpit';
 import {
@@ -297,28 +297,16 @@ function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact
 const ladderOutline = cockpitPixel(0x183f39), horizonColor = cockpitPixel(0x9befb2), ladderColor = cockpitPixel(0x73bb93);
 
 function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: CockpitMotion,
-  labels: GlassLabels, raster: CockpitLineRaster, marks: ReturnType<typeof pitchLadder>, anchor: Point,
-  attitude: ReturnType<typeof maneuverAttitude> | null, horizon: Point | null): void {
+  labels: GlassLabels, raster: CockpitLineRaster, marks: PitchMark[],
+  attitude: ReturnType<typeof maneuverAttitude> | null): void {
   const area = layout.aiming, compact = layout.compact;
-  const span = Math.min(compact ? 51 : 105, area.width * 0.31), scale = compact ? 2 : 3;
+  const centerX = area.x + area.width / 2;
   const slope = Math.atan2(motion.climb, Math.max(12, motion.speed));
-  const pitch = attitude ? attitude.cockpitPitch * 180 / Math.PI : clamp(slope * 180 / Math.PI, -32, 32);
-  anchor.x = area.x + area.width / 2 - motion.turn * (compact ? 7 : 14);
-  anchor.y = area.y + area.height / 2 - area.height * 0.03;
-  pitchLadder(anchor, pitch, attitude ? -attitude.cameraBank : motion.bank, span, scale, marks);
   raster.clear();
   for (const mark of marks) {
-    if (horizon && mark.angle === 0) continue;
     const weight = mark.angle === 0 ? 2 : 1, color = mark.angle === 0 ? horizonColor : ladderColor;
-    rasterLadderSegment(raster, mark.left, mark.angle < 0, color, weight);
-    rasterLadderSegment(raster, mark.right, mark.angle < 0, color, weight);
-  }
-  if (horizon && attitude) {
-    const slope = Math.tan(attitude.cameraBank);
-    const point = (x: number): Point => ({ x, y: horizon.y + (x - horizon.x) * slope });
-    const { x } = anchor, gap = span * 0.3;
-    rasterLadderSegment(raster, { from: point(x - span), to: point(x - gap) }, false, horizonColor, 2);
-    rasterLadderSegment(raster, { from: point(x + gap), to: point(x + span) }, false, horizonColor, 2);
+    for (const line of mark.left) rasterLadderSegment(raster, area, line, mark.angle < 0, color, weight);
+    for (const line of mark.right) rasterLadderSegment(raster, area, line, mark.angle < 0, color, weight);
   }
   raster.draw(c, layout.glass);
 
@@ -329,17 +317,19 @@ function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: Cockp
   for (const mark of marks) {
     if (mark.angle === 0 || (compact && mark.angle % 20 !== 0 && Math.abs(mark.angle) !== 90)) continue;
     const sprites = labels.pitch[(mark.angle + 90) / 10];
-    const left = mark.left.from, right = mark.right.to;
+    const left = mark.left[0].from, right = mark.right[mark.right.length - 1].to;
     if (left.y >= area.y + 7 && left.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.left, left.x - 7, left.y);
     if (!compact && right.y >= area.y + 7 && right.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.right, right.x + 8, right.y);
   }
   const tag = attitude?.inverted ? labels.inverted : attitude?.stalled ? labels.stall : null;
   if (tag) {
-    fill(c, ink, anchor.x - tag.advance / 2 - 4, area.y + 3, tag.advance + 8, 13);
-    drawCockpitLabel(c, tag, anchor.x, area.y + 9);
+    fill(c, ink, centerX - tag.advance / 2 - 4, area.y + 3, tag.advance + 8, 13);
+    drawCockpitLabel(c, tag, centerX, area.y + 9);
   }
-  const pathY = clamp((horizon?.y ?? aim.y) - Math.sin(slope) * 54, area.y + 10, bottom(area) - 10);
-  const pathX = anchor.x + motion.turn * (compact ? 3 : 6);
+  const zero = marks.find(mark => mark.angle === 0);
+  const horizonY = zero ? (zero.left[zero.left.length - 1].to.y + zero.right[0].from.y) / 2 : aim.y;
+  const pathY = clamp(horizonY - Math.sin(slope) * 54, area.y + 10, bottom(area) - 10);
+  const pathX = centerX - motion.turn * (compact ? 4 : 8);
   for (let side = -1; side <= 1; side += 2) {
     fill(c, green, pathX - 2, pathY + side * 4, 5, 1);
     fill(c, green, pathX + side * 4, pathY - 2, 1, 5);
@@ -351,8 +341,15 @@ function drawLadder(c: Context, layout: CockpitLayout, aim: Point, motion: Cockp
   c.restore();
 }
 
-function rasterLadderSegment(raster: CockpitLineRaster, line: { from: Point; to: Point }, dashed: boolean, color: number, weight: number): void {
-  const { from: a, to: b } = line;
+function rasterLadderSegment(raster: CockpitLineRaster, area: Rect, line: Line, dashed: boolean, color: number, weight: number): void {
+  const { from, to } = line, top = area.y, end = bottom(area) - 1;
+  if (Math.max(from.y, to.y) < top || Math.min(from.y, to.y) > end) return;
+  // Clip before rasterizing so a rung near the edge of the camera cannot make a long offscreen loop.
+  const clip = (point: Point, other: Point): Point => {
+    const y = clamp(point.y, top, end);
+    return y === point.y ? point : { x: point.x + (other.x - point.x) * (y - point.y) / (other.y - point.y), y };
+  };
+  const a = clip(from, to), b = clip(to, from);
   raster.line(ladderOutline, a.x - 1, a.y - 1, b.x - 1, b.y - 1, weight + 2);
   if (dashed) {
     const dx = b.x - a.x, dy = b.y - a.y;
@@ -558,8 +555,6 @@ export class CockpitDisplay {
   private readonly host: HTMLElement;
   private readonly hud = cockpitSurface(1, 1).context;
   private readonly panels = cockpitSurface(1, 1).context;
-  private readonly anchor: Point = { x: 0, y: 0 };
-  private readonly marks: ReturnType<typeof pitchLadder> = [];
   private readonly readout: { target: CockpitTarget | null; warnings: CockpitWarnings } = {
     target: null, warnings: { master: false, lowHull: false, terrain: null, boost: null },
   };
@@ -620,8 +615,7 @@ export class CockpitDisplay {
     placeLayer(this.panels, layout.dashboard);
     this.labels = new GlassLabels(font, t);
 
-    const span = Math.min(compact ? 51 : 105, aiming.width * 0.31);
-    const half = Math.ceil(Math.hypot(span, 35 * (compact ? 2 : 3))) + 27;
+    const half = Math.ceil(cockpitLadderSpan(layout)) + 4;
     const ladderX = Math.max(aiming.x, Math.floor(aiming.x + aiming.width / 2 - half));
     const ladderRight = Math.min(right(aiming), Math.ceil(aiming.x + aiming.width / 2 + half));
     this.ladder = aiming.height >= 20 && ladderRight > ladderX
@@ -658,7 +652,7 @@ export class CockpitDisplay {
     }));
   }
 
-  draw(state: StageState, aim: Point, horizon: Point | null, motion: CockpitMotion, clearance: number, impact: number,
+  draw(state: StageState, aim: Point, marks: PitchMark[], motion: CockpitMotion, clearance: number, impact: number,
     readout: RadarReadout, target: CockpitTarget | null, language: Language, t: Translate) {
     const layout = this.layout;
     if (!layout) return null;
@@ -666,7 +660,7 @@ export class CockpitDisplay {
     const elapsed = state.tick / 60;
     this.readout.target = target;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.readout.warnings);
-    this.drawGlass(layout, aim, horizon, state, motion, target, state.maneuver ? undefined : readout.priority?.alt);
+    this.drawGlass(layout, aim, marks, state, motion, target, state.maneuver ? undefined : readout.priority?.alt);
 
     const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
     const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
@@ -692,7 +686,7 @@ export class CockpitDisplay {
     return this.readout;
   }
 
-  private drawGlass(layout: CockpitLayout, aim: Point, horizon: Point | null, state: StageState, motion: CockpitMotion,
+  private drawGlass(layout: CockpitLayout, aim: Point, marks: PitchMark[], state: StageState, motion: CockpitMotion,
     target: CockpitTarget | null, targetAltitude?: number): void {
     const c = this.hud, { compact, speed, heading, altitude, aiming } = layout;
     clearZone(c, heading);
@@ -712,8 +706,7 @@ export class CockpitDisplay {
     }
     if (this.ladder) {
       clearZone(c, aiming);
-      drawLadder(c, layout, aim, motion, this.labels, this.ladder, this.marks, this.anchor,
-        state.maneuver ? maneuverAttitude(state.maneuver) : null, horizon);
+      drawLadder(c, layout, aim, motion, this.labels, this.ladder, marks, state.maneuver ? maneuverAttitude(state.maneuver) : null);
       drawAim(c, aiming, aim, target, state.tick / 60, this.labels);
     }
   }

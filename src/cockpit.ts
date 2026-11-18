@@ -4,9 +4,7 @@ import type { Lock, StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n.ts';
 import type { CockpitLayout, Rect } from './layout.ts';
 
-export type CockpitMotion = { speed: number; climb: number; bank: number; turn: number };
-type Line = { from: Point; to: Point };
-type PitchMark = { angle: number; left: Line; right: Line };
+export type CockpitMotion = { speed: number; climb: number; turn: number };
 export type CockpitTarget = { point: Point; range: number; locked: boolean; progress: number };
 export type CockpitWarnings = {
   master: boolean; lowHull: boolean; terrain: 'altLow' | 'pullUp' | null; boost: 'active' | 'low' | null;
@@ -39,32 +37,6 @@ export function headingTape(yaw: number, step: 15 | 30, t: ReturnType<typeof cre
     ticks.push({ offset: angle - degrees, label: headingTickLabel(angle, t) });
   }
   return { bearing, ticks };
-}
-
-export function pitchLadder(center: Point, pitch: number, bank: number, span: number, pixelsPerDegree: number, marks: PitchMark[] = []): PitchMark[] {
-  const cos = Math.cos(bank), sin = Math.sin(bank);
-  const middle = Math.max(-60, Math.min(60, Math.round(pitch / 10) * 10));
-  const gap = span * 0.3;
-  for (let i = 0; i < 7; i++) {
-    const angle = middle - 30 + i * 10;
-    const y = (pitch - angle) * pixelsPerDegree;
-    const outer = angle === 0 ? span : span * 0.78;
-    const mark = marks[i] ?? (marks[i] = {
-      angle, left: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } },
-      right: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } },
-    });
-    mark.angle = angle;
-    // Keep the same subpixel anchors for both the integer lines and their labels.
-    mark.left.from.x = center.x - outer * cos + y * sin;
-    mark.left.from.y = center.y + outer * sin + y * cos;
-    mark.left.to.x = center.x - gap * cos + y * sin;
-    mark.left.to.y = center.y + gap * sin + y * cos;
-    mark.right.from.x = center.x + gap * cos + y * sin;
-    mark.right.from.y = center.y - gap * sin + y * cos;
-    mark.right.to.x = center.x + outer * cos + y * sin;
-    mark.right.to.y = center.y - outer * sin + y * cos;
-  }
-  return marks;
 }
 
 export function cockpitTarget(track: Track, point: Point, area: Rect, lock: Lock | null): CockpitTarget | null {

@@ -372,7 +372,7 @@
 .guide-body:focus-visible { outline: 2px solid #bceff0; outline-offset: -2px; }
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
-.menu-open :is(.objective, .flight-message, .view-tag, .scene-cue, .help),
+.menu-open :is(.objective, .flight-message, .view-tag, .scene-cue, .rear-bomb-marker, .help),
 .guide-open :is(.hud, .boss-hud, .radio, #nav-radar, .alt-ruler) {
   visibility: hidden;
 }
@@ -443,6 +443,23 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .experience.phone-layout:not(.cockpit-view) :is(.flight-message, .view-tag) {
   top: auto;
   bottom: calc(100% - var(--controls-y) + 8px);
+}
+
+.rear-bomb-marker {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  padding: 2px 5px;
+  border: 1px solid #d79aab;
+  background: #251a2b;
+  color: #ffa5bc;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+.experience.phone-layout .rear-bomb-marker {
+  bottom: calc(100% - var(--controls-y) + 30px);
 }
 
 .loop {

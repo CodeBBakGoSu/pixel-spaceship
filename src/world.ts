@@ -1,4 +1,6 @@
 export const TERRAIN_SIZE = 512;
+export const TERRAIN_HALF_WIDTH = 800;
+export const TERRAIN_MESH_STEP = 10;
 const MASK = TERRAIN_SIZE - 1;
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const hash = (x: number, y: number) => {
