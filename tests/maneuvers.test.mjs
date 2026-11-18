@@ -204,3 +204,21 @@ test('rear stores enforce 24 ticks between drops and refill one charge every 450
   assert.equal(state.bombs, 3);
   assert.equal(state.bombReloadAt, null);
 });
+
+test('the wider Reach rim warns at 60 m and contains all four maneuvers', () => {
+  for (const kind of ['immelmann', 'split-s', 'cobra', 'j-turn']) {
+    const state = pursuit();
+    const { player, arena } = state;
+    assert.equal(arena.radius, 560);
+    state.enemies.length = 0;
+    Object.assign(player, { x: arena.x + 505, z: arena.z, yaw: Math.PI / 2 });
+    stepStage(state);
+    assert.equal(state.boundaryWarning, true);
+    Object.assign(player, { x: arena.x + arena.radius - 0.2, z: arena.z });
+    for (let n = 0; n < 90; n++) {
+      stepStage(state, n === 0 ? { maneuver: kind } : {});
+      assert.ok(Math.hypot(player.x - arena.x, player.z - arena.z) <= arena.radius + 1e-9);
+    }
+    assert.ok(state.maneuverReadyAt > state.tick);
+  }
+});

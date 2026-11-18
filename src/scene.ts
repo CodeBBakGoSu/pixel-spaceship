@@ -6,14 +6,14 @@ import {
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
-import { frameCockpit, type PitchMark } from './camera.ts';
+import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
 import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { wardenFaces, wardenPalette } from './models.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, MAX_BOMBS, SHOT_LIMIT } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
-import { TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
+import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
 function makeTerrain(world: World): Mesh {
   const map = new DataTexture(world.texture, TERRAIN_SIZE, TERRAIN_SIZE);
@@ -92,6 +92,7 @@ export class FlightScene {
   private readonly color = new Color();
   private readonly vector = new Vector3();
   private readonly up = new Vector3(0, 1, 0);
+  private readonly ground = (x: number, z: number) => this.world.height(x, z);
 
   constructor(canvas: HTMLCanvasElement, private readonly world: World, arena: StageState['arena']) {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
@@ -109,7 +110,7 @@ export class FlightScene {
   }
 
   private makeBoundary(arena: StageState['arena']): InstancedMesh {
-    const count = 96;
+    const count = 192;
     const edge = instances(new BoxGeometry(), count, new MeshBasicMaterial({ color: 0xa99c68 }));
     for (let i = 0; i < count; i++) {
       const a = Math.PI * 2 * i / count;
@@ -122,14 +123,16 @@ export class FlightScene {
 
   private makeCanopies(arena: StageState['arena']): InstancedMesh {
     const trees = instances(new BoxGeometry(), 1600);
+    const step = 29, reach = arena.radius + 100, cells = Math.ceil(reach / step);
     let count = 0;
-    canopyRows: for (let row = -19; row <= 19; row++) for (let col = -19; col <= 19; col++) {
+    canopyRows: for (let row = -cells; row <= cells; row++) for (let col = -cells; col <= cells; col++) {
+      if (Math.hypot(row, col) * step > reach) continue;
       const hash = Math.imul(row + 47, 374761393) ^ Math.imul(col + 61, 668265263);
       if ((hash & 15) > 8) continue;
-      const x = arena.x + col * 21 + ((hash >>> 4) & 7);
-      const z = arena.z + row * 21 + ((hash >>> 7) & 7);
+      const x = arena.x + col * step + ((hash >>> 4) & 7);
+      const z = arena.z + row * step + ((hash >>> 7) & 7);
       const y = this.world.height(x, z);
-      if (y < 40.3) continue;
+      if (y < 42 || y > 85) continue;
       const size = 2.8 + ((hash >>> 10) & 3) * 0.6;
       this.write(trees, count++, x, z, y + size * 0.55, 0, size * 2, size * 1.1, size * 1.7,
         hash & 1 ? 0x2b623f : 0x3b7149);
@@ -179,6 +182,7 @@ export class FlightScene {
     const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
     const aspect = width / Math.max(1, height);
     if (state.view === 'overhead') {
+      this.fog.far = 875;
       const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
       const center = phone ? phone.shipY / height : 0.57;
       const z = p.z + (center * 2 - 1) * halfHeight;
@@ -192,9 +196,11 @@ export class FlightScene {
       this.camera = this.top;
     } else if (state.view === 'cockpit') {
       this.camera = this.cockpit;
+      const pitch = attitude?.cameraPitch ?? 0;
+      this.fog.far = terrainFogFar(aspect, cockpitFov(aspect, pitch), pitch, attitude?.cameraBank);
       // The last ~5% of terrain contrast blends into the sky under Three's smoothstep fog.
       const visibleDepth = this.fog.near + (this.fog.far - this.fog.near) * 0.865;
-      return frameCockpit(this.cockpit, p, this.framing, attitude, (x, z) => this.world.height(x, z), visibleDepth);
+      return frameCockpit(this.cockpit, p, this.framing, attitude, this.ground, visibleDepth);
     } else {
       const camera = this.chase;
       const field = phone?.playfield;
@@ -208,6 +214,7 @@ export class FlightScene {
       const center = field ? (field.y + field.height * 0.39) / height : 0.43;
       const shift = clamp(center, 0.29, 0.64);
       camera.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI);
+      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(1 - elevation, 105 + setback));
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
       camera.position.set(p.x - fx * setback + fz * slide, p.altitude + elevation, -(p.z - fz * setback - fx * slide));
       camera.lookAt(p.x + fx * 105, p.altitude + 1, -(p.z + fz * 105));

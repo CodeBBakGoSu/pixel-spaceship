@@ -3,7 +3,7 @@ import type { CockpitLayout } from './layout.ts';
 import type { maneuverAttitude } from './maneuvers.ts';
 import { clamp } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
-import { TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP } from './world.ts';
+import { terrainSurface, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP } from './world.ts';
 
 export type Segment = 'overhead' | 'chase' | 'cockpit';
 export type Point = { x: number; y: number };
@@ -13,14 +13,18 @@ type CockpitFraming = { width: number; height: number; cockpit: CockpitLayout | 
 
 const WORLD_UP = new Vector3(0, 1, 0);
 
+export function cockpitFov(aspect: number, pitch: number): number {
+  const minimum = 2 * Math.atan(Math.tan(20 * Math.PI / 180) / aspect) * 180 / Math.PI;
+  return Math.max(60 + Math.abs(pitch) * 66, minimum);
+}
+
 export function frameCockpit(camera: PerspectiveCamera, player: StageState['player'], frame: CockpitFraming,
   attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number): PitchMark[] {
   const { width, height, cockpit } = frame;
   const pitch = attitude?.cameraPitch ?? 0, bank = attitude?.cameraBank ?? 0;
   const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
-  const minimumFov = 2 * Math.atan(Math.tan(20 * Math.PI / 180) * height / width) * 180 / Math.PI;
-  camera.fov = Math.max(60 + Math.abs(pitch) * 66, minimumFov);
+  camera.fov = cockpitFov(width / height, pitch);
   let shift = clamp(center, 0.29, 0.64);
   if (cockpit && pitch) {
     const { y, height: glassHeight } = cockpit.aiming;
@@ -55,24 +59,14 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
 export const cockpitLadderSpan = (layout: CockpitLayout): number =>
   Math.min(layout.compact ? 51 : 105, layout.aiming.width * 0.31);
 
-// Match the two triangles in each PlaneGeometry cell, including its reversed world Z.
-function meshHeight(ground: Ground, x: number, z: number): number {
-  const step = TERRAIN_MESH_STEP;
-  const left = Math.floor(x / step) * step, top = Math.floor(z / step) * step;
-  const u = (x - left) / step, v = (z - top) / step;
-  const b = ground(left, -(top + step)), d = ground(left + step, -top);
-  if (u + v <= 1) return ground(left, -top) * (1 - u - v) + u * d + v * b;
-  return ground(left + step, -(top + step)) * (u + v - 1) + (1 - u) * b + (1 - v) * d;
-}
-
 function terrainElevation(eye: Vector3, horizontal: Vector3, vertical: Vector3, gaze: Vector3,
   ground: Ground, near: number, far: number): number {
   const horizontalDepth = gaze.dot(horizontal), verticalDepth = gaze.dot(vertical);
   const sample = (distance: number): number => {
     const x = eye.x + distance * horizontal.x, z = eye.z + distance * horizontal.z;
-    let offset = (meshHeight(ground, x, z) - eye.y) / vertical.y;
+    let offset = (terrainSurface(ground, x, -z) - eye.y) / vertical.y;
     for (let i = 0; i < 2; i++) {
-      offset = (meshHeight(ground, x + offset * vertical.x, z + offset * vertical.z) - eye.y) / vertical.y;
+      offset = (terrainSurface(ground, x + offset * vertical.x, -z - offset * vertical.z) - eye.y) / vertical.y;
     }
     const depth = distance * horizontalDepth + offset * verticalDepth;
     if (depth < near || depth > far

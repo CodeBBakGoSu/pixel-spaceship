@@ -142,6 +142,7 @@
 
 .status-view time{color:#dce6de;font-size:10px;margin-left:3px}.flight-message{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.flight-message[hidden]{display:none}
 #nav-radar{position:absolute;left:var(--radar-x);top:var(--radar-y);width:var(--radar-w);height:var(--radar-h);image-rendering:pixelated;pointer-events:none;opacity:.9}
+#arena-map{position:absolute;left:var(--arena-map-x);top:var(--arena-map-y);width:var(--arena-map-w);height:var(--arena-map-h);image-rendering:pixelated;pointer-events:none;opacity:.92}
 
 /* Safe-area measurements are read by the pure layout adapter. */
 #safe-area-probe{position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -373,7 +374,7 @@
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
 .menu-open :is(.objective, .flight-message, .view-tag, .scene-cue, .rear-bomb-marker, .help),
-.guide-open :is(.hud, .boss-hud, .radio, #nav-radar, .alt-ruler) {
+.guide-open :is(.hud, .boss-hud, .radio, #nav-radar, #arena-map, .alt-ruler) {
   visibility: hidden;
 }
 

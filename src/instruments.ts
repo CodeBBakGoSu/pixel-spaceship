@@ -1,17 +1,62 @@
 import type { createTranslator } from './i18n.ts';
 import { exitAltitude } from './maneuvers.ts';
-import { activeWeakPoint, HIT_WINDOW, inBand } from './stage-combat.ts';
+import { BEACON_SIGNAL_SECONDS, LANDMARKS, RIM_WARNING } from './reach.ts';
+import { activeWeakPoint, angleTo, HIT_WINDOW, inBand, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 160;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
 export type Track = Position & { id: number; kind: 'patrol' | 'interceptor' | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null };
+type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
 export type RadarReadout = {
   contacts: Blip[]; priority: Track | null; salvage: Track | null;
   rear: boolean; rearCount: number; rearClose: boolean; rearBandMatch: boolean;
   rearMarks: AltitudeMark[];
+  rim: RimTick[]; boundaryBearing: number | null;
 };
+
+export function beaconTrack(state: StageState): Position | null {
+  if (state.boss) return state.boss;
+  return state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND ? LANDMARKS.atoll : null;
+}
+
+export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState): void {
+  const { width, height } = c.canvas;
+  const center = width / 2, middle = height / 2 + 2, radius = width / 2 - 6;
+  const { arena, player } = state, scale = radius / arena.radius;
+  c.fillStyle = '#091d23';
+  c.fillRect(0, 0, width, height);
+  c.strokeStyle = '#52796b';
+  c.strokeRect(0.5, 0.5, width - 1, height - 1);
+  c.beginPath();
+  c.arc(center, middle, radius, 0, Math.PI * 2);
+  c.stroke();
+  c.fillStyle = '#9abebc';
+  c.fillRect(center - 1, 4, 2, 4);
+  for (const landmark of Object.values(LANDMARKS)) {
+    const x = center + (landmark.x - arena.x) * scale, y = middle - (landmark.z - arena.z) * scale;
+    c.fillStyle = landmark === LANDMARKS.strait ? '#6bc4c9' : landmark === LANDMARKS.ridge ? '#a9c165' : '#94a6a6';
+    c.fillRect(Math.round(x) - 2, Math.round(y) - 2, 5, 5);
+  }
+  const beacon = beaconTrack(state);
+  if (beacon) {
+    const x = center + (beacon.x - arena.x) * scale, y = middle - (beacon.z - arena.z) * scale;
+    c.strokeStyle = '#ffd783';
+    c.strokeRect(Math.round(x) - 4.5, Math.round(y) - 4.5, 9, 9);
+  }
+  const x = center + (player.x - arena.x) * scale, y = middle - (player.z - arena.z) * scale;
+  c.save();
+  c.translate(x, y);
+  c.rotate(player.yaw);
+  c.fillStyle = '#f6fddd';
+  c.beginPath();
+  c.moveTo(0, -5);
+  c.lineTo(-3, 3);
+  c.lineTo(3, 3);
+  c.fill();
+  c.restore();
+}
 
 export function relativeMark(delta: number, coarse: boolean): AltitudeMark {
   if (delta > HIT_WINDOW) return coarse ? '△' : '^';
@@ -29,6 +74,14 @@ export function buildRadar(state: StageState): RadarReadout {
   const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
   const top = state.view === 'overhead';
   const contacts: Blip[] = [];
+  const rim: RimTick[] = [];
+  const rimTick = (kind: RimTick['kind'], dx: number, dz: number) => {
+    const bin = Math.round(angleTo(p.yaw, dx, dz) * 8 / Math.PI);
+    const angle = (bin + 16) % 16 * Math.PI / 8;
+    if (!rim.some(tick => tick.kind === kind && tick.angle === angle)) rim.push({ kind, angle });
+  };
+  const rx = p.x - state.arena.x, rz = p.z - state.arena.z;
+  const boundaryBearing = Math.hypot(rx, rz) > state.arena.radius - RIM_WARNING ? angleTo(p.yaw, rx, rz) : null;
   let rearCount = 0, rearClose = false, rearBandMatch = false;
   let rearHigher = false, rearLower = false;
   const up = exitAltitude(p.altitude, 'immelmann'), down = exitAltitude(p.altitude, 'split-s');
@@ -40,7 +93,11 @@ export function buildRadar(state: StageState): RadarReadout {
     const range = Math.hypot(dx, dz), ahead = dx * sin + dz * cos;
     const track: Track = { x: item.x, z: item.z, alt: item.alt, id: item.id, kind, range, ahead };
     if (!top && kind !== 'salvage') hostiles.push(track);
-    if (range > RADAR_RANGE) return;
+    if (range > RADAR_RANGE) {
+      if (kind === 'salvage') rimTick(kind, dx, dz);
+      else if (kind !== 'warden' && kind !== 'pod' && kind !== 'core') rimTick('enemy', dx, dz);
+      return;
+    }
     if (!top && ahead < 0) {
       if (kind !== 'salvage') {
         rearCount++;
@@ -60,6 +117,8 @@ export function buildRadar(state: StageState): RadarReadout {
     else scan(active, active.kind);
   }
   for (const pickup of state.pickups) scan(pickup, 'salvage');
+  const beacon = beaconTrack(state);
+  if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('warden', beacon.x - p.x, beacon.z - p.z);
   if (!top && !rearClose) rearClose = state.shots.some(shot => {
     const dx = shot.x - p.x, dz = shot.z - p.z;
     return shot.kind === 'hostile' && dx * sin + dz * cos < 0 && Math.hypot(dx, dz) < 90;
@@ -83,7 +142,7 @@ export function buildRadar(state: StageState): RadarReadout {
   if (rearHigher) rearMarks.push('△');
   if (rearBandMatch) rearMarks.push('■');
   if (rearLower) rearMarks.push('▽');
-  return { contacts, priority: priority ?? nearest(hostiles), salvage,
+  return { contacts, rim, boundaryBearing, priority: priority ?? nearest(hostiles), salvage,
     rear: rearCount > 0 || rearClose, rearCount, rearClose, rearBandMatch, rearMarks };
 }
 
@@ -151,6 +210,24 @@ export class RadarDisplay {
       }
       px = Math.max(left + 4, Math.min(left + this.face.width - 5, px));
       this.drawBlip(c, px, py, contact);
+    }
+    for (const { kind, angle } of readout.rim) {
+      const dx = Math.sin(angle), dy = -Math.cos(angle);
+      c.strokeStyle = kind === 'warden' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
+      const offset = kind === 'salvage' ? -5 : kind === 'warden' ? 2 : 0;
+      c.beginPath();
+      c.moveTo(x + dx * (radius - 3 + offset), y + dy * (radius - 3 + offset));
+      c.lineTo(x + dx * (radius + offset), y + dy * (radius + offset));
+      c.stroke();
+    }
+    if (readout.boundaryBearing !== null) {
+      const edge = readout.boundaryBearing - Math.PI / 2;
+      c.strokeStyle = '#fa565f';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y, radius + 2, edge - 0.55, edge + 0.55);
+      c.stroke();
+      c.lineWidth = 1;
     }
     if (readout.rear) {
       const pulse = readout.rearClose && Math.floor(tick / 12) % 2 === 0;

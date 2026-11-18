@@ -1,6 +1,7 @@
 import type { Segment } from './camera.ts';
+import type { LandmarkId } from './reach.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit';
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | LandmarkId;
 export type StageOptions = {
   seed: number;
   view: Segment | null;

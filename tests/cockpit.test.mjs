@@ -8,6 +8,7 @@ import { createTranslator, strings } from '../src/i18n.ts';
 import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, cockpitTarget } from '../src/cockpit.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { maneuverAttitude } from '../src/maneuvers.ts';
+import { TERRAIN_HALF_WIDTH } from '../src/world.ts';
 
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
 test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
@@ -83,9 +84,9 @@ test('the zero line follows the visible mesh edge in high level flight', () => {
   const cockpit = cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
   const frame = { width, height, cockpit };
   const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
-  const player = { x: -96, z: -266, altitude: 165, yaw: Math.PI, bank: 0 };
+  const player = { x: -96, z: 534 - TERRAIN_HALF_WIDTH, altitude: 165, yaw: Math.PI, bank: 0 };
   const marks = frameCockpit(camera, player, frame, null, ground, limit);
-  const y = (1 - new Vector3(player.x, 35, 800).project(camera).y) * height / 2;
+  const y = (1 - new Vector3(player.x, 35, TERRAIN_HALF_WIDTH).project(camera).y) * height / 2;
   const zero = marks.find(mark => mark.angle === 0);
   assert.ok(Math.abs(zero.left[0].to.y - y) < 0.4);
   assert.ok(y < cockpit.aiming.y + cockpit.aiming.height, `mesh edge y=${y} stays in view of the ladder`);
@@ -100,10 +101,13 @@ test('the zero line follows a terrain corner between the ends of a rung', () => 
   state.enemies.length = 0;
   state.player.yaw = 2.29;
   for (let tick = 0; tick < 15; tick++) stepStage(state, tick === 0 ? { maneuver: 'cobra' } : {}, ground);
+  // Translate the maneuver to a position that puts the actual terrain corner across the rung.
+  state.player.x += TERRAIN_HALF_WIDTH - 896;
+  state.player.z += 704 - TERRAIN_HALF_WIDTH;
 
   const marks = frameCockpit(camera, state.player, frame, maneuverAttitude(state.maneuver), ground, 1060);
   const zero = marks.find(mark => mark.angle === 0);
-  const corner = new Vector3(800, 35, 800).project(camera);
+  const corner = new Vector3(TERRAIN_HALF_WIDTH, 35, TERRAIN_HALF_WIDTH).project(camera);
   const x = (1 + corner.x) * width / 2, y = (1 - corner.y) * height / 2;
   const { from, to } = zero.left.find(line => x >= line.from.x && x <= line.to.x);
   const barY = from.y + (to.y - from.y) * (x - from.x) / (to.x - from.x);

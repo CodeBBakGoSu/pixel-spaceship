@@ -76,3 +76,24 @@ test('TOP uses a single Warden return, while forward instruments track the expos
   assert.equal(forward.priority.alt, weak.alt);
   assert.equal(forward.contacts[0].mark, '^');
 });
+
+test('far radar groups share a rim tick and the warning arc points to the nearest boundary', () => {
+  const state = createStage(parseStageOptions('?fixture=stack'));
+  const p = state.player;
+  p.x = state.arena.x + 515;
+  p.z = state.arena.z;
+  state.enemies[0].x = p.x - 192;
+  state.enemies[0].z = p.z;
+  state.enemies[1].x = p.x - 193;
+  state.enemies[1].z = p.z + 6;
+  state.enemies[2].x = p.x - 65;
+  state.enemies[2].z = p.z;
+  state.pickups.push({ id: 200, x: p.x - 200, z: p.z, alt: 110, xp: 1, born: state.tick });
+  state.tick = 92 * 60;
+  const readout = buildRadar(state);
+  assert.equal(readout.contacts.length, 1);
+  assert.equal(readout.rim.filter(tick => tick.kind === 'enemy').length, 1);
+  assert.equal(readout.rim.filter(tick => tick.kind === 'salvage').length, 1);
+  assert.equal(readout.rim.filter(tick => tick.kind === 'warden').length, 1);
+  assert.ok(Math.abs(readout.boundaryBearing - Math.PI / 2) < 0.001);
+});

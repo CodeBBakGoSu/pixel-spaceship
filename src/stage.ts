@@ -1,5 +1,6 @@
 import { advanceBank } from './flight.ts';
 import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS, nearestBand } from './maneuvers.ts';
+import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
   acquireAndFire, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
   hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
@@ -12,7 +13,6 @@ export const BOSS_TICK = 105 * TICKS_PER_SECOND;
 const BOSS_SIGNAL = 3 * TICKS_PER_SECOND;
 const BOSS_ORBIT_PER_TICK = 0.010;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
-const ARENA = { x: -96, z: -96, radius: 240 };
 const seaLevel: Ground = () => 35;
 
 export function parseStageOptions(search: string): StageOptions {
@@ -24,7 +24,8 @@ export function parseStageOptions(search: string): StageOptions {
   return {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
-    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' ? fixture : null,
+    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit'
+      || isLandmarkId(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
@@ -194,10 +195,13 @@ function selectDraft(state: StageState, id: DraftId): void {
 
 function applyFixture(state: StageState, fixture: StageOptions['fixture']): void {
   if (!fixture) return;
-  const seconds = fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
+  const landmark = isLandmarkId(fixture) ? LANDMARKS[fixture] : null;
+  const seconds = landmark ? BEACON_SIGNAL_SECONDS : fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
   state.tick = seconds * TICKS_PER_SECOND;
   state.nextWave = WAVES.findIndex(wave => wave.time > seconds);
-  if (fixture === 'stack') {
+  if (landmark) {
+    Object.assign(state.player, { x: landmark.x, z: landmark.z - 70, altitude: landmark.alt });
+  } else if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
       state.enemies.push(makeEnemy(state, state.player.x, state.player.z + 60, band));
     }
@@ -281,7 +285,11 @@ function startManeuver(state: StageState, kind: ManeuverKind): void {
       enemy.course = { target: { x: p.x - fx * 64 + fz * lane, z: p.z - fz * 64 - fx * lane },
         speed: enemy.kind === 'interceptor' ? 30 : 23, until };
     }
-    if (enemy.course) enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
+    if (enemy.course) {
+      keepInsideArena(enemy.course.target, state.arena);
+      if (enemy.course.pass) keepInsideArena(enemy.course.pass, state.arena);
+      enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
+    }
   }
 }
 
@@ -321,9 +329,9 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   }
   const dx = p.x - a.x, dz = p.z - a.z;
   const distance = Math.hypot(dx, dz);
-  state.boundaryWarning = distance > a.radius - 35;
-  if (distance > a.radius - 28 && maneuver?.kind !== 'j-turn') {
-    const inward = Math.min(96, (distance - a.radius + 28) * 2.2) * STEP;
+  state.boundaryWarning = distance > a.radius - RIM_WARNING;
+  if (distance > a.radius - RIM_PUSH) {
+    const inward = maneuver?.kind === 'j-turn' ? 0 : Math.min(96, (distance - a.radius + RIM_PUSH) * 2.2) * STEP;
     const bound = Math.min(a.radius, distance - inward);
     p.x = a.x + dx * bound / distance;
     p.z = a.z + dz * bound / distance;
@@ -408,7 +416,7 @@ function advanceSalvage(state: StageState): void {
   }
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
   state.pickups = state.pickups.filter(pickup => {
-    if (state.tick - pickup.born >= 42 * TICKS_PER_SECOND) return false;
+    if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
     if (!inBand(p.altitude, pickup.alt)) return true;
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
@@ -465,7 +473,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   fly(state, input, ground, grace);
 
   if (state.tick === BOSS_TICK && !state.boss) {
-    state.boss = makeBoss(state, state.arena.x, state.arena.z + 12);
+    state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
     state.enemies.length = Math.min(state.enemies.length, 10);
   }
   const wave = WAVES[state.nextWave];

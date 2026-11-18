@@ -4,7 +4,7 @@ import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { cockpitTarget, cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
-import { altitudeDeltaText, buildRadar, RadarDisplay, relativeMark, type RadarReadout } from './instruments.ts';
+import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark, type RadarReadout } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { canManeuver, chooseManeuver, MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { FlightScene } from './scene.ts';
@@ -35,6 +35,7 @@ const safeProbe = $('#safe-area-probe');
 const wipe = $('#view-wipe');
 const rearBombMarker = $('#rear-bomb-marker');
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
+const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
 const navRadar = new RadarDisplay();
 const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay'), font);
@@ -140,6 +141,16 @@ function layoutFlight(): void {
   radar.width = Math.max(1, hud.radar.width);
   radar.height = Math.max(1, hud.radar.height);
   navRadar.resize(radar.width, radar.height, font, t('hud.nav'));
+  const mapSize = Math.min(touch ? 66 : 78, radar.width);
+  const mapY = hud.radar.y + hud.radar.height + 5;
+  const beside = phone ? mapY + mapSize > phone.controls.y : hud.radar.x - mapSize - 5 > hud.radio.x + hud.radio.width;
+  setRect('arena-map', {
+    x: beside ? hud.radar.x - mapSize - 5 : phone ? hud.radar.x + radar.width - mapSize : hud.alt.x - mapSize - 5,
+    y: beside ? hud.radar.y : Math.max(mapY, hud.alt.y),
+    width: mapSize, height: mapSize,
+  });
+  arenaMap.width = arenaMap.height = mapSize;
+  arenaMap.hidden = state.view !== 'overhead';
   lastRadarTick = null;
   scene?.resize({ width: innerWidth, height: innerHeight, phone, cockpit });
   root.dataset.view = state.view;
@@ -168,15 +179,21 @@ function resize(): void {
 }
 
 function objectiveText(): string {
+  const p = state.player, beacon = state.view !== 'overhead' ? beaconTrack(state) : null;
+  const dx = beacon ? beacon.x - p.x : 0, dz = beacon ? beacon.z - p.z : 0;
+  const range = Math.hypot(dx, dz);
+  const bearing = (Math.round(Math.atan2(dx, dz) * 180 / Math.PI) + 360) % 360;
+  const navigation = beacon && (range > RADAR_RANGE || !state.boss) ? ` · ${String(bearing).padStart(3, '0')}°` : '';
   const point = activeWeakPoint(state);
   if (!point || !state.boss) {
+    if (beacon) return t('speaker.warden') + navigation;
     return t(state.tick < 40 * TICKS_PER_SECOND ? 'objective.reach' :
       state.tick < BOSS_TICK ? 'objective.waves' : 'objective.boss');
   }
   const seconds = Math.ceil((state.boss.exposeTick - state.tick) / TICKS_PER_SECOND);
   if (state.view === 'overhead') return point.exposed ? t('objective.boss') : t('objective.bossSignal', { seconds });
   const part = t(point.kind === 'core' ? 'boss.core' : point.band === 2 ? 'boss.high' : 'boss.low');
-  return point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds });
+  return (point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds })) + navigation;
 }
 
 function drawPortrait(warden: boolean): void {
@@ -674,6 +691,7 @@ function render(): void {
       motion, clearance, impact, readout, target, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
     navRadar.draw(radarContext, 0, 0, readout, p.yaw, state.tick);
+    if (!arenaMap.hidden) drawArenaMap(mapContext, state);
     lastRadarTick = state.tick;
   }
   dirty = false;
