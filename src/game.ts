@@ -1,26 +1,30 @@
 import { advanceBank } from './flight.ts';
 import type { CameraState, Segment } from './camera.ts';
+import type { MessageKey } from './i18n.ts';
 export type { CameraState, Segment } from './camera.ts';
 
 export type SegmentId = 'reach' | 'atoll' | 'canyon' | 'orbit';
 export type Biome = 'jungle' | 'canyon' | 'space';
 export type Rank = 'S' | 'A' | 'B' | 'C';
-export type DialogueBeat = { at: number; speaker: 'OPAL' | 'GALE' | 'WARDEN'; text: string };
-export type SegmentDef = { id: SegmentId; name: string; defaultView: Segment; biome: Biome; goal: 'waves' | 'pylons' | 'doors' | 'boss'; duration?: number; waveEvery: number; supplyEvery: number; doorCount?: number; approach?: number; beats: DialogueBeat[] };
+type ObjectiveKey = Extract<MessageKey, `objective.${string}`>;
+type DialogueKey = Extract<MessageKey, `dialogue.${string}`>;
+type DialogueLine = { speaker: 'opal' | 'gale' | 'warden'; key: DialogueKey };
+export type DialogueBeat = DialogueLine & { at: number };
+export type SegmentDef = { id: SegmentId; defaultView: Segment; biome: Biome; goal: 'waves' | 'pylons' | 'doors' | 'boss'; duration?: number; waveEvery: number; supplyEvery: number; doorCount?: number; approach?: number; beats: DialogueBeat[] };
 export const SCRIPT: readonly SegmentDef[] = [
-  { id: 'reach', name: 'KESTREL REACH', defaultView: 'overhead', biome: 'jungle', goal: 'waves', duration: 50, waveEvery: 12, supplyEvery: 14, beats: [
-    { at: 0, speaker: 'OPAL', text: 'Kestrel Reach ahead. Watch your altitude, courier.' },
-    { at: 10, speaker: 'GALE', text: 'Supply drones carry power capsules. Grab what you can.' },
+  { id: 'reach', defaultView: 'overhead', biome: 'jungle', goal: 'waves', duration: 50, waveEvery: 12, supplyEvery: 14, beats: [
+    { at: 0, speaker: 'opal', key: 'dialogue.reachArrival' },
+    { at: 10, speaker: 'gale', key: 'dialogue.reachSupply' },
   ] },
-  { id: 'atoll', name: 'THE ATOLL', defaultView: 'chase', biome: 'jungle', goal: 'pylons', waveEvery: 25, supplyEvery: 18, beats: [
-    { at: 0, speaker: 'OPAL', text: 'Four relay pylons guard the exit. Take them down.' },
+  { id: 'atoll', defaultView: 'chase', biome: 'jungle', goal: 'pylons', waveEvery: 25, supplyEvery: 18, beats: [
+    { at: 0, speaker: 'opal', key: 'dialogue.atollArrival' },
   ] },
-  { id: 'canyon', name: 'BASE CANYON', defaultView: 'chase', biome: 'canyon', goal: 'doors', waveEvery: 24, supplyEvery: 18, doorCount: 3, beats: [
-    { at: 0, speaker: 'GALE', text: 'Blast doors ahead. Shoot both locks to open each gate.' },
+  { id: 'canyon', defaultView: 'chase', biome: 'canyon', goal: 'doors', waveEvery: 24, supplyEvery: 18, doorCount: 3, beats: [
+    { at: 0, speaker: 'gale', key: 'dialogue.canyonArrival' },
   ] },
-  { id: 'orbit', name: 'KESTREL ORBIT', defaultView: 'cockpit', biome: 'space', goal: 'boss', waveEvery: 12, supplyEvery: 18, approach: 14, beats: [
-    { at: 0, speaker: 'WARDEN', text: 'Unregistered courier. This lane is closed.' },
-    { at: 7, speaker: 'OPAL', text: 'Break the four outer pods. Then hit the eye.' },
+  { id: 'orbit', defaultView: 'cockpit', biome: 'space', goal: 'boss', waveEvery: 12, supplyEvery: 18, approach: 14, beats: [
+    { at: 0, speaker: 'warden', key: 'dialogue.orbitWarning' },
+    { at: 7, speaker: 'opal', key: 'dialogue.orbitPods' },
   ] },
 ];
 export type GamePhase = 'title' | 'playing' | 'transition' | 'win' | 'game_over';
@@ -33,10 +37,10 @@ export type Entity = {
 };
 export type Bullet = { x: number; y: number; z: number; alt: number; vx: number; vy: number; vz: number; friendly: boolean; life: number };
 export type GameState = {
-  phase: GamePhase; segment: SegmentId; nextSegment: SegmentId; initialView: Segment | null; scriptIndex: number; biome: Biome; objective: string;
+  phase: GamePhase; segment: SegmentId; nextSegment: SegmentId; initialView: Segment | null; scriptIndex: number; biome: Biome; objective: ObjectiveKey;
   loop: number; loopSpeed: number; score: number; salvage: number; lives: number; hull: number; maxHull: number; hitsTaken: number; rank: Rank | null;
   bst: number; boosting: boolean; bombs: number; weaponLv: 1 | 2 | 3; peakWeaponLv: 1 | 2 | 3; roll: number; wipeT: number; viewTagT: number;
-  dialogue: { speaker: string; text: string; timer: number } | null; beatIndex: number;
+  dialogue: (DialogueLine & { timer: number }) | null; beatIndex: number;
   phaseTime: number; transitionT: number; invulnTimer: number; aimX: number; aimY: number; aspect: number;
   rng: number; seed: number; autoplay: boolean; paused: boolean; elapsed: number; spawnTimer: number; supplyTimer: number; waveId: number;
   pylonsDown: number; doorsCleared: number; doorOpen: boolean; doorTimer: number; boundaryWarning: boolean; botRetreat: boolean;
@@ -141,17 +145,17 @@ function enterSegment(s: GameState, id: SegmentId, ground: Ground, view?: Segmen
   s.arena = { x: s.player.x, z: s.player.z, radius: id === 'atoll' ? 220 : id === 'canyon' ? 95 : 350 };
   s.player.altitude = clamp(Math.max(s.player.altitude, ground(s.player.x, s.player.z) + 65), 65, 155);
   s.camera.mode = view || def.defaultView; updateCamera(s);
-  if (def.goal === 'waves') s.objective = 'CLEAR THE APPROACH';
+  if (def.goal === 'waves') s.objective = 'objective.reach';
   if (def.goal === 'pylons') {
-    s.objective = 'DESTROY THE RELAY PYLONS  0/4';
+    s.objective = 'objective.pylons';
     for (const [x, z] of [[-105, 115], [105, 140], [120, -70], [-115, -90]]) s.entities.push(entity('pylon', s.arena.x + x, s.arena.z + z, s.player.altitude));
   }
-  if (def.goal === 'doors') { s.objective = `BLAST DOORS // SHOOT THE LOCKS  0/${def.doorCount}`; spawnDoor(s); }
-  if (def.goal === 'boss') { s.objective = 'ORBIT APPROACH // CLEAR THE ESCORTS'; s.boss.x = s.arena.x; s.boss.z = s.arena.z + 245; s.boss.alt = s.player.altitude; }
+  if (def.goal === 'doors') { s.objective = 'objective.doors'; spawnDoor(s); }
+  if (def.goal === 'boss') { s.objective = 'objective.orbit'; s.boss.x = s.arena.x; s.boss.z = s.arena.z + 245; s.boss.alt = s.player.altitude; }
 }
 export function createGame(options: GameOptions = parseGameOptions(''), ground: Ground = () => 30): GameState {
   const id = options.segment || 'reach';
-  const s: GameState = { phase: options.segment ? 'playing' : 'title', segment: id, nextSegment: id, initialView: options.view, scriptIndex: 0, biome: 'jungle', objective: '',
+  const s: GameState = { phase: options.segment ? 'playing' : 'title', segment: id, nextSegment: id, initialView: options.view, scriptIndex: 0, biome: 'jungle', objective: 'objective.reach',
     loop: options.loop, loopSpeed: Math.min(1.8, 1 + (options.loop - 1) * 0.2), score: 0, salvage: 0, lives: 3, hull: 8, maxHull: 8, hitsTaken: 0, rank: null,
     bst: 1, boosting: false, bombs: 3, weaponLv: 1, peakWeaponLv: 1, roll: 0, wipeT: 0, viewTagT: 0, dialogue: null, beatIndex: 0,
     phaseTime: 0, transitionT: 0, invulnTimer: 0, aimX: 0, aimY: 0, aspect: 16 / 9, rng: options.seed >>> 0, seed: options.seed >>> 0, autoplay: options.autoplay, paused: false, elapsed: 0,
@@ -160,7 +164,7 @@ export function createGame(options: GameOptions = parseGameOptions(''), ground: 
     camera: { mode: 'overhead', x: 0, z: 55, yaw: 0, altitude: 110, pitch: 0, camOffset: 0, camHeightOffset: 2, crossFade: 0 },
     entities: [], bullets: [], effects: [], boss: blankBoss() };
   enterSegment(s, id, ground, options.view);
-  if (options.boss && id === 'orbit') { s.boss.active = true; s.boss.z = s.player.z + 130; s.objective = 'WARDEN // DESTROY THE FOUR PODS'; }
+  if (options.boss && id === 'orbit') { s.boss.active = true; s.boss.z = s.player.z + 130; s.objective = 'objective.pods'; }
   if (!options.segment) s.phase = 'title'; return s;
 }
 export function restartGame(s: GameState, ground: Ground = () => 30): GameState {
@@ -250,7 +254,7 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   const mx = clamp(control.moveX, -1, 1), my = clamp(control.moveY, -1, 1), p = s.player;
   s.phaseTime += dt;
   const mission = SCRIPT[s.scriptIndex], beat = mission.beats[s.beatIndex];
-  if (beat && s.phaseTime >= beat.at) { s.dialogue = { speaker: beat.speaker, text: beat.text, timer: 5 }; s.beatIndex++; }
+  if (beat && s.phaseTime >= beat.at) { s.dialogue = { speaker: beat.speaker, key: beat.key, timer: 5 }; s.beatIndex++; }
   if (s.dialogue) { s.dialogue.timer -= dt; if (s.dialogue.timer <= 0) s.dialogue = null; }
   s.boosting = !!control.boost && s.bst > 0;
   s.bst = clamp(s.bst + (control.boost ? -0.5 : 0.35) * dt, 0, 1);
@@ -280,7 +284,7 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   if (s.spawnTimer <= 0 && (mission.goal !== 'boss' || !s.boss.active)) { spawnWave(s); s.spawnTimer = mission.waveEvery / s.loopSpeed; }
   s.supplyTimer -= dt;
   if (s.supplyTimer <= 0) { spawnSupply(s); s.supplyTimer = mission.supplyEvery; }
-  if (mission.goal === 'boss' && !s.boss.active && s.phaseTime >= (mission.approach || 14)) { s.boss.active = true; s.objective = 'WARDEN // DESTROY THE FOUR PODS'; }
+  if (mission.goal === 'boss' && !s.boss.active && s.phaseTime >= (mission.approach || 14)) { s.boss.active = true; s.objective = 'objective.pods'; }
   if (s.boss.active) { s.boss.fireTimer -= dt; s.boss.hitFlash = Math.max(0, s.boss.hitFlash - dt);
     if (s.boss.fireTimer <= 0 && !bombTriggered && s.entities.filter(e => e.kind === 'boss_orb').length < 10) {
       for (let i = -1; i <= 1; i++) { const orb = entity('boss_orb', s.boss.x + i * 13, s.boss.z, s.boss.alt); const dx = p.x - orb.x, dz = p.z - orb.z, d = Math.max(1, Math.hypot(dx, dz)); orb.vx = dx / d * 45 + i * 5; orb.vz = dz / d * 45; orb.valt = (p.altitude - orb.alt) / d * 45; orb.fireTimer = 4; s.entities.push(orb); }
@@ -360,21 +364,21 @@ export function stepGame(previous: GameState, input: GameInput, elapsed: number,
   }
   s.entities = s.entities.filter(e => e.hp > 0 && (!['drone', 'supply', 'capsule', 'boss_orb'].includes(e.kind) || Math.hypot(e.x - p.x, e.z - p.z) <= 500));
   if (mission.goal === 'pylons') {
-    if (s.pylonsDown === 4 && !s.entities.some(e => e.kind === 'exit')) { s.entities.push(entity('exit', s.arena.x, s.arena.z + 180, p.altitude)); s.dialogue = { speaker: 'OPAL', text: 'Pylons down. Follow the gold exit ring.', timer: 5 }; }
-    s.objective = s.pylonsDown === 4 ? 'PYLONS DOWN // FLY THROUGH EXIT' : `DESTROY THE RELAY PYLONS  ${s.pylonsDown}/4`;
+    if (s.pylonsDown === 4 && !s.entities.some(e => e.kind === 'exit')) { s.entities.push(entity('exit', s.arena.x, s.arena.z + 180, p.altitude)); s.dialogue = { speaker: 'opal', key: 'dialogue.pylonsDown', timer: 5 }; }
+    s.objective = s.pylonsDown === 4 ? 'objective.exit' : 'objective.pylons';
   }
   if (mission.goal === 'doors') {
-    if (!s.doorOpen && !s.entities.some(e => e.kind === 'lock')) { s.doorOpen = true; s.doorTimer = 1; s.objective = 'DOOR OPEN'; }
+    if (!s.doorOpen && !s.entities.some(e => e.kind === 'lock')) { s.doorOpen = true; s.doorTimer = 1; s.objective = 'objective.doorOpen'; }
     else if (s.doorOpen) {
       s.doorTimer -= dt;
       if (s.doorTimer <= 0) { s.doorsCleared++; s.entities = s.entities.filter(e => e.kind !== 'door');
-        if (s.doorsCleared >= (mission.doorCount || 3)) transition(s); else { s.objective = `BLAST DOORS // SHOOT THE LOCKS  ${s.doorsCleared}/${mission.doorCount}`; spawnDoor(s); }
+        if (s.doorsCleared >= (mission.doorCount || 3)) transition(s); else { s.objective = 'objective.doors'; spawnDoor(s); }
       }
     }
   }
   if (s.boss.active) {
     s.boss.hp = s.boss.pods.reduce((sum, hp) => sum + hp, 0) + s.boss.coreHp;
-    if (!s.boss.pods.some(hp => hp > 0)) s.objective = 'THE EYE IS OPEN // HIT THE CORE';
+    if (!s.boss.pods.some(hp => hp > 0)) s.objective = 'objective.core';
     if (s.boss.coreHp <= 0 && s.phase === 'playing') {
       s.score += 25000; s.rank = calculateRank(s.hitsTaken); s.salvage += { S: 500, A: 300, B: 150, C: 50 }[s.rank];
       s.phase = 'win'; s.boss.active = false; s.effects.push({ x: s.boss.x, z: s.boss.z, alt: s.boss.alt, life: 1, kind: 'burst' });

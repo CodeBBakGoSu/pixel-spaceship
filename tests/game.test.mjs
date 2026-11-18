@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, stepGame, parseGameOptions, restartGame, nextLoop, elevationBracket, calculateRank, wardenTargets } from '../src/game.ts';
+import { SCRIPT, createGame, stepGame, parseGameOptions, restartGame, nextLoop, elevationBracket, calculateRank, wardenTargets } from '../src/game.ts';
 
 const ground = () => 30;
 const idle = { moveX: 0, moveY: 0, fire: false };
@@ -239,7 +239,9 @@ test('the mission script has a longer reach, three doors, and an orbital approac
   assert.equal(s.phaseTime, 0); assert.equal(s.boss.active, false);
   s=advance(s, 2); assert.equal(s.boss.active, false);
   s=createGame(parseGameOptions('?segment=canyon'),ground);
-  assert.match(s.objective, /0\/3/);
+  assert.equal(s.objective, 'objective.doors');
+  assert.equal(s.doorsCleared, 0);
+  assert.equal(SCRIPT[s.scriptIndex].doorCount, 3);
 });
 
 test('supplies spawned near a bay edge remain inside the reachable airspace', () => {

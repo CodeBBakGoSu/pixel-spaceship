@@ -1,0 +1,218 @@
+const en = {
+  'app.title': 'ASTER // Courier Run',
+  'app.description': 'A pixel-art courier flight through coast, canyon and orbit.',
+  'aria.game': 'Pixel-art courier flight game',
+  'aria.flight': 'Flight game. Steer, climb and fire.',
+  'aria.hud': 'Flight status',
+  'aria.menu': 'Mission menu',
+  'aria.radar': 'Navigation radar',
+  'aria.stick': 'Virtual steering stick',
+  'language.label': 'Language',
+  'language.en': 'EN',
+  'language.ko': '한국어',
+  'hud.hull': 'HULL',
+  'hud.boost': 'BST',
+  'hud.bombs': 'BMB',
+  'hud.bombStock': 'Bombs remaining',
+  'hud.score': 'SCORE',
+  'hud.salvage': 'Salvage',
+  'hud.altitude': 'ALT',
+  'hud.speed': 'SPD',
+  'hud.nav': 'NAV',
+  'hud.radar': 'RDR',
+  'hud.twin': 'TWIN',
+  'hud.weapon': 'TWIN {level}',
+  'hud.boundary': 'RETURN TO AIRSPACE',
+  'canvas.exit': 'EXIT',
+  'canvas.weakPoint': 'WEAK POINT',
+  'view.overhead': 'TOP',
+  'view.chase': 'CHASE',
+  'view.cockpit': 'COCKPIT',
+  'view.tag': 'VIEW {view}',
+  'control.climb': 'CLIMB / DIVE',
+  'control.fire': 'FIRE',
+  'control.boost': 'BOOST',
+  'control.bomb': 'BOMB',
+  'control.view': 'VIEW',
+  'control.pause': 'PAUSE',
+  'help.reach': 'CLEAR WAVES / MATCH ALTITUDE',
+  'help.atoll': 'SHOOT PYLONS / FIND EXIT',
+  'help.canyon': 'SHOOT BOTH LOCKS',
+  'help.orbit': 'DESTROY PODS / CORE',
+  'help.keys': 'WASD / ARROWS · SPACE FIRE · SHIFT BOOST · X BOMB · V VIEW · P PAUSE',
+  'help.touch': 'DRAG TO TURN / CLIMB · FIRE · BOOST · BOMB · VIEW',
+  'menu.title.kicker': 'COURIER FLIGHT SYSTEMS / MISSION 01',
+  'menu.title.title': 'ASTER WING',
+  'menu.title.copy': 'Clear the reach, open the gates, and deliver the signal through orbit.',
+  'menu.title.action': 'LAUNCH MISSION',
+  'menu.title.hint': 'ENTER TO LAUNCH',
+  'menu.paused.kicker': 'FLIGHT SYSTEMS / STANDBY',
+  'menu.paused.title': 'PAUSED',
+  'menu.paused.copy': 'Mission clock and flight systems are on hold.',
+  'menu.paused.action': 'RESUME',
+  'menu.paused.hint': 'P TO RESUME',
+  'menu.win.kicker': 'KESTREL ORBIT CLEAR',
+  'menu.win.title': 'ROUTE COMPLETE',
+  'menu.win.copy': 'SCORE {score} · {hits} HITS · ◆ {salvage}',
+  'menu.win.action': 'NEXT LOOP',
+  'menu.win.hint': 'ENTER FOR NEXT LOOP · R TO RESTART',
+  'menu.win.rank': 'RANK {rank}',
+  'menu.game_over.kicker': 'SIGNAL LOST',
+  'menu.game_over.title': 'MISSION ENDED',
+  'menu.game_over.copy': 'FINAL SCORE {score}',
+  'menu.game_over.hint': 'ENTER TO RESTART',
+  'menu.restart': 'RESTART',
+  'segment.reach': 'KESTREL REACH',
+  'segment.atoll': 'THE ATOLL',
+  'segment.canyon': 'BASE CANYON',
+  'segment.orbit': 'KESTREL ORBIT',
+  'objective.reach': 'CLEAR THE APPROACH',
+  'objective.pylons': 'DESTROY THE RELAY PYLONS  {down}/4',
+  'objective.exit': 'PYLONS DOWN // FLY THROUGH EXIT',
+  'objective.doors': 'BLAST DOORS // SHOOT THE LOCKS  {cleared}/{total}',
+  'objective.doorOpen': 'DOOR OPEN',
+  'objective.orbit': 'ORBIT APPROACH // CLEAR THE ESCORTS',
+  'objective.pods': 'WARDEN // DESTROY THE FOUR PODS',
+  'objective.core': 'THE EYE IS OPEN // HIT THE CORE',
+  'speaker.opal': 'OPAL',
+  'speaker.gale': 'GALE',
+  'speaker.warden': 'WARDEN',
+  'dialogue.reachArrival': 'Kestrel Reach ahead. Watch your altitude, courier.',
+  'dialogue.reachSupply': 'Supply drones carry power capsules. Grab what you can.',
+  'dialogue.atollArrival': 'Four relay pylons guard the exit. Take them down.',
+  'dialogue.pylonsDown': 'Pylons down. Follow the gold exit ring.',
+  'dialogue.canyonArrival': 'Blast doors ahead. Shoot both locks to open each gate.',
+  'dialogue.orbitWarning': 'Unregistered courier. This lane is closed.',
+  'dialogue.orbitPods': 'Break the four outer pods. Then hit the eye.',
+};
+
+export type MessageKey = keyof typeof en;
+export type Language = 'en' | 'ko';
+
+const ko = {
+  'app.title': '아스터 // 우주 수송 작전',
+  'app.description': '해안과 협곡, 궤도를 통과하는 픽셀 아트 수송 임무.',
+  'aria.game': '픽셀 아트 수송 비행 게임',
+  'aria.flight': '비행 게임. 방향과 고도를 조절하고 사격하세요.',
+  'aria.hud': '비행 상태',
+  'aria.menu': '임무 메뉴',
+  'aria.radar': '항법 레이더',
+  'aria.stick': '가상 조종 스틱',
+  'language.label': '언어',
+  'language.en': 'EN',
+  'language.ko': '한국어',
+  'hud.hull': '장갑',
+  'hud.boost': '가속',
+  'hud.bombs': '폭탄',
+  'hud.bombStock': '남은 폭탄 수',
+  'hud.score': '점수',
+  'hud.salvage': '회수품',
+  'hud.altitude': '고도',
+  'hud.speed': '속도',
+  'hud.nav': '항법',
+  'hud.radar': '레이더',
+  'hud.twin': '기총',
+  'hud.weapon': '기총 {level}',
+  'hud.boundary': '작전 구역으로 복귀',
+  'canvas.exit': '출구',
+  'canvas.weakPoint': '약점',
+  'view.overhead': '상공',
+  'view.chase': '후방',
+  'view.cockpit': '조종석',
+  'view.tag': '{view} 시점',
+  'control.climb': '상승 / 하강',
+  'control.fire': '사격',
+  'control.boost': '가속',
+  'control.bomb': '폭탄',
+  'control.view': '시점',
+  'control.pause': '일시 정지',
+  'help.reach': '적 편대 격파 / 고도 맞추기',
+  'help.atoll': '중계탑 파괴 / 출구 탐색',
+  'help.canyon': '잠금장치 두 개 파괴',
+  'help.orbit': '포드와 코어 파괴',
+  'help.keys': 'WASD / 방향키 · 스페이스 사격 · Shift 가속 · X 폭탄 · V 시점 · P 정지',
+  'help.touch': '스틱으로 방향과 고도 조절 · 사격 · 가속 · 폭탄 · 시점',
+  'menu.title.kicker': '수송 비행 시스템 / 임무 01',
+  'menu.title.title': '아스터 윙',
+  'menu.title.copy': '해역을 돌파하고 관문을 열어 궤도 너머로 신호를 전송하세요.',
+  'menu.title.action': '임무 시작',
+  'menu.title.hint': 'Enter로 출격',
+  'menu.paused.kicker': '비행 시스템 / 대기',
+  'menu.paused.title': '일시 정지',
+  'menu.paused.copy': '임무 시간과 비행이 멈췄습니다.',
+  'menu.paused.action': '계속하기',
+  'menu.paused.hint': 'P로 계속하기',
+  'menu.win.kicker': '케스트럴 궤도 돌파',
+  'menu.win.title': '항로 돌파 완료',
+  'menu.win.copy': '점수 {score} · 피격 {hits}회 · ◆ {salvage}',
+  'menu.win.action': '다음 루프',
+  'menu.win.hint': 'Enter 다음 루프 · R 처음부터',
+  'menu.win.rank': '등급 {rank}',
+  'menu.game_over.kicker': '신호 끊김',
+  'menu.game_over.title': '임무 종료',
+  'menu.game_over.copy': '최종 점수 {score}',
+  'menu.game_over.hint': 'Enter로 다시 시작',
+  'menu.restart': '다시 시작',
+  'segment.reach': '케스트럴 해역',
+  'segment.atoll': '환초 지대',
+  'segment.canyon': '기지 협곡',
+  'segment.orbit': '케스트럴 궤도',
+  'objective.reach': '접근로의 적 편대를 격파하세요',
+  'objective.pylons': '중계탑 파괴  {down}/4',
+  'objective.exit': '중계탑 파괴 완료 // 출구 고리 통과',
+  'objective.doors': '방폭문 잠금장치 파괴  {cleared}/{total}',
+  'objective.doorOpen': '방폭문 개방',
+  'objective.orbit': '궤도 진입 // 호위 편대 격파',
+  'objective.pods': '워든 // 포드 4기 파괴',
+  'objective.core': '코어 노출 // 집중 사격',
+  'speaker.opal': '오팔',
+  'speaker.gale': '게일',
+  'speaker.warden': '워든',
+  'dialogue.reachArrival': '케스트럴 해역입니다. 고도를 확인하세요.',
+  'dialogue.reachSupply': '보급 드론의 강화 캡슐을 회수하세요.',
+  'dialogue.atollArrival': '중계탑 4기가 출구를 막고 있습니다. 모두 파괴하세요.',
+  'dialogue.pylonsDown': '중계탑 파괴 완료. 황금 고리로 가세요.',
+  'dialogue.canyonArrival': '방폭문입니다. 잠금장치 두 개를 쏘면 열립니다.',
+  'dialogue.orbitWarning': '미등록 수송기다. 이 항로는 폐쇄됐다.',
+  'dialogue.orbitPods': '외부 포드 4기를 파괴한 뒤 코어를 공격하세요.',
+} satisfies Record<MessageKey, string>;
+
+export const strings = { en, ko };
+const languageKey = 'aster.lang';
+type LanguageStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type Params = Record<string, string | number>;
+
+function isLanguage(value: string | null | undefined): value is Language {
+  return value === 'en' || value === 'ko';
+}
+
+export function detectLanguage(locale: string): Language {
+  return locale.toLowerCase().startsWith('ko') ? 'ko' : 'en';
+}
+
+export function initialLanguage(search: string, locale: string, storage?: LanguageStorage): Language {
+  const override = new URLSearchParams(search).get('lang');
+  if (isLanguage(override)) return override;
+  try {
+    const stored = storage?.getItem(languageKey);
+    if (isLanguage(stored)) return stored;
+  } catch {
+    // Storage can be disabled in the browser.
+  }
+  return detectLanguage(locale);
+}
+
+export function saveLanguage(language: Language, storage?: LanguageStorage): void {
+  try {
+    storage?.setItem(languageKey, language);
+  } catch {
+    // The current page can still switch languages.
+  }
+}
+
+export function createTranslator(language: Language) {
+  return function t(key: MessageKey, params?: Params): string {
+    const message = strings[language][key];
+    return params ? message.replace(/\{(\w+)\}/g, (token, name: string) => String(params[name] ?? token)) : message;
+  };
+}

@@ -9,49 +9,55 @@
   <title>ASTER // Courier Run</title>
 </head>
 <body>
-<main class="experience" aria-label="Pixel-art courier flight game">
-  <canvas id="screen" aria-label="Flight game. Steer, climb and fire."></canvas>
+<main class="experience" data-label="aria.game">
+  <canvas id="screen" data-label="aria.flight"></canvas>
   <canvas id="glow" aria-hidden="true"></canvas>
   <div class="screen-shade" aria-hidden="true"></div>
   <div id="safe-area-probe" aria-hidden="true"></div>
   <div id="control-backdrop" aria-hidden="true"></div>
-  <header class="hud" aria-label="Flight status">
+  <header class="hud" data-label="aria.hud">
     <div class="status">
-      <div><span>HULL</span><b id="hull-bars" class="blocks">▮▮▮▮▮▮▮▮</b><small id="lives">×3</small></div>
-      <div><span>BST</span><i class="track"><i id="boost-bar"></i></i></div>
-      <div><span>BMB</span><b id="bombs" class="bombs">◆◆◆</b></div>
-      <div class="status-view"><strong id="view-label">TOP</strong><span id="weapon-label">TWIN 1</span><time id="segment-timer">00:00</time></div>
+      <div><span data-i18n="hud.hull"></span><b id="hull-bars" class="blocks"></b><small id="lives"></small></div>
+      <div><span data-i18n="hud.boost"></span><i class="track"><i id="boost-bar"></i></i></div>
+      <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b></div>
+      <div class="status-view"><strong id="view-label"></strong><span id="weapon-label"></span><time id="segment-timer"></time></div>
     </div>
-    <div class="scorebox"><span>SCORE</span><strong id="score">000000</strong><small id="salvage">◆ 000</small></div>
+    <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small></div>
   </header>
-  <button class="touch-pause" id="touch-pause" type="button" aria-label="Pause" hidden>Ⅱ</button>
-  <div id="boss-hud" class="boss-hud" hidden><span>WARDEN</span><i><i id="boss-health"></i></i></div>
+  <button class="touch-pause" id="touch-pause" type="button" data-label="control.pause" hidden>Ⅱ</button>
+  <div id="boss-hud" class="boss-hud" hidden><span data-i18n="speaker.warden"></span><i><i id="boss-health"></i></i></div>
   <section id="radio" class="radio" aria-live="polite" hidden>
     <canvas id="portrait" width="32" height="32" aria-hidden="true"></canvas>
     <div><strong id="radio-speaker"></strong><p id="radio-text"></p></div>
   </section>
   <div id="objective" class="objective"></div>
-  <div id="boundary-warning" class="boundary-warning" hidden>RETURN TO AIRSPACE</div>
-  <canvas id="nav-radar" width="72" height="72" aria-label="Navigation radar"></canvas>
-  <div class="alt-ruler" aria-label="Altitude"><span>ALT</span><i></i><b id="alt-marker">◂</b><small id="alt-number">110</small></div>
+  <div id="boundary-warning" class="boundary-warning" data-i18n="hud.boundary" hidden></div>
+  <canvas id="nav-radar" width="72" height="72" data-label="aria.radar"></canvas>
+  <div class="alt-ruler" data-label="hud.altitude"><span data-i18n="hud.altitude"></span><i></i><b id="alt-marker">◂</b><small id="alt-number"></small></div>
   <div id="phase-banner" class="phase-banner" hidden></div>
   <div id="view-tag" class="view-tag" hidden></div>
-  <section class="game-overlay" id="game-overlay" aria-label="Mission menu">
+  <section class="game-overlay" id="game-overlay" data-label="aria.menu" hidden>
     <div class="game-card">
-      <div class="card-kicker" id="card-kicker">COURIER FLIGHT SYSTEMS</div>
-      <h1 id="card-title">ASTER <span>WING</span></h1>
-      <p id="card-copy">Clear the route. Deliver the signal.</p>
+      <div class="card-kicker" id="card-kicker"></div>
+      <h1 id="card-title"></h1>
+      <p id="card-copy"></p>
       <div id="rank-display" class="rank-display" hidden></div>
-      <div class="card-actions"><button type="button" id="primary-action">LAUNCH MISSION</button><button type="button" id="restart-action" hidden>RESTART</button></div>
-      <div class="card-hint" id="card-hint">ENTER TO LAUNCH</div>
+      <div class="card-actions"><button type="button" id="primary-action"></button><button type="button" id="restart-action" data-i18n="menu.restart" hidden></button></div>
+      <div class="card-hint" id="card-hint"></div>
+      <div class="card-options" id="card-options" hidden>
+        <div class="language-switch" role="group" data-label="language.label">
+          <button type="button" lang="en" data-lang="en" data-i18n="language.en" aria-pressed="false"></button>
+          <button type="button" lang="ko" data-lang="ko" data-i18n="language.ko" aria-pressed="false"></button>
+        </div>
+      </div>
     </div>
   </section>
   <div class="touch-controls" id="touch-controls" hidden>
-    <div class="stick" id="stick" aria-label="Virtual steering stick"><span id="stick-knob"></span><small>CLIMB / DIVE</small></div>
-    <button class="touch-button fire" id="touch-fire" type="button">FIRE</button>
-    <button class="touch-button boost" id="touch-boost" type="button">BOOST</button>
-    <button class="touch-button bomb" id="touch-bomb" type="button">BOMB</button>
-    <button class="touch-button view" id="touch-view" type="button">VIEW</button>
+    <div class="stick" id="stick" data-label="aria.stick"><span id="stick-knob"></span><small data-i18n="control.climb"></small></div>
+    <button class="touch-button fire" id="touch-fire" type="button" data-i18n="control.fire"></button>
+    <button class="touch-button boost" id="touch-boost" type="button" data-i18n="control.boost"></button>
+    <button class="touch-button bomb" id="touch-bomb" type="button" data-i18n="control.bomb"></button>
+    <button class="touch-button view" id="touch-view" type="button" data-i18n="control.view"></button>
   </div>
   <div class="help" id="help" aria-live="polite"></div>
 </main>

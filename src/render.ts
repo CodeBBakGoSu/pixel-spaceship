@@ -3,6 +3,7 @@ import { elevationBracket, wardenTargets, type GameState } from './game';
 import type { SpriteCache } from './models';
 
 type Point = { x: number; y: number; scale: number; depth: number };
+export type EntityLabels = { font: string; exit: string; warden: string; weakPoint: string };
 export function projectWorld(camera: CameraState, x: number, z: number, alt: number, w: number, h: number, mode: Segment): Point | null {
   if (mode === 'overhead') return { x: w / 2 + (x - camera.x) / 1.4 * Math.min(1, w / 240), y: h / 2 - (z - camera.z) / 1.4, scale: 1 / 1.4, depth: z - camera.z };
   const sin = Math.sin(camera.yaw), cos = Math.cos(camera.yaw);
@@ -13,11 +14,11 @@ export function projectWorld(camera: CameraState, x: number, z: number, alt: num
   return { x: w / 2 + right * h * 0.95 / depth, y: h * 0.3 + camera.pitch * 15 + (camera.altitude + camera.camHeightOffset - alt) * scale, scale, depth };
 }
 
-export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, cache: SpriteCache, s: GameState, mode: Segment, ground: (x: number, z: number) => number): void {
+export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, cache: SpriteCache, s: GameState, mode: Segment, ground: (x: number, z: number) => number, labels: EntityLabels): void {
   const w = ctx.canvas.width, h = ctx.canvas.height;
   const objects = s.entities.map(e => ({ e, point: projectWorld(s.camera, e.x, e.z, e.alt, w, h, mode) }));
   objects.sort((a, b) => (b.point?.depth ?? -1) - (a.point?.depth ?? -1));
-  ctx.font = 'bold 6px monospace'; ctx.textAlign = 'center';
+  ctx.font = labels.font; ctx.textAlign = 'center';
   for (const { e, point } of objects) {
     if (!point || point.y < -120 || point.y > h + 120) continue;
     if ((point.x < 6 || point.x > w - 6) && (e.kind === 'pylon' || e.kind === 'lock')) {
@@ -57,7 +58,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
       for (let k=-height;k<height;k+=4) { ctx.fillStyle = k%8 ? '#38434d' : '#505965'; ctx.fillRect(x-width,y+k,width*2,2); }
       ctx.fillStyle = '#e0a543'; for (let k=-width;k<width;k+=8) ctx.fillRect(x+k,y+height-3,4,2);
     }
-    if (e.kind === 'exit') { ctx.fillStyle='#ffe16c'; ctx.fillText('EXIT',x,y-18*scale); }
+    if (e.kind === 'exit') { ctx.fillStyle='#ffe16c'; ctx.fillText(labels.exit,x,y-18*scale); }
     if (e.kind === 'pylon') { ctx.fillStyle='#171927'; ctx.fillRect(x-6,y-6,12,3); ctx.fillStyle='#ffd454'; ctx.fillRect(x-5,y-5,Math.max(0,Math.round(e.hp/12*10)),1); }
     if (['drone','supply','pylon'].includes(e.kind)) {
       const cue = elevationBracket(e.alt,s.player.altitude); ctx.fillStyle = cue === 'inline' ? '#ff5e66' : cue === 'above' ? '#6ef3ff' : '#ffaa4c';
@@ -80,7 +81,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
         ctx.fillStyle='#1b1c28';ctx.fillRect(px-5,py-5,10,10);ctx.fillStyle='#f8b52e';ctx.fillRect(px-4,py-4,8,8);ctx.fillStyle='#fff0a2';ctx.fillRect(px-2,py-2,4,4);
         const cue=elevationBracket(target.alt,s.player.altitude);ctx.fillStyle=cue==='inline'?'#ff5e66':cue==='above'?'#6ef3ff':'#ffaa4c';ctx.fillText(cue==='inline'?'[ ]':cue==='above'?'^':'v',px,py-7);
       }
-      ctx.fillStyle=open ? '#fff09a' : '#ffcf6b';ctx.fillText(open ? 'WEAK POINT' : 'WARDEN',x,y-35*scale);
+      ctx.fillStyle=open ? '#fff09a' : '#ffcf6b';ctx.fillText(open ? labels.weakPoint : labels.warden,x,y-35*scale);
     }
   }
 }
