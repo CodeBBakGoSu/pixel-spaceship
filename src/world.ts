@@ -4,6 +4,8 @@ import type { Ground } from './stage-types.ts';
 export const TERRAIN_SIZE = 1024;
 export const TERRAIN_HALF_WIDTH = 1920;
 export const TERRAIN_MESH_STEP = 16;
+export const TERRAIN_MIN_ALTITUDE = 35;
+export const TERRAIN_MAX_ALTITUDE = Math.max(...BASALT_STACKS.map(stack => stack.top));
 const MASK = TERRAIN_SIZE - 1;
 const BASE_SIZE = 512;
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -55,7 +57,7 @@ export class World {
       const index = z * TERRAIN_SIZE + x;
       const jx = (x + 128) % BASE_SIZE, jz = (z + 128) % BASE_SIZE;
       const coast = noise(jx, jz, 256) * 0.55 + noise(jx, jz, 128) * 0.45;
-      let height = 35 + Math.max(0, coast - 0.32) * 38 + noise(jx, jz, 64) * 2;
+      let height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.32) * 38 + noise(jx, jz, 64) * 2;
 
       let rgb: [number, number, number];
       if (coast < 0.32) rgb = coast < 0.25 ? [28, 85, 109] : [45, 128, 140];
@@ -72,7 +74,7 @@ export class World {
         height = mix(height, 80 + noise(jx, jz, 64) * 3, shoulder(ridgeRange, 0.48));
         if (height > 53) rgb = height > 74 ? [118, 158, 83] : [132, 122, 78];
       } else if (straitRange < 1) {
-        height = mix(height, 35, shoulder(straitRange, 0.58));
+        height = mix(height, TERRAIN_MIN_ALTITUDE, shoulder(straitRange, 0.58));
         rgb = straitRange < 0.61 ? [31, 115, 139] : straitRange < 0.87 ? [64, 148, 147] : [180, 173, 120];
       } else if (atollRange < 115) {
         const rim = Math.max(0, 1 - Math.abs(atollRange - 77) / 17);

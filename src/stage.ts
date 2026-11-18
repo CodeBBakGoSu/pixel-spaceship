@@ -146,8 +146,8 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
     state.nextWave = WAVES.length;
     const p = state.player;
     if (fixture === 'skimmer') Object.assign(p, { x: LANDMARKS.strait.x, z: LANDMARKS.strait.z - 48 });
-    if (fixture === 'turret') Object.assign(p, { x: LANDMARKS.ridge.x, z: LANDMARKS.ridge.z - 65 });
-    const x = p.x + (fixture === 'hound' || fixture === 'turret' ? 0 : 12);
+    if (fixture === 'turret') Object.assign(p, { x: LANDMARKS.ridge.x - 18, z: LANDMARKS.ridge.z - 65, altitude: 130 });
+    const x = fixture === 'turret' ? LANDMARKS.ridge.x : p.x + (fixture === 'hound' ? 0 : 12);
     const z = p.z + (fixture === 'spotter' ? 90 : fixture === 'turret' ? 65 : 62);
     const enemy = makeEnemy(state, x, z, fixtureBands[fixture], fixture);
     if (fixture === 'turret') enemy.alt = ground(x, z) + 5;
@@ -224,7 +224,7 @@ function startManeuver(state: StageState, kind: ManeuverKind): void {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
     warnHarrier(state, enemy, maneuver, aft, lateral);
-    if (enemy.kind === 'turret' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
+    if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
     if (kind === 'cobra' && aft >= 10 && aft <= 24) {
       const lane = lateral < 0 ? -9 : 9;

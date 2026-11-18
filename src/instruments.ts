@@ -10,6 +10,7 @@ export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
 export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null };
 type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
+const MAP_LANDMARKS = Object.entries(LANDMARKS);
 export type RadarReadout = {
   contacts: Blip[]; priority: Track | null; salvage: Track | null;
   rear: boolean; rearCount: number; rearClose: boolean; rearBandMatch: boolean;
@@ -22,7 +23,7 @@ export function beaconTrack(state: StageState): Position | null {
   return state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND ? LANDMARKS.atoll : null;
 }
 
-export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState): void {
+export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, north: string, font: string): void {
   const { width, height } = c.canvas;
   const center = width / 2, middle = height / 2 + 2, radius = width / 2 - 6;
   const { arena, player } = state, scale = radius / arena.radius;
@@ -34,11 +35,28 @@ export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState): vo
   c.arc(center, middle, radius, 0, Math.PI * 2);
   c.stroke();
   c.fillStyle = '#9abebc';
+  c.font = '9px ' + font;
+  c.fillText(north, 4, 11);
   c.fillRect(center - 1, 4, 2, 4);
-  for (const landmark of Object.values(LANDMARKS)) {
+  for (const [kind, landmark] of MAP_LANDMARKS) {
     const x = center + (landmark.x - arena.x) * scale, y = middle - (landmark.z - arena.z) * scale;
-    c.fillStyle = landmark === LANDMARKS.strait ? '#6bc4c9' : landmark === LANDMARKS.ridge ? '#a9c165' : '#94a6a6';
-    c.fillRect(Math.round(x) - 2, Math.round(y) - 2, 5, 5);
+    c.fillStyle = kind === 'strait' ? '#6bc4c9' : kind === 'ridge' ? '#a9c165' : '#94a6a6';
+    const px = Math.round(x), py = Math.round(y);
+    if (kind === 'ridge') {
+      c.beginPath();
+      c.moveTo(px, py - 4);
+      c.lineTo(px - 4, py + 3);
+      c.lineTo(px + 4, py + 3);
+      c.fill();
+    } else if (kind === 'strait') {
+      c.fillRect(px - 4, py - 1, 9, 3);
+    } else if (kind === 'stacks') {
+      c.fillRect(px - 3, py - 1, 3, 5);
+      c.fillRect(px + 1, py - 4, 3, 7);
+    } else {
+      c.strokeStyle = '#b7cda2';
+      c.strokeRect(px - 2.5, py - 2.5, 5, 5);
+    }
   }
   const beacon = beaconTrack(state);
   if (beacon) {
@@ -100,7 +118,7 @@ export function buildRadar(state: StageState): RadarReadout {
       return;
     }
     if (!top && ahead < 0) {
-      if (kind !== 'salvage') {
+      if (kind !== 'salvage' && kind !== 'turret') {
         rearCount++;
         rearClose ||= range < 95;
         rearBandMatch ||= inBand(item.alt, p.altitude);
@@ -127,7 +145,9 @@ export function buildRadar(state: StageState): RadarReadout {
   const nearest = (tracks: Track[]): Track | null =>
     tracks.reduce<Track | null>((best, track) => !best || track.range < best.range ? track : best, null);
   const forward = visible.map(({ track }) => track);
+  const charging = !top && state.enemies.find(enemy => enemy.tell?.kind === 'snipe');
   const priority = top ? null : forward.find(track => track.id === (state.lock?.id ?? active?.id)) ??
+    (charging ? forward.find(track => track.id === charging.id) : undefined) ??
     nearest(forward.filter(track => track.kind !== 'salvage'));
   const salvage = top ? null : nearest(forward.filter(track => track.kind === 'salvage'));
   for (const { track, across } of visible) {

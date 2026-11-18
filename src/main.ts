@@ -3,10 +3,12 @@ import { autopilotInput, seekStage } from './autoplay.ts';
 import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { cockpitTarget, cockpitWarnings, type CockpitMotion } from './cockpit.ts';
+import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark, type RadarReadout } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { canManeuver, chooseManeuver, MANEUVERS, maneuverAttitude } from './maneuvers.ts';
+import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, BOSS_TICK, parseStageOptions, requiredXp, stepStage } from './stage.ts';
 import { BOMB_RELOAD_TICKS, clamp, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
@@ -179,6 +181,9 @@ function resize(): void {
 }
 
 function objectiveText(): string {
+  const fixture = options.fixture;
+  if (isNewEnemyKind(fixture) && state.enemies.some(enemy => enemy.kind === fixture)) return t(`enemy.${fixture}`);
+  if (isLandmarkId(fixture) && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND && !state.boss) return t(`landmark.${fixture}`);
   const p = state.player, beacon = state.view !== 'overhead' ? beaconTrack(state) : null;
   const dx = beacon ? beacon.x - p.x : 0, dz = beacon ? beacon.z - p.z : 0;
   const range = Math.hypot(dx, dz);
@@ -186,7 +191,7 @@ function objectiveText(): string {
   const navigation = beacon && (range > RADAR_RANGE || !state.boss) ? ` · ${String(bearing).padStart(3, '0')}°` : '';
   const point = activeWeakPoint(state);
   if (!point || !state.boss) {
-    if (beacon) return t('speaker.warden') + navigation;
+    if (beaconTrack(state)) return t('objective.beacon', { bearing: navigation });
     return t(state.tick < 40 * TICKS_PER_SECOND ? 'objective.reach' :
       state.tick < BOSS_TICK ? 'objective.waves' : 'objective.boss');
   }
@@ -285,12 +290,24 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
+  const flak = state.enemies.some(enemy => enemy.tell?.kind === 'flak'
+    && Math.hypot(p.x - enemy.tell.x, p.z - enemy.tell.z) < 85);
+  const spotter = state.enemies.some(enemy => enemy.tell?.kind === 'snipe' && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 165);
+  const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
+  let threat = '';
   if (state.boundaryWarning) message = 'hud.boundary';
   else if (warnings.terrain === 'pullUp') message = 'cockpit.pullUp';
+  else if (flak) message = 'hud.flakWarning';
+  else if (spotter) message = 'hud.spotterWarning';
   else if (miss?.kind === 'miss') message = top ? 'hud.checkAlt' : miss.delta > 0 ? 'hud.shotLow' : 'hud.shotHigh';
-  else if (warning?.maneuver) message = top ? 'hud.interceptor' :
-    warning.maneuver.band < warning.band ? 'hud.interceptorDive' : 'hud.interceptorClimb';
+  else if (warning?.maneuver) {
+    const down = warning.maneuver.band < warning.band;
+    if (isNewEnemyKind(warning.kind)) {
+      threat = t(`enemy.${warning.kind}`);
+      message = top ? 'hud.enemyManeuver' : down ? 'hud.enemyDive' : 'hud.enemyClimb';
+    } else message = top ? 'hud.interceptor' : down ? 'hud.interceptorDive' : 'hud.interceptorClimb';
+  } else if (mine) message = 'hud.mineWarning';
   else if (top && state.altitudeHint) message = 'hud.checkAlt';
   else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
   else if (state.tick < state.bombReadyAt) message = 'hud.bombAway';
@@ -300,7 +317,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   if (message) {
     const count = readout.rearCount ? ` · ${readout.rearCount}` : '';
     const layers = readout.rearMarks.length ? ' ' + readout.rearMarks.join('') : '';
-    setText('#flight-message', t(message, { warning: `▼ ${t('hud.rear')}${count}${layers}` }));
+    setText('#flight-message', t(message, { name: threat, warning: `▼ ${t('hud.rear')}${count}${layers}` }));
   }
   const tag = $('#view-tag');
   tag.hidden = state.viewTag <= 0 || !!message;
@@ -691,7 +708,7 @@ function render(): void {
       motion, clearance, impact, readout, target, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
     navRadar.draw(radarContext, 0, 0, readout, p.yaw, state.tick);
-    if (!arenaMap.hidden) drawArenaMap(mapContext, state);
+    if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font);
     lastRadarTick = state.tick;
   }
   dirty = false;
@@ -707,6 +724,8 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
+  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp }) => ({ id, kind, x, z, alt, hp })),
+  mineCount: state.enemyMines.length,
   weakPointHits: state.boss?.weakPoints.map(point => point.hits) ?? [],
   bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],
   lock: state.lock && { ...state.lock }, cockpitDelta,

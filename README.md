@@ -40,6 +40,8 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 - `?fixture=draft` opens the first draft at 0:45.
 - `?fixture=boss` starts at 1:48 with the high weak point ahead.
 - `?fixture=pursuit` starts in CHASE at 0:30 with four pursuers behind at three heights.
+- Review the new enemies with `?fixture=skimmer|spotter|hound|flanker|harrier|diver|bomber|turret`. Each fixture puts its featured enemy ahead for inspection.
+- Review the terrain and map with `?fixture=ridge|strait|stacks|atoll`. In TOP, the inset shows the 560 m arena, north, player heading, four landmarks, and the Warden signal.
 - Use `?seed=1`, `?view=overhead|chase|cockpit`, `?touch=1`, and `?autoplay=1` for replay checks. `?t=SECONDS` seeks to an absolute sortie time and returns control to the player unless autoplay is active.
 
-`window.__game` exposes a read-only snapshot with tick, altitude, draft choices, weak-point hits, and lock progress.
+`window.__game` exposes a read-only snapshot with tick, altitude, enemy contacts, mine count, draft choices, weak-point hits, and lock progress.

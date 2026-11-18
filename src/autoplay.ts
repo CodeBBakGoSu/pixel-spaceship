@@ -1,10 +1,11 @@
 import { canManeuver, exitAltitude } from './maneuvers.ts';
+import { BEACON_SIGNAL_SECONDS, LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
 import type { Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
-type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'home' };
+type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home' };
 
 function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
   let best: T | null = null, range = Infinity;
@@ -26,9 +27,20 @@ function routeFor(state: StageState, mode: PilotMode): Route {
   }
   const weak = activeWeakPoint(state);
   if (weak) return { ...weak, kind: 'weak' };
-  const pickup = nearest(state.pickups, p.x, p.z);
-  if (pickup && Math.hypot(pickup.x - p.x, pickup.z - p.z) <= 150) return { ...pickup, kind: 'pickup' };
+  if (mode === 'full' && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND
+    && (state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
+    && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
+    return { ...LANDMARKS.atoll, kind: 'beacon' };
+  }
   const enemy = nearest(state.enemies, p.x, p.z);
+  const pickup = nearest(state.pickups, p.x, p.z);
+  if (pickup) {
+    const needsXp = mode === 'full' && state.level < 3;
+    const distantEnemy = !enemy || Math.hypot(enemy.x - p.x, enemy.z - p.z) > 120;
+    if (Math.hypot(pickup.x - p.x, pickup.z - p.z) <= (needsXp && distantEnemy ? 260 : 150)) {
+      return { ...pickup, kind: 'pickup' };
+    }
+  }
   if (enemy) return { ...enemy, kind: 'enemy' };
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
@@ -126,7 +138,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   const maneuver = mode === 'full' && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
-  const boost = extend || (range > 155 && Math.abs(angle) < 0.2 && state.level < 3);
+  const boost = extend || (range > 155 && Math.abs(angle) < 0.2 && (state.level < 3 || target.kind === 'beacon'));
   return {
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
@@ -137,7 +149,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
 function holdAboveTraffic(state: StageState): StageInput {
   const p = state.player, a = state.arena;
   const dx = a.x - p.x, dz = a.z - p.z;
-  const turn = Math.hypot(dx, dz) > 155 ? clamp(angleTo(p.yaw, dx, dz) * 2.35, -1, 1) : 0.58;
+  const turn = Math.hypot(dx, dz) > a.radius - 80 ? clamp(angleTo(p.yaw, dx, dz) * 2.35, -1, 1) : 0.58;
   return { turn, climb: clamp((MAX_ALTITUDE - p.altitude) / 4, 0, 1) };
 }
 

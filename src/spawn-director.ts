@@ -104,22 +104,20 @@ function entry(state: StageState, ground: Ground, kind: EnemyKind, alt: number,
   return null;
 }
 
-function addTurret(state: StageState, ground: Ground, escape: number): void {
+function turretSite(state: StageState, escape: number | null, relocating: boolean) {
   const p = state.player;
   let best: typeof TURRET_SITES[number] | null = null, bestRange = Infinity;
   for (const site of TURRET_SITES) {
     const dx = site.x - p.x, dz = site.z - p.z, range = Math.hypot(dx, dz);
-    if (range < 85 || (range < 150 && Math.abs(angleTo(escape, dx, dz)) < ESCAPE_HALF)
+    if (range < 85 || (escape !== null && range < 150 && Math.abs(angleTo(escape, dx, dz)) < ESCAPE_HALF)
       || state.enemies.some(enemy => enemy.kind === 'turret' && enemy.x === site.x && enemy.z === site.z)) continue;
+    if (relocating && (range > 380 || Math.abs(angleTo(p.yaw, dx, dz)) > Math.PI / 2)) continue;
     if (range < bestRange) {
       best = site;
       bestRange = range;
     }
   }
-  if (!best) return;
-  const enemy = makeEnemy(state, best.x, best.z, best.band, 'turret');
-  enemy.alt = ground(best.x, best.z) + 5;
-  state.enemies.push(enemy);
+  return best;
 }
 
 export function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
@@ -134,7 +132,12 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
     const slots = kind === 'bomber' ? 3 : 1;
     if (enemies.length + slots > cap || enemies.filter(enemy => enemy.kind === kind).length >= ENEMY_KINDS[kind].cap) continue;
     if (kind === 'turret') {
-      addTurret(state, ground, escape);
+      const site = turretSite(state, escape, false);
+      if (site) {
+        const enemy = makeEnemy(state, site.x, site.z, site.band, kind);
+        enemy.alt = ground(site.x, site.z) + 5;
+        enemies.push(enemy);
+      }
       continue;
     }
     const band = member.band === 'flank' ? random(state) < 0.5 ? 0 : 2 : member.band;
@@ -167,13 +170,22 @@ function moveToEntry(state: StageState, enemy: Enemy, point: Point): void {
 export function relocateStragglers(state: StageState, ground: Ground): void {
   const p = state.player;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.kind === 'turret') continue;
+    if (!enemy.hp) continue;
     if (Math.hypot(p.x - enemy.x, p.z - enemy.z) <= 380) {
       enemy.farTicks = 0;
       continue;
     }
     enemy.farTicks = (enemy.farTicks ?? 0) + 1;
     if (enemy.farTicks < 6 * TICKS_PER_SECOND || enemy.formation) continue;
+    if (enemy.kind === 'turret') {
+      const site = turretSite(state, null, true);
+      if (site) {
+        enemy.band = site.band;
+        moveToEntry(state, enemy, site);
+        enemy.alt = ground(site.x, site.z) + 5;
+      }
+      continue;
+    }
     const position = entry(state, ground, enemy.kind, BANDS[enemy.band] + enemy.offset, p.yaw, 170, null);
     if (!position) continue;
     moveToEntry(state, enemy, position);

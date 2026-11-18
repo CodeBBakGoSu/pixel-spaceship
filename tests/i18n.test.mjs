@@ -78,3 +78,15 @@ test('every upgrade offered by either draft has a translated title and detail', 
     }
   }
 });
+
+test('review fixtures and navigation warnings have English and Korean names', () => {
+  const keys = [
+    'aria.arenaMap', 'objective.beacon', 'hud.flakWarning', 'hud.spotterWarning',
+    ...['skimmer', 'spotter', 'hound', 'flanker', 'harrier', 'diver', 'bomber', 'turret'].map(kind => 'enemy.' + kind),
+    ...['ridge', 'strait', 'stacks', 'atoll'].map(kind => 'landmark.' + kind),
+  ];
+  for (const key of keys) {
+    assert.ok(strings.en[key], key);
+    assert.match(strings.ko[key], /[가-힣]/, key);
+  }
+});

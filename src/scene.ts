@@ -33,27 +33,32 @@ function makeTerrain(world: World): Mesh {
   return new Mesh(geometry, new MeshBasicMaterial({ map }));
 }
 
+const instanceRanges = new WeakMap<InstancedBufferAttribute, { start: number; count: number }>();
+
 function instances(geometry: BufferGeometry, capacity: number, material = new MeshBasicMaterial()): InstancedMesh {
   const mesh = new InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-  mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(DynamicDrawUsage);
+  mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3).setUsage(DynamicDrawUsage);
+  instanceRanges.set(mesh.instanceMatrix, { start: 0, count: 0 });
+  instanceRanges.set(mesh.instanceColor, { start: 0, count: 0 });
   mesh.frustumCulled = false;
   mesh.count = 0;
   return mesh;
 }
 
+function uploadAttribute(attribute: InstancedBufferAttribute, count: number): void {
+  const range = instanceRanges.get(attribute)!;
+  range.count = count * attribute.itemSize;
+  attribute.clearUpdateRanges();
+  attribute.updateRanges.push(range);
+  attribute.needsUpdate = true;
+}
+
 function upload(mesh: InstancedMesh, count: number): void {
   mesh.count = count;
   if (!count) return;
-  mesh.instanceMatrix.clearUpdateRanges();
-  mesh.instanceMatrix.addUpdateRange(0, count * 16);
-  mesh.instanceMatrix.needsUpdate = true;
-  const colors = mesh.instanceColor;
-  if (colors) {
-    colors.clearUpdateRanges();
-    colors.addUpdateRange(0, count * 3);
-    colors.needsUpdate = true;
-  }
+  uploadAttribute(mesh.instanceMatrix, count);
+  if (mesh.instanceColor) uploadAttribute(mesh.instanceColor, count);
 }
 
 type Projection = { x: number; y: number };

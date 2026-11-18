@@ -414,3 +414,33 @@ test('four damaging hits exhaust the one life and earn Rank C', () => {
   assert.equal(state.hitsTaken, 4);
   assert.equal(state.rank, 'C');
 });
+
+test('the full pilot can pursue off-radar salvage and intercept the advance Warden signal', () => {
+  const salvage = stage('?autoplay=1');
+  salvage.pickups.push({ id: 91, x: -200, z: salvage.player.z, alt: 75, xp: 2, born: 0 });
+  const pickup = autopilotInput(salvage, 'full', ground);
+  assert.ok(pickup.turn < 0 && pickup.climb < 0);
+
+  const beacon = stage('?autoplay=1');
+  beacon.tick = 92 * 60;
+  beacon.level = 3;
+  Object.assign(beacon.player, { x: -350, z: -100, yaw: 1.6 });
+  assert.ok(autopilotInput(beacon, 'full', ground).turn > 0);
+  assert.ok(autopilotInput(beacon, 'top', ground).turn < 0);
+});
+
+test('seeded placement, hazards and combat stay identical across view choices', () => {
+  const top = stage('?autoplay=1&seed=1&view=top');
+  const cockpit = stage('?autoplay=1&seed=1&view=cockpit');
+  const seen = new Set();
+  for (let i = 0; i < 10810 && ['playing', 'draft'].includes(top.phase); i++) {
+    const input = autopilotInput(top, 'full', ground);
+    delete input.toggleView;
+    stepStage(top, input, ground);
+    stepStage(cockpit, input, ground);
+    for (const enemy of top.enemies) seen.add(enemy.kind);
+  }
+  const simulation = ({ view, initialView, wipe, viewTag, ...state }) => state;
+  assert.deepEqual(simulation(top), simulation(cockpit));
+  assert.ok(['skimmer', 'spotter', 'hound', 'flanker', 'harrier', 'diver', 'bomber', 'turret'].every(kind => seen.has(kind)));
+});

@@ -8,7 +8,7 @@ import { createTranslator, strings } from '../src/i18n.ts';
 import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, cockpitTarget } from '../src/cockpit.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { maneuverAttitude } from '../src/maneuvers.ts';
-import { TERRAIN_HALF_WIDTH } from '../src/world.ts';
+import { TERRAIN_HALF_WIDTH, World } from '../src/world.ts';
 
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
 test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
@@ -171,4 +171,26 @@ test('cockpit copy covers warnings, instruments and targeting in both languages'
     assert.ok(strings.en[key]?.trim(), key);
     assert.ok(strings.ko[key]?.trim(), key);
   }
+});
+
+test('the zero rung follows a steep Reach stack between grid samples', () => {
+  const width = 1280, height = 800, far = 770;
+  const world = new World();
+  const ground = (x, z) => world.height(x, z);
+  const safe = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { width, height, cockpit: cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective) };
+  const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
+  const player = { x: 356, z: 322.641, altitude: 110, yaw: 210 * Math.PI / 180, bank: 0 };
+  const marks = frameCockpit(camera, player, frame, null, ground, far);
+  const { to } = marks.find(mark => mark.angle === 0).right.at(-1);
+  const gaze = camera.getWorldDirection(new Vector3());
+  const heading = new Vector3(to.x * 2 / width - 1, 0, 0).unproject(camera).sub(camera.position).setY(0).normalize();
+  const sample = new Vector3();
+  let skyline = height;
+  for (let range = 1; range <= far / gaze.dot(heading); range += 0.025) {
+    sample.copy(camera.position).addScaledVector(heading, range);
+    sample.y = ground(sample.x, -sample.z);
+    skyline = Math.min(skyline, (1 - sample.project(camera).y) * height / 2);
+  }
+  assert.ok(Math.abs(to.y - skyline) < 0.75, `terrain skyline y=${skyline}, HUD y=${to.y}`);
 });

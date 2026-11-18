@@ -3,7 +3,7 @@ import type { CockpitLayout } from './layout.ts';
 import type { maneuverAttitude } from './maneuvers.ts';
 import { clamp } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
-import { terrainSurface, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP } from './world.ts';
+import { terrainElevation } from './terrain-horizon.ts';
 
 export type Segment = 'overhead' | 'chase' | 'cockpit';
 export type Point = { x: number; y: number };
@@ -41,7 +41,8 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   camera.updateMatrixWorld();
   if (!cockpit || cockpit.aiming.height < 20) return [];
 
-  const marks = projectPitchLadder(camera, frame, ground, visibleDepth);
+  const columns = pitchColumns(camera, frame, ground, visibleDepth);
+  const marks = projectPitchLadder(camera, frame.height, columns);
   const zero = marks.find(mark => mark.angle === 0);
   if (!zero) return marks;
   const { y, height: glassHeight } = cockpit.aiming;
@@ -53,54 +54,18 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
 
   // Move the lens rather than clamping the bar, so both scene and HUD keep the same skyline.
   camera.setViewOffset(width, height, 0, viewOffset + adjustment, width, height);
-  return projectPitchLadder(camera, frame, ground, visibleDepth);
+  return projectPitchLadder(camera, frame.height, columns);
 }
 
 export const cockpitLadderSpan = (layout: CockpitLayout): number =>
   Math.min(layout.compact ? 51 : 105, layout.aiming.width * 0.31);
 
-function terrainElevation(eye: Vector3, horizontal: Vector3, vertical: Vector3, gaze: Vector3,
-  ground: Ground, near: number, far: number): number {
-  const horizontalDepth = gaze.dot(horizontal), verticalDepth = gaze.dot(vertical);
-  const sample = (distance: number): number => {
-    const x = eye.x + distance * horizontal.x, z = eye.z + distance * horizontal.z;
-    let offset = (terrainSurface(ground, x, -z) - eye.y) / vertical.y;
-    for (let i = 0; i < 2; i++) {
-      offset = (terrainSurface(ground, x + offset * vertical.x, -z - offset * vertical.z) - eye.y) / vertical.y;
-    }
-    const depth = distance * horizontalDepth + offset * verticalDepth;
-    if (depth < near || depth > far
-      || Math.abs(x + offset * vertical.x) > TERRAIN_HALF_WIDTH
-      || Math.abs(z + offset * vertical.z) > TERRAIN_HALF_WIDTH) return -Infinity;
-    return Math.atan2(offset, distance);
-  };
-  let highest = -Infinity;
-  for (let distance = TERRAIN_MESH_STEP; distance <= 3 * TERRAIN_HALF_WIDTH; distance += TERRAIN_MESH_STEP) {
-    const angle = sample(distance);
-    if (angle === -Infinity && highest !== -Infinity) {
-      // Refine the last step at the fog cutoff or the edge of the mesh.
-      let inside = distance - TERRAIN_MESH_STEP, outside = distance;
-      for (let i = 0; i < 8; i++) {
-        const middle = (inside + outside) / 2, edge = sample(middle);
-        if (edge === -Infinity) outside = middle;
-        else {
-          inside = middle;
-          highest = Math.max(highest, edge);
-        }
-      }
-      break;
-    }
-    highest = Math.max(highest, angle);
-  }
-  return highest;
-}
-
-function projectPitchLadder(camera: PerspectiveCamera, frame: CockpitFraming, ground: Ground, visibleDepth: number): PitchMark[] {
-  const { width, height, cockpit } = frame;
+function pitchColumns(camera: PerspectiveCamera, frame: CockpitFraming, ground: Ground, visibleDepth: number) {
+  const { width, cockpit } = frame;
   if (!cockpit) return [];
   const eye = camera.position, gaze = camera.getWorldDirection(new Vector3());
   const span = cockpitLadderSpan(cockpit), center = cockpit.aiming.x + cockpit.aiming.width / 2;
-  const columns = [-1, -0.65, -0.3, 0.3, 0.65, 1].map(offset => {
+  return [-1, -0.65, -0.3, 0.3, 0.65, 1].map(offset => {
     const x = center + offset * span, ndcX = x * 2 / width - 1;
     // Each screen column lies in one plane through the eye, including camera bank and lens shift.
     const normal = new Vector3(ndcX, 1, 0).unproject(camera).sub(eye)
@@ -109,10 +74,14 @@ function projectPitchLadder(camera: PerspectiveCamera, frame: CockpitFraming, gr
     if (horizontal.dot(gaze) < 0) horizontal.negate();
     const vertical = new Vector3().crossVectors(horizontal, normal).normalize();
     if (vertical.y < 0) vertical.negate();
-    const elevation = terrainElevation(eye, horizontal, vertical, gaze, ground, camera.near, Math.min(visibleDepth, camera.far));
+    const elevation = terrainElevation(eye, horizontal, vertical, normal, gaze, ground, camera.near, Math.min(visibleDepth, camera.far));
     return { x, horizontal, vertical, elevation };
   });
-  if (columns.some(column => column.elevation === -Infinity)) return [];
+}
+
+function projectPitchLadder(camera: PerspectiveCamera, height: number, columns: ReturnType<typeof pitchColumns>): PitchMark[] {
+  if (!columns.length || columns.some(column => column.elevation === -Infinity)) return [];
+  const eye = camera.position, gaze = camera.getWorldDirection(new Vector3());
 
   const marks: PitchMark[] = [], ray = new Vector3();
   const rungColumns = [columns[0], columns[2], columns[3], columns[5]];

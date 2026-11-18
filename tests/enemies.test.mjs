@@ -142,3 +142,25 @@ test('an airborne straggler relocates ahead after six seconds without dropping s
   assert.equal(hound.hp, 2);
   assert.equal(state.pickups.length, 0);
 });
+
+test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
+  const state = fixture('skimmer');
+  Object.assign(state.player, { x: 288, z: 308, yaw: 0, altitude: 110 });
+  const skimmer = state.enemies[0];
+  Object.assign(skimmer, { x: 288, z: 208 });
+  advance(state, 90, { maneuver: 'split-s' });
+  assert.equal(skimmer.alt, 75);
+  assert.ok(ground(skimmer.x, skimmer.z) <= 39);
+});
+
+test('a far turret transfers only to a vacant landmark ahead and keeps its HP', () => {
+  const state = fixture('turret');
+  const turret = state.enemies[0];
+  Object.assign(state.player, { x: 288, z: 125, yaw: 0, altitude: 145 });
+  Object.assign(turret, { farTicks: 359, hp: 2 });
+  advance(state, 1);
+  assert.ok(turret.x > 200 && turret.z > state.player.z);
+  assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
+  assert.equal(turret.hp, 2);
+  assert.equal(state.pickups.length, 0);
+});
