@@ -5,3 +5,6 @@ dist
 ref/*.mp4
 ref/frames/
 ref/clips/
+
+# throwaway renderer preview output
+.proto-preview/
