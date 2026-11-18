@@ -132,13 +132,21 @@
 .experience.phone-landscape .phase-banner{top:calc(var(--field-y) + 6px);padding:5px 14px;font-size:12px}
 .experience.phone-landscape .view-tag{top:calc(var(--field-y) + 42px);font-size:11px}
 
-#cockpit-overlay {
+#cockpit-display {
   position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#cockpit-overlay, .cockpit-instruments {
+  position: absolute;
+  image-rendering: pixelated;
+}
+
+#cockpit-overlay {
   inset: 0;
   width: 100%;
   height: 100%;
-  image-rendering: pixelated;
-  pointer-events: none;
 }
 
 .experience.cockpit-view :is(#nav-radar, .alt-ruler) { display: none; }

@@ -152,7 +152,7 @@ function updateFlightLayout(): void {
   cockpit = layoutView === 'cockpit'
     ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, viewportSafe, hud.objective)
     : null;
-  cockpitDisplay.resize(cockpit, innerWidth, innerHeight);
+  cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t);
   if (cockpit) {
     setRect('cockpit-message', cockpit.message);
     if (cockpit.help) setRect('cockpit-help', cockpit.help);
@@ -421,7 +421,7 @@ function render():void{
     const { x, z, altitude, yaw } = game.player;
     const clearance = altitude - Math.max(ground(x, z), ground(x + Math.sin(yaw) * 24, z + Math.cos(yaw) * 24));
     const view = { camera: scene.camera, buffer: { width: w, height: h }, screen: { width: innerWidth, height: innerHeight } };
-    cockpitReadout = cockpitDisplay.draw(game, view, cockpitMotion, clearance, impact, cockpitBlend * (1 - game.wipeT / 0.35), t);
+    cockpitReadout = cockpitDisplay.draw(game, view, cockpitMotion, clearance, impact, cockpitBlend * (1 - game.wipeT / 0.35), language, t);
   } else {
     cockpitReadout = null;
     drawRadar();
