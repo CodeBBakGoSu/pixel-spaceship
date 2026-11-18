@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { phoneLayout } from '../src/layout.ts';
+import { desktopLayout, guideLayout, phoneLayout } from '../src/layout.ts';
 
 const views = ['overhead', 'chase', 'cockpit'];
 const sizes = [[390,844], [360,780], [430,932]];
@@ -36,3 +36,33 @@ test('landscape phone has usable, separated zones and controls', () => {
   const buttons=[l.stick,l.fire,l.boost,l.bomb,l.view];
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
+
+for (const [width, height] of [[1280, 720], ...sizes]) {
+  test(`desktop HUD keeps status, radio, objective and instruments apart at ${width}x${height}`, () => {
+    const l = desktopLayout(width, height, insets[0]);
+    const viewport = { x: 0, y: 0, width, height };
+    const zones = Object.entries(l);
+    for (const [i, [name, zone]] of zones.entries()) {
+      assert.ok(contains(viewport, zone), `${name} outside viewport`);
+      for (const [other, rect] of zones.slice(i + 1)) {
+        assert.equal(intersects(zone, rect), false, `${name} overlaps ${other}`);
+      }
+    }
+  });
+}
+
+for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const safe of insets) {
+  test(`guide reserves separate heading, content and action areas at ${width}x${height}, safe ${safe.top}`, () => {
+    const guide = guideLayout(width, height, safe);
+    const safeArea = { x: safe.left, y: safe.top, width: width - safe.left - safe.right, height: height - safe.top - safe.bottom };
+    assert.ok(contains(safeArea, guide.card));
+    assert.equal(guide.columns, width >= 844 ? 2 : 1);
+    assert.ok(guide.actions.height >= 44);
+    assert.ok(guide.body.height >= (height > width ? 460 : 180));
+    const zones = [guide.heading, guide.body, guide.actions];
+    for (const [i, zone] of zones.entries()) {
+      assert.ok(contains(guide.card, zone));
+      for (const other of zones.slice(i + 1)) assert.equal(intersects(zone, other), false);
+    }
+  });
+}
