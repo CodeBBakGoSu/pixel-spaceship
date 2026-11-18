@@ -2,12 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, parseGameOptions } from '../src/game.ts';
 import { createTranslator, strings } from '../src/i18n.ts';
-import { cockpitWarnings, headingTape, measureCockpitMotion, pitchLadder, selectCockpitTarget } from '../src/cockpit.ts';
+import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, measureCockpitMotion, pitchLadder, selectCockpitTarget } from '../src/cockpit.ts';
+import { phoneLayout } from '../src/layout.ts';
 
 const screen = { width: 1280, height: 720 };
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
 const target = (kind, x, z, alt, hp = 1) => ({ kind, x, z, alt, hp });
 const projection = state => ({ camera: state.camera, buffer: { width: 320, height: 180 }, screen });
+
+test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
+  const safe = { top: 0, right: 0, bottom: 0, left: 0 };
+  const layout = phoneLayout(390, 844, safe, 'cockpit').cockpit;
+  const original = cockpitCacheKey(layout, 390, 844, 'en');
+  assert.equal(cockpitCacheKey(structuredClone(layout), 390, 844, 'en'), original);
+  assert.notEqual(cockpitCacheKey(layout, 390, 844, 'ko'), original);
+  assert.notEqual(cockpitCacheKey(layout, 390, 845, 'en'), original);
+  const inset = phoneLayout(390, 844, { ...safe, top: 24 }, 'cockpit').cockpit;
+  assert.notEqual(cockpitCacheKey(inset, 390, 844, 'en'), original);
+});
+
+test('MFDs refresh at 20 Hz, including the first frame and a restarted run', () => {
+  assert.equal(cockpitMfdDue(null, 0), true);
+  assert.equal(cockpitMfdDue(10, 10), false);
+  assert.equal(cockpitMfdDue(10, 10 + 2 / 60), false);
+  assert.equal(cockpitMfdDue(10, 10 + 3 / 60), true);
+  assert.equal(cockpitMfdDue(10, 0), true);
+});
 
 test('pitch ladder shifts with climb and rotates its marks with bank', () => {
   const center = { x: 100, y: 120 };

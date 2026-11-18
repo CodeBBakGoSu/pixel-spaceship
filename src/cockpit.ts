@@ -1,7 +1,7 @@
 import { projectWorld, type CameraState, type Point, type Size } from './camera.ts';
 import { wardenTargets, type Entity, type GameState } from './game.ts';
-import type { createTranslator } from './i18n.ts';
-import type { Rect } from './layout.ts';
+import type { createTranslator, Language } from './i18n.ts';
+import type { CockpitLayout, Rect } from './layout.ts';
 
 export type CockpitView = { camera: CameraState; buffer: Size; screen: Size };
 export type CockpitMotion = { speed: number; climb: number; bank: number; turn: number };
@@ -18,35 +18,53 @@ const cardinal = ['cockpit.north', 'cockpit.east', 'cockpit.south', 'cockpit.wes
 const heading = (degrees: number) => (degrees % 360 + 360) % 360;
 const threeDigits = (value: number) => String(value).padStart(3, '0');
 
+export function cockpitCacheKey(layout: CockpitLayout, width: number, height: number, language: Language): string {
+  return JSON.stringify([width, height, language, layout]);
+}
+
+export function cockpitMfdDue(previous: number | null, elapsed: number): boolean {
+  return previous === null || elapsed < previous || elapsed - previous >= 1 / 20 - 1e-6;
+}
+
+export const cockpitHeadingDegrees = (yaw: number) => heading(yaw * 180 / Math.PI);
+
+export function headingTickLabel(angle: number, t: ReturnType<typeof createTranslator>): string {
+  const tick = heading(angle);
+  return tick % 90 === 0 ? t(cardinal[tick / 90]) : threeDigits(tick);
+}
+
 export function headingTape(yaw: number, step: 15 | 30, t: ReturnType<typeof createTranslator>) {
-  const degrees = heading(yaw * 180 / Math.PI);
+  const degrees = cockpitHeadingDegrees(yaw);
   const bearing = t('cockpit.bearing', { value: threeDigits(heading(Math.round(degrees))) });
   const ticks: { offset: number; label: string }[] = [];
   for (let angle = Math.ceil((degrees - 60) / step) * step; angle <= degrees + 60; angle += step) {
-    const tick = heading(angle);
-    const label = tick % 90 === 0 ? t(cardinal[tick / 90]) : threeDigits(tick);
-    ticks.push({ offset: angle - degrees, label });
+    ticks.push({ offset: angle - degrees, label: headingTickLabel(angle, t) });
   }
   return { bearing, ticks };
 }
 
-export function pitchLadder(center: Point, pitch: number, bank: number, span: number, pixelsPerDegree: number): PitchMark[] {
+export function pitchLadder(center: Point, pitch: number, bank: number, span: number, pixelsPerDegree: number, marks: PitchMark[] = []): PitchMark[] {
   const cos = Math.cos(bank), sin = Math.sin(bank);
-  const rotate = (x: number, y: number): Point => ({
-    x: center.x + x * cos + y * sin,
-    y: center.y - x * sin + y * cos,
-  });
-  const marks: PitchMark[] = [];
   const middle = Math.round(pitch / 10) * 10;
-  for (let angle = middle - 30; angle <= middle + 30; angle += 10) {
+  const gap = span * 0.3;
+  for (let i = 0; i < 7; i++) {
+    const angle = middle - 30 + i * 10;
     const y = (pitch - angle) * pixelsPerDegree;
     const outer = angle === 0 ? span : span * 0.78;
-    const gap = span * 0.3;
-    marks.push({
-      angle,
-      left: { from: rotate(-outer, y), to: rotate(-gap, y) },
-      right: { from: rotate(gap, y), to: rotate(outer, y) },
+    const mark = marks[i] ?? (marks[i] = {
+      angle, left: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } },
+      right: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } },
     });
+    mark.angle = angle;
+    // Keep the same subpixel anchors for both the integer lines and their labels.
+    mark.left.from.x = center.x - outer * cos + y * sin;
+    mark.left.from.y = center.y + outer * sin + y * cos;
+    mark.left.to.x = center.x - gap * cos + y * sin;
+    mark.left.to.y = center.y + gap * sin + y * cos;
+    mark.right.from.x = center.x + gap * cos + y * sin;
+    mark.right.from.y = center.y - gap * sin + y * cos;
+    mark.right.to.x = center.x + outer * cos + y * sin;
+    mark.right.to.y = center.y - outer * sin + y * cos;
   }
   return marks;
 }
@@ -66,19 +84,18 @@ export function measureCockpitMotion(previous: GameState, state: GameState, moti
   };
 }
 
-export function cockpitAim(view: CockpitView, state: Pick<GameState, 'aimX' | 'aimY' | 'aspect'>): Point {
+export function cockpitAim(view: CockpitView, state: Pick<GameState, 'aimX' | 'aimY' | 'aspect'>, point: Point = { x: 0, y: 0 }): Point {
   const { camera, buffer, screen } = view;
-  return {
-    x: (buffer.width / 2 + state.aimX * 0.38 * state.aspect * buffer.height) * screen.width / buffer.width,
-    y: screen.height * (0.42 + state.aimY * 0.27) + camera.pitch * 15 * screen.height / buffer.height,
-  };
+  point.x = (buffer.width / 2 + state.aimX * 0.38 * state.aspect * buffer.height) * screen.width / buffer.width;
+  point.y = screen.height * (0.42 + state.aimY * 0.27) + camera.pitch * 15 * screen.height / buffer.height;
+  return point;
 }
 
 function isCombatTarget(kind: Entity['kind']): kind is CombatEntity {
   return kind === 'drone' || kind === 'supply' || kind === 'pylon' || kind === 'lock';
 }
 
-export function selectCockpitTarget(state: GameState, view: CockpitView, area: Rect, aim = cockpitAim(view, state)): CockpitTarget | null {
+export function selectCockpitTarget(state: GameState, view: CockpitView, area: Rect, aim = cockpitAim(view, state), result?: CockpitTarget): CockpitTarget | null {
   const { camera, buffer, screen } = view;
   const { player } = state;
   let nearest: CockpitTarget | null = null, distance = Infinity;
@@ -88,13 +105,19 @@ export function selectCockpitTarget(state: GameState, view: CockpitView, area: R
     if (range >= distance) return;
     const projected = projectWorld(camera, x, z, alt, buffer.width, buffer.height, 'cockpit');
     if (!projected) return;
-    const point = { x: projected.x * screen.width / buffer.width, y: projected.y * screen.height / buffer.height };
+    const px = projected.x * screen.width / buffer.width, py = projected.y * screen.height / buffer.height;
     const inset = 12;
-    if (point.x < area.x + inset || point.x > area.x + area.width - inset
-      || point.y < area.y + inset || point.y > area.y + area.height - inset) return;
-    const coneX = (point.x - aim.x) / (screen.width * 0.14);
-    const coneY = (point.y - aim.y) / (screen.height * 0.14);
-    nearest = { kind, point, altitude: alt, range: Math.round(range), locked: range <= 230 && coneX * coneX + coneY * coneY <= 1 };
+    if (px < area.x + inset || px > area.x + area.width - inset
+      || py < area.y + inset || py > area.y + area.height - inset) return;
+    const coneX = (px - aim.x) / (screen.width * 0.14);
+    const coneY = (py - aim.y) / (screen.height * 0.14);
+    nearest = result ?? nearest ?? { kind, point: { x: 0, y: 0 }, altitude: 0, range: 0, locked: false };
+    nearest.kind = kind;
+    nearest.point.x = px;
+    nearest.point.y = py;
+    nearest.altitude = alt;
+    nearest.range = Math.round(range);
+    nearest.locked = range <= 230 && coneX * coneX + coneY * coneY <= 1;
     distance = range;
   }
 
@@ -107,10 +130,15 @@ export function selectCockpitTarget(state: GameState, view: CockpitView, area: R
   return nearest;
 }
 
-export function cockpitWarnings(state: Pick<GameState, 'hull' | 'maxHull' | 'biome' | 'boosting' | 'bst'>, clearance: number, climb: number): CockpitWarnings {
+export function cockpitWarnings(state: Pick<GameState, 'hull' | 'maxHull' | 'biome' | 'boosting' | 'bst'>, clearance: number, climb: number,
+  result: CockpitWarnings = { master: false, lowHull: false, terrain: null, boost: null }): CockpitWarnings {
   const lowHull = state.hull <= state.maxHull / 4;
   const terrain = state.biome === 'space' || clearance > 40 ? null
     : clearance <= 26 || (clearance <= 34 && climb < -4) ? 'pullUp' : 'altLow';
   const boost = !state.boosting || state.bst <= 0 ? null : state.bst <= 0.25 ? 'low' : 'active';
-  return { master: lowHull || terrain !== null || boost === 'low', lowHull, terrain, boost };
+  result.master = lowHull || terrain !== null || boost === 'low';
+  result.lowHull = lowHull;
+  result.terrain = terrain;
+  result.boost = boost;
+  return result;
 }
