@@ -1,0 +1,314 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { activeWeakPoint, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { autopilotInput, seekStage } from '../src/autoplay.ts';
+import { World } from '../src/world.ts';
+
+const world = new World();
+const ground = (x, z) => world.height(x, z);
+const stage = query => createStage(parseStageOptions(query), ground);
+const run = (state, ticks, input = {}) => {
+  for (let i = 0; i < ticks; i++) stepStage(state, input, ground);
+  return state;
+};
+
+function atPlayer(state, alt, friendly = false) {
+  return {
+    x: state.player.x, z: state.player.z + 0.7, alt,
+    vx: 0, vz: 0, life: 1, damage: 2, kind: friendly ? 'twin' : 'hostile',
+    volley: 42, nearMiss: false, lockId: null,
+  };
+}
+
+test('the title launches a one-life sortie in cruise with both weapons and two bombs', () => {
+  const state = stage('?seed=22');
+  assert.equal(state.phase, 'title');
+  run(state, 1, { start: true });
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.view, 'overhead');
+  assert.equal(state.player.altitude, 110);
+  assert.equal(state.hull, 8);
+  assert.equal(state.boost, 1);
+  assert.equal(state.bombs, 2);
+  assert.equal(state.twinRank, 1);
+  assert.equal(state.podRank, 1);
+});
+
+test('the stack fixture has the same planar contact at 75, 110 and 145 m in every view', () => {
+  for (const view of ['overhead', 'chase', 'cockpit']) {
+    const state = stage('?fixture=stack&view=' + view);
+    assert.equal(state.tick, 30 * 60);
+    assert.deepEqual(state.enemies.map(e => e.alt), [75, 110, 145]);
+    assert.ok(state.enemies.every(e => e.x === state.enemies[0].x && e.z === state.enemies[0].z));
+    run(state, 44);
+    assert.deepEqual(state.enemies.map(e => e.alt), [75, 145]);
+    assert.equal(state.pickups[0].alt, 110);
+  }
+});
+
+test('hit and miss feedback use the bolt launch height and emit one miss for a paired volley', () => {
+  const state = stage('?fixture=stack');
+  state.enemies = state.enemies.filter(enemy => enemy.alt === 145);
+  run(state, 18);
+  assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 0);
+  assert.equal(state.altitudeHint.delta, 35);
+  run(state, 1, { fire: true });
+  const bolts = state.shots.filter(shot => shot.kind === 'twin');
+  assert.equal(bolts.length, 2);
+  assert.ok(bolts.every(shot => shot.alt === 110));
+  run(state, 25, { climb: 1 });
+  assert.equal(state.enemies[0].hp, 2);
+  assert.equal(state.effects.filter(effect => effect.kind === 'miss').length, 1);
+  assert.equal(state.effects.find(effect => effect.kind === 'miss').delta, 35);
+});
+
+test('shot and body overlap only damage the player through the inclusive eight-metre window', () => {
+  for (const offset of [8, 8.01, -8, -8.01]) {
+    const state = stage('?fixture=stack');
+    state.enemies = [];
+    state.shots.push(atPlayer(state, 110 + offset));
+    run(state, 1);
+    assert.equal(state.hull, Math.abs(offset) <= 8 ? 6 : 8);
+  }
+  const state = stage('?fixture=stack');
+  const enemy = state.enemies[0];
+  enemy.x = state.player.x;
+  enemy.z = state.player.z + 1;
+  state.enemies = [enemy];
+  run(state, 1);
+  assert.equal(state.hull, 8);
+  state.player.altitude = 75;
+  run(state, 1);
+  assert.equal(state.hull, 6);
+});
+
+test('salvage pulls from 22 m and collects inside 8 m, only while inside the altitude window', () => {
+  const state = stage('?fixture=stack');
+  state.enemies = [];
+  const { x, z } = state.player;
+  state.pickups = [{ id: 10, x, z: z + 21, alt: 75, xp: 2, born: state.tick }];
+  run(state, 3);
+  assert.equal(state.pickups[0].z, z + 21);
+  state.player.altitude = 83;
+  run(state, 1);
+  assert.ok(state.pickups[0].z < z + 21);
+  state.player.altitude = 90;
+  const afterPull = state.pickups[0].z;
+  run(state, 3);
+  assert.equal(state.pickups[0].z, afterPull);
+  state.player.altitude = 83;
+  state.pickups[0].z = state.player.z + 7;
+  run(state, 1);
+  assert.equal(state.xp, 2);
+  assert.equal(state.salvage, 2);
+  assert.equal(state.pickups.length, 0);
+});
+
+test('the three draft cards pause active time, apply once and keep three legal choices on round two', () => {
+  for (let pick = 0; pick < 3; pick++) {
+    const state = stage('?fixture=draft');
+    assert.equal(state.tick, 45 * 60);
+    assert.equal(state.phase, 'draft');
+    assert.deepEqual(state.draft, ['twin-2', 'pods-2', 'twin-damage']);
+    const { x, z } = state.player;
+    run(state, 120, { boost: true, bomb: true, toggleView: true, climb: 1 });
+    assert.equal(state.tick, 45 * 60);
+    assert.deepEqual([state.player.x, state.player.z, state.bombs, state.boost], [x, z, 2, 1]);
+    run(state, 1, { pick: 'twin-3' });
+    assert.equal(state.phase, 'draft');
+    run(state, 1, { pick: state.draft[pick], boost: true, bomb: true, toggleView: true });
+    assert.equal(state.phase, 'playing');
+    assert.equal(state.level, 2);
+    assert.equal(state.xp, 0);
+    assert.equal(state.twinRank, pick === 0 ? 2 : 1);
+    assert.equal(state.podRank, pick === 1 ? 2 : 1);
+    assert.equal(state.twinDamage, pick === 2 ? 2 : 1);
+    run(state, 18, { boost: true, bomb: true, toggleView: true });
+    assert.equal(state.boost, 1);
+    assert.equal(state.bombs, 2);
+    assert.equal(state.view, 'overhead');
+    run(state, 1, { boost: true });
+    assert.equal(state.boost, 1);
+    run(state, 1);
+    run(state, 1, { boost: true });
+    assert.ok(state.boost < 1);
+    state.pickups.push({ id: 20, ...atPlayer(state, state.player.altitude), xp: 12, born: state.tick });
+    run(state, 1);
+    assert.equal(state.draft.length, 3);
+    assert.equal(new Set(state.draft).size, 3);
+    run(state, 1, { pick: state.draft[0] });
+    assert.equal(state.level, 3);
+    assert.equal(state.xp, 2);
+    assert.equal(state.salvage, 18);
+  }
+});
+
+test('the boss fixture opens on a high weak point and rejects cruise bolts', () => {
+  const state = stage('?fixture=boss&view=cockpit');
+  assert.equal(state.tick, 108 * 60);
+  assert.equal(state.player.altitude, 110);
+  const point = activeWeakPoint(state);
+  assert.ok(point.exposed);
+  assert.ok(point.alt >= 139);
+  run(state, 32, { fire: true });
+  assert.equal(state.boss.weakPoints[0].hits, 0);
+  assert.ok(state.effects.some(effect => effect.kind === 'miss' && effect.delta > 0));
+
+  state.player.altitude = point.alt;
+  run(state, 12);
+  assert.ok(state.lock.progress > 0 && state.lock.progress < 1);
+  run(state, 1, { toggleView: true });
+  assert.ok(state.lock.progress > 0);
+  assert.equal(state.view, 'overhead');
+  run(state, 65);
+  assert.ok(state.boss.weakPoints[0].hits > 0);
+  assert.equal(state.boss.weakPoints[1].hits, 0);
+  for (let i = 0; i < 480 && state.boss.index === 0; i++) stepStage(state, autopilotInput(state), ground);
+  const next = activeWeakPoint(state);
+  assert.ok(next.alt < 81);
+  assert.equal(next.exposed, false);
+  assert.ok(state.boss.exposeTick - state.boss.changedTick >= 180);
+});
+
+test('the small boss has to be fought in different bands and its destruction ends the sortie', () => {
+  const state = stage('?fixture=boss');
+  for (let i = 0; i < 72 * 60 && state.phase !== 'clear'; i++) {
+    stepStage(state, autopilotInput(state), ground);
+  }
+  assert.equal(state.phase, 'clear');
+  assert.ok(state.tick < 180 * 60);
+  assert.ok(state.boss.weakPoints.every(point => point.hp === 0 && point.hits > 0));
+  assert.ok('SABC'.includes(state.rank));
+});
+
+test('time expiry shows a ranked timeout with a live boss and does not advance past 03:00', () => {
+  const state = stage('?fixture=boss');
+  state.tick = 180 * 60 - 1;
+  run(state, 1);
+  assert.equal(state.phase, 'timeout');
+  assert.equal(state.tick, 180 * 60);
+  assert.equal(state.rank, 'S');
+  run(state, 60);
+  assert.equal(state.tick, 180 * 60);
+  run(state, 1, { start: true });
+  assert.equal(state.tick, 0);
+  assert.equal(state.phase, 'playing');
+});
+
+test('last-tick damage, weak-point hits and an earned draft resolve before the result', () => {
+  function finalTick(hull) {
+    const state = stage('?fixture=boss');
+    state.tick = 180 * 60 - 1;
+    state.hull = hull;
+    state.xp = 5;
+    const point = state.boss.weakPoints[0];
+    point.hp = 1;
+    for (const other of state.boss.weakPoints.slice(1)) other.hp = 0;
+    state.shots.push({ ...atPlayer(state, point.alt, true), x: point.x, z: point.z, lockId: point.id });
+    state.shots.push(atPlayer(state, state.player.altitude));
+    state.pickups.push({ id: 70, ...atPlayer(state, state.player.altitude), xp: 1, born: state.tick });
+    return run(state, 1);
+  }
+  const alive = finalTick(8);
+  assert.equal(alive.phase, 'draft');
+  assert.equal(alive.hull, 6);
+  assert.equal(alive.boss.weakPoints[0].hits, 1);
+  run(alive, 1, { pick: alive.draft[0] });
+  assert.equal(alive.phase, 'clear');
+  assert.equal(alive.rank, 'A');
+  const dead = finalTick(2);
+  assert.equal(dead.phase, 'lost');
+  assert.equal(dead.boss.weakPoints[0].hits, 1);
+});
+
+test('Nova clears nearby shots in all bands and only damages craft in-band', () => {
+  const state = stage('?fixture=stack');
+  for (const alt of [75, 110, 145]) state.shots.push(atPlayer(state, alt));
+  state.shots.push({ ...atPlayer(state, 110), x: state.player.x + 180 });
+  run(state, 1, { bomb: true, toggleView: true });
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 1);
+  assert.deepEqual(state.enemies.map(enemy => enemy.alt), [75, 145]);
+  assert.equal(state.bombs, 1);
+  assert.ok(state.roll > 0);
+  assert.ok(state.wipe > 0);
+  assert.equal(state.invulnerability, 0);
+});
+
+test('an explicit view sets the camera after a deterministic absolute seek', () => {
+  const options = parseStageOptions('?t=47&seed=11&view=cockpit&touch=1');
+  const first = seekStage(options, ground);
+  const second = seekStage(options, ground);
+  assert.equal(first.tick, 47 * 60);
+  assert.equal(first.view, 'cockpit');
+  assert.equal(options.touch, true);
+  assert.deepEqual(first, second);
+  assert.equal(seekStage(parseStageOptions('?fixture=stack&t=31'), ground).tick, 31 * 60);
+  assert.equal(seekStage(parseStageOptions('?fixture=stack&t=10'), ground).tick, 10 * 60);
+});
+
+test('seeded waves respect phase caps and warn before interceptor altitude changes', () => {
+  const state = stage('?autoplay=1&seed=11');
+  let warned = 0;
+  const warnings = new Map();
+  for (let i = 0; i < 180 * 60 + 30 && ['playing', 'draft'].includes(state.phase); i++) {
+    stepStage(state, autopilotInput(state), ground);
+    assert.ok(state.enemies.length <= (state.tick < 2400 ? 6 : state.tick < 6300 ? 16 : 10));
+    for (const enemy of state.enemies.filter(enemy => enemy.kind === 'interceptor')) {
+      if (enemy.maneuver?.phase === 'warning') {
+        if (!warnings.has(enemy.id)) warnings.set(enemy.id, [state.tick, enemy.alt]);
+        assert.equal(enemy.alt, warnings.get(enemy.id)[1]);
+        warned++;
+      } else if (enemy.maneuver?.phase === 'diving' && warnings.has(enemy.id)) {
+        assert.ok(state.tick - warnings.get(enemy.id)[0] >= 75);
+      } else {
+        warnings.delete(enemy.id);
+      }
+    }
+  }
+  assert.ok(warned > 75);
+  assert.ok(['clear', 'timeout', 'lost'].includes(state.phase));
+});
+
+test('a successful stacked volley does not also report a wrong-height miss', () => {
+  const state = stage('?fixture=stack');
+  state.twinDamage = 2;
+  run(state, 25);
+  assert.equal(state.enemies.length, 2);
+  assert.equal(state.effects.filter(effect => effect.kind === 'miss').length, 0);
+});
+
+test('Wing Pods cover a side contact at launch height and upgrades improve both weapons independently', () => {
+  const state = stage('?fixture=draft');
+  run(state, 1, { pick: 'pods-2' });
+  const target = stage('?fixture=stack').enemies[1];
+  target.x = state.player.x - 38;
+  target.z = state.player.z;
+  target.hp = 12;
+  target.shotAt = state.tick + 120;
+  state.enemies = [target];
+  run(state, 1);
+  assert.equal(state.shots[0].kind, 'pods');
+  assert.equal(state.shots[0].alt, 110);
+  assert.equal(state.podsAt - state.tick, 25);
+  assert.equal(state.twinRank, 1);
+});
+
+test('the six-seed replay gate clears with all views and produces no good TOP-only clears', () => {
+  let clearWithAllViews = 0, goodTopOnly = 0;
+  for (const seed of [1, 11, 27, 42, 128, 2026]) {
+    for (const mode of ['full', 'top']) {
+      const state = stage('?autoplay=1&seed=' + seed);
+      const views = new Set([state.view]);
+      for (let i = 0; i < 10810 && ['playing', 'draft'].includes(state.phase); i++) {
+        stepStage(state, autopilotInput(state, mode), ground);
+        views.add(state.view);
+      }
+      assert.ok(['clear', 'timeout', 'lost'].includes(state.phase));
+      const good = state.phase === 'clear' && state.level === 3 && state.salvageBands.filter(Boolean).length >= 2;
+      if (mode === 'full' && good && views.size === 3) clearWithAllViews++;
+      if (mode === 'top' && good) goodTopOnly++;
+    }
+  }
+  assert.ok(clearWithAllViews >= 4);
+  assert.equal(goodTopOnly, 0);
+});

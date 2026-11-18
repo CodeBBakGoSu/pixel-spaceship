@@ -1,0 +1,131 @@
+import type { Segment } from './camera.ts';
+
+export type Fixture = 'stack' | 'draft' | 'boss';
+export type StageOptions = {
+  seed: number;
+  view: Segment | null;
+  fixture: Fixture | null;
+  time: number | null;
+  autoplay: boolean;
+  touch: boolean;
+};
+export type DraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
+export type Outcome = 'clear' | 'timeout' | 'lost';
+export type StageInput = {
+  turn?: number;
+  climb?: number;
+  fire?: boolean;
+  boost?: boolean;
+  bomb?: boolean;
+  toggleView?: boolean;
+  start?: boolean;
+  pause?: boolean;
+  pick?: DraftId;
+};
+
+export type Position = { x: number; z: number; alt: number };
+export type Ground = (x: number, z: number) => number;
+export type Band = 0 | 1 | 2;
+export type Enemy = Position & {
+  id: number;
+  kind: 'patrol' | 'interceptor';
+  hp: number;
+  yaw: number;
+  vx: number;
+  vz: number;
+  bank: number;
+  shotAt: number;
+  hitUntil: number;
+  shotDown: boolean;
+  band: Band;
+  offset: number;
+  maneuverAt: number;
+  maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
+};
+export type Pickup = Position & { id: number; xp: number; born: number };
+export type Shot = Position & {
+  vx: number;
+  vz: number;
+  life: number;
+  damage: number;
+  kind: 'twin' | 'pods' | 'hostile';
+  volley: number;
+  nearMiss: boolean;
+  lockId: number | null;
+};
+export type Effect = Position & (
+  { kind: 'hit' | 'burst' | 'nova'; life: number } |
+  { kind: 'miss'; life: number; delta: number; vx: number; vz: number }
+);
+export type WeakPoint = Position & {
+  id: number;
+  kind: 'pod' | 'core';
+  band: Band;
+  hp: number;
+  maxHp: number;
+  hits: number;
+  window: number;
+};
+export type Boss = {
+  x: number;
+  z: number;
+  alt: number;
+  weakPoints: WeakPoint[];
+  index: number;
+  exposeTick: number;
+  changedTick: number;
+  shotAt: number;
+};
+export type Lock = { id: number; progress: number; ready: boolean };
+export type StageState = {
+  phase: 'title' | 'playing' | 'draft' | Outcome;
+  paused: boolean;
+  resultPending: Outcome | null;
+  seed: number;
+  rng: number;
+  nextId: number;
+  nextVolley: number;
+  tick: number;
+  nextWave: number;
+  view: Segment;
+  initialView: Segment | null;
+  wipe: number;
+  viewTag: number;
+  arena: { x: number; z: number; radius: number };
+  boundaryWarning: boolean;
+  player: { x: number; z: number; altitude: number; yaw: number; bank: number };
+  speed: number;
+  climbRate: number;
+  hull: number;
+  maxHull: number;
+  hitsTaken: number;
+  rank: 'S' | 'A' | 'B' | 'C' | null;
+  invulnerability: number;
+  boost: number;
+  boosting: boolean;
+  bombs: number;
+  roll: number;
+  xp: number;
+  level: 1 | 2 | 3;
+  salvage: number;
+  salvageBands: [number, number, number];
+  draft: DraftId[];
+  picks: DraftId[];
+  graceUntil: number;
+  boostRelease: boolean;
+  twinRank: 1 | 2 | 3;
+  podRank: 1 | 2;
+  twinDamage: number;
+  podDamage: number;
+  twinAt: number;
+  podsAt: number;
+  score: number;
+  enemies: Enemy[];
+  pickups: Pickup[];
+  shots: Shot[];
+  effects: Effect[];
+  boss: Boss | null;
+  lock: Lock | null;
+  wrongLayer: { id: number; since: number } | null;
+  altitudeHint: { delta: number } | null;
+};
