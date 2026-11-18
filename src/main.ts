@@ -1,6 +1,6 @@
 import './style.css';
 import { CockpitDisplay } from './cockpit-display';
-import { measureCockpitMotion, type CockpitMotion, type CockpitTarget, type CockpitWarnings } from './cockpit';
+import { measureCockpitMotion, type CockpitMotion, type CockpitTarget, type CockpitView, type CockpitWarnings } from './cockpit';
 import { SCRIPT, createGame, parseGameOptions, restartGame, stepGame, type GameInput, type GameState } from './game';
 import type { Segment } from './camera';
 import type { Flight } from './flight';
@@ -31,6 +31,8 @@ let cockpit: CockpitLayout | null = null;
 let cockpitReadout: { target: CockpitTarget | null; warnings: CockpitWarnings } | null = null;
 let cockpitMotion: CockpitMotion = { speed: 0, climb: 0, bank: 0, turn: 0 };
 let game = createGame(options, ground);
+const cameraScratch = { ...game.camera };
+const cockpitView: CockpitView = { camera: cameraScratch, buffer: canvas, screen: { width: innerWidth, height: innerHeight } };
 if (legacy.get('roll') === '1') { game.roll = 0.5; game.player.bank = 0.45; }
 const neutral: GameInput = { moveX: 0, moveY: 0, fire: false, aspect: innerWidth / Math.max(1, innerHeight) };
 const stepTime = 1 / 60;
@@ -177,6 +179,8 @@ function resize():void{
   const aspect=innerWidth/Math.max(1,innerHeight);
   if(phone){canvas.width=phone.buffer.width;canvas.height=phone.buffer.height;}
   else{canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);}
+  cockpitView.screen.width = innerWidth;
+  cockpitView.screen.height = innerHeight;
   ctx.imageSmoothingEnabled = false;
   glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
   lastHelp='';
@@ -375,12 +379,11 @@ function cockpitCamera(layout: CockpitLayout, blend: number, impact: number): Ga
   const horizon = layout.aiming.y + Math.min(32, layout.aiming.height * 0.22);
   const framing = Math.max(0, horizon - innerHeight * 0.3);
   const screenShift = framing + clamp(cockpitMotion.climb * 0.62, -18, 18) + Math.sin(clock * 72) * shake;
-  return {
-    ...camera,
-    x: camera.x + Math.cos(camera.yaw) * crosswind,
-    z: camera.z - Math.sin(camera.yaw) * crosswind,
-    pitch: camera.pitch + screenShift * blend / (15 * innerHeight / canvas.height),
-  };
+  Object.assign(cameraScratch, camera);
+  cameraScratch.x = camera.x + Math.cos(camera.yaw) * crosswind;
+  cameraScratch.z = camera.z - Math.sin(camera.yaw) * crosswind;
+  cameraScratch.pitch = camera.pitch + screenShift * blend / (15 * innerHeight / canvas.height);
+  return cameraScratch;
 }
 
 function render():void{
@@ -391,37 +394,39 @@ function render():void{
   const cockpitBlend = mode === 'cockpit' ? (transition && nextView !== 'cockpit' ? 1 - transitionProgress : 1) : transitionProgress;
   let impact = 0;
   if (cockpit) for (const fx of game.effects) if (fx.kind === 'hit') impact = Math.max(impact, fx.life * 2);
-  let scene=game;
-  if (cockpit && mode !== 'overhead') scene = { ...game, camera: cockpitCamera(cockpit, cockpitBlend, impact) };
+  let camera = game.camera;
+  if (cockpit && mode !== 'overhead') camera = cockpitCamera(cockpit, cockpitBlend, impact);
   if(phone&&mode==='overhead'){
     const desired=phone.shipY*h/innerHeight,current=h/2-(game.player.z-game.camera.z)/1.4;
     const shift=(desired-current)*1.4*(1-transitionProgress);
-    scene={...game,camera:{...game.camera,z:game.camera.z+shift}};
+    Object.assign(cameraScratch, game.camera);
+    cameraScratch.z += shift;
+    camera = cameraScratch;
   }
   world.setBiome(game.biome,game.arena.x);
   if(transition && (mode==='overhead') !== (nextView==='overhead')){
-    world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');world.render(other,scene.camera,nextView==='overhead'?'overhead':'chase');
+    world.render(frame,camera,mode==='overhead'?'overhead':'chase');world.render(other,camera,nextView==='overhead'?'overhead':'chase');
     const from=frame.data,to=other.data;for(let i=0;i<from.length;i+=4){from[i]=mix(from[i],to[i],transitionProgress);from[i+1]=mix(from[i+1],to[i+1],transitionProgress);from[i+2]=mix(from[i+2],to[i+2],transitionProgress);}
-  }else world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');
+  }else world.render(frame,camera,mode==='overhead'?'overhead':'chase');
   ctx.putImageData(frame,0,0);if(glow){glow.setTransform(1,0,0,1,0,0);glow.clearRect(0,0,w,h);}
-  if(mode==='overhead')world.drawDust(ctx,scene.camera,'overhead',game.elapsed);
-  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawEntities(ctx,glow,sprites,scene,mode,ground,entityLabels);ctx.restore();
+  if(mode==='overhead')world.drawDust(ctx,camera,'overhead',game.elapsed);
+  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawEntities(ctx,glow,sprites,game,mode,ground,entityLabels,camera);ctx.restore();
   if((mode!=='cockpit'||transition&&nextView!=='cockpit') && !(game.invulnTimer>0&&Math.floor(game.elapsed*10)%2===0&&!transition)){
     const overhead=mode==='overhead',blend=transition&&overhead&&nextView!=='overhead'?transitionProgress:overhead?0:1;
     const clearance=Math.max(0,game.player.altitude-ground(game.player.x,game.player.z));
-    const overheadX=w/2+(game.player.x-scene.camera.x)/1.4*Math.min(1,w/240),overheadY=phone?h/2-(game.player.z-scene.camera.z)/1.4:h/2-game.player.y/1.4;
+    const overheadX=w/2+(game.player.x-camera.x)/1.4*Math.min(1,w/240),overheadY=phone?h/2-(game.player.z-camera.z)/1.4:h/2-game.player.y/1.4;
     const chaseY=phone?phone.shipY*h/innerHeight:h*.59;
     const alpha=transition&&nextView==='cockpit'?1-transitionProgress:transition&&mode==='cockpit'?transitionProgress:1;
     const pose:ShipPose={x:mix(overheadX,w/2,blend),y:mix(overheadY,chaseY,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
     shipSprite.draw(ctx,glow,visualFlight(game),blend<.5?'overhead':'chase',game.biome==='space'?-1000:ground(game.player.x,game.player.z),false,pose);
   }
-  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawShots(ctx,glow,scene,mode);ctx.restore();
+  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawShots(ctx,glow,game,mode,camera);ctx.restore();
   if(game.wipeT>0){const progress=1-game.wipeT/.35,y=Math.round(progress*h);ctx.fillStyle='rgba(14,22,35,.75)';ctx.fillRect(0,y-7,w,14);ctx.fillStyle='rgba(189,246,244,.7)';for(let i=-8;i<=8;i+=3)ctx.fillRect(0,y+i,w,1);}
   if (cockpit) {
     const { x, z, altitude, yaw } = game.player;
     const clearance = altitude - Math.max(ground(x, z), ground(x + Math.sin(yaw) * 24, z + Math.cos(yaw) * 24));
-    const view = { camera: scene.camera, buffer: { width: w, height: h }, screen: { width: innerWidth, height: innerHeight } };
-    cockpitReadout = cockpitDisplay.draw(game, view, cockpitMotion, clearance, impact, cockpitBlend * (1 - game.wipeT / 0.35), language, t);
+    cockpitView.camera = camera;
+    cockpitReadout = cockpitDisplay.draw(game, cockpitView, cockpitMotion, clearance, impact, cockpitBlend * (1 - game.wipeT / 0.35), language, t);
   } else {
     cockpitReadout = null;
     drawRadar();

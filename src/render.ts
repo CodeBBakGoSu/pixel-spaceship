@@ -4,9 +4,9 @@ import type { SpriteCache } from './models';
 
 export type EntityLabels = { font: string; exit: string; warden: string; weakPoint: string };
 
-export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, cache: SpriteCache, s: GameState, mode: Segment, ground: (x: number, z: number) => number, labels: EntityLabels): void {
+export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, cache: SpriteCache, s: GameState, mode: Segment, ground: (x: number, z: number) => number, labels: EntityLabels, camera = s.camera): void {
   const w = ctx.canvas.width, h = ctx.canvas.height;
-  const objects = s.entities.map(e => ({ e, point: projectWorld(s.camera, e.x, e.z, e.alt, w, h, mode) }));
+  const objects = s.entities.map(e => ({ e, point: projectWorld(camera, e.x, e.z, e.alt, w, h, mode) }));
   objects.sort((a, b) => (b.point?.depth ?? -1) - (a.point?.depth ?? -1));
   ctx.font = labels.font; ctx.textAlign = 'center';
   for (const { e, point } of objects) {
@@ -29,14 +29,14 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
       continue;
     }
     if (e.kind === 'drone' || e.kind === 'supply') {
-      const shadow = projectWorld(s.camera, e.x, e.z, ground(e.x, e.z), w, h, mode);
+      const shadow = projectWorld(camera, e.x, e.z, ground(e.x, e.z), w, h, mode);
       if (shadow && s.biome !== 'space') { ctx.fillStyle = 'rgba(15,16,26,.28)'; ctx.fillRect(Math.round(shadow.x-4),Math.round(shadow.y+2),9,3); }
     }
     const sprite = e.kind === 'drone' ? cache.drones[Math.max(0,Math.min(8,Math.round(e.bank*8)+4))]
       : e.kind === 'supply' ? cache.supply : e.kind === 'pylon' ? cache.pylon : e.kind === 'door' ? cache.door : cache.ring;
     const base = e.kind === 'drone' || e.kind === 'supply' ? 1.65 : e.kind === 'pylon' ? 1.35 : 1.6;
     const scale = mode === 'overhead' ? 0.65 : Math.max(0.2, Math.min(2.5, point.scale/base)) * Math.min(1,w/240);
-    const foot = e.kind === 'pylon' && mode !== 'overhead' ? projectWorld(s.camera,e.x,e.z,ground(e.x,e.z),w,h,mode) : null;
+    const foot = e.kind === 'pylon' && mode !== 'overhead' ? projectWorld(camera,e.x,e.z,ground(e.x,e.z),w,h,mode) : null;
     const spriteY = foot ? Math.round(foot.y) : y, sx = e.kind === 'pylon' ? scale * 0.65 : scale;
     const sy = foot ? Math.max(scale, (spriteY - y + 8) / 49) : scale;
     ctx.save(); if (e.hitFlash > 0) ctx.globalAlpha = 0.5;
@@ -56,7 +56,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
     }
   }
   if (s.boss.active) {
-    const p = projectWorld(s.camera,s.boss.x,s.boss.z,s.boss.alt,w,h,mode);
+    const p = projectWorld(camera,s.boss.x,s.boss.z,s.boss.alt,w,h,mode);
     if (p) {
       const scale = mode === 'overhead' ? 0.62 : Math.max(0.3,Math.min(2,p.scale/1.65))*Math.min(1,w/240);
       const x=Math.round(p.x), y=Math.round(p.y);
@@ -66,7 +66,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
       ctx.fillStyle=open ? '#fff3a6' : '#79dce7'; ctx.fillRect(x-4,y-4,8,8);
       ctx.fillStyle='#11222a'; ctx.fillRect(x-2,y-2,4,4);
       for (const target of wardenTargets(s)) if (target.kind === 'pod') {
-        const q = projectWorld(s.camera,target.x,target.z,target.alt,w,h,mode); if (!q) continue;
+        const q = projectWorld(camera,target.x,target.z,target.alt,w,h,mode); if (!q) continue;
         const px=Math.round(q.x), py=Math.round(q.y + (mode === 'overhead' ? -(target.alt-s.boss.alt)*0.65 : 0));
         ctx.fillStyle='#1b1c28';ctx.fillRect(px-5,py-5,10,10);ctx.fillStyle='#f8b52e';ctx.fillRect(px-4,py-4,8,8);ctx.fillStyle='#fff0a2';ctx.fillRect(px-2,py-2,4,4);
         if (mode !== 'cockpit') {
@@ -80,16 +80,16 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
   }
 }
 
-export function drawShots(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, s: GameState, mode: Segment): void {
+export function drawShots(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, s: GameState, mode: Segment, camera = s.camera): void {
   const w=ctx.canvas.width,h=ctx.canvas.height;
   for (const b of s.bullets) {
-    const p=projectWorld(s.camera,b.x,b.z,b.alt,w,h,mode); if (!p || p.x<0 || p.x>=w || p.y<0 || p.y>=h) continue;
+    const p=projectWorld(camera,b.x,b.z,b.alt,w,h,mode); if (!p || p.x<0 || p.x>=w || p.y<0 || p.y>=h) continue;
     const x=Math.round(p.x),y=Math.round(p.y),length=mode==='overhead'?5:Math.max(2,Math.min(5,Math.round(p.scale*2)));
     ctx.fillStyle='#211a25';ctx.fillRect(x-1,y-length,3,length*2);ctx.fillStyle=b.friendly?'#a8fff0':'#ff7681';ctx.fillRect(x,y-length+1,1,length*2-2);
     if (glow && b.friendly) { glow.fillStyle='rgba(100,255,218,.16)';glow.fillRect(x-2,y-length,5,length*2); }
   }
   for (const fx of s.effects) {
-    const p=projectWorld(s.camera,fx.x,fx.z,fx.alt,w,h,mode); if (!p) continue;
+    const p=projectWorld(camera,fx.x,fx.z,fx.alt,w,h,mode); if (!p) continue;
     const r=Math.max(2,Math.round((1-fx.life)*(fx.kind==='burst'?14:20)));ctx.fillStyle=fx.kind==='ring'?'#a4fff0':'#ffb35e';
     for (let i=0;i<8;i++) { const a=i*Math.PI/4;ctx.fillRect(Math.round(p.x+Math.cos(a)*r),Math.round(p.y+Math.sin(a)*r),2,2); }
   }
