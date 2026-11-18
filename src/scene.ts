@@ -7,6 +7,7 @@ import {
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { frameCockpit, type PitchMark } from './camera.ts';
+import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import type { CockpitLayout, PhoneLayout } from './layout.ts';
 import { MANEUVERS, maneuverAttitude } from './maneuvers.ts';
 import { wardenFaces, wardenPalette } from './models.ts';
@@ -74,14 +75,14 @@ export class FlightScene {
   private camera: Camera = this.top;
   private framing: Framing = { width: 0, height: 0, phone: null, cockpit: null };
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
-  private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, 0.62), this.voxelMaterial);
+  private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial);
+  private readonly exhaust = new EngineExhaust(this.ship);
   private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), 16, this.voxelMaterial);
   private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial);
   private readonly weakPoints = instances(new BoxGeometry(), 10);
   private readonly pickups = instances(new BoxGeometry(), 80);
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
-  private readonly engines = instances(new BoxGeometry(), 2);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 24,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   private readonly bombs = instances(new BoxGeometry(), MAX_BOMBS);
@@ -98,7 +99,7 @@ export class FlightScene {
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
-    this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks, this.engines,
+    this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast);
     this.top.up.set(0, 0, -1);
     this.screenCamera.position.z = 1;
@@ -235,6 +236,7 @@ export class FlightScene {
     this.ship.position.set(p.x, flat ? 104 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
     this.ship.rotation.set(flat ? 0 : (attitude?.pitch ?? state.climbRate * 0.004), -p.yaw, flat ? 0 : (attitude?.roll ?? -p.bank), 'YXZ');
+    this.exhaust.update(state, this.camera);
 
     let shadows = 0;
     const contactShadow = (x: number, z: number, sx: number, sz: number, yaw: number) => {
@@ -325,19 +327,6 @@ export class FlightScene {
     }
     upload(this.sparks, sparks);
     upload(this.blast, blasts);
-
-    const enginesVisible = this.ship.visible && (flat || !attitude);
-    if (enginesVisible) {
-      const sx = Math.cos(p.yaw), sz = -Math.sin(p.yaw);
-      const length = (state.boosting ? 8 : 3.1) + (Math.sin(state.tick * 0.95) + 1) * 0.8;
-      for (const [i, side] of [-3.4, 3.4].entries()) {
-        const behind = 11 + length / 2;
-        this.write(this.engines, i, p.x - Math.sin(p.yaw) * behind + sx * side,
-          p.z - Math.cos(p.yaw) * behind + sz * side, flat ? 104 : p.altitude - 0.6, p.yaw,
-          1.25, 1.25, length, state.boosting ? 0xffbd6c : 0xe88952);
-      }
-    }
-    upload(this.engines, enginesVisible ? 2 : 0);
 
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
