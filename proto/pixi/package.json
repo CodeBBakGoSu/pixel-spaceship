@@ -1,0 +1,17 @@
+{
+  "name": "aster-proto-pixi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5193",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5193"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.8.0"
+  }
+}
