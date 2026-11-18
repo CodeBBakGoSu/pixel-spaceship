@@ -7,7 +7,7 @@ import { bakeSprites } from './models';
 import { drawEntities, drawShots, type EntityLabels } from './render';
 import { drawCockpit, ShipSprite, type CockpitLabels, type ShipPose } from './ship';
 import { World } from './world';
-import { phoneLayout as calculatePhoneLayout, type Insets, type PhoneLayout, type Rect } from './layout';
+import { desktopLayout, guideLayout, phoneLayout as calculatePhoneLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout';
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const canvas = $<HTMLCanvasElement>('#screen'), ctx = canvas.getContext('2d', { alpha: false })!;
@@ -37,13 +37,17 @@ let phone:PhoneLayout|null=null,phoneView:Segment|null=null,phoneSafe:Insets={to
 let stickX=0,stickY=0,stickActive=false,touchFire=false,touchBoost=false;
 let pendingStart=false,pendingPause=false,pendingView=false,pendingBomb=false;
 let lastHelp='',helpTimer=0,lastMenu='',lastSpeaker='';
+let guideMode: 'launch' | 'help' | null = null;
+let guideOpener: HTMLElement | null = null;
 const keys=new Set<string>();
 const help=$<HTMLElement>('#help'),banner=$<HTMLElement>('#phase-banner'),overlay=$<HTMLElement>('#game-overlay');
 const primary=$<HTMLButtonElement>('#primary-action'),restart=$<HTMLButtonElement>('#restart-action');
 const languageButtons = document.querySelectorAll<HTMLButtonElement>('[data-lang]');
+const gameCard = $<HTMLElement>('.game-card'), guideCard = $<HTMLElement>('#guide-card');
+const guideBody = $<HTMLElement>('.guide-body'), guidePrimary = $<HTMLButtonElement>('#guide-primary');
+const guideSkip = $<HTMLButtonElement>('#guide-skip'), guideHelp = $<HTMLButtonElement>('#help-action');
 const experience=$<HTMLElement>('.experience'),safeProbe=$<HTMLElement>('#safe-area-probe'),touchPause=$<HTMLButtonElement>('#touch-pause');
 const touchControls=$<HTMLElement>('#touch-controls'),stick=$<HTMLElement>('#stick'),knob=$<HTMLElement>('#stick-knob');
-touchControls.hidden=!touchMode;
 const clamp=(n:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,n));
 const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
 const smooth=(n:number)=>{n=clamp(n,0,1);return n*n*(3-2*n);};
@@ -113,19 +117,38 @@ function setRect(name:string,r:Rect):void {
   const style=experience.style;style.setProperty(`--${name}-x`,`${r.x}px`);style.setProperty(`--${name}-y`,`${r.y}px`);
   style.setProperty(`--${name}-w`,`${r.width}px`);style.setProperty(`--${name}-h`,`${r.height}px`);
 }
+function setHudLayout(layout: HudLayout): void {
+  for (const name of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(name, layout[name]);
+}
 function updatePhoneLayout():void {
-  if(!touchMode){phone=null;phoneView=null;return;}
-  phoneSafe=safeInsets();phoneView=intendedView();phone=calculatePhoneLayout(innerWidth,innerHeight,phoneSafe,phoneView);
-  const parts:Record<string,Rect>={hud:phone.hud,boss:phone.boss,radio:phone.radio,objective:phone.objective,field:phone.playfield,
-    controls:phone.controls,radar:phone.radar,alt:phone.alt,pause:phone.pause,stick:phone.stick,fire:phone.fire,boost:phone.boost,bomb:phone.bomb,view:phone.view};
+  phoneView=intendedView();phone=calculatePhoneLayout(innerWidth,innerHeight,phoneSafe,phoneView);
+  setHudLayout(phone);
+  const parts:Record<string,Rect>={field:phone.playfield,controls:phone.controls,pause:phone.pause,stick:phone.stick,
+    fire:phone.fire,boost:phone.boost,bomb:phone.bomb,view:phone.view};
   for(const [name,r] of Object.entries(parts))setRect(name,r);
   experience.classList.toggle('phone-portrait',phone.orientation==='portrait');
   experience.classList.toggle('phone-landscape',phone.orientation==='landscape');
 }
 function resize():void{
   touchMode=detectTouch();
+  const safe = safeInsets();
   experience.classList.toggle('phone-layout',touchMode);
-  if(touchMode)updatePhoneLayout();else{phone=null;phoneView=null;experience.classList.remove('phone-portrait','phone-landscape');}
+  if (touchMode) {
+    phoneSafe = safe;
+    updatePhoneLayout();
+  } else {
+    phone = phoneView = null;
+    experience.classList.remove('phone-portrait', 'phone-landscape');
+    setHudLayout(desktopLayout(innerWidth, innerHeight, safe));
+  }
+  const guide = guideLayout(innerWidth, innerHeight, safe);
+  setRect('guide', guide.card);
+  guideCard.style.setProperty('--guide-heading-h', `${guide.heading.height}px`);
+  guideCard.style.setProperty('--guide-body-h', `${guide.body.height}px`);
+  guideCard.style.setProperty('--guide-actions-h', `${guide.actions.height}px`);
+  guideCard.classList.toggle('guide-wide', guide.columns === 2);
+  $<HTMLElement>('#guide-keyboard').hidden = touchMode;
+  $<HTMLElement>('#guide-touch').hidden = !touchMode;
   const aspect=innerWidth/Math.max(1,innerHeight);
   if(phone){canvas.width=phone.buffer.width;canvas.height=phone.buffer.height;}
   else{canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);}
@@ -159,7 +182,7 @@ function updateHud():void{
   setText('#score',scoreText());setText('#salvage',`◆ ${String(game.salvage).padStart(3,'0')}`);
   setText('#objective',objectiveText());setText('#alt-number',String(Math.round(game.player.altitude)));
   $<HTMLElement>('#alt-marker').style.top=`${clamp(85-(game.player.altitude-55)/110*70,10,85)}%`;
-  const radio=$<HTMLElement>('#radio');radio.hidden=!game.dialogue;radio.classList.toggle('boss-radio',game.boss.active);
+  $<HTMLElement>('#radio').hidden = !game.dialogue;
   if (game.dialogue) {
     setText('#radio-speaker', t(`speaker.${game.dialogue.speaker}`));
     setText('#radio-text', t(game.dialogue.key));
@@ -172,45 +195,113 @@ function updateHud():void{
   banner.hidden=!(game.phase==='transition'||game.phase==='playing'&&game.phaseTime<2);
   setText('#phase-banner', t(`segment.${game.phase === 'transition' ? game.nextSegment : game.segment}`));
   const tag=$<HTMLElement>('#view-tag');tag.hidden=game.viewTagT<=0;setText('#view-tag', t('view.tag', { view: viewName(game.camera.mode) }));
+  updateMenu();
+}
+
+function updateMenu(): void {
   const menu = game.paused ? 'paused' : game.phase;
+  const screen = guideMode ?? menu;
   const show = menu !== 'playing' && menu !== 'transition';
-  if(touchMode&&show&&menu!==lastMenu){
+  if(touchMode&&show&&screen!==lastMenu){
     stickActive=false;stickX=stickY=0;touchFire=false;touchBoost=false;pointerDown=false;pointerActive=false;knob.style.transform='';
     for(const button of touchControls.querySelectorAll('.held'))button.classList.remove('held');
   }
   touchControls.hidden=!touchMode||show;touchPause.hidden=!touchMode||show;experience.classList.toggle('menu-open',show);
-  if(menu!==lastMenu){lastMenu=menu;overlay.hidden=!show;
-    if (show) {
-      $<HTMLElement>('#card-options').hidden = menu !== 'title' && menu !== 'paused';
-      $<HTMLElement>('#rank-display').hidden = menu !== 'win';
-      restart.hidden = menu !== 'win';
-      setText('#card-kicker', t(`menu.${menu}.kicker`));
-      setText('#card-title', t(`menu.${menu}.title`));
-      setText('#card-copy', t(`menu.${menu}.copy`, { score: scoreText(), hits: game.hitsTaken, salvage: game.salvage }));
-      setText('#primary-action', t(menu === 'game_over' ? 'menu.restart' : `menu.${menu}.action`));
-      setText('#card-hint', t(`menu.${menu}.hint`));
-      if (game.rank) setText('#rank-display', t('menu.win.rank', { rank: game.rank }));
-    }
+  if (screen === lastMenu) return;
+  lastMenu = screen;
+  overlay.hidden = !show;
+  guideCard.hidden = !guideMode;
+  gameCard.hidden = !!guideMode;
+  experience.classList.toggle('guide-open', !!guideMode);
+  if (guideMode) {
+    guideSkip.hidden = guideMode !== 'launch';
+    setText('#guide-primary', t(guideMode === 'launch' ? 'guide.launch' : 'guide.back'));
+  } else if (show) {
+    $<HTMLElement>('#card-options').hidden = menu !== 'title' && menu !== 'paused';
+    $<HTMLElement>('#rank-display').hidden = menu !== 'win';
+    restart.hidden = menu !== 'win';
+    setText('#card-kicker', t(`menu.${menu}.kicker`));
+    setText('#card-title', t(`menu.${menu}.title`));
+    setText('#card-copy', t(`menu.${menu}.copy`, { score: scoreText(), hits: game.hitsTaken, salvage: game.salvage }));
+    setText('#primary-action', t(menu === 'game_over' ? 'menu.restart' : `menu.${menu}.action`));
+    setText('#card-hint', t(`menu.${menu}.hint`));
+    setText('#help-action-label', t(menu === 'title' ? 'guide.title' : 'menu.help'));
+    if (game.rank) setText('#rank-display', t('menu.win.rank', { rank: game.rank }));
   }
 }
-function action():void{if(game.paused)pendingPause=true;else if(['title','game_over','win'].includes(game.phase))pendingStart=true;}
+
+function openGuide(mode: NonNullable<typeof guideMode>): void {
+  guideOpener = document.activeElement instanceof HTMLButtonElement ? document.activeElement : primary;
+  guideMode = mode;
+  updateMenu();
+  guideBody.scrollTop = 0;
+  guidePrimary.focus({ preventScroll: true });
+}
+
+function closeGuide(launch: boolean): void {
+  const startMission = launch && guideMode === 'launch';
+  guideMode = null;
+  if (startMission) {
+    pendingStart = true;
+  } else {
+    updateMenu();
+    guideOpener?.focus({ preventScroll: true });
+  }
+  guideOpener = null;
+}
+
+function action(): void {
+  if (guideMode) closeGuide(true);
+  else if (game.paused) pendingPause = true;
+  else if (game.phase === 'title' && !pendingStart) openGuide('launch');
+  else if (game.phase === 'game_over' || game.phase === 'win') pendingStart = true;
+}
+
 primary.addEventListener('click',action);restart.addEventListener('click',()=>{game=restartGame(game,ground);});
+guideHelp.addEventListener('click', () => openGuide('help'));
+guidePrimary.addEventListener('click', () => closeGuide(true));
+guideSkip.addEventListener('click', () => closeGuide(true));
 touchPause.addEventListener('pointerdown',event=>{event.preventDefault();pendingPause=true;});
 touchPause.addEventListener('click',event=>{if(event.detail===0)pendingPause=true;});
 overlay.addEventListener('pointerdown',event=>{if(event.target===overlay)action();});
 window.addEventListener('resize',resize);window.addEventListener('orientationchange',resize);
 coarsePointer.addEventListener('change',resize);portraitOrientation.addEventListener('change',resize);
-experience.addEventListener('touchmove',event=>event.preventDefault(),{passive:false});
+experience.addEventListener('touchmove', event => {
+  if (event.target instanceof Node && (guideBody.contains(event.target) || gameCard.contains(event.target))) return;
+  event.preventDefault();
+}, { passive: false });
 experience.addEventListener('contextmenu',event=>event.preventDefault());experience.addEventListener('dblclick',event=>event.preventDefault());
 document.addEventListener('gesturestart',event=>event.preventDefault());
 window.addEventListener('keydown',event=>{
+  if (!event.repeat && event.key === '?' && (guideMode || game.phase === 'title' || game.paused)) {
+    event.preventDefault();
+    if (guideMode) closeGuide(false);
+    else openGuide('help');
+    return;
+  }
   if ((event.code === 'Enter' || event.code === 'Space') && event.target instanceof HTMLButtonElement) {
     if (event.repeat) event.preventDefault();
     return;
   }
+  if (guideMode) {
+    if (event.repeat) return;
+    if (event.code === 'Escape' || event.code === 'KeyP' && game.paused) {
+      event.preventDefault();
+      closeGuide(false);
+    } else if (event.code === 'Enter') {
+      event.preventDefault();
+      closeGuide(true);
+    }
+    return;
+  }
+  if (event.code === 'Enter') {
+    event.preventDefault();
+    if (!event.repeat) action();
+    return;
+  }
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault();
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(event.code))pointerActive=false;
-  if(!event.repeat){if(event.code==='Enter')action();if(event.code==='KeyP')pendingPause=true;if(event.code==='KeyV')pendingView=true;if(event.code==='KeyX'||event.code==='KeyK')pendingBomb=true;if(event.code==='KeyR'&&(game.phase==='win'||game.phase==='game_over'))game=restartGame(game,ground);}
+  if(!event.repeat){if(event.code==='KeyP')pendingPause=true;if(event.code==='KeyV')pendingView=true;if(event.code==='KeyX'||event.code==='KeyK')pendingBomb=true;if(event.code==='KeyR'&&(game.phase==='win'||game.phase==='game_over'))game=restartGame(game,ground);}
   keys.add(event.code);
 });
 window.addEventListener('keyup',event=>keys.delete(event.code));

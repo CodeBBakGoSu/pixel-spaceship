@@ -45,12 +45,64 @@
       <div class="card-actions"><button type="button" id="primary-action"></button><button type="button" id="restart-action" data-i18n="menu.restart" hidden></button></div>
       <div class="card-hint" id="card-hint"></div>
       <div class="card-options" id="card-options" hidden>
+        <button class="help-action" id="help-action" type="button"><b aria-hidden="true">?</b><span id="help-action-label"></span></button>
         <div class="language-switch" role="group" data-label="language.label">
           <button type="button" lang="en" data-lang="en" data-i18n="language.en" aria-pressed="false"></button>
           <button type="button" lang="ko" data-lang="ko" data-i18n="language.ko" aria-pressed="false"></button>
         </div>
       </div>
     </div>
+    <section class="guide-card" id="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-heading" hidden>
+      <header class="guide-heading"><h2 id="guide-heading" data-i18n="guide.title"></h2></header>
+      <div class="guide-body" tabindex="0">
+        <section class="guide-pane" id="guide-keyboard">
+          <h3 data-i18n="guide.keyboard"></h3>
+          <dl class="guide-list">
+            <dt data-i18n="guide.move"></dt><dd data-i18n="guide.keysMove"></dd>
+            <dt data-i18n="control.fire"></dt><dd data-i18n="guide.keysFire"></dd>
+            <dt data-i18n="control.boost"></dt><dd data-i18n="guide.keysBoost"></dd>
+            <dt data-i18n="control.bomb"></dt><dd>X</dd>
+            <dt data-i18n="control.view"></dt><dd data-i18n="guide.keysView"></dd>
+            <dt data-i18n="control.pause"></dt><dd>P</dd>
+            <dt data-i18n="guide.start"></dt><dd>Enter</dd>
+            <dt data-i18n="guide.mouse"></dt><dd data-i18n="guide.mouseInput"></dd>
+          </dl>
+        </section>
+        <section class="guide-pane" id="guide-touch">
+          <h3 data-i18n="guide.touch"></h3>
+          <dl class="guide-list">
+            <dt data-i18n="guide.stick"></dt><dd data-i18n="guide.touchMove"></dd>
+            <dt data-i18n="control.fire"></dt><dd data-i18n="guide.touchFire"></dd>
+            <dt data-i18n="control.boost"></dt><dd data-i18n="guide.touchBoost"></dd>
+            <dt data-i18n="control.bomb"></dt><dd data-i18n="guide.touchBomb"></dd>
+            <dt data-i18n="control.view"></dt><dd data-i18n="guide.touchView"></dd>
+            <dt data-i18n="control.pause"></dt><dd data-i18n="guide.touchPause"></dd>
+          </dl>
+        </section>
+        <section class="guide-pane guide-hud">
+          <h3 data-i18n="guide.hud"></h3>
+          <dl class="guide-list">
+            <dt data-i18n="guide.hull"></dt><dd data-i18n="guide.armorHint"></dd>
+            <dt data-i18n="guide.bst"></dt><dd data-i18n="guide.boostHint"></dd>
+            <dt data-i18n="guide.bmb"></dt><dd data-i18n="guide.bombHint"></dd>
+            <dt data-i18n="guide.twin"></dt><dd data-i18n="guide.gunHint"></dd>
+            <dt data-i18n="hud.score"></dt><dd data-i18n="guide.scoreHint"></dd>
+            <dt class="guide-salvage">◆</dt><dd data-i18n="guide.salvageHint"></dd>
+            <dt data-i18n="guide.alt"></dt><dd data-i18n="guide.altitudeHint"></dd>
+            <dt data-i18n="guide.radar"></dt><dd data-i18n="guide.radarHint"></dd>
+          </dl>
+          <p class="guide-markers">
+            <span><b>[ ]</b> <span data-i18n="guide.aligned"></span></span>
+            <span><b>^</b> <span data-i18n="guide.climb"></span></span>
+            <span><b>v</b> <span data-i18n="guide.dive"></span></span>
+          </p>
+        </section>
+      </div>
+      <footer class="guide-actions">
+        <button id="guide-skip" type="button" data-i18n="guide.skip"></button>
+        <button id="guide-primary" type="button"></button>
+      </footer>
+    </section>
   </section>
   <div class="touch-controls" id="touch-controls" hidden>
     <div class="stick" id="stick" data-label="aria.stick"><span id="stick-knob"></span><small data-i18n="control.climb"></small></div>
