@@ -104,7 +104,7 @@
 }
 
 .status-view time{color:#dce6de;font-size:10px;margin-left:3px}.boundary-warning{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.boundary-warning[hidden]{display:none}
-#nav-radar{position:absolute;left:var(--radar-x);top:var(--radar-y);width:var(--radar-w);height:var(--radar-h);image-rendering:pixelated;pointer-events:none;opacity:.9}.help.cockpit-help{bottom:calc(var(--cockpit-panel, 136px) + 10px)}
+#nav-radar{position:absolute;left:var(--radar-x);top:var(--radar-y);width:var(--radar-w);height:var(--radar-h);image-rendering:pixelated;pointer-events:none;opacity:.9}
 
 /* Safe-area measurements are read by the pure layout adapter. */
 #safe-area-probe{position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -131,6 +131,38 @@
 .experience.phone-layout.menu-open #control-backdrop{display:none}
 .experience.phone-landscape .phase-banner{top:calc(var(--field-y) + 6px);padding:5px 14px;font-size:12px}
 .experience.phone-landscape .view-tag{top:calc(var(--field-y) + 42px);font-size:11px}
+
+#cockpit-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.experience.cockpit-view :is(#nav-radar, .alt-ruler) { display: none; }
+
+.experience.cockpit-view :is(.boundary-warning, .phase-banner, .view-tag) {
+  top: var(--cockpit-message-y);
+  height: var(--cockpit-message-h);
+  max-width: var(--cockpit-message-w);
+  padding: 0 12px;
+  border-width: 1px;
+  line-height: calc(var(--cockpit-message-h) - 2px);
+  font-size: 12px;
+}
+
+.experience.cockpit-view .help {
+  top: var(--cockpit-help-y);
+  bottom: auto;
+  max-width: var(--cockpit-help-w);
+  height: var(--cockpit-help-h);
+  line-height: var(--cockpit-help-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .card-options {
   display: flex;

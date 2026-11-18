@@ -24,6 +24,8 @@ npm run dev
 
 Use the north-up navigation radar to find objectives: yellow dots mark pylons and locks, green marks the exit, cyan marks supplies, and pink marks the Warden. The Atoll bay, canyon walls, and orbit have soft boundaries; turn back when the edge warning appears.
 
+In cockpit view the radar rotates with the ship. The right tape shows your altitude and marks the tracked target's altitude. A flashing lock box means the target is within range and close to the gunsight. The weapon display shows unlimited gun ammo, remaining bombs, and zero missiles.
+
 The clear rank is based on hits taken: S for zero, A for one or two, B for three to five, and C for more. The optional shop and later-game mechanics from the reference are outside this MVP.
 
 ## Language
@@ -37,7 +39,7 @@ When adding Korean glyphs, regenerate the subset from the package's `dist/Galmur
 ```sh
 node --experimental-strip-types --input-type=module -e 'import { strings } from "./src/i18n.ts"; process.stdout.write(Object.values(strings.ko).join(""));' > glyphs.txt
 pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
-  --unicodes=U+0020-007E,U+00B7,U+00D7,U+2014,U+2026,U+2161,U+25AE-25AF,U+25C2,U+25C6 \
+  --unicodes=U+0020-007E,U+00B0,U+00B7,U+00D7,U+2014,U+2026,U+2161,U+221E,U+25AE-25AF,U+25C2,U+25C6 \
   --name-IDs=0,1,2,3,4,5,6,13,14 --output-file=src/fonts/galmuri11-subset.woff2
 ```
 

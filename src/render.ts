@@ -1,18 +1,8 @@
-import type { CameraState, Segment } from './camera';
+import { projectWorld, type Segment } from './camera';
 import { elevationBracket, wardenTargets, type GameState } from './game';
 import type { SpriteCache } from './models';
 
-type Point = { x: number; y: number; scale: number; depth: number };
 export type EntityLabels = { font: string; exit: string; warden: string; weakPoint: string };
-export function projectWorld(camera: CameraState, x: number, z: number, alt: number, w: number, h: number, mode: Segment): Point | null {
-  if (mode === 'overhead') return { x: w / 2 + (x - camera.x) / 1.4 * Math.min(1, w / 240), y: h / 2 - (z - camera.z) / 1.4, scale: 1 / 1.4, depth: z - camera.z };
-  const sin = Math.sin(camera.yaw), cos = Math.cos(camera.yaw);
-  const dx = x - (camera.x - sin * camera.camOffset), dz = z - (camera.z - cos * camera.camOffset);
-  const depth = dx * sin + dz * cos, right = dx * cos - dz * sin;
-  if (depth < 8) return null;
-  const scale = h * 0.95 / depth;
-  return { x: w / 2 + right * h * 0.95 / depth, y: h * 0.3 + camera.pitch * 15 + (camera.altitude + camera.camHeightOffset - alt) * scale, scale, depth };
-}
 
 export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderingContext2D | null, cache: SpriteCache, s: GameState, mode: Segment, ground: (x: number, z: number) => number, labels: EntityLabels): void {
   const w = ctx.canvas.width, h = ctx.canvas.height;
@@ -31,7 +21,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
       ctx.fillStyle = '#171927'; ctx.fillRect(x-r-1,y-r-1,r*2+2,r*2+2);
       ctx.fillStyle = e.kind === 'lock' ? '#ffbd40' : e.kind === 'capsule' ? '#68e7f1' : '#ff5b82'; ctx.fillRect(x-r,y-r,r*2,r*2);
       ctx.fillStyle = '#fff4ca'; if (e.kind === 'capsule') ctx.fillText('P',x,y+2); else ctx.fillRect(x-1,y-1,2,2);
-      if (e.kind === 'lock') {
+      if (e.kind === 'lock' && mode !== 'cockpit') {
         const cue = elevationBracket(e.alt,s.player.altitude); ctx.fillStyle = cue === 'inline' ? '#ff5e66' : cue === 'above' ? '#6ef3ff' : '#ffaa4c';
         ctx.fillText(cue === 'inline' ? '[ ]' : cue === 'above' ? '^' : 'v',x,y-8);
       }
@@ -60,7 +50,7 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
     }
     if (e.kind === 'exit') { ctx.fillStyle='#ffe16c'; ctx.fillText(labels.exit,x,y-18*scale); }
     if (e.kind === 'pylon') { ctx.fillStyle='#171927'; ctx.fillRect(x-6,y-6,12,3); ctx.fillStyle='#ffd454'; ctx.fillRect(x-5,y-5,Math.max(0,Math.round(e.hp/12*10)),1); }
-    if (['drone','supply','pylon'].includes(e.kind)) {
+    if (mode !== 'cockpit' && ['drone','supply','pylon'].includes(e.kind)) {
       const cue = elevationBracket(e.alt,s.player.altitude); ctx.fillStyle = cue === 'inline' ? '#ff5e66' : cue === 'above' ? '#6ef3ff' : '#ffaa4c';
       ctx.fillText(cue === 'inline' ? '[  ]' : cue === 'above' ? '^' : 'v',x,y-11);
     }
@@ -79,9 +69,13 @@ export function drawEntities(ctx: CanvasRenderingContext2D, glow: CanvasRenderin
         const q = projectWorld(s.camera,target.x,target.z,target.alt,w,h,mode); if (!q) continue;
         const px=Math.round(q.x), py=Math.round(q.y + (mode === 'overhead' ? -(target.alt-s.boss.alt)*0.65 : 0));
         ctx.fillStyle='#1b1c28';ctx.fillRect(px-5,py-5,10,10);ctx.fillStyle='#f8b52e';ctx.fillRect(px-4,py-4,8,8);ctx.fillStyle='#fff0a2';ctx.fillRect(px-2,py-2,4,4);
-        const cue=elevationBracket(target.alt,s.player.altitude);ctx.fillStyle=cue==='inline'?'#ff5e66':cue==='above'?'#6ef3ff':'#ffaa4c';ctx.fillText(cue==='inline'?'[ ]':cue==='above'?'^':'v',px,py-7);
+        if (mode !== 'cockpit') {
+          const cue=elevationBracket(target.alt,s.player.altitude);ctx.fillStyle=cue==='inline'?'#ff5e66':cue==='above'?'#6ef3ff':'#ffaa4c';ctx.fillText(cue==='inline'?'[ ]':cue==='above'?'^':'v',px,py-7);
+        }
       }
-      ctx.fillStyle=open ? '#fff09a' : '#ffcf6b';ctx.fillText(open ? labels.weakPoint : labels.warden,x,y-35*scale);
+      if (mode !== 'cockpit') {
+        ctx.fillStyle=open ? '#fff09a' : '#ffcf6b';ctx.fillText(open ? labels.weakPoint : labels.warden,x,y-35*scale);
+      }
     }
   }
 }

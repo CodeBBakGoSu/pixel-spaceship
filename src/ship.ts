@@ -157,28 +157,3 @@ export class ShipSprite {
     if (glow) glow.restore();
   }
 }
-
-export type CockpitLabels = { font: string; radar: string; speed: string; altitude: string; twin: string };
-
-export function drawCockpit(ctx: CanvasRenderingContext2D, labels: CockpitLabels, pitch: number, aimX = 0, aimY = 0, slide = 0, altitude = 110, speed = 120, bottomInset = 0, panelScale = 1, safeLeft = 0, safeRight = 0): void {
-  const w=ctx.canvas.width,h=ctx.canvas.height,cx=Math.floor((w+safeLeft-safeRight)/2),panel=Math.round(h-34*panelScale-bottomInset);
-  ctx.save();ctx.translate(0,slide*h*0.45);
-  // Canopy ribs and luminous pitch ladder.
-  const frameBottom=bottomInset ? panel+34*panelScale : h;
-  ctx.strokeStyle='#182635';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(safeLeft,frameBottom);ctx.lineTo(w*0.07,0);ctx.moveTo(w-safeRight,frameBottom);ctx.lineTo(w*0.93,0);ctx.stroke();
-  ctx.strokeStyle='rgba(134,234,189,.68)';ctx.lineWidth=1;
-  for (let i=-2;i<=2;i++) { const y=Math.round(h*0.43+i*15+pitch*10);ctx.beginPath();ctx.moveTo(cx-22,y);ctx.lineTo(cx-8,y);ctx.moveTo(cx+8,y);ctx.lineTo(cx+22,y);ctx.stroke(); }
-  if(panelScale!==1){ctx.save();ctx.translate(0,panel);ctx.scale(1,panelScale);ctx.translate(0,-panel);}
-  ctx.fillStyle='#152431';ctx.fillRect(0,panel,w,34);ctx.fillStyle='#415866';ctx.fillRect(0,panel,w,2);
-  ctx.fillStyle='#071c1b';ctx.fillRect(safeLeft+7,panel+5,Math.max(36,(w-safeLeft-safeRight)*0.25),24);ctx.fillStyle='#0c2927';ctx.fillRect(w-safeRight-70,panel+5,62,24);
-  ctx.fillStyle='#7ddf9e';ctx.font=labels.font;ctx.textAlign='left';
-  ctx.fillText(labels.radar,safeLeft+10,panel+12);
-  ctx.fillText(`${labels.speed} ${Math.round(speed)}`,w-safeRight-66,panel+13);
-  ctx.fillText(`${labels.altitude} ${Math.round(altitude)}`,w-safeRight-66,panel+23);
-  const rx=safeLeft+28,ry=panel+19;ctx.strokeStyle='#2c7957';ctx.beginPath();ctx.arc(rx,ry,8,0,Math.PI*2);ctx.moveTo(rx-8,ry);ctx.lineTo(rx+8,ry);ctx.moveTo(rx,ry-8);ctx.lineTo(rx,ry+8);ctx.stroke();ctx.fillStyle='#a5f0c2';ctx.fillRect(rx+3,ry-5,2,2);
-  ctx.fillStyle='#b5dbe0';ctx.fillText(labels.twin,cx-15,panel+12);ctx.fillStyle='#58d5c9';for(let i=0;i<5;i++)ctx.fillRect(cx-15+i*5,panel+17,4,4);
-  if(panelScale!==1)ctx.restore();
-  const sightX=Math.round(cx+aimX*w*0.38),sightY=Math.floor(h*0.42+aimY*h*0.27+pitch*8);
-  ctx.fillStyle='rgba(169,230,208,.9)';ctx.fillRect(sightX-10,sightY,6,1);ctx.fillRect(sightX+5,sightY,6,1);ctx.fillRect(sightX,sightY-9,1,5);ctx.fillRect(sightX,sightY+5,1,5);
-  ctx.restore();
-}

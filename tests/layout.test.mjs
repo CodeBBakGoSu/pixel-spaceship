@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { desktopLayout, guideLayout, phoneLayout } from '../src/layout.ts';
+import { cockpitLayout, desktopLayout, guideLayout, phoneLayout } from '../src/layout.ts';
 
 const views = ['overhead', 'chase', 'cockpit'];
 const sizes = [[390,844], [360,780], [430,932]];
@@ -63,6 +63,35 @@ for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const sa
     for (const [i, zone] of zones.entries()) {
       assert.ok(contains(guide.card, zone));
       for (const other of zones.slice(i + 1)) assert.equal(intersects(zone, other), false);
+    }
+  });
+}
+
+for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const safe of insets) {
+  test(`cockpit zones stay separate at ${width}x${height}, safe ${safe.top}`, () => {
+    const phone = width < 1280 ? phoneLayout(width, height, safe, 'cockpit') : null;
+    const hud = phone ?? desktopLayout(width, height, safe);
+    const cockpit = cockpitLayout(width, height, safe, hud.objective, phone?.controls);
+    if (phone) assert.deepEqual(phone.dashboard, cockpit.dashboard);
+    else assert.ok(cockpit.help);
+    if (height >= 720) assert.ok(cockpit.stores);
+
+    const zones = [hud.hud, hud.boss, hud.radio, hud.objective, cockpit.glass,
+      cockpit.message, ...(cockpit.help ? [cockpit.help] : []), cockpit.dashboard,
+      ...(phone ? [phone.controls] : [])];
+    for (const [i, zone] of zones.entries()) {
+      for (const other of zones.slice(i + 1)) assert.equal(intersects(zone, other), false);
+    }
+
+    for (const [outer, children] of [
+      [cockpit.glass, [cockpit.heading, cockpit.speed, cockpit.altitude, cockpit.aiming, ...(cockpit.stores ? [cockpit.stores] : [])]],
+      [cockpit.dashboard, [cockpit.warnings, cockpit.radar, cockpit.damage, cockpit.weapons, cockpit.gauges]],
+    ]) {
+      for (const [i, child] of children.entries()) {
+        assert.ok(contains(outer, child));
+        assert.ok(child.width > 0 && child.height > 0);
+        for (const other of children.slice(i + 1)) assert.equal(intersects(child, other), false);
+      }
     }
   });
 }

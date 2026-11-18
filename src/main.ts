@@ -1,13 +1,15 @@
 import './style.css';
+import { CockpitDisplay } from './cockpit-display';
+import { measureCockpitMotion, type CockpitMotion, type CockpitTarget, type CockpitWarnings } from './cockpit';
 import { SCRIPT, createGame, parseGameOptions, restartGame, stepGame, type GameInput, type GameState } from './game';
 import type { Segment } from './camera';
 import type { Flight } from './flight';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n';
 import { bakeSprites } from './models';
 import { drawEntities, drawShots, type EntityLabels } from './render';
-import { drawCockpit, ShipSprite, type CockpitLabels, type ShipPose } from './ship';
+import { ShipSprite, type ShipPose } from './ship';
 import { World } from './world';
-import { desktopLayout, guideLayout, phoneLayout as calculatePhoneLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout';
+import { cockpitLayout, desktopLayout, guideLayout, phoneLayout as calculatePhoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout';
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const canvas = $<HTMLCanvasElement>('#screen'), ctx = canvas.getContext('2d', { alpha: false })!;
@@ -21,19 +23,32 @@ const languageStorage = {
 };
 let language = initialLanguage(location.search, navigator.language, languageStorage);
 let t = createTranslator(language);
-const canvasFont = `8px ${getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim()}`;
-let entityLabels: EntityLabels, cockpitLabels: CockpitLabels, radarLabel: string;
+const gameFont = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
+const canvasFont = `8px ${gameFont}`;
+const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay'), gameFont);
+let entityLabels: EntityLabels, radarLabel: string;
+let cockpit: CockpitLayout | null = null;
+let cockpitReadout: { target: CockpitTarget | null; warnings: CockpitWarnings } | null = null;
+let cockpitMotion: CockpitMotion = { speed: 0, climb: 0, bank: 0, turn: 0 };
 let game = createGame(options, ground);
 if (legacy.get('roll') === '1') { game.roll = 0.5; game.player.bank = 0.45; }
 const neutral: GameInput = { moveX: 0, moveY: 0, fire: false, aspect: innerWidth / Math.max(1, innerHeight) };
-for (let i=0;i<Math.round(options.time*60) && game.phase!=='win' && game.phase!=='game_over';i++) { world.setBiome(game.biome,game.arena.x); game=stepGame(game,neutral,1/60,ground); }
+const stepTime = 1 / 60;
+function advanceGame(input: GameInput): void {
+  const previous = game;
+  world.setBiome(previous.biome, previous.arena.x);
+  game = stepGame(previous, input, stepTime, ground);
+  cockpitMotion = measureCockpitMotion(previous, game, cockpitMotion, stepTime);
+}
+for (let i = 0; i < Math.round(options.time * 60) && game.phase !== 'win' && game.phase !== 'game_over'; i++) advanceGame(neutral);
 let frame: ImageData, other: ImageData;
 let lastTime=performance.now(), accumulator=0, fps=60;
 let pointerX=0,pointerY=0,pointerActive=false,pointerDown=false;
 const coarsePointer=matchMedia('(pointer: coarse)'),portraitOrientation=matchMedia('(orientation: portrait)');
 const detectTouch=()=>options.touch||coarsePointer.matches||(navigator.maxTouchPoints>0&&Math.min(innerWidth,innerHeight)<=600);
 let touchMode=detectTouch();
-let phone:PhoneLayout|null=null,phoneView:Segment|null=null,phoneSafe:Insets={top:0,right:0,bottom:0,left:0};
+let phone: PhoneLayout | null = null, layoutView: Segment | null = null;
+let viewportSafe: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 let stickX=0,stickY=0,stickActive=false,touchFire=false,touchBoost=false;
 let pendingStart=false,pendingPause=false,pendingView=false,pendingBomb=false;
 let lastHelp='',helpTimer=0,lastMenu='',lastSpeaker='';
@@ -78,7 +93,6 @@ function applyLanguage(): void {
   }
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
   entityLabels = { font: canvasFont, exit: t('canvas.exit'), warden: t('speaker.warden'), weakPoint: t('canvas.weakPoint') };
-  cockpitLabels = { font: canvasFont, radar: t('hud.radar'), speed: t('hud.speed'), altitude: t('hud.altitude'), twin: t('hud.twin') };
   radarLabel = t('hud.nav');
   lastHelp = lastMenu = '';
 }
@@ -103,6 +117,11 @@ Object.defineProperty(window,'__game',{get:()=>Object.freeze({
   phaseTime:game.phaseTime,transitionT:game.transitionT,wipeT:game.wipeT,paused:game.paused,boosting:game.boosting,pylonsDown:game.pylonsDown,doorsCleared:game.doorsCleared,
   boundaryWarning:game.boundaryWarning,arena:Object.freeze({...game.arena}),bossHp:game.boss.active?game.boss.hp:null,bossPods:Object.freeze([...game.boss.pods]),entities:game.entities.length,bullets:game.bullets.length,
   player:Object.freeze({...game.player}),aimX:game.aimX,aimY:game.aimY,
+  cockpit: cockpitReadout ? Object.freeze({
+    target: cockpitReadout.target ? Object.freeze({ ...cockpitReadout.target, point: Object.freeze({ ...cockpitReadout.target.point }) }) : null,
+    warnings: Object.freeze({ ...cockpitReadout.warnings }),
+    motion: Object.freeze({ ...cockpitMotion }),
+  }) : null,
   layout:phone?Object.freeze({orientation:phone.orientation,buffer:Object.freeze({...phone.buffer}),playfield:Object.freeze({...phone.playfield}),controls:Object.freeze({...phone.controls}),dashboard:phone.dashboard?Object.freeze({...phone.dashboard}):null}):null,
 })});
 function safeInsets():Insets {
@@ -120,28 +139,34 @@ function setRect(name:string,r:Rect):void {
 function setHudLayout(layout: HudLayout): void {
   for (const name of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(name, layout[name]);
 }
-function updatePhoneLayout():void {
-  phoneView=intendedView();phone=calculatePhoneLayout(innerWidth,innerHeight,phoneSafe,phoneView);
-  setHudLayout(phone);
-  const parts:Record<string,Rect>={field:phone.playfield,controls:phone.controls,pause:phone.pause,stick:phone.stick,
-    fire:phone.fire,boost:phone.boost,bomb:phone.bomb,view:phone.view};
-  for(const [name,r] of Object.entries(parts))setRect(name,r);
-  experience.classList.toggle('phone-portrait',phone.orientation==='portrait');
-  experience.classList.toggle('phone-landscape',phone.orientation==='landscape');
+function updateFlightLayout(): void {
+  layoutView = intendedView();
+  phone = touchMode ? calculatePhoneLayout(innerWidth, innerHeight, viewportSafe, layoutView) : null;
+  const hud = phone ?? desktopLayout(innerWidth, innerHeight, viewportSafe);
+  setHudLayout(hud);
+  if (phone) {
+    const parts: Record<string, Rect> = { field: phone.playfield, controls: phone.controls, pause: phone.pause, stick: phone.stick,
+      fire: phone.fire, boost: phone.boost, bomb: phone.bomb, view: phone.view };
+    for (const [name, r] of Object.entries(parts)) setRect(name, r);
+  }
+  cockpit = layoutView === 'cockpit'
+    ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, viewportSafe, hud.objective)
+    : null;
+  cockpitDisplay.resize(cockpit, innerWidth, innerHeight);
+  if (cockpit) {
+    setRect('cockpit-message', cockpit.message);
+    if (cockpit.help) setRect('cockpit-help', cockpit.help);
+  }
+  experience.classList.toggle('cockpit-view', !!cockpit);
+  experience.classList.toggle('phone-portrait', phone?.orientation === 'portrait');
+  experience.classList.toggle('phone-landscape', phone?.orientation === 'landscape');
 }
 function resize():void{
   touchMode=detectTouch();
-  const safe = safeInsets();
+  viewportSafe = safeInsets();
   experience.classList.toggle('phone-layout',touchMode);
-  if (touchMode) {
-    phoneSafe = safe;
-    updatePhoneLayout();
-  } else {
-    phone = phoneView = null;
-    experience.classList.remove('phone-portrait', 'phone-landscape');
-    setHudLayout(desktopLayout(innerWidth, innerHeight, safe));
-  }
-  const guide = guideLayout(innerWidth, innerHeight, safe);
+  updateFlightLayout();
+  const guide = guideLayout(innerWidth, innerHeight, viewportSafe);
   setRect('guide', guide.card);
   guideCard.style.setProperty('--guide-heading-h', `${guide.heading.height}px`);
   guideCard.style.setProperty('--guide-body-h', `${guide.body.height}px`);
@@ -152,7 +177,7 @@ function resize():void{
   const aspect=innerWidth/Math.max(1,innerHeight);
   if(phone){canvas.width=phone.buffer.width;canvas.height=phone.buffer.height;}
   else{canvas.width=clamp(Math.round(180*aspect),160,480);canvas.height=Math.round(canvas.width/aspect);}
-  ctx.imageSmoothingEnabled=false;document.documentElement.style.setProperty('--cockpit-panel',`${34/canvas.height*innerHeight}px`);
+  ctx.imageSmoothingEnabled = false;
   glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;frame=ctx.createImageData(canvas.width,canvas.height);other=ctx.createImageData(canvas.width,canvas.height);
   lastHelp='';
 }
@@ -177,7 +202,6 @@ function updateHud():void{
   setText('#weapon-label', t('hud.weapon', { level: game.weaponLv }));
   const seconds=game.phase==='transition'?0:Math.floor(game.phaseTime+0.00001);
   setText('#segment-timer',`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`);
-  help.classList.toggle('cockpit-help',game.camera.mode==='cockpit');
   $<HTMLElement>('#boundary-warning').hidden=!game.boundaryWarning;
   setText('#score',scoreText());setText('#salvage',`◆ ${String(game.salvage).padStart(3,'0')}`);
   setText('#objective',objectiveText());setText('#alt-number',String(Math.round(game.player.altitude)));
@@ -192,9 +216,12 @@ function updateHud():void{
     }
   }
   const boss=$<HTMLElement>('#boss-hud');boss.hidden=!game.boss.active;if(game.boss.active)$<HTMLElement>('#boss-health').style.width=`${game.boss.hp/game.boss.maxHp*100}%`;
-  banner.hidden=!(game.phase==='transition'||game.phase==='playing'&&game.phaseTime<2);
+  const showPhase = game.phase === 'transition' || game.phase === 'playing' && game.phaseTime < 2;
+  banner.hidden = !showPhase || (!!cockpit && game.boundaryWarning);
   setText('#phase-banner', t(`segment.${game.phase === 'transition' ? game.nextSegment : game.segment}`));
-  const tag=$<HTMLElement>('#view-tag');tag.hidden=game.viewTagT<=0;setText('#view-tag', t('view.tag', { view: viewName(game.camera.mode) }));
+  const tag = $<HTMLElement>('#view-tag');
+  tag.hidden = game.viewTagT <= 0 || (!!cockpit && (game.boundaryWarning || !banner.hidden));
+  setText('#view-tag', t('view.tag', { view: viewName(game.camera.mode) }));
   updateMenu();
 }
 
@@ -340,47 +367,70 @@ function drawRadar():void {
   const x=36+Math.sin(p.yaw)*6,y=38-Math.cos(p.yaw)*6;c.strokeStyle='#e5fff0';c.beginPath();c.moveTo(36,38);c.lineTo(x,y);c.stroke();c.fillStyle='#e5fff0';c.fillRect(35,37,3,3);
   c.fillStyle='#a5d5ce';c.font=canvasFont;c.fillText(radarLabel,4,9);
 }
+
+function cockpitCamera(layout: CockpitLayout, blend: number, impact: number): GameState['camera'] {
+  const camera = game.camera, clock = game.elapsed;
+  const shake = (game.boosting ? 1.8 : 0) + impact * 4.5;
+  const crosswind = Math.sin(clock * 89) * shake * 0.16 * blend;
+  const horizon = layout.aiming.y + Math.min(32, layout.aiming.height * 0.22);
+  const framing = Math.max(0, horizon - innerHeight * 0.3);
+  const screenShift = framing + clamp(cockpitMotion.climb * 0.62, -18, 18) + Math.sin(clock * 72) * shake;
+  return {
+    ...camera,
+    x: camera.x + Math.cos(camera.yaw) * crosswind,
+    z: camera.z - Math.sin(camera.yaw) * crosswind,
+    pitch: camera.pitch + screenShift * blend / (15 * innerHeight / canvas.height),
+  };
+}
+
 function render():void{
-  const w=canvas.width,h=canvas.height,mode=game.camera.mode,transition=game.phase==='transition',t=transition?smooth(game.transitionT):0;
+  const w=canvas.width,h=canvas.height,mode=game.camera.mode,transition=game.phase==='transition';
+  const transitionProgress = transition ? smooth(game.transitionT) : 0;
   const nextView=SCRIPT.find(d=>d.id===game.nextSegment)!.defaultView;
-  if(touchMode&&phoneView!==intendedView())updatePhoneLayout();
+  if (layoutView !== intendedView()) updateFlightLayout();
+  const cockpitBlend = mode === 'cockpit' ? (transition && nextView !== 'cockpit' ? 1 - transitionProgress : 1) : transitionProgress;
+  let impact = 0;
+  if (cockpit) for (const fx of game.effects) if (fx.kind === 'hit') impact = Math.max(impact, fx.life * 2);
   let scene=game;
+  if (cockpit && mode !== 'overhead') scene = { ...game, camera: cockpitCamera(cockpit, cockpitBlend, impact) };
   if(phone&&mode==='overhead'){
     const desired=phone.shipY*h/innerHeight,current=h/2-(game.player.z-game.camera.z)/1.4;
-    const shift=(desired-current)*1.4*(transition?1-t:1);
+    const shift=(desired-current)*1.4*(1-transitionProgress);
     scene={...game,camera:{...game.camera,z:game.camera.z+shift}};
   }
   world.setBiome(game.biome,game.arena.x);
   if(transition && (mode==='overhead') !== (nextView==='overhead')){
     world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');world.render(other,scene.camera,nextView==='overhead'?'overhead':'chase');
-    const from=frame.data,to=other.data;for(let i=0;i<from.length;i+=4){from[i]=mix(from[i],to[i],t);from[i+1]=mix(from[i+1],to[i+1],t);from[i+2]=mix(from[i+2],to[i+2],t);}
+    const from=frame.data,to=other.data;for(let i=0;i<from.length;i+=4){from[i]=mix(from[i],to[i],transitionProgress);from[i+1]=mix(from[i+1],to[i+1],transitionProgress);from[i+2]=mix(from[i+2],to[i+2],transitionProgress);}
   }else world.render(frame,scene.camera,mode==='overhead'?'overhead':'chase');
   ctx.putImageData(frame,0,0);if(glow){glow.setTransform(1,0,0,1,0,0);glow.clearRect(0,0,w,h);}
   if(mode==='overhead')world.drawDust(ctx,scene.camera,'overhead',game.elapsed);
-  ctx.save();if(transition)ctx.globalAlpha=1-t;drawEntities(ctx,glow,sprites,scene,mode,ground,entityLabels);ctx.restore();
+  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawEntities(ctx,glow,sprites,scene,mode,ground,entityLabels);ctx.restore();
   if((mode!=='cockpit'||transition&&nextView!=='cockpit') && !(game.invulnTimer>0&&Math.floor(game.elapsed*10)%2===0&&!transition)){
-    const overhead=mode==='overhead',blend=transition&&overhead&&nextView!=='overhead'?t:overhead?0:1;
+    const overhead=mode==='overhead',blend=transition&&overhead&&nextView!=='overhead'?transitionProgress:overhead?0:1;
     const clearance=Math.max(0,game.player.altitude-ground(game.player.x,game.player.z));
     const overheadX=w/2+(game.player.x-scene.camera.x)/1.4*Math.min(1,w/240),overheadY=phone?h/2-(game.player.z-scene.camera.z)/1.4:h/2-game.player.y/1.4;
     const chaseY=phone?phone.shipY*h/innerHeight:h*.59;
-    const alpha=transition&&nextView==='cockpit'?1-t:transition&&mode==='cockpit'?t:1;
+    const alpha=transition&&nextView==='cockpit'?1-transitionProgress:transition&&mode==='cockpit'?transitionProgress:1;
     const pose:ShipPose={x:mix(overheadX,w/2,blend),y:mix(overheadY,chaseY,blend),scale:mix(.72,1,blend)*(w<240?1.22:1),pitch:mix(65,36,blend),lift:mix(1.4,1,blend),bank:game.player.bank,alpha,perspective:blend,shadowSquash:mix(.82,.28,blend),shadowY:mix(clearance*.48,23+clearance*.24,blend)};
     shipSprite.draw(ctx,glow,visualFlight(game),blend<.5?'overhead':'chase',game.biome==='space'?-1000:ground(game.player.x,game.player.z),false,pose);
   }
-  ctx.save();if(transition)ctx.globalAlpha=1-t;drawShots(ctx,glow,scene,mode);ctx.restore();
-  if(mode==='cockpit'||transition&&nextView==='cockpit'){
-    if(phone?.dashboard){
-      const inset=(innerHeight-phone.dashboard.y-phone.dashboard.height)*h/innerHeight;
-      ctx.save();if(transition)ctx.globalAlpha=mode==='cockpit'?1-t:t;
-      drawCockpit(ctx,cockpitLabels,game.camera.pitch,game.aimX,game.aimY,0,game.player.altitude,game.boosting?190:120,inset,phone.panelScale,phoneSafe.left*w/innerWidth,phoneSafe.right*w/innerWidth);ctx.restore();
-    }else drawCockpit(ctx,cockpitLabels,game.camera.pitch,game.aimX,game.aimY,transition?(mode==='cockpit'?t:1-t):0,game.player.altitude,game.boosting?190:120);
-  }
+  ctx.save();if(transition)ctx.globalAlpha=1-transitionProgress;drawShots(ctx,glow,scene,mode);ctx.restore();
   if(game.wipeT>0){const progress=1-game.wipeT/.35,y=Math.round(progress*h);ctx.fillStyle='rgba(14,22,35,.75)';ctx.fillRect(0,y-7,w,14);ctx.fillStyle='rgba(189,246,244,.7)';for(let i=-8;i<=8;i+=3)ctx.fillRect(0,y+i,w,1);}
-  updateHud();drawRadar();
+  if (cockpit) {
+    const { x, z, altitude, yaw } = game.player;
+    const clearance = altitude - Math.max(ground(x, z), ground(x + Math.sin(yaw) * 24, z + Math.cos(yaw) * 24));
+    const view = { camera: scene.camera, buffer: { width: w, height: h }, screen: { width: innerWidth, height: innerHeight } };
+    cockpitReadout = cockpitDisplay.draw(game, view, cockpitMotion, clearance, impact, cockpitBlend * (1 - game.wipeT / 0.35), t);
+  } else {
+    cockpitReadout = null;
+    drawRadar();
+  }
+  updateHud();
 }
 function animate(now:number):void{
   const elapsed=Math.max(0,(now-lastTime)/1000);lastTime=now;if(elapsed>0&&elapsed<.25)fps+=(1/elapsed-fps)*.05;accumulator+=Math.min(.05,elapsed);
-  while(accumulator>=1/60){world.setBiome(game.biome,game.arena.x);game=stepGame(game,controls(),1/60,ground);pendingStart=pendingPause=pendingView=pendingBomb=false;if(!game.paused)shipSprite.update(1/60,visualFlight(game),game.player.bank/.65);accumulator-=1/60;}
+  while(accumulator>=stepTime){advanceGame(controls());pendingStart=pendingPause=pendingView=pendingBomb=false;if(!game.paused)shipSprite.update(stepTime,visualFlight(game),game.player.bank/.65);accumulator-=stepTime;}
   render();requestAnimationFrame(animate);
 }
 async function start(): Promise<void> {

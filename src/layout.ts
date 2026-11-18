@@ -3,11 +3,17 @@ import type { Segment } from './camera.ts';
 export type Insets = { top: number; right: number; bottom: number; left: number };
 export type Rect = { x: number; y: number; width: number; height: number };
 export type HudLayout = { hud: Rect; boss: Rect; radio: Rect; objective: Rect; radar: Rect; alt: Rect };
+export type CockpitLayout = {
+  compact: boolean;
+  glass: Rect; heading: Rect; speed: Rect; altitude: Rect; aiming: Rect; stores: Rect | null;
+  message: Rect; help: Rect | null;
+  dashboard: Rect; warnings: Rect; radar: Rect; damage: Rect; weapons: Rect; gauges: Rect;
+};
 export type PhoneLayout = HudLayout & {
   orientation: 'portrait' | 'landscape'; buffer: { width: number; height: number };
   playfield: Rect; dashboard: Rect | null; controls: Rect;
   pause: Rect; stick: Rect; stickLabel: Rect; fire: Rect; boost: Rect; bomb: Rect; view: Rect;
-  shipY: number; panelScale: number;
+  shipY: number; cockpit: CockpitLayout | null;
 };
 export type GuideLayout = { card: Rect; heading: Rect; body: Rect; actions: Rect; columns: 1 | 2 };
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
@@ -49,6 +55,50 @@ export function guideLayout(width: number, height: number, safe: Insets): GuideL
   return { card, heading, body, actions, columns };
 }
 
+export function cockpitLayout(width: number, height: number, safe: Insets, objective: Rect, controls?: Rect): CockpitLayout {
+  const portrait = height >= width, short = height < 480, compact = width < 620 || short;
+  const availableWidth = width - safe.left - safe.right;
+  const bottom = controls?.y ?? height - safe.bottom;
+  const heightWanted = portrait ? clamp(Math.round(width * 0.23), 82, 105)
+    : short && controls ? 52 : clamp(Math.round(height * 0.24), 110, 176);
+  const dashboard = rect(safe.left, bottom - heightWanted, availableWidth, heightWanted);
+  const help = controls ? null : rect(safe.left + 10, dashboard.y - 21, availableWidth - 20, 17);
+  const messageHeight = short ? 16 : 22;
+  const message = rect(safe.left + 10, (help?.y ?? dashboard.y) - messageHeight - 3, availableWidth - 20, messageHeight);
+
+  const glassInset = compact ? 12 : clamp(Math.round(width * 0.052), 32, 78);
+  const glassTop = objective.y + objective.height + 5;
+  const glass = rect(safe.left + glassInset, glassTop, availableWidth - 2 * glassInset, Math.max(0, message.y - 3 - glassTop));
+  const headingHeight = Math.min(compact ? 28 : 34, Math.floor(glass.height * 0.52));
+  const headingWidth = Math.min(compact ? 180 : 294, glass.width);
+  const heading = rect(glass.x + (glass.width - headingWidth) / 2, glass.y, headingWidth, headingHeight);
+  const storesHeight = compact ? 16 : 19;
+  const stores = glass.height >= 125 ? rect(heading.x, glass.y + glass.height - storesHeight, heading.width, storesHeight) : null;
+  const aimingTop = heading.y + heading.height + 3;
+  const aimingBottom = stores ? stores.y - 4 : glass.y + glass.height;
+  const aimingHeight = Math.max(0, aimingBottom - aimingTop);
+  const tapeWidth = compact ? 44 : 73, tapeHeight = Math.min(compact ? 112 : 154, aimingHeight);
+  const tapeY = aimingTop + (aimingHeight - tapeHeight) * 0.44;
+  const speed = rect(glass.x, tapeY, tapeWidth, tapeHeight);
+  const altitude = rect(glass.x + glass.width - tapeWidth, tapeY, tapeWidth, tapeHeight);
+  const aiming = rect(glass.x + tapeWidth + 5, aimingTop, glass.width - 2 * (tapeWidth + 5), aimingHeight);
+
+  const rackWidth = Math.min(1040, availableWidth - (compact ? 12 : 80));
+  const rackX = Math.round(safe.left + (availableWidth - rackWidth) / 2);
+  const warnings = rect(rackX, dashboard.y + (compact ? 3 : 8), rackWidth, short ? 12 : compact ? 16 : 22);
+  const panelTop = warnings.y + warnings.height + (compact ? 3 : 8);
+  const panelHeight = bottom - panelTop - (compact ? 4 : 14);
+  const gap = compact ? 4 : 10, columnSpace = rackWidth - 3 * gap;
+  const radarWidth = Math.round(columnSpace * (compact ? 0.235 : 0.25));
+  const damageWidth = Math.round(columnSpace * 0.23);
+  const weaponsWidth = Math.round(columnSpace * (compact ? 0.3 : 0.25));
+  const radar = rect(rackX, panelTop, radarWidth, panelHeight);
+  const damage = rect(radar.x + radar.width + gap, panelTop, damageWidth, panelHeight);
+  const weapons = rect(damage.x + damage.width + gap, panelTop, weaponsWidth, panelHeight);
+  const gauges = rect(weapons.x + weapons.width + gap, panelTop, columnSpace - radarWidth - damageWidth - weaponsWidth, panelHeight);
+  return { compact, glass, heading, speed, altitude, aiming, stores, message, help, dashboard, warnings, radar, damage, weapons, gauges };
+}
+
 // CSS pixels; the canvas still covers the entire viewport, including the safe areas.
 export function phoneLayout(width: number, height: number, safe: Insets, view: Segment): PhoneLayout {
   const portrait = height >= width, left = safe.left + 8, right = width - safe.right - 8, top = safe.top + 4;
@@ -61,8 +111,8 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
   const bufferWidth = portrait ? 180 : clamp(Math.round(180 * width / height), 160, 480);
   const buffer = { width: bufferWidth, height: Math.round(bufferWidth * height / width) };
-  const panelScale = portrait ? 1 : 0.55, panelHeight = Math.round(34 * height / buffer.height * panelScale);
-  const dashboard = view === 'cockpit' ? rect(safe.left, controls.y - panelHeight, controls.width, panelHeight) : null;
+  const cockpit = view === 'cockpit' ? cockpitLayout(width, height, safe, objective, controls) : null;
+  const dashboard = cockpit?.dashboard ?? null;
   const fieldTop = objective.y + objective.height + 4, fieldBottom = dashboard ? dashboard.y : controls.y;
   const playfield = rect(left, fieldTop, usableWidth, Math.max(0, fieldBottom - fieldTop));
   const radarSize = Math.min(48, Math.max(20, playfield.height - 8));
@@ -80,5 +130,5 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const viewButton = rect(fire.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
     radar, alt, pause, stick, stickLabel, fire, boost, bomb, view: viewButton,
-    shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), panelScale };
+    shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), cockpit };
 }
