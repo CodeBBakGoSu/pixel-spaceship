@@ -94,7 +94,7 @@ test('former pursuers survive inversion and retain altitude data when diverted a
   const contact = enemy(14, -130, 123), hiddenByMirror = enemy(78, -116, 92);
   state.maneuverTrail = { kind: 'immelmann', startTick: state.tick - 30, yaw: 0, side: 1,
     exitAltitude: 110, limited: false, points: [{ x: 0, z: 0, alt: 110 }], pursuers: [contact.id, hiddenByMirror.id] };
-  face({ pitch: Math.PI, roll: 0, cockpitPitch: 0, cameraPitch: 0, cameraBank: Math.PI, inverted: true, stalled: false });
+  face({ pitch: Math.PI, roll: 0, cockpitPitch: 0, cameraPitch: 0, cameraBank: Math.PI, inverted: true });
   const [visible, obscured] = read({ x: 1080, y: 210, width: 120, height: 100 });
   assert.equal(visible.id, contact.id);
   assert.equal(visible.placement, 'forward');

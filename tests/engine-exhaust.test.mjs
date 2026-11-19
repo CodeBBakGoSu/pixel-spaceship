@@ -37,33 +37,24 @@ test('exhaust grows from idle through cruise to boost with a separate diamond pa
   assert.equal(diamonds.visible, true);
 });
 
-test('Cobra and immediate J-turn produce a flame flare without changing stage state', () => {
-  const { state, exhaust, camera, length } = exhaustFixture();
+test('the J-turn handoff produces a brief exhaust pulse without changing stage state', () => {
+  const { state, exhaust, camera, diamonds, length } = exhaustFixture();
+  stepStage(state, { maneuver: 'j-turn' });
+  for (let i = 1; i < MANEUVERS['j-turn'].ticks - 1; i++) stepStage(state);
   exhaust.update(state, camera);
-  const idle = length();
-  stepStage(state, { maneuver: 'cobra' });
-  for (let i = 0; i < 8; i++) stepStage(state);
-  exhaust.update(state, camera);
-  assert.ok(length() > idle * 1.5);
-  const flipped = createStage(parseStageOptions('?t=0'));
-  stepStage(flipped, { maneuver: 'j-turn' });
-  const snapshot = structuredClone(flipped);
-  exhaust.update(flipped, camera);
-  assert.ok(length() > idle * 1.5);
-  assert.deepEqual(flipped, snapshot);
-});
-
-test('the Cobra recovery pulse is fading out when normal flight resumes', () => {
-  const { state, exhaust, camera, length } = exhaustFixture();
+  assert.equal(diamonds.visible, false);
   stepStage(state);
-  stepStage(state, { maneuver: 'cobra' });
-  for (let i = 0; i < 58; i++) stepStage(state);
-  exhaust.update(state, camera);
-  const before = length();
-  stepStage(state);
+  const snapshot = structuredClone(state);
   exhaust.update(state, camera);
   assert.equal(state.maneuver, null);
-  assert.ok(Math.abs(before - length()) < 2, 'plume length should stay continuous at handoff');
+  assert.equal(diamonds.visible, true);
+  const pulse = length();
+  assert.deepEqual(state, snapshot);
+
+  for (let i = 0; i < 17; i++) stepStage(state);
+  exhaust.update(state, camera);
+  assert.equal(diamonds.visible, false);
+  assert.ok(pulse > length() * 1.35);
 });
 
 test('the same tick reproduces both plumes and keeps their axes attached through inversion', () => {

@@ -1,4 +1,4 @@
-import type { Boss, Effect, Enemy, Ground, Position, RearBomb, Shot, StageState, WeakPoint } from './stage-types.ts';
+import type { Boss, Effect, Enemy, Ground, Point, Position, RearBomb, RearGlimpse, StageState, WeakPoint } from './stage-types.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -17,6 +17,20 @@ export const FLAK_LIFE = 0.65;
 export const MAX_BOMBS = 3;
 export const BOMB_RELOAD_TICKS = 450;
 export const BOMB_BLAST_RADIUS = 34;
+export const MAX_FLARES = 3;
+export const FLARE_COOLDOWN_TICKS = 36;
+export const FLARE_RELOAD_TICKS = 420;
+export const FLARE_LIFE_TICKS = 120;
+export const FLARE_GRAVITY = 14;
+export const REAR_GLIMPSE_TICKS = 84;
+const REAR_IMPACT_TICKS = 45;
+const FLARE_KICK = 56;
+const FLARE_HIT_RADIUS = 4.5;
+const FLARE_BURN_TICKS = 88;
+const FLARE_BURN_INTERVAL = 27;
+const WARDEN_BURN_INTERVAL = 54;
+const FLARE_CONFIRM_TICKS = 72;
+const FLARE_FAN = [-2, -1, 0, 1, 2];
 const BOMB_DROP_TICKS = 24;
 const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = 24;
@@ -166,6 +180,20 @@ export function acquireAndFire(state: StageState): void {
   }
 }
 
+function showRearLaunch(state: StageState, kind: RearGlimpse['kind']): void {
+  const glimpse = state.rearGlimpse;
+  const until = Math.max(glimpse?.until ?? 0, state.tick + REAR_GLIMPSE_TICKS);
+  if (glimpse?.kind === kind) glimpse.until = until;
+  else state.rearGlimpse = { kind, since: glimpse?.since ?? state.tick, until };
+}
+
+function showRearImpact(state: StageState, kind: RearGlimpse['kind'], { x, z, alt }: Position): void {
+  state.rearGlimpse = {
+    kind, target: { x, z, alt }, since: state.rearGlimpse?.since ?? state.tick,
+    until: Math.max(state.rearGlimpse?.until ?? 0, state.tick + REAR_IMPACT_TICKS),
+  };
+}
+
 export function dropRearBomb(state: StageState): void {
   if (!state.bombs || state.tick < state.bombReadyAt) return;
   const p = state.player;
@@ -175,6 +203,7 @@ export function dropRearBomb(state: StageState): void {
   state.bombs--;
   state.bombReadyAt = state.tick + BOMB_DROP_TICKS;
   state.bombReloadAt ??= state.tick + BOMB_RELOAD_TICKS;
+  showRearLaunch(state, 'bomb');
 }
 
 function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
@@ -183,6 +212,7 @@ function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
 
 function blast(state: StageState, bomb: RearBomb): void {
   state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8 });
+  showRearImpact(state, 'bomb', bomb);
   state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, BOMB_CLEAR_RADIUS));
   state.enemyMines = state.enemyMines.filter(mine => !nearBomb(bomb, mine, BOMB_CLEAR_RADIUS));
   for (const enemy of state.enemies) {
@@ -192,6 +222,100 @@ function blast(state: StageState, bomb: RearBomb): void {
   if (state.boss && point?.exposed && nearBomb(bomb, point, BOMB_BLAST_RADIUS) && inBand(point.alt, bomb.alt, point.window)) {
     hurtWeakPoint(state, state.boss, 4);
   }
+}
+
+export function canDropFlare(state: StageState, tick = state.tick): boolean {
+  return state.phase === 'playing' && !state.paused && tick > state.graceUntil
+    && state.flareCharges > 0 && tick >= state.flareReadyAt;
+}
+
+export function dropFlares(state: StageState, vx: number, vz: number): void {
+  if (!canDropFlare(state)) return;
+  const p = state.player;
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  const vy = clamp(state.climbRate * 0.2 - 7, -12, -6);
+  for (const side of FLARE_FAN) {
+    state.flares.push({
+      x: p.x - fx * 8 + fz * side * 3.4, z: p.z - fz * 8 - fx * side * 3.4, alt: p.altitude - 1,
+      vx: vx - fx * FLARE_KICK + fz * side * 10,
+      vz: vz - fz * FLARE_KICK - fx * side * 10,
+      vy, born: state.tick,
+    });
+  }
+  state.flareCharges--;
+  state.flareReadyAt = state.tick + FLARE_COOLDOWN_TICKS;
+  state.flareReloadAt ??= state.tick + FLARE_RELOAD_TICKS;
+  showRearLaunch(state, 'flare');
+}
+
+function ignite(state: StageState, target: Enemy | WeakPoint, interval: number): void {
+  if (state.tick >= (target.burnUntil ?? 0)) target.burnNextAt = state.tick + interval;
+  target.burnUntil = state.tick + FLARE_BURN_TICKS;
+
+  // Keep the camera on the first impact while the rest of the volley arrives.
+  const prior = state.rearGlimpse;
+  const recent = (state.flareHit?.until ?? 0) > state.tick + FLARE_CONFIRM_TICKS - 12;
+  showRearImpact(state, 'flare', prior?.kind === 'flare' && prior.target && recent ? prior.target : target);
+  state.flareHit = { until: state.tick + FLARE_CONFIRM_TICKS };
+}
+
+function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): boolean {
+  if (!target.hp || target.burnNextAt === undefined || target.burnUntil === undefined) return false;
+  if (tick >= target.burnUntil) {
+    delete target.burnUntil;
+    delete target.burnNextAt;
+    return false;
+  }
+  if (tick < target.burnNextAt) return false;
+  target.burnNextAt += interval;
+  return true;
+}
+
+export function advanceFlares(state: StageState, ground: Ground): void {
+  if (state.flareReloadAt !== null && state.tick >= state.flareReloadAt) {
+    state.flareCharges = Math.min(MAX_FLARES, state.flareCharges + 1);
+    state.flareReloadAt = state.flareCharges < MAX_FLARES ? state.tick + FLARE_RELOAD_TICKS : null;
+  }
+  if (state.flareHit && state.tick >= state.flareHit.until) state.flareHit = null;
+  for (const enemy of state.enemies) {
+    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL)) hurtEnemy(state, enemy, 1);
+  }
+  const boss = state.boss;
+  const point = boss && state.tick >= boss.exposeTick ? boss.weakPoints[boss.index] : null;
+  if (boss && point && burnTick(point, state.tick, WARDEN_BURN_INTERVAL)) hurtWeakPoint(state, boss, 1);
+
+  let alive = 0;
+  for (const flare of state.flares) {
+    if (state.tick - flare.born >= FLARE_LIFE_TICKS) continue;
+    flare.vy -= FLARE_GRAVITY * STEP;
+    const dx = flare.vx * STEP, dz = flare.vz * STEP, dy = flare.vy * STEP;
+    const terrain = groundImpact(flare, dx, dz, ground, dy);
+
+    let hit: Enemy | null = null;
+    let first = terrain;
+    for (const enemy of state.enemies) {
+      if (!enemy.hp) continue;
+      const time = flareImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS);
+      if (time < first) {
+        first = time;
+        hit = enemy;
+      }
+    }
+    const pointTime = point?.hp ? flareImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, point.window) : Infinity;
+    if (boss && point && pointTime < first) {
+      hurtWeakPoint(state, boss, 1);
+      ignite(state, point, WARDEN_BURN_INTERVAL);
+    } else if (hit) {
+      hurtEnemy(state, hit, 1);
+      ignite(state, hit, FLARE_BURN_INTERVAL);
+    } else if (terrain === Infinity) {
+      flare.x += dx;
+      flare.z += dz;
+      flare.alt += dy;
+      state.flares[alive++] = flare;
+    }
+  }
+  state.flares.length = alive;
 }
 
 export function advanceEnemyHazards(state: StageState, ground: Ground): void {
@@ -235,26 +359,34 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
 }
 
 // Check the thin per-tick segment so fast bolts cannot skip over small weak points.
-function impactTime(shot: Shot, dx: number, dz: number, target: Position, radius: number): number {
-  const x = shot.x - target.x, z = shot.z - target.z;
+function impactTime(origin: Point, dx: number, dz: number, target: Position, radius: number, from = 0, to = 1): number {
+  const x = origin.x - target.x + dx * from, z = origin.z - target.z + dz * from;
   const c = x * x + z * z - radius * radius;
-  if (c <= 0) return 0;
+  if (c <= 0) return from;
   const a = dx * dx + dz * dz;
   const b = x * dx + z * dz;
   const discriminant = b * b - a * c;
   if (!a || b >= 0 || discriminant < 0) return Infinity;
   const time = (-b - Math.sqrt(discriminant)) / a;
-  return time <= 1 ? time : Infinity;
+  return time <= to - from ? from + time : Infinity;
 }
 
-function groundImpact(shot: Shot, dx: number, dz: number, ground: Ground): number {
-  if (ground(shot.x, shot.z) >= shot.alt) return 0;
-  let first = ground(shot.x + dx / 2, shot.z + dz / 2) >= shot.alt ? 0.5 : 1;
-  if (first === 1 && ground(shot.x + dx, shot.z + dz) < shot.alt) return Infinity;
+function flareImpactTime(flare: Position, dx: number, dz: number, dy: number, target: Position, radius: number, window = HIT_WINDOW): number {
+  const height = flare.alt - target.alt;
+  const from = Math.max(0, (height - window) / -dy);
+  const to = Math.min(1, (height + window) / -dy);
+  // Use only the part of the segment that passes through the contact's altitude window.
+  return from <= to ? impactTime(flare, dx, dz, target, radius, from, to) : Infinity;
+}
+
+function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
+  if (ground(origin.x, origin.z) >= origin.alt) return 0;
+  let first = ground(origin.x + dx / 2, origin.z + dz / 2) >= origin.alt + dy / 2 ? 0.5 : 1;
+  if (first === 1 && ground(origin.x + dx, origin.z + dz) < origin.alt + dy) return Infinity;
   let last = first - 0.5;
   for (let i = 0; i < 5; i++) {
     const middle = (last + first) / 2;
-    if (ground(shot.x + dx * middle, shot.z + dz * middle) >= shot.alt) first = middle;
+    if (ground(origin.x + dx * middle, origin.z + dz * middle) >= origin.alt + dy * middle) first = middle;
     else last = middle;
   }
   return first;

@@ -2,7 +2,7 @@ import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'cobra' | LandmarkId | NewEnemyKind;
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | LandmarkId | NewEnemyKind;
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -13,14 +13,13 @@ export type StageOptions = {
 };
 export type DraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
 export type Outcome = 'clear' | 'timeout' | 'lost';
-export type ManeuverKind = 'immelmann' | 'split-s' | 'cobra' | 'j-turn';
+export type ManeuverKind = 'immelmann' | 'split-s' | 'j-turn';
 export type Maneuver = {
   kind: ManeuverKind;
   elapsed: number;
   yaw: number;
   altitude: number;
   exitAltitude: number;
-  speed: number;
   side: -1 | 1;
 };
 export type ManeuverTrail = {
@@ -41,6 +40,7 @@ export type StageInput = {
   maneuverTurn?: number;
   boost?: boolean;
   bomb?: boolean;
+  flare?: boolean;
   toggleView?: boolean;
   start?: boolean;
   pause?: boolean;
@@ -70,7 +70,9 @@ export type Enemy = Position & {
   formation?: { leader: number; side: number };
   fanFired?: boolean;
   farTicks?: number;
-  course?: { target: Point; pass?: Point; speed: number; until: number };
+  course?: { target: Point; speed: number; until: number };
+  burnUntil?: number;
+  burnNextAt?: number;
 };
 export type Pickup = Position & { id: number; xp: number; born: number };
 export type Shot = Position & {
@@ -84,6 +86,8 @@ export type Shot = Position & {
   lockId: number | null;
 };
 export type RearBomb = Position & { born: number; vx: number; vz: number };
+export type Flare = Position & { born: number; vx: number; vz: number; vy: number };
+export type RearGlimpse = { kind: 'bomb' | 'flare'; since: number; until: number; target?: Position };
 export type EnemyMine = Position & { born: number };
 export type Effect = Position & (
   { kind: 'hit' | 'burst' | 'bomb-blast'; life: number } |
@@ -100,6 +104,8 @@ export type WeakPoint = Position & {
   window: number;
   vx: number;
   vz: number;
+  burnUntil?: number;
+  burnNextAt?: number;
 };
 export type Boss = {
   x: number;
@@ -144,12 +150,17 @@ export type StageState = {
   bombReadyAt: number;
   bombReloadAt: number | null;
   rearBombs: RearBomb[];
+  flares: Flare[];
+  flareCharges: number;
+  flareReadyAt: number;
+  flareReloadAt: number | null;
+  flareHit: { until: number } | null;
+  rearGlimpse: RearGlimpse | null;
   enemyMines: EnemyMine[];
   maneuver: Maneuver | null;
   maneuverTrail: ManeuverTrail | null;
   maneuverReadyAt: number;
   bodyGraceUntil: number;
-  cobraStaged: boolean;
   xp: number;
   level: 1 | 2 | 3;
   salvage: number;

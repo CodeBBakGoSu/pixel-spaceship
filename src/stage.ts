@@ -7,8 +7,9 @@ import { relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-direc
 import { random } from './stage-random.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
-  acquireAndFire, advanceEnemyHazards, advanceRearBombs, advanceShots, angleTo, BANDS, clamp, dropRearBomb, fireHostile,
-  hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
+  acquireAndFire, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, clamp,
+  dropFlares, dropRearBomb, fireHostile, hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
+  REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
 
@@ -29,7 +30,7 @@ export function parseStageOptions(search: string): StageOptions {
   return {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
-    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'cobra'
+    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'flare'
       || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
@@ -165,13 +166,15 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
-  } else if (fixture === 'cobra') {
+  } else if (fixture === 'flare') {
     const p = state.player;
-    state.cobraStaged = true;
-    state.speed = CRUISE_SPEED;
     state.nextWave = WAVES.length;
-    for (const [x, aft] of [[-6, 19], [6, 23]]) {
-      const enemy = makeEnemy(state, p.x + x, p.z - aft, 1);
+    // Start the review on a reload so both close contacts are available for a manual drop.
+    state.podsAt = state.tick + 150;
+    for (const [band, lateral, aft, kind] of [
+      [1, -6, 22, 'hound'], [1, 7, 29, 'hound'], [0, 52, 80, 'patrol'], [2, 10, 40, 'patrol'],
+    ] as const) {
+      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band, kind);
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
@@ -196,12 +199,13 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'cobra' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
+    view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
     speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
     boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
-    maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, cobraStaged: false,
+    flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
+    maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0,
     xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
@@ -222,7 +226,7 @@ function finish(state: StageState, outcome: Outcome): void {
 function startManeuver(state: StageState, kind: ManeuverKind, turn: number): void {
   const p = state.player, spec = MANEUVERS[kind];
   const maneuver: Maneuver = {
-    kind, elapsed: 0, yaw: p.yaw, speed: state.speed || CRUISE_SPEED,
+    kind, elapsed: 0, yaw: p.yaw,
     altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind), side: turn < 0 ? -1 : 1,
   };
   state.maneuver = maneuver;
@@ -244,21 +248,13 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number): voi
     warnHarrier(state, enemy, maneuver, aft, lateral);
     if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
-    if (kind === 'cobra' && aft >= 10 && aft <= 24) {
-      const lane = lateral < 0 ? -9 : 9;
-      enemy.course = {
-        target: { x: p.x - fx * aft + fz * lane, z: p.z - fz * aft - fx * lane },
-        pass: { x: p.x + fx * 30 + fz * lane, z: p.z + fz * 30 - fx * lane },
-        speed: 60, until,
-      };
-    } else if (kind !== 'cobra' && aft >= 65 && aft <= 115) {
+    if (aft >= 65 && aft <= 115) {
       const lane = (enemy.id % 3 - 1) * 5;
       enemy.course = { target: { x: p.x - fx * 64 + fz * lane, z: p.z - fz * 64 - fx * lane },
         speed: enemy.kind === 'interceptor' ? 30 : 23, until };
     }
     if (enemy.course) {
       keepInsideArena(enemy.course.target, state.arena);
-      if (enemy.course.pass) keepInsideArena(enemy.course.pass, state.arena);
       enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
     }
   }
@@ -367,6 +363,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
 
   state.tick++;
   const grace = state.tick <= state.graceUntil;
+  const glimpse = state.rearGlimpse;
+  if (glimpse) {
+    if ((input.bomb || input.flare) && state.tick <= glimpse.until) glimpse.until = Math.max(glimpse.until, state.tick + REAR_GLIMPSE_TICKS);
+    else if (state.tick >= glimpse.until) state.rearGlimpse = null;
+  }
   if (input.toggleView && !grace) {
     state.view = VIEWS[(VIEWS.indexOf(state.view) + 1) % VIEWS.length];
     state.wipe = WIPE_DURATION;
@@ -380,12 +381,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   state.effects = state.effects.filter(effect => effect.life > 0);
   if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? input.turn ?? 0);
   const maneuver = state.maneuver;
-  if (state.cobraStaged) {
-    // Let the pilot inspect the close contacts before movement or auto-fire begins.
-    if (!maneuver && state.tick < BOSS_TICK) return;
-    state.cobraStaged = false;
-    for (const enemy of state.enemies) enemy.shotAt = state.tick + ENEMY_KINDS[enemy.kind].firstShot;
-  }
+  const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);
   fly(state, input, ground, grace, controlled);
   if (maneuver && state.maneuverTrail && (maneuver.elapsed % TRAIL_SAMPLE_TICKS === 0 || maneuver.elapsed === MANEUVERS[maneuver.kind].ticks)) {
@@ -407,10 +403,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   advanceEnemies(state, ground);
   updateBoss(state);
   advanceRearBombs(state, ground);
+  advanceFlares(state, ground);
   if (controlled) {
     if (input.bomb && !grace) dropRearBomb(state);
     acquireAndFire(state);
   }
+  if (input.flare) dropFlares(state, (state.player.x - x) / STEP, (state.player.z - z) / STEP);
   if (maneuver && maneuver.elapsed === MANEUVERS[maneuver.kind].ticks) {
     if (state.maneuverTrail) state.maneuverTrail.actualExit = state.player.altitude;
     state.maneuver = null;

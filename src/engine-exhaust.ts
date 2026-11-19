@@ -108,18 +108,15 @@ export class EngineExhaust {
     const time = state.tick;
     const cruise = clamp(Math.hypot(state.speed, state.climbRate) / CRUISE_SPEED, 0, 1);
     const boost = Number(state.boosting);
-    // The J-turn finishes in a single tick. Its longer cooldown also gives the effect its start tick.
+    // The J-turn's longer cooldown records the tick when the handoff pulse starts.
     const turnAge = time - (state.maneuverReadyAt - MANEUVERS['j-turn'].cooldown);
-    const jTurn = turnAge >= 0 ? Math.max(0, 1 - turnAge / 17) : 0;
-    const cobra = state.maneuver?.kind === 'cobra' ? state.maneuver.elapsed : -1;
-    const recovery = Math.sin(Math.PI * clamp((cobra - 48) / 12, 0, 1)) * 0.55;
-    const flare = Math.max(jTurn, cobra < 0 ? 0 : Math.max(1 - cobra / 19, recovery));
+    const turnPulse = turnAge >= 0 ? Math.max(0, 1 - turnAge / 17) : 0;
     // In wide CHASE the camera is closer to the tail, so the same world-space plume projects longer.
     const chaseForeshortening = camera instanceof PerspectiveCamera ? clamp((camera.aspect - 0.75) / 0.65, 0, 1) : 0;
-    const extension = Math.max((11.7 - 6.1 * chaseForeshortening) * boost, 6.2 * flare);
+    const extension = Math.max((11.7 - 6.1 * chaseForeshortening) * boost, 6.2 * turnPulse);
     const length = 3.1 + 5.3 * cruise + extension;
-    const width = 2.5 + 1.45 * cruise + 0.95 * boost + 0.8 * flare;
-    const brightness = 0.73 + 0.27 * cruise + 0.18 * boost + 0.16 * flare;
+    const width = 2.5 + 1.45 * cruise + 0.95 * boost + 0.8 * turnPulse;
+    const brightness = 0.73 + 0.27 * cruise + 0.18 * boost + 0.16 * turnPulse;
 
     this.inverseShip.copy(this.ship.quaternion).invert();
     if (camera instanceof OrthographicCamera) camera.getWorldDirection(this.eye).negate();
@@ -134,9 +131,9 @@ export class EngineExhaust {
       this.vertices.setX(i, (i % 2 === 0 ? -0.5 : 0.5) + sway);
     }
     this.vertices.needsUpdate = true;
-    this.diamonds.visible = boost > 0 || flare > 0.1;
-    this.diamonds.material.opacity = Math.min(1, 0.83 * boost + 0.39 * flare);
-    this.halos.material.opacity = 0.39 + 0.24 * cruise + 0.19 * boost + 0.13 * flare;
+    this.diamonds.visible = boost > 0 || turnPulse > 0.1;
+    this.diamonds.material.opacity = Math.min(1, 0.83 * boost + 0.39 * turnPulse);
+    this.halos.material.opacity = 0.39 + 0.24 * cruise + 0.19 * boost + 0.13 * turnPulse;
 
     for (let i = 0; i < 2; i++) {
       const x = (i === 0 ? -1 : 1) * NOZZLE_X;
@@ -151,7 +148,7 @@ export class EngineExhaust {
       if (this.diamonds.visible) this.diamonds.setMatrixAt(i, this.pose.matrix);
       for (let j = 0; j < GLOW_LOCATIONS.length; j++) {
         const u = GLOW_LOCATIONS[j];
-        const size = (4.9 + 2.9 * cruise + 3.7 * boost + 2.6 * flare) * flicker * (1 - u * 0.54);
+        const size = (4.9 + 2.9 * cruise + 3.7 * boost + 2.6 * turnPulse) * flicker * (1 - u * 0.54);
         this.pose.position.set(x, NOZZLE_Y, NOZZLE_Z + u * jetLength);
         this.pose.quaternion.copy(this.billboard);
         this.pose.scale.set(size, size, 1);

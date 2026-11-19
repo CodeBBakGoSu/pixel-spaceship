@@ -49,17 +49,6 @@ test('a Spotter warns for 1.5 s before its bolt and buffs a nearby Hound by 20%'
   assert.equal(state.shots.filter(shot => shot.alt === 145 && shot.kind === 'hostile').length, 1);
 });
 
-test('Cobra sends a close Hound past the nose without changing its CRUISE band', () => {
-  const state = fixture('hound');
-  const hound = state.enemies[0];
-  assert.equal(hound?.kind, 'hound');
-  hound.z = state.player.z - 20;
-  hound.shotAt = state.tick + 120;
-  advance(state, 65, { maneuver: 'cobra' });
-  assert.ok(hound.z > state.player.z);
-  assert.equal(hound.alt, 110);
-});
-
 test('Flankers hold to the side at their assigned weapon height', () => {
   const state = fixture('flanker');
   const flanker = state.enemies[0];

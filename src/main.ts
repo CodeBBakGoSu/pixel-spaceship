@@ -13,7 +13,8 @@ import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, man
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, BOSS_TICK, parseStageOptions, requiredXp, stepStage } from './stage.ts';
-import { BOMB_RELOAD_TICKS, clamp, MAX_ALTITUDE, MAX_BOMBS, MIN_ALTITUDE, STEP, TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
+import { BOMB_RELOAD_TICKS, canDropFlare, clamp, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE, STEP,
+  TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { DraftId, Effect, ManeuverKind, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 
@@ -33,11 +34,13 @@ const touchControls = $('#touch-controls');
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const touchLoop = $<HTMLButtonElement>('#touch-loop');
 const touchBomb = $<HTMLButtonElement>('#touch-bomb');
+const touchFlare = $<HTMLButtonElement>('#touch-flare');
 const stick = $('#stick'), knob = $('#stick-knob');
 const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-lang]')];
 const safeProbe = $('#safe-area-probe');
 const wipe = $('#view-wipe');
 const rearBombMarker = $('#rear-bomb-marker');
+const rearViewCue = $('#rear-view-cue');
 const maneuverCue = $('#maneuver-cue');
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
@@ -73,12 +76,12 @@ let guideOpener: HTMLElement | null = null;
 let menuKey = '';
 let draftLevel = 0;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
-let pendingStart = false, pendingPause = false, pendingBomb = false, pendingViews = 0;
+let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
 let pendingPick: DraftId | undefined;
 type ManeuverPress = { kind: ManeuverKind; turn: number };
 let pendingManeuver: ManeuverPress | undefined;
 let stickId: number | null = null;
-let loopPointer: { id: number; x: number; y: number; press: ManeuverPress } | null = null;
+let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
@@ -137,7 +140,7 @@ function layoutFlight(): void {
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
-    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'boost', 'bomb', 'view'] as const) setRect(key, phone[key]);
+    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'boost', 'bomb', 'flare', 'view'] as const) setRect(key, phone[key]);
   }
   cockpit = state.view === 'cockpit' ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, safe, hud.objective) : null;
   if (cockpit) {
@@ -160,7 +163,7 @@ function layoutFlight(): void {
   arenaMap.width = arenaMap.height = mapSize;
   arenaMap.hidden = state.view !== 'overhead';
   lastRadarTick = null;
-  scene?.resize({ width: innerWidth, height: innerHeight, phone, cockpit });
+  scene?.resize({ width: innerWidth, height: innerHeight, phone, cockpit, hud });
   root.dataset.view = state.view;
   root.classList.toggle('cockpit-view', !!cockpit);
   root.classList.toggle('phone-portrait', phone?.orientation === 'portrait');
@@ -187,8 +190,10 @@ function resize(): void {
 }
 
 function objectiveText(): string {
-  if (state.cobraStaged) return t(touch ? 'maneuver.demoTouch' : 'maneuver.demoKeys');
   const fixture = options.fixture;
+  if (fixture === 'flare' && state.tick >= 30 * TICKS_PER_SECOND && state.tick < 40 * TICKS_PER_SECOND) {
+    return t('hud.flareDemo', { control: touch ? t('control.flareShort') : 'C' });
+  }
   if (isNewEnemyKind(fixture) && state.enemies.some(enemy => enemy.kind === fixture)) return t(`enemy.${fixture}`);
   if (isLandmarkId(fixture) && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND && !state.boss) return t(`landmark.${fixture}`);
   const p = state.player, beacon = state.view !== 'overhead' ? beaconTrack(state) : null;
@@ -245,13 +250,19 @@ function updateHud(readout: RadarReadout): void {
   setText('#bombs', '◆'.repeat(state.bombs) + '◇'.repeat(MAX_BOMBS - state.bombs));
   const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / BOMB_RELOAD_TICKS;
   $('#bomb-reload-bar').style.width = `${Math.round(clamp(refill, 0, 1) * 100)}%`;
-  touchBomb.setAttribute('aria-disabled', String(!state.bombs || !!state.maneuver || state.tick < state.bombReadyAt));
+  touchBomb.setAttribute('aria-disabled', String(!state.bombs || !maneuverAllowsControl(state.maneuver)
+    || state.tick <= state.graceUntil || state.tick < state.bombReadyAt));
   touchBomb.setAttribute('aria-label', `${t('control.bomb')} · ${state.bombs}/${MAX_BOMBS}`);
+  const flareReady = canDropFlare(state);
+  setText('#flare-stock', t('cockpit.flares', { count: state.flareCharges, max: MAX_FLARES }));
+  $('#flare-stock').dataset.ready = String(flareReady);
+  touchFlare.setAttribute('aria-disabled', String(!flareReady));
+  touchFlare.setAttribute('aria-label', `${t('control.flare')} · ${state.flareCharges}/${MAX_FLARES}`);
   const ready = canManeuver(state, 'immelmann');
   const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
   const loopKey: MessageKey = state.maneuver ? `maneuver.${state.maneuver.kind}` : loopSeconds ? 'hud.loopCooldown' : 'hud.loopReady';
   const keyboard = keyboardAxes();
-  const selected = touch ? chooseManeuver(stickX, stickY, false) : chooseManeuver(keyboard.turn, keyboard.climb, keys.has('KeyC'));
+  const selected = touch ? chooseManeuver(stickX, stickY) : chooseManeuver(keyboard.turn, keyboard.climb);
   const lowBoost = ready && selected === 'j-turn' && state.boost < MANEUVERS['j-turn'].boost;
   setText('#loop-status', t(lowBoost ? 'hud.jTurnLow' : loopKey, { seconds: loopSeconds }));
   const loopStatus = $('#loop-status');
@@ -297,7 +308,7 @@ function updateManeuverCue(): void {
   const name = t(`maneuver.${kind}`);
   const loop = kind === 'immelmann' || kind === 'split-s';
   const title = kind === 'immelmann' ? t('maneuver.up', { name }) : kind === 'split-s' ? t('maneuver.down', { name })
-    : kind === 'j-turn' ? t('maneuver.reverse', { name, arrow: trail.side < 0 ? '↶' : '↷' }) : t('maneuver.brake', { name });
+    : t('maneuver.reverse', { name, arrow: trail.side < 0 ? '↶' : '↷' });
   const pendingFlip = state.tick - trail.startTick + 1 < MANEUVERS[kind].flipTick;
   const degrees = Math.round((pendingFlip ? trail.yaw + Math.PI : state.player.yaw) * 180 / Math.PI);
   const heading = String((degrees % 360 + 360) % 360).padStart(3, '0');
@@ -412,7 +423,7 @@ function updateMenu(): void {
   gameCard.hidden = !showing || drafting || status === 'guide';
   if (showing) {
     resetTouch();
-    pendingBomb = false;
+    pendingBomb = pendingFlare = false;
     pendingManeuver = undefined;
     pendingViews = 0;
   }
@@ -543,8 +554,9 @@ window.addEventListener('keydown', event => {
   if (state.phase === 'playing' && !state.paused) {
     if (code === 'KeyV') pendingViews++;
     if (code === 'KeyX' || code === 'KeyK') pendingBomb = true;
+    if (code === 'KeyC') pendingFlare = true;
     const { turn, climb } = keyboardAxes();
-    const kind = maneuverForKey(code, turn, climb, keys.has('KeyC'));
+    const kind = maneuverForKey(code, turn, climb);
     if (kind) {
       event.preventDefault();
       pendingManeuver = { kind, turn };
@@ -555,6 +567,7 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', () => {
   keys.clear();
+  pendingFlare = false;
   pendingManeuver = undefined;
   resetTouch();
 });
@@ -617,24 +630,20 @@ bindHold('#touch-boost', held => { touchBoost = held; });
 touchLoop.addEventListener('pointerdown', event => {
   if (event.button !== 0 || menuKey !== 'playing' || loopPointer) return;
   event.preventDefault();
-  loopPointer = { id: event.pointerId, x: event.clientX, y: event.clientY,
-    press: { kind: chooseManeuver(stickX, stickY, false), turn: stickX } };
+  loopPointer = { id: event.pointerId, press: { kind: chooseManeuver(stickX, stickY), turn: stickX } };
   touchLoop.setPointerCapture(event.pointerId);
   touchLoop.classList.add('held');
 });
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
   touchLoop.addEventListener(name, event => {
     if (!loopPointer || event.pointerId !== loopPointer.id) return;
-    if (name === 'pointerup' && menuKey === 'playing') {
-      const left = loopPointer.x - event.clientX, vertical = Math.abs(event.clientY - loopPointer.y);
-      pendingManeuver = left >= 24 && left > vertical ? { kind: 'cobra', turn: 0 } : loopPointer.press;
-    }
+    if (name === 'pointerup' && menuKey === 'playing') pendingManeuver = loopPointer.press;
     loopPointer = null;
     touchLoop.classList.remove('held');
   });
 }
 touchLoop.addEventListener('click', event => {
-  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = { kind: chooseManeuver(stickX, stickY, false), turn: stickX };
+  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = { kind: chooseManeuver(stickX, stickY), turn: stickX };
 });
 function bindPress(button: HTMLButtonElement, press: () => void): void {
   button.addEventListener('pointerdown', event => {
@@ -648,6 +657,7 @@ function bindPress(button: HTMLButtonElement, press: () => void): void {
 }
 bindPress(touchPause, () => { pendingPause = true; });
 bindPress(touchBomb, () => { pendingBomb = true; });
+bindPress(touchFlare, () => { pendingFlare = true; });
 bindPress($<HTMLButtonElement>('#touch-view'), () => { pendingViews++; });
 
 function keyboardAxes() {
@@ -679,12 +689,13 @@ function advance(): void {
     start: pendingStart,
     pause: pendingPause,
     bomb: pendingBomb || control.bomb,
+    flare: pendingFlare || control.flare,
     maneuver: pendingManeuver?.kind ?? control.maneuver,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
     toggleView: pendingViews > 0 || control.toggleView,
     pick: pendingPick ?? control.pick,
   }, ground);
-  pendingStart = pendingPause = pendingBomb = false;
+  pendingStart = pendingPause = pendingBomb = pendingFlare = false;
   if (pendingViews) pendingViews--;
   pendingPick = undefined;
   pendingManeuver = undefined;
@@ -717,6 +728,19 @@ function updateRearBombMarker(): void {
   rearBombMarker.hidden = !offscreen;
 }
 
+function updateRearViewCue(): void {
+  const rect = scene?.rearView;
+  const hit = state.rearGlimpse?.kind === 'flare' && !!state.flareHit && state.tick < state.flareHit.until;
+  const active = !!state.rearGlimpse && state.tick < state.rearGlimpse.until;
+  rearViewCue.hidden = !rect || rect.width < 74 || state.phase !== 'playing' || state.paused || (!active && !hit);
+  if (rearViewCue.hidden || !rect) return;
+  setText('#rear-view-cue', t(hit ? 'hud.flareHit' : 'hud.rearView'));
+  rearViewCue.dataset.hit = String(hit);
+  rearViewCue.style.left = `${rect.x + 4}px`;
+  rearViewCue.style.top = `${rect.y + 4}px`;
+  rearViewCue.style.maxWidth = `${rect.width - 8}px`;
+}
+
 function render(): void {
   if (layoutView !== state.view) layoutFlight();
   const ladder = scene?.draw(state) ?? [];
@@ -725,6 +749,7 @@ function render(): void {
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
+  updateRearViewCue();
   const progress = 1 - state.wipe / WIPE_DURATION;
   wipe.hidden = state.wipe <= 0;
   if (!wipe.hidden) wipe.style.top = `${progress * 100}%`;
@@ -743,10 +768,11 @@ function render(): void {
     const settling = Math.cos(yaw - p.yaw) < 0.999;
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
       (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
-    const markers = cockpitMarkers.update(state, cockpit, scene, scene.cockpitMirror);
+    const mirror = scene.cockpitMirror;
+    const markers = cockpitMarkers.update(state, cockpit, scene, mirror);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
     cockpitDisplay.draw(state, aim, ladder,
-      motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, instrumentTrack?.alt, language, t);
+      motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, mirror, instrumentTrack?.alt, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
     navRadar.draw(radarContext, 0, 0, readout, yaw, state.tick);
     if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font, yaw);
@@ -760,6 +786,11 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   view: state.view, airspace: { ...state.arena }, objective: objectiveText(), altitude: state.player.altitude,
   player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting, bombs: state.bombs,
   speed: state.speed, rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
+  flares: state.flares.map(flare => ({ ...flare })), flareCharges: state.flareCharges,
+  flareReadyAt: state.flareReadyAt, flareReloadAt: state.flareReloadAt,
+  flareHit: state.flareHit && { ...state.flareHit },
+  rearGlimpse: state.rearGlimpse && { ...state.rearGlimpse, target: state.rearGlimpse.target && { ...state.rearGlimpse.target } },
+  rearView: scene?.rearView && { ...scene.rearView },
   maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver, state.player.bank),
     controllable: maneuverAllowsControl(state.maneuver) },
   maneuverTrail: state.maneuverTrail && { ...state.maneuverTrail, points: state.maneuverTrail.points.map(point => ({ ...point })),
@@ -769,7 +800,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
-  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp }) => ({ id, kind, x, z, alt, hp })),
+  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp, burnUntil }) => ({ id, kind, x, z, alt, hp, burnUntil })),
   mineCount: state.enemyMines.length,
   weakPointHits: state.boss?.weakPoints.map(point => point.hits) ?? [],
   bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],

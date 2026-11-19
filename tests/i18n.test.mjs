@@ -22,10 +22,13 @@ test('translations format draft and weak-point countdowns in both languages', ()
   assert.equal(ko('objective.bandSignal', { part: ko('boss.low'), seconds: 3 }), '3초 후 저고도 포드 노출');
 });
 
-test('maneuver guidance gives distinct keyboard selectors and a mobile brake gesture', () => {
+test('guidance separates maneuver selectors from the flare key and touch control', () => {
   for (const t of [createTranslator('en'), createTranslator('ko')]) {
-    assert.match(t('guide.keysLoop'), /Space.*C/);
+    assert.match(t('guide.keysLoop'), /Space.*J/);
     assert.match(t('guide.touchLoop'), /LOOP|반전/);
+    assert.match(t('help.keys'), /C (FLARE|플레어)/);
+    assert.equal(t('control.flareShort'), 'FLR');
+    assert.equal(t('cockpit.flares', { count: 2, max: 3 }), 'FLR 2/3');
     assert.ok(t('hud.rear')?.trim());
     assert.ok(t('hud.loopReady')?.trim());
   }

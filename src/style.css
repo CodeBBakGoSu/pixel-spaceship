@@ -164,6 +164,7 @@
 .experience.phone-layout .stick span{left:calc(50% - 16px);top:calc(50% - 16px)}.experience.phone-layout .stick small{top:-14px;font-size:8px}
 .experience.phone-layout .touch-button{right:auto;bottom:auto}.experience.phone-layout .loop{left:var(--loop-x);top:var(--loop-y);width:var(--loop-w);height:var(--loop-h)}
 .experience.phone-layout .boost{left:var(--boost-x);top:var(--boost-y);width:var(--boost-w);height:var(--boost-h)}.experience.phone-layout .bomb{left:var(--bomb-x);top:var(--bomb-y);width:var(--bomb-w);height:var(--bomb-h)}.experience.phone-layout .view{left:var(--view-x);top:var(--view-y);width:var(--view-w);height:var(--view-h)}
+.experience.phone-layout .flare{left:var(--flare-x);top:var(--flare-y);width:var(--flare-w);height:var(--flare-h);border:2px solid #e99b62;color:#ffd0a1}
 .experience.phone-layout .game-overlay{padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 8px)}
 .experience.phone-layout .game-card{width:min(420px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain}.experience.phone-layout .card-actions button{min-width:44px;min-height:44px}
 .experience.phone-layout.menu-open #control-backdrop{display:none}
@@ -373,7 +374,7 @@
 .guide-body:focus-visible { outline: 2px solid #bceff0; outline-offset: -2px; }
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
-.menu-open :is(.objective, .flight-message, .maneuver-cue, .view-tag, .scene-cue, .rear-bomb-marker, .help),
+.menu-open :is(.objective, .flight-message, .maneuver-cue, .view-tag, .scene-cue, .rear-bomb-marker, .rear-view-cue, .help),
 .guide-open :is(.hud, .boss-hud, .radio, #nav-radar, #arena-map, .alt-ruler) {
   visibility: hidden;
 }
@@ -462,6 +463,19 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .experience.phone-layout .rear-bomb-marker {
   bottom: calc(100% - var(--controls-y) + 30px);
 }
+.rear-view-cue {
+  position: absolute;
+  padding: 2px 4px;
+  background: #0c1720;
+  color: #dbede6;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.rear-view-cue[data-hit="true"] { background: #381d13; color: #ffe0ad; }
 
 .loop {
   right: 20px;
@@ -477,9 +491,12 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   .loop.rear-ready { animation: rear-ready 1s steps(2, end) infinite alternate; }
 }
 @keyframes rear-ready { to { border-color: #d69c5b; } }
-.loop[aria-disabled="true"], .bomb[aria-disabled="true"] { opacity: .52; }
+.loop[aria-disabled="true"], .bomb[aria-disabled="true"], .flare[aria-disabled="true"] { opacity: .52; }
 .bomb-reload { display: block; width: 21px; height: 4px; background: #34233b; }
 .bomb-reload > i { display: block; height: 100%; background: #fa80b0; }
+.status > div > span:first-child { flex-shrink: 0; white-space: nowrap; }
+.flare-stock { color: #ffc18b; font-size: 9px; white-space: nowrap; }
+.flare-stock[data-ready="false"] { color: #bd9c86; }
 .loop-status {
   display: inline-flex;
   align-items: center;
@@ -517,7 +534,6 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 }
 .maneuver-cue[data-kind="immelmann"] { --cue-color: #b4f5c8; }
 .maneuver-cue[data-kind="split-s"] { --cue-color: #ffc993; }
-.maneuver-cue[data-kind="cobra"] { --cue-color: #ffe6a4; }
 .maneuver-cue strong { display: block; font-size: clamp(13px, 1.9vw, 20px); white-space: nowrap; }
 .maneuver-cue span { display: block; margin-top: 4px; font-size: clamp(9px, 1.15vw, 13px); }
 .experience.cockpit-view .maneuver-cue {

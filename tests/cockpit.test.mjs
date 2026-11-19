@@ -39,7 +39,7 @@ test('the HUD zero line matches projected terrain through upright, vertical and 
       ? cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective)
       : phoneLayout(width, height, safe, 'cockpit').cockpit };
     const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
-    for (const maneuver of ['immelmann', 'split-s', 'cobra', 'j-turn']) {
+    for (const maneuver of ['immelmann', 'split-s', 'j-turn']) {
       const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'), ground);
       state.enemies.length = 0;
       for (let tick = 0; tick <= MANEUVERS[maneuver].ticks; tick++) {
@@ -142,10 +142,11 @@ test('the zero line follows a terrain corner between the ends of a rung', () => 
   const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'), ground);
   state.enemies.length = 0;
   state.player.yaw = 2.29;
-  for (let tick = 0; tick < 15; tick++) stepStage(state, tick === 0 ? { maneuver: 'cobra' } : {}, ground);
-  // Translate the maneuver to a position that puts the actual terrain corner across the rung.
-  state.player.x += TERRAIN_HALF_WIDTH - 896;
-  state.player.z += 704 - TERRAIN_HALF_WIDTH;
+  for (let tick = 0; tick < MANEUVERS.immelmann.flipTick - 25; tick++) {
+    stepStage(state, tick === 0 ? { maneuver: 'immelmann' } : {}, ground);
+  }
+  // Put the clamped camera where the terrain corner crosses the rung.
+  Object.assign(state.player, { x: TERRAIN_HALF_WIDTH - 894, z: 617 - TERRAIN_HALF_WIDTH, altitude: 110 });
 
   const marks = frameCockpit(camera, state.player, frame, maneuverAttitude(state.maneuver), ground, 1060);
   const zero = marks.find(mark => mark.angle === 0);
@@ -207,7 +208,7 @@ test('cockpit copy covers warnings, instruments and targeting in both languages'
   for (const suffix of [
     'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'track', 'gLoad',
     'masterCaution', 'cautionShort', 'lowHull', 'altLow', 'pullUp',
-    'airframe', 'weapons', 'altDelta', 'bombs', 'inverted', 'stall',
+    'airframe', 'weapons', 'altDelta', 'bombs', 'flares', 'inverted',
   ]) {
     const key = `cockpit.${suffix}`;
     assert.ok(strings.en[key]?.trim(), key);

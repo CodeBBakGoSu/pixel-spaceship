@@ -1,6 +1,7 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, LANDMARKS } from './reach.ts';
-import { activeWeakPoint, angleTo, BANDS, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
+import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
+  TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
 import type { Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
@@ -95,7 +96,6 @@ function rearManeuver(state: StageState, target: Route, angle: number, range: nu
   if (target.kind !== 'enemy' || Math.abs(angle) < Math.PI * 155 / 180) return;
   const { altitude } = state.player;
   if (inBand(altitude, target.alt)) {
-    if (range >= 10 && range <= 24 && canManeuver(state, 'cobra')) return 'cobra';
     if (range >= 65 && range <= 115 && canManeuver(state, 'j-turn')) return 'j-turn';
   }
   if (range < 65 || range > 115) return;
@@ -117,10 +117,23 @@ function hasRearBombTarget(state: StageState): boolean {
   });
 }
 
+function hasRearFlareTarget(state: StageState): boolean {
+  if (!canDropFlare(state, state.tick + 1)) return false;
+  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  return state.enemies.some(enemy => {
+    if (!enemy.hp || (enemy.burnUntil ?? 0) > state.tick) return false;
+    const x = enemy.x - p.x, z = enemy.z - p.z;
+    const aft = -x * fx - z * fz, side = x * fz - z * fx;
+    const drop = p.altitude - enemy.alt;
+    return aft >= 9 && aft <= 48 && Math.abs(side) <= 6 + aft * 0.24 && drop >= -3 && drop <= 16;
+  });
+}
+
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
   if (state.phase === 'draft') return { pick: state.draft[0] };
   if (state.phase !== 'playing' || state.paused) return {};
-  if (!maneuverAllowsControl(state.maneuver)) return {};
+  const flare = mode === 'full' && hasRearFlareTarget(state);
+  if (!maneuverAllowsControl(state.maneuver)) return { flare };
   const p = state.player, target = routeFor(state, mode);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
@@ -145,6 +158,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
     bomb: mode === 'full' && !maneuver && hasRearBombTarget(state),
+    flare: flare && !maneuver,
   };
 }
 

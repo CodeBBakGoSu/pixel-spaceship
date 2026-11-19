@@ -244,10 +244,6 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
       const tx = course.target.x - enemy.x, tz = course.target.z - enemy.z;
       const remaining = Math.hypot(tx, tz);
       setVelocity(enemy, remaining > 0.001 ? Math.atan2(tx, tz) : enemy.yaw, Math.min(course.speed, remaining / STEP));
-      if (remaining <= course.speed * STEP && course.pass) {
-        course.target = course.pass;
-        delete course.pass;
-      }
     } else if (enemy.kind === 'skimmer') {
       setVelocity(enemy, enemy.yaw, 0);
       moveSkimmer(state, enemy, ground, angle, range);

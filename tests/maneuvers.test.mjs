@@ -32,7 +32,6 @@ test('full autoplay uses a charged J-turn against a distant level pursuer', () =
 for (const [kind, ticks, altitude, yaw, cooldown] of [
   ['immelmann', 270, 145, Math.PI, 240],
   ['split-s', 290, 75, Math.PI, 240],
-  ['cobra', 60, 110, 0, 180],
   ['j-turn', 52, 110, Math.PI, 420],
 ]) {
   test(`${kind} hands back on tick ${ticks} at the specified altitude and heading`, () => {
@@ -56,11 +55,11 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
     assert.equal(state.bombs, 3);
     assert.equal(state.maneuverReadyAt, state.tick + cooldown);
     assert.equal(state.invulnerability, 0);
-    if (kind !== 'cobra') assert.ok(Math.hypot(state.player.x - x, state.player.z - z) >= 10);
-    run(state, cooldown - 1, { maneuver: 'cobra' });
+    assert.ok(Math.hypot(state.player.x - x, state.player.z - z) >= 10);
+    run(state, cooldown - 1, { maneuver: 'immelmann' });
     assert.equal(state.maneuver, null);
-    run(state, 1, { maneuver: 'cobra' });
-    assert.equal(state.maneuver?.kind, 'cobra');
+    run(state, 1, { maneuver: 'immelmann' });
+    assert.equal(state.maneuver?.kind, 'immelmann');
   });
 }
 
@@ -78,13 +77,17 @@ test('J-turn requires charge and keeps precise launch altitude', () => {
   assert.ok(Math.abs(state.player.yaw) > 3.1);
 });
 
-test('C alone queues Cobra, and Space respects the climb and dive selectors', () => {
-  assert.equal(moves.maneuverForKey?.('Space', 0, 1, false), 'immelmann');
-  assert.equal(moves.maneuverForKey?.('Space', 0, -1, false), 'split-s');
-  assert.equal(moves.maneuverForKey?.('KeyC', 0, 0, false), 'cobra');
-  const state = empty();
-  run(state, 1, { maneuver: moves.maneuverForKey('KeyC', 0, 0, false) });
-  assert.equal(state.maneuver?.kind, 'cobra');
+test('C no longer selects a maneuver and Space respects the direction selectors', () => {
+  assert.equal(moves.maneuverForKey('Space', 0, 0), 'immelmann');
+  assert.equal(moves.maneuverForKey('Space', 0, 1), 'immelmann');
+  assert.equal(moves.maneuverForKey('Space', 0, -1), 'split-s');
+  assert.equal(moves.maneuverForKey('Space', 1, 0), 'j-turn');
+  assert.equal(moves.maneuverForKey('KeyC', 0, 0), undefined);
+  const state = createStage(parseStageOptions('?fixture=cobra'));
+  assert.equal(state.phase, 'title');
+  run(state, 1, { start: true });
+  run(state, 1, { maneuver: 'cobra' });
+  assert.equal(state.maneuver, null);
 });
 
 test('J-turn snaps its flight heading, traces a displaced U and lets the view catch up', () => {
@@ -251,34 +254,6 @@ test('hostile shots still damage the player during body grace', () => {
   assert.equal(state.hull, state.maxHull - 2);
 });
 
-test('Cobra lets a close same-band pursuer pass safely into a forward volley', () => {
-  const state = pursuit();
-  const near = state.enemies.find(enemy => enemy.alt === 110);
-  near.x = state.player.x;
-  near.z = state.player.z - 20;
-  state.enemies = [near];
-  run(state, 1, { maneuver: 'cobra' });
-  run(state, 8);
-  assert.equal(state.speed, 2);
-  run(state, 51);
-  assert.ok(near.z > state.player.z);
-  assert.ok(moves.formerPursuer(state, moves.activeTrail(state), near));
-  assert.equal(state.hull, 8);
-  run(state, 16);
-  assert.equal(near.hp, 0);
-});
-
-test('the Cobra fixture keeps the close pass available after the pilot waits', () => {
-  const state = createStage(parseStageOptions('?fixture=cobra'));
-  const before = state.enemies.map(enemy => [enemy.x, enemy.z]);
-  run(state, 300);
-  assert.deepEqual(state.enemies.map(enemy => [enemy.x, enemy.z]), before);
-  run(state, 1, { maneuver: moves.maneuverForKey('KeyC', 0, 0, false) });
-  run(state, 40);
-  assert.ok(state.enemies.some(enemy => moves.formerPursuer(state, moves.activeTrail(state), enemy)));
-  assert.equal(state.hull, 8);
-});
-
 test('rear bomb coasts at its release altitude and falls after 27 ticks', () => {
   const state = empty();
   run(state, 1, { bomb: true });
@@ -352,8 +327,8 @@ test('rear stores enforce 24 ticks between drops and refill one charge every 450
   assert.equal(state.bombReloadAt, null);
 });
 
-test('the wider Reach rim warns at 60 m and contains all four maneuvers', () => {
-  for (const kind of ['immelmann', 'split-s', 'cobra', 'j-turn']) {
+test('the wider Reach rim warns at 60 m and contains all three maneuvers', () => {
+  for (const kind of ['immelmann', 'split-s', 'j-turn']) {
     const state = pursuit();
     const { player, arena } = state;
     assert.equal(arena.radius, 560);

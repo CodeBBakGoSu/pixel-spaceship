@@ -13,7 +13,7 @@ export type CockpitLayout = {
 export type PhoneLayout = HudLayout & {
   orientation: 'portrait' | 'landscape'; buffer: { width: number; height: number };
   playfield: Rect; dashboard: Rect | null; controls: Rect;
-  pause: Rect; stick: Rect; stickLabel: Rect; loop: Rect; boost: Rect; bomb: Rect; view: Rect;
+  pause: Rect; stick: Rect; stickLabel: Rect; loop: Rect; boost: Rect; bomb: Rect; flare: Rect; view: Rect;
   shipY: number; cockpit: CockpitLayout | null;
 };
 export type GuideLayout = { card: Rect; heading: Rect; body: Rect; actions: Rect; columns: 1 | 2 };
@@ -132,8 +132,9 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const loop = rect(side - loopSize, controls.y + controls.height - 8 - loopSize, loopSize, loopSize);
   const boost = rect(side - 52, controls.y + 6, 52, 52);
   const bomb = rect(boost.x - 8 - 48, controls.y + 8, 48, 48);
+  const flare = rect(bomb.x - 8 - bomb.width, bomb.y, bomb.width, bomb.height);
   const viewButton = rect(loop.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
-    radar, alt, pause, stick, stickLabel, loop, boost, bomb, view: viewButton,
+    radar, alt, pause, stick, stickLabel, loop, boost, bomb, flare, view: viewButton,
     shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), cockpit };
 }

@@ -9,14 +9,14 @@ import {
 } from './cockpit-pixels';
 import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
 import { MANEUVERS, maneuverAttitude, maneuverViewYaw } from './maneuvers.ts';
-import { MAX_BOMBS, TICKS_PER_SECOND } from './stage-combat.ts';
+import { MAX_BOMBS, MAX_FLARES, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
 
 type Context = CanvasRenderingContext2D;
 type Translate = ReturnType<typeof createTranslator>;
-type WeaponReadout = { gun: string; pods: string; bombs: string };
+type WeaponReadout = { gun: string; pods: string; bombs: string; flares: string };
 const green = '#a3ffc0', dimGreen = '#65927a', amber = '#ffce7e', ink = '#0d1d20';
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const middle = (r: Rect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
@@ -166,7 +166,6 @@ class GlassLabels {
   readonly headingTicks: CockpitLabel[];
   readonly pitch: { left: CockpitLabel; right: CockpitLabel }[];
   readonly inverted: CockpitLabel;
-  readonly stall: CockpitLabel;
   readonly rear: CockpitLabel;
 
   constructor(font: string, private readonly t: Translate) {
@@ -180,7 +179,6 @@ class GlassLabels {
       return { left: atlas.add(label, green, 'right', '#16312b'), right: atlas.add(label, green, 'left', '#16312b') };
     });
     this.inverted = atlas.add(t('cockpit.inverted'), amber, 'center');
-    this.stall = atlas.add(t('cockpit.stall'), amber, 'center');
     this.rear = atlas.add(t('cockpit.rearShort'), amber);
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
@@ -336,7 +334,7 @@ function drawLadder(c: Context, layout: CockpitLayout, aim: Point | null, motion
     if (left.y >= area.y + 7 && left.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.left, left.x - 7, left.y);
     if (!compact && right.y >= area.y + 7 && right.y <= bottom(area) - 7) drawCockpitLabel(c, sprites.right, right.x + 8, right.y);
   }
-  const tag = attitude?.inverted ? labels.inverted : attitude?.stalled ? labels.stall : null;
+  const tag = attitude?.inverted ? labels.inverted : null;
   if (tag) {
     fill(c, ink, centerX - tag.advance / 2 - 4, area.y + 3, tag.advance + 8, 13);
     drawCockpitLabel(c, tag, centerX, area.y + 9);
@@ -598,22 +596,23 @@ function drawDamage(c: Context, r: Rect, state: StageState, compact: boolean, hi
   }
 }
 
-function weaponReadouts(level: number, pods: number, bombs: number, t: Translate): WeaponReadout {
-  return { gun: t('hud.weapon', { level }), pods: t('hud.pods', { level: pods }),
-    bombs: t('cockpit.bombs', { count: bombs, max: MAX_BOMBS }) };
+function weaponReadouts(state: StageState, t: Translate): WeaponReadout {
+  return { gun: t('hud.weapon', { level: state.twinRank }), pods: t('hud.pods', { level: state.podRank }),
+    bombs: t('cockpit.bombs', { count: state.bombs, max: MAX_BOMBS }),
+    flares: t('cockpit.flares', { count: state.flareCharges, max: MAX_FLARES }) };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string,
   font: string, scale: number): void {
   const left = r.x + (compact ? 6 : 12 * scale), y = r.y + (r.height < 40 ? 8 : 11 * scale);
   text(c, title, left, y);
-  const labels = [weapons.gun, weapons.pods, weapons.bombs];
-  const columns = r.height < 40 ? 3 : 2;
+  const labels = [weapons.gun, weapons.pods, weapons.bombs, weapons.flares];
+  const columns = r.height < 40 ? 4 : 2;
   const cell = (r.width - (left - r.x) * 2) / columns;
   const row = compact ? 13 : 23 * scale, firstRow = r.y + (r.height < 40 ? 20 : compact ? 26 : 43 * scale);
   for (const [i, label] of labels.entries()) {
     const x = left + i % columns * cell + cell / 2;
-    fittedText(c, label, x, firstRow + Math.floor(i / columns) * row, green, cell - 2, font,
+    fittedText(c, label, x, firstRow + Math.floor(i / columns) * row, i === 3 ? amber : green, cell - 2, font,
       compact ? 10 : Math.round(14 * scale));
   }
   if (!compact) {
@@ -760,14 +759,13 @@ export class CockpitDisplay {
     this.lastSpeed = this.lastBoost = this.lastGaugeHull = this.lastGaugeFlicker = this.lastG = -1;
   }
 
-  private cacheWeapons(layout: CockpitLayout, level: number, pods: number, bombs: number, t: Translate): void {
+  private cacheWeapons(layout: CockpitLayout, key: number, state: StageState, t: Translate): void {
     const { compact, stores, weapons, panelScale } = layout;
-    const readouts = weaponReadouts(level, pods, bombs, t);
-    const key = bombs * 12 + pods * 4 + level;
+    const readouts = weaponReadouts(state, t);
     const font = (compact ? 10 : 12) + 'px ' + this.font, title = t('cockpit.weapons');
     this.weapons.set(key, plate(weapons, c => {
       c.font = `${compact ? 10 : Math.round(12 * panelScale)}px ${this.font}`;
-      drawWeapons(c, weapons, readouts, level, compact, title, this.font, panelScale);
+      drawWeapons(c, weapons, readouts, state.twinRank, compact, title, this.font, panelScale);
     }));
     if (stores && !this.stores.has(key)) this.stores.set(key, plate(stores, c => {
       c.font = font;
@@ -777,13 +775,14 @@ export class CockpitDisplay {
 
   draw(state: StageState, aim: Point | null, marks: PitchMark[], motion: CockpitMotion, clearance: number, impact: number,
     readout: RadarReadout, markers: readonly CockpitMarker[], markerObstructions: readonly Readonly<Rect>[],
-    trackAltitude: number | undefined, language: Language, t: Translate): void {
+    mirror: Readonly<Rect> | null, trackAltitude: number | undefined, language: Language, t: Translate): void {
     const layout = this.layout;
     if (!layout) return;
     if (language !== this.language) this.resize(layout, this.frame.width, this.frame.height, language, t);
     const elapsed = state.tick / 60;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.warnings);
     this.drawGlass(layout, aim, marks, state, motion, markers, markerObstructions, trackAltitude);
+    if (mirror) clearZone(this.hud, mirror);
 
     const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
     const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
@@ -858,9 +857,9 @@ export class CockpitDisplay {
       this.lastMaxHull = state.maxHull;
       this.lastHit = hit;
     }
-    const weapon = state.bombs * 12 + state.podRank * 4 + state.twinRank;
+    const weapon = (state.bombs * (MAX_FLARES + 1) + state.flareCharges) * 12 + state.podRank * 4 + state.twinRank;
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
-      if (!this.weapons.has(weapon)) this.cacheWeapons(layout, state.twinRank, state.podRank, state.bombs, t);
+      if (!this.weapons.has(weapon)) this.cacheWeapons(layout, weapon, state, t);
       blitPlate(c, weapons, this.weapons.get(weapon)!);
       this.lastWeapon = weapon;
     }
