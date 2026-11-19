@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { relocateStragglers } from '../src/spawn-director.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
-import { makeEnemy } from '../src/stage-enemies.ts';
+import { advanceEnemies, makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
 
 const world = new World();
@@ -67,6 +67,7 @@ test('a rear Harrier telegraphs one adjacent hop in answer to an Immelmann', () 
   assert.equal(harrier?.kind, 'harrier');
   harrier.x = state.player.x;
   harrier.z = state.player.z - 78;
+  harrier.yaw = state.player.yaw;
   advance(state, 1, { maneuver: 'immelmann' });
   assert.equal(harrier.maneuver?.band, 2);
   assert.equal(harrier.maneuver?.diveAt - state.tick, 75);
@@ -246,4 +247,61 @@ test('a far turret transfers only to a vacant landmark ahead and keeps its HP', 
   assert.equal(turret.band, 1);
   assert.equal(turret.hp, 2);
   assert.equal(state.pickups.length, 0);
+});
+
+test('seeded sorties keep enemy turns within 3.2 radians per second', () => {
+  const kinds = new Set();
+  for (const seed of [1, 11, 53]) {
+    const state = createStage(parseStageOptions('?autoplay=1&seed=' + seed), ground);
+    state.twinAt = state.podsAt = Infinity;
+    state.graceUntil = Infinity;
+    for (let tick = 0; tick < 105 * 60; tick++) {
+      const before = new Map(state.enemies.map(enemy => [enemy.id, { x: enemy.x, z: enemy.z, yaw: enemy.yaw }]));
+      stepStage(state, { turn: Math.sin(tick / 137) * 0.6 }, ground);
+      for (const enemy of state.enemies) {
+        if (!enemy.hp) continue;
+        const previous = before.get(enemy.id);
+        // Re-entry teleports stragglers and sets a new initial heading.
+        if (!previous || Math.hypot(enemy.x - previous.x, enemy.z - previous.z) > 2) continue;
+        kinds.add(enemy.kind);
+        const delta = enemy.yaw - previous.yaw;
+        const turn = Math.atan2(Math.sin(delta), Math.cos(delta));
+        assert.ok(Math.abs(turn) <= 3.2 / 60 + 1e-9, `${enemy.kind} turned ${turn} rad at tick ${tick} (seed ${seed})`);
+      }
+    }
+  }
+  assert.equal(kinds.size, 10, `only checked ${[...kinds]}`);
+});
+
+test('a patrol keeps its close steering mode on both sides of the nominal range', () => {
+  const state = fixture('hound');
+  const patrol = makeEnemy(state, state.player.x, state.player.z + 20, 1);
+  state.enemies = [patrol];
+  for (const [range, expected] of [[20, false], [13, false], [9, true], [15, true], [18, false]]) {
+    patrol.x = state.player.x;
+    patrol.z = state.player.z + range;
+    state.tick++;
+    advanceEnemies(state, ground);
+    assert.equal(patrol.closeRange, expected);
+  }
+});
+
+test('an enemy holds its terrain escape heading when its requested course clears briefly', () => {
+  const state = fixture('hound');
+  const patrol = makeEnemy(state, 0, 0, 1);
+  Object.assign(patrol, { yaw: 0, shotAt: Infinity });
+  Object.assign(state.player, { x: 0, z: 50, yaw: 0 });
+  state.enemies = [patrol];
+
+  advanceEnemies(state, (x, z) => Math.abs(x) < 3 && z >= 5 ? 110 : 0);
+  const escape = patrol.terrainTurn;
+  assert.ok(escape);
+  state.tick++;
+  advanceEnemies(state, () => 0);
+  assert.equal(patrol.terrainTurn, escape);
+  assert.ok(Math.sign(patrol.yaw) === Math.sign(escape.yaw));
+
+  state.tick = escape.until;
+  advanceEnemies(state, () => 0);
+  assert.equal(patrol.terrainTurn, undefined);
 });

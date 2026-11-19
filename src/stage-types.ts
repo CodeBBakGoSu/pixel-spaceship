@@ -71,6 +71,10 @@ export type Enemy = Position & {
   formation?: { leader: number; side: number };
   fanFired?: boolean;
   farTicks?: number;
+  flightSpeed?: number;
+  closeRange?: boolean;
+  longRange?: boolean;
+  terrainTurn?: { yaw: number; until: number };
   course?: { target: Point; speed: number; until: number };
   flyby?: { startedAt: number; yaw: number; side: -1 | 1; lane: number } &
     ({ phase: 'overtake' } | { phase: 'cross'; target: Point });
