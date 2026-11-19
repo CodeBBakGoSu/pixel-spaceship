@@ -5,6 +5,7 @@ export type Rect = { x: number; y: number; width: number; height: number };
 export type HudLayout = { hud: Rect; boss: Rect; radio: Rect; objective: Rect; radar: Rect; alt: Rect };
 export type CockpitLayout = {
   compact: boolean;
+  panelScale: number;
   glass: Rect; heading: Rect; speed: Rect; altitude: Rect; aiming: Rect; stores: Rect | null;
   message: Rect; help: Rect | null;
   dashboard: Rect; warnings: Rect; radar: Rect; damage: Rect; weapons: Rect; gauges: Rect;
@@ -59,8 +60,12 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
   const portrait = height >= width, short = height < 480, compact = width < 620 || short;
   const availableWidth = width - safe.left - safe.right;
   const bottom = controls?.y ?? height - safe.bottom;
+  const standardHeight = clamp(Math.round(height * 0.24), 110, 176);
+  // Reserve the canopy and its tapes before widening and raising the desktop rack.
+  const panelSpace = bottom - objective.y - objective.height - 230;
+  const panelScale = controls || portrait || compact ? 1 : clamp(panelSpace / standardHeight, 1, 1.34);
   const heightWanted = portrait ? clamp(Math.round(width * 0.23), 82, 105)
-    : short && controls ? 52 : clamp(Math.round(height * 0.24), 110, 176);
+    : short && controls ? 52 : Math.round(standardHeight * panelScale);
   const dashboard = rect(safe.left, bottom - heightWanted, availableWidth, heightWanted);
   const help = controls ? null : rect(safe.left + 10, dashboard.y - 21, availableWidth - 20, 17);
   const messageHeight = short ? 16 : 22;
@@ -83,9 +88,9 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
   const altitude = rect(glass.x + glass.width - tapeWidth, tapeY, tapeWidth, tapeHeight);
   const aiming = rect(glass.x + tapeWidth + 5, aimingTop, glass.width - 2 * (tapeWidth + 5), aimingHeight);
 
-  const rackWidth = Math.min(1040, availableWidth - (compact ? 12 : 80));
+  const rackWidth = Math.min(Math.round(1040 * panelScale), availableWidth - (compact ? 12 : 80));
   const rackX = Math.round(safe.left + (availableWidth - rackWidth) / 2);
-  const warnings = rect(rackX, dashboard.y + (compact ? 3 : 8), rackWidth, short ? 12 : compact ? 16 : 22);
+  const warnings = rect(rackX, dashboard.y + (compact ? 3 : 8), rackWidth, short ? 12 : compact ? 16 : 22 * panelScale);
   const panelTop = warnings.y + warnings.height + (compact ? 3 : 8);
   const panelHeight = bottom - panelTop - (compact ? 4 : 14);
   const gap = compact ? 4 : 10, columnSpace = rackWidth - 3 * gap;
@@ -96,7 +101,7 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
   const damage = rect(radar.x + radar.width + gap, panelTop, damageWidth, panelHeight);
   const weapons = rect(damage.x + damage.width + gap, panelTop, weaponsWidth, panelHeight);
   const gauges = rect(weapons.x + weapons.width + gap, panelTop, columnSpace - radarWidth - damageWidth - weaponsWidth, panelHeight);
-  return { compact, glass, heading, speed, altitude, aiming, stores, message, help, dashboard, warnings, radar, damage, weapons, gauges };
+  return { compact, panelScale, glass, heading, speed, altitude, aiming, stores, message, help, dashboard, warnings, radar, damage, weapons, gauges };
 }
 
 // CSS pixels; the canvas still covers the entire viewport, including the safe areas.
@@ -109,7 +114,7 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const objective = rect(left, objectiveY, usableWidth, 22);
   const controlHeight = portrait ? clamp(Math.round(height * 0.19), 146, 170) : clamp(Math.round(height * 0.35), 134, 140);
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
-  const bufferWidth = portrait ? 180 : clamp(Math.round(180 * width / height), 160, 480);
+  const bufferWidth = portrait ? 288 : clamp(Math.round(288 * width / height), 256, 768);
   const buffer = { width: bufferWidth, height: Math.round(bufferWidth * height / width) };
   const cockpit = view === 'cockpit' ? cockpitLayout(width, height, safe, objective, controls) : null;
   const dashboard = cockpit?.dashboard ?? null;

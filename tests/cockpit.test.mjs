@@ -194,3 +194,21 @@ test('the zero rung follows a steep Reach stack between grid samples', () => {
   }
   assert.ok(Math.abs(to.y - skyline) < 0.75, `terrain skyline y=${skyline}, HUD y=${to.y}`);
 });
+
+test('the cockpit ladder sweeps down on a climb and up on a dive', () => {
+  const width = 1280, height = 800;
+  const safe = { top: 0, right: 0, bottom: 0, left: 0 };
+  const cockpit = cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
+  const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
+  const heights = [];
+  for (const [kind, tick] of [['immelmann', 29], ['split-s', 46]]) {
+    const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'));
+    state.enemies.length = 0;
+    for (let elapsed = 0; elapsed < tick; elapsed++) stepStage(state, elapsed === 0 ? { maneuver: kind } : {});
+    const marks = frameCockpit(camera, state.player, { width, height, cockpit }, maneuverAttitude(state.maneuver), () => 35, 770);
+    const zero = marks.find(mark => mark.angle === 0);
+    const y = (zero.left.at(-1).to.y + zero.right[0].from.y) / 2;
+    heights.push((y - cockpit.aiming.y) / cockpit.aiming.height);
+  }
+  assert.ok(heights[0] > 0.65 && heights[1] < 0.35, heights.join(' vs '));
+});

@@ -373,7 +373,7 @@
 .guide-body:focus-visible { outline: 2px solid #bceff0; outline-offset: -2px; }
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
-.menu-open :is(.objective, .flight-message, .view-tag, .scene-cue, .rear-bomb-marker, .help),
+.menu-open :is(.objective, .flight-message, .maneuver-cue, .view-tag, .scene-cue, .rear-bomb-marker, .help),
 .guide-open :is(.hud, .boss-hud, .radio, #nav-radar, #arena-map, .alt-ruler) {
   visibility: hidden;
 }
@@ -481,10 +481,49 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .bomb-reload { display: block; width: 21px; height: 4px; background: #34233b; }
 .bomb-reload > i { display: block; height: 100%; background: #fa80b0; }
 .loop-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 1px 3px;
   border: 1px solid #5e8582;
   color: #e2eee2;
   font-size: 9px;
   white-space: nowrap;
 }
+.loop-status::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--loop-charge, 100%), #3d5657 0);
+  mask: radial-gradient(circle, transparent 40%, #000 49%);
+}
 .loop-status[data-ready="true"] { color: #b4ffce; border-color: #7fc7a4; }
+
+.maneuver-cue {
+  --cue-color: #bde1ff;
+  position: absolute;
+  left: 50%;
+  top: calc(var(--objective-y) + var(--objective-h) + 32px);
+  transform: translateX(-50%);
+  max-width: calc(100% - 36px);
+  padding: 5px 11px 6px;
+  border: 1px solid var(--cue-color);
+  background: rgba(9, 26, 33, .84);
+  color: var(--cue-color);
+  text-align: center;
+  pointer-events: none;
+}
+.maneuver-cue[data-kind="immelmann"] { --cue-color: #b4f5c8; }
+.maneuver-cue[data-kind="split-s"] { --cue-color: #ffc993; }
+.maneuver-cue[data-kind="cobra"] { --cue-color: #ffe6a4; }
+.maneuver-cue strong { display: block; font-size: clamp(13px, 1.9vw, 20px); white-space: nowrap; }
+.maneuver-cue span { display: block; margin-top: 4px; font-size: clamp(9px, 1.15vw, 13px); }
+.experience.cockpit-view .maneuver-cue {
+  top: var(--maneuver-center-y);
+  transform: translate(-50%, -50%);
+  padding: 9px 16px 11px;
+  background: rgba(9, 26, 33, .66);
+}
+.experience.cockpit-view .maneuver-cue strong { font-size: clamp(18px, 3.2vw, 39px); }

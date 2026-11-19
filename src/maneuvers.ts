@@ -1,16 +1,21 @@
 import { BANDS, clamp, MAX_ALTITUDE, MIN_ALTITUDE, STEP } from './stage-combat.ts';
-import type { Band, Maneuver, ManeuverKind, StageState } from './stage-types.ts';
+import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
 
 export const CRUISE_SPEED = 34;
-export const MANEUVERS = {
-  immelmann: { ticks: 90, cooldown: 240, boost: 0 },
-  'split-s': { ticks: 90, cooldown: 240, boost: 0 },
-  cobra: { ticks: 60, cooldown: 180, boost: 0 },
-  'j-turn': { ticks: 1, cooldown: 420, boost: 0.4 },
-};
-
 const HALF_LOOP_TICKS = 54;
 const ROLL_TICKS = 18;
+export const MANEUVERS = {
+  immelmann: { ticks: 90, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS },
+  'split-s': { ticks: 90, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS + ROLL_TICKS },
+  cobra: { ticks: 60, cooldown: 180, boost: 0, flipTick: 0 },
+  'j-turn': { ticks: 20, cooldown: 420, boost: 0.4, flipTick: 1 },
+};
+export const TRAIL_SAMPLE_TICKS = 3;
+export const TRAIL_LIMIT = Math.ceil(MANEUVERS.immelmann.ticks / TRAIL_SAMPLE_TICKS) + 1;
+export const TRAIL_LINGER_TICKS = 90;
+const TURN_BURST_TICKS = 18;
+const CAMERA_LAG_TICKS = 3;
+const CAMERA_SWEEP_TICKS = 24;
 const COBRA_ENTRY = 9;
 const COBRA_STALL = 48;
 const COBRA_SPEED = 2;
@@ -29,10 +34,15 @@ export function chooseManeuver(turn: number, climb: number, brake: boolean): Man
   return 'immelmann';
 }
 
+export function maneuverForKey(code: string, turn: number, climb: number, brake: boolean): ManeuverKind | undefined {
+  if (code === 'KeyC') return 'cobra';
+  if (code === 'Space') return chooseManeuver(turn, climb, brake);
+}
+
 export function exitAltitude(altitude: number, kind: ManeuverKind): number {
   const band = nearestBand(altitude);
-  if (kind === 'immelmann') return BANDS[Math.min(2, band + 1)];
-  if (kind === 'split-s') return BANDS[Math.max(0, band - 1)];
+  if (kind === 'immelmann' && band < 2) return BANDS[band + 1];
+  if (kind === 'split-s' && band > 0) return BANDS[band - 1];
   return altitude;
 }
 
@@ -44,6 +54,7 @@ export function canManeuver(state: StageState, kind: ManeuverKind): boolean {
 
 type Frame = {
   forward: number;
+  lateral?: number;
   altitude: number;
   pitch: number;
   roll: number;
@@ -57,7 +68,7 @@ function frameAt(m: Maneuver, tick: number): Frame {
       const apex = Math.min(MAX_ALTITUDE, Math.max(altitude, exit) + 18);
       if (tick < HALF_LOOP_TICKS) {
         const u = tick / HALF_LOOP_TICKS;
-        return { forward: 10 * Math.sin(Math.PI * u), altitude: mix(altitude, apex, ease(u)),
+        return { forward: 17 * Math.sin(Math.PI * u), altitude: mix(altitude, apex, ease(u)),
           pitch: Math.PI * u, roll: 0, reversed: false };
       }
       const recovery = tick - HALF_LOOP_TICKS;
@@ -75,11 +86,11 @@ function frameAt(m: Maneuver, tick: number): Frame {
       const dive = tick - ROLL_TICKS, rollDistance = CRUISE_SPEED * ROLL_TICKS * STEP;
       if (dive < HALF_LOOP_TICKS) {
         const u = dive / HALF_LOOP_TICKS;
-        return { forward: rollDistance + 10 * Math.sin(Math.PI * u), altitude: mix(altitude, trough, ease(u)),
+        return { forward: rollDistance + 17 * Math.sin(Math.PI * u) - 12 * ease(u), altitude: mix(altitude, trough, ease(u)),
           pitch: -Math.PI * u, roll: Math.PI, reversed: false };
       }
       const recovery = dive - HALF_LOOP_TICKS;
-      return { forward: rollDistance - CRUISE_SPEED * recovery * STEP,
+      return { forward: rollDistance - 12 - CRUISE_SPEED * recovery * STEP,
         altitude: mix(trough, exit, ease(recovery / ROLL_TICKS)), pitch: 0, roll: 0, reversed: true };
     }
     case 'cobra': {
@@ -91,8 +102,11 @@ function frameAt(m: Maneuver, tick: number): Frame {
       return { forward: STEP * (entry * entryAverage + stall * COBRA_SPEED + recovery * recoveryAverage), altitude,
         pitch: COBRA_PITCH * ease(entry / COBRA_ENTRY) * (1 - ease(recovery / recoveryTicks)), roll: 0, reversed: false };
     }
-    case 'j-turn':
-      return { forward: 0, altitude, pitch: 0, roll: 0, reversed: tick > 0 };
+    case 'j-turn': {
+      const u = tick / MANEUVERS['j-turn'].ticks, angle = Math.PI * (0.25 * u + 0.75 * ease(u));
+      return { forward: 8 * Math.sin(angle) - 5 * u * u, lateral: m.side * 9 * (1 - Math.cos(angle)), altitude,
+        pitch: 0, roll: m.side * 0.42 * Math.sin(angle), reversed: tick > 0 };
+    }
   }
 }
 
@@ -100,13 +114,44 @@ export function advanceManeuver(maneuver: Maneuver) {
   const prior = frameAt(maneuver, maneuver.elapsed);
   const current = frameAt(maneuver, ++maneuver.elapsed);
   const distance = current.forward - prior.forward;
-  let speed = Math.abs(distance) / STEP;
+  const slide = (current.lateral ?? 0) - (prior.lateral ?? 0);
+  let speed = Math.hypot(distance, slide) / STEP;
   if (maneuver.kind === 'cobra') {
     const tick = maneuver.elapsed;
     speed = tick < COBRA_ENTRY ? mix(maneuver.speed, COBRA_SPEED, tick / COBRA_ENTRY)
       : mix(COBRA_SPEED, CRUISE_SPEED, Math.max(0, tick - COBRA_STALL) / (MANEUVERS.cobra.ticks - COBRA_STALL));
   }
-  return { distance, speed, altitude: current.altitude, reverse: current.reversed && !prior.reversed };
+  return { distance, slide, speed, altitude: current.altitude, reverse: current.reversed && !prior.reversed };
+}
+
+export function trailEnd(trail: ManeuverTrail): number {
+  return trail.startTick + MANEUVERS[trail.kind].ticks - 1;
+}
+
+export function activeTrail(state: StageState): ManeuverTrail | null {
+  const trail = state.maneuverTrail;
+  return trail && state.tick < trailEnd(trail) + TRAIL_LINGER_TICKS ? trail : null;
+}
+
+export function maneuverViewYaw(state: StageState): number {
+  const { player: p, maneuverTrail: trail } = state;
+  if (!trail) return p.yaw;
+  const flip = MANEUVERS[trail.kind].flipTick, elapsed = state.tick - trail.startTick + 1;
+  if (!flip || elapsed < flip) return p.yaw;
+  const progress = clamp((elapsed - flip - CAMERA_LAG_TICKS) / CAMERA_SWEEP_TICKS, 0, 1);
+  return p.yaw - trail.side * Math.PI * (1 - ease(progress));
+}
+
+export function turnExitBurst(state: StageState): number {
+  const trail = state.maneuverTrail;
+  if (trail?.kind !== 'j-turn') return 0;
+  return 0.28 * clamp(1 - (state.tick - trailEnd(trail)) / TURN_BURST_TICKS, 0, 1);
+}
+
+export function formerPursuer(state: StageState, trail: ManeuverTrail | null, enemy: Enemy): boolean {
+  if (!trail || !enemy.hp || !trail.pursuers.includes(enemy.id)) return false;
+  const p = state.player;
+  return (enemy.x - p.x) * Math.sin(p.yaw) + (enemy.z - p.z) * Math.cos(p.yaw) > 3;
 }
 
 export function maneuverAttitude(maneuver: Maneuver) {
@@ -116,7 +161,7 @@ export function maneuverAttitude(maneuver: Maneuver) {
     pitch, roll,
     cockpitPitch,
     cameraPitch: clamp(cockpitPitch, -28 * degree, 34 * degree),
-    cameraBank: clamp(roll, -20 * degree, 20 * degree),
+    cameraBank: Math.sin(roll) * 20 * degree + (maneuver.kind === 'immelmann' ? Math.sin(2 * pitch) * 8 * degree : 0),
     inverted: Math.cos(pitch) * Math.cos(roll) < 0,
     stalled: maneuver.kind === 'cobra' && maneuver.elapsed >= COBRA_ENTRY && maneuver.elapsed <= COBRA_STALL,
   };

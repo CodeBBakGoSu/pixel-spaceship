@@ -37,6 +37,26 @@ test('landscape phone has usable, separated zones and controls', () => {
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 
+test('the desktop cockpit has a larger instrument rack with room for the canopy', () => {
+  const hud = desktopLayout(1280, 800, insets[0]);
+  const cockpit = cockpitLayout(1280, 800, insets[0], hud.objective);
+  assert.ok(cockpit.dashboard.height >= 229 && cockpit.dashboard.height <= 264);
+  assert.ok(cockpit.radar.height >= 161 && cockpit.radar.height <= 186);
+  assert.ok(cockpit.aiming.height >= 200);
+  assert.ok(contains(cockpit.dashboard, cockpit.gauges));
+});
+
+test('phone scene buffers use finer pixels while the cockpit clears the controls', () => {
+  const portrait = phoneLayout(390, 844, insets[1], 'cockpit');
+  const landscape = phoneLayout(844, 390, insets[1], 'cockpit');
+  assert.deepEqual(portrait.buffer, { width: 288, height: 623 });
+  assert.deepEqual(landscape.buffer, { width: 623, height: 288 });
+  for (const layout of [portrait, landscape]) {
+    assert.equal(layout.dashboard.y + layout.dashboard.height, layout.controls.y);
+    assert.ok(contains(layout.dashboard, layout.cockpit.gauges));
+  }
+});
+
 for (const [width, height] of [[1280, 720], ...sizes]) {
   test(`desktop HUD keeps status, radio, objective and instruments apart at ${width}x${height}`, () => {
     const l = desktopLayout(width, height, insets[0]);

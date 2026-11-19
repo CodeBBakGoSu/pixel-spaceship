@@ -1,14 +1,14 @@
 import type { createTranslator } from './i18n.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
-import { exitAltitude } from './maneuvers.ts';
+import { activeTrail, exitAltitude, formerPursuer } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, LANDMARKS, RIM_WARNING } from './reach.ts';
 import { activeWeakPoint, angleTo, HIT_WINDOW, inBand, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 160;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
-export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number };
-type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null };
+export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number; former?: true };
+type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null; former?: true };
 type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
 const MAP_LANDMARKS = Object.entries(LANDMARKS);
 export type RadarReadout = {
@@ -23,7 +23,7 @@ export function beaconTrack(state: StageState): Position | null {
   return state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND ? LANDMARKS.atoll : null;
 }
 
-export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, north: string, font: string): void {
+export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, north: string, font: string, yaw = state.player.yaw): void {
   const { width, height } = c.canvas;
   const center = width / 2, middle = height / 2 + 2, radius = width / 2 - 6;
   const { arena, player } = state, scale = radius / arena.radius;
@@ -67,7 +67,7 @@ export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, nor
   const x = center + (player.x - arena.x) * scale, y = middle - (player.z - arena.z) * scale;
   c.save();
   c.translate(x, y);
-  c.rotate(player.yaw);
+  c.rotate(yaw);
   c.fillStyle = '#f6fddd';
   c.beginPath();
   c.moveTo(0, -5);
@@ -88,29 +88,30 @@ export function altitudeDeltaText(delta: number, t: ReturnType<typeof createTran
   return t('cockpit.altDelta', { sign: delta < 0 && value ? '−' : '+', value: String(value).padStart(2, '0') });
 }
 
-export function buildRadar(state: StageState): RadarReadout {
+export function buildRadar(state: StageState, yaw = state.player.yaw): RadarReadout {
   const p = state.player;
-  const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
+  const sin = Math.sin(yaw), cos = Math.cos(yaw);
   const top = state.view === 'overhead';
   const contacts: Blip[] = [];
   const rim: RimTick[] = [];
   const rimTick = (kind: RimTick['kind'], dx: number, dz: number) => {
-    const bin = Math.round(angleTo(p.yaw, dx, dz) * 8 / Math.PI);
+    const bin = Math.round(angleTo(yaw, dx, dz) * 8 / Math.PI);
     const angle = (bin + 16) % 16 * Math.PI / 8;
     if (!rim.some(tick => tick.kind === kind && tick.angle === angle)) rim.push({ kind, angle });
   };
   const rx = p.x - state.arena.x, rz = p.z - state.arena.z;
-  const boundaryBearing = Math.hypot(rx, rz) > state.arena.radius - RIM_WARNING ? angleTo(p.yaw, rx, rz) : null;
+  const boundaryBearing = Math.hypot(rx, rz) > state.arena.radius - RIM_WARNING ? angleTo(yaw, rx, rz) : null;
   let rearCount = 0, rearClose = false, rearBandMatch = false;
   let rearHigher = false, rearLower = false;
   const up = exitAltitude(p.altitude, 'immelmann'), down = exitAltitude(p.altitude, 'split-s');
   const active = activeWeakPoint(state);
   const visible: { track: Track; across: number }[] = [];
   const hostiles: Track[] = [];
-  const scan = (item: Position & { id: number }, kind: Track['kind']): void => {
+  const scan = (item: Position & { id: number }, kind: Track['kind'], former = false): void => {
     const dx = item.x - p.x, dz = item.z - p.z;
     const range = Math.hypot(dx, dz), ahead = dx * sin + dz * cos;
     const track: Track = { x: item.x, z: item.z, alt: item.alt, id: item.id, kind, range, ahead };
+    if (former) track.former = true;
     if (!top && kind !== 'salvage') hostiles.push(track);
     if (range > RADAR_RANGE) {
       if (kind === 'salvage') rimTick(kind, dx, dz);
@@ -129,7 +130,8 @@ export function buildRadar(state: StageState): RadarReadout {
     }
     visible.push({ track, across: dx * cos - dz * sin });
   };
-  for (const enemy of state.enemies) if (enemy.hp) scan(enemy, enemy.kind);
+  const trail = activeTrail(state);
+  for (const enemy of state.enemies) if (enemy.hp) scan(enemy, enemy.kind, formerPursuer(state, trail, enemy));
   // The flat radar resolves the Warden as one airframe. The forward views resolve its exposed hardware.
   if (active && state.boss) {
     if (top) scan({ id: -1, x: state.boss.x, z: state.boss.z, alt: state.boss.alt }, 'warden');
@@ -152,12 +154,14 @@ export function buildRadar(state: StageState): RadarReadout {
   const salvage = top ? null : nearest(forward.filter(track => track.kind === 'salvage'));
   for (const { track, across } of visible) {
     const marked = top || track.id === priority?.id || track.id === salvage?.id;
-    contacts.push({
+    const blip: Blip = {
       x: across / RADAR_RANGE,
       y: -track.ahead / RADAR_RANGE,
       kind: track.kind,
       mark: marked ? relativeMark(track.alt - p.altitude, top) : null,
-    });
+    };
+    if (track.former) blip.former = true;
+    contacts.push(blip);
   }
   const rearMarks: AltitudeMark[] = [];
   if (rearHigher) rearMarks.push('△');
@@ -174,7 +178,7 @@ export class RadarDisplay {
   private y = 0;
   private radius = 0;
 
-  resize(width: number, height: number, font: string, label: string): void {
+  resize(width: number, height: number, font: string, label: string, labelSize?: number): void {
     this.face.width = width;
     this.face.height = height;
     const c = this.staticLayer;
@@ -197,8 +201,9 @@ export class RadarDisplay {
     c.fillRect(x - radius, y, radius * 2, 1);
     c.fillRect(x, y - radius, 1, radius * 2);
     c.fillStyle = '#95ccaf';
-    c.font = (short ? '8px ' : '10px ') + font;
-    c.fillText(label, 4, short ? 10 : 12);
+    const size = labelSize ?? (short ? 8 : 10);
+    c.font = `${size}px ${font}`;
+    c.fillText(label, 4, size + 2);
   }
 
   draw(c: CanvasRenderingContext2D, left: number, top: number, readout: RadarReadout, yaw: number, tick: number): void {
@@ -268,6 +273,10 @@ export class RadarDisplay {
     const { kind, mark } = contact;
     const salvage = kind === 'salvage';
     const base = salvage ? '#7cece0' : kind === 'pod' || kind === 'core' || kind === 'warden' ? '#ffd783' : '#ff9683';
+    if (contact.former) {
+      c.strokeStyle = '#91fff1';
+      c.strokeRect(x - 4.5, y - 4.5, 9, 9);
+    }
     c.fillStyle = base;
     if (salvage) {
       c.fillRect(x, y - 2, 1, 5);

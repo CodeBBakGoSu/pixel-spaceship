@@ -1,5 +1,5 @@
 import { advanceBank } from './flight.ts';
-import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS } from './maneuvers.ts';
+import { advanceManeuver, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage-enemies.ts';
 import { relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
@@ -28,7 +28,7 @@ export function parseStageOptions(search: string): StageOptions {
   return {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
-    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit'
+    fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'cobra'
       || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
@@ -164,6 +164,16 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
+  } else if (fixture === 'cobra') {
+    const p = state.player;
+    state.cobraStaged = true;
+    state.speed = CRUISE_SPEED;
+    state.nextWave = WAVES.length;
+    for (const [x, aft] of [[-6, 19], [6, 23]]) {
+      const enemy = makeEnemy(state, p.x + x, p.z - aft, 1);
+      enemy.yaw = p.yaw;
+      state.enemies.push(enemy);
+    }
   } else if (fixture === 'draft') {
     state.xp = state.salvage = 6;
     state.salvageBands[1] = 6;
@@ -185,12 +195,13 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    view: options.view ?? (options.fixture === 'pursuit' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
+    view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'cobra' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
     speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
     boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
-    maneuver: null, maneuverReadyAt: 0, xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
+    maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, cobraStaged: false,
+    xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
@@ -207,13 +218,18 @@ function finish(state: StageState, outcome: Outcome): void {
   if (outcome === 'clear') state.score += 2500;
 }
 
-function startManeuver(state: StageState, kind: ManeuverKind): void {
+function startManeuver(state: StageState, kind: ManeuverKind, turn: number): void {
   const p = state.player, spec = MANEUVERS[kind];
   const maneuver: Maneuver = {
-    kind, elapsed: 0, yaw: p.yaw, speed: state.speed,
-    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind),
+    kind, elapsed: 0, yaw: p.yaw, speed: state.speed || CRUISE_SPEED,
+    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind), side: turn < 0 ? -1 : 1,
   };
   state.maneuver = maneuver;
+  const trail = state.maneuverTrail = {
+    kind, startTick: state.tick, yaw: p.yaw, side: maneuver.side, exitAltitude: maneuver.exitAltitude,
+    limited: (kind === 'immelmann' || kind === 'split-s') && maneuver.exitAltitude === p.altitude,
+    points: [{ x: p.x, z: p.z, alt: p.altitude }], pursuers: [] as number[],
+  };
   state.boost -= spec.boost;
   state.boostRelease = true;
   state.lock = state.wrongLayer = state.altitudeHint = null;
@@ -223,6 +239,7 @@ function startManeuver(state: StageState, kind: ManeuverKind): void {
   for (const enemy of state.enemies) {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
+    if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 160) trail.pursuers.push(enemy.id);
     warnHarrier(state, enemy, maneuver, aft, lateral);
     if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
@@ -249,7 +266,6 @@ function startManeuver(state: StageState, kind: ManeuverKind): void {
 function reverseHeading(state: StageState, entryYaw: number): void {
   const p = state.player, fx = Math.sin(entryYaw), fz = Math.cos(entryYaw);
   p.yaw = Math.atan2(-fx, -fz);
-  if (state.view !== 'overhead') state.wipe = WIPE_DURATION;
   for (const enemy of state.enemies) {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= 160) enemy.shotAt = Math.max(enemy.shotAt, state.tick + 25);
@@ -267,15 +283,16 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     const motion = advanceManeuver(maneuver);
     state.speed = motion.speed;
     p.bank = 0;
-    p.x += Math.sin(maneuver.yaw) * motion.distance;
-    p.z += Math.cos(maneuver.yaw) * motion.distance;
+    const fx = Math.sin(maneuver.yaw), fz = Math.cos(maneuver.yaw);
+    p.x += fx * motion.distance + fz * motion.slide;
+    p.z += fz * motion.distance - fx * motion.slide;
     altitude = motion.altitude;
     if (motion.reverse) reverseHeading(state, maneuver.yaw);
   } else {
     const turn = clamp(input.turn ?? 0, -1, 1);
     p.bank = advanceBank(p.bank, turn, STEP);
     p.yaw = angleTo(0, Math.sin(p.yaw + turn * 1.55 * STEP), Math.cos(p.yaw + turn * 1.55 * STEP));
-    state.speed = CRUISE_SPEED * (state.boosting ? 1.55 : 1) * (1 - Math.abs(turn) * 0.25);
+    state.speed = CRUISE_SPEED * Math.max(state.boosting ? 1.55 : 1, 1 + turnExitBurst(state)) * (1 - Math.abs(turn) * 0.25);
     p.x += Math.sin(p.yaw) * state.speed * STEP;
     p.z += Math.cos(p.yaw) * state.speed * STEP;
     altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * STEP;
@@ -359,9 +376,19 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   state.invulnerability = Math.max(0, state.invulnerability - STEP);
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
-  if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver);
+  if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? input.turn ?? 0);
   const maneuver = state.maneuver;
+  if (state.cobraStaged) {
+    // Let the pilot inspect the close contacts before movement or auto-fire begins.
+    if (!maneuver && state.tick < BOSS_TICK) return;
+    state.cobraStaged = false;
+    for (const enemy of state.enemies) enemy.shotAt = state.tick + ENEMY_KINDS[enemy.kind].firstShot;
+  }
   fly(state, input, ground, grace);
+  if (maneuver && state.maneuverTrail && (maneuver.elapsed % TRAIL_SAMPLE_TICKS === 0 || maneuver.elapsed === MANEUVERS[maneuver.kind].ticks)) {
+    const { x, z, altitude } = state.player;
+    state.maneuverTrail.points.push({ x, z, alt: altitude });
+  }
 
   if (state.tick === BOSS_TICK && !state.boss) {
     state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
@@ -381,6 +408,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     if (input.bomb && !grace) dropRearBomb(state);
     acquireAndFire(state);
   } else if (maneuver.elapsed === MANEUVERS[maneuver.kind].ticks) {
+    if (state.maneuverTrail) state.maneuverTrail.actualExit = state.player.altitude;
     state.maneuver = null;
     state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
   }

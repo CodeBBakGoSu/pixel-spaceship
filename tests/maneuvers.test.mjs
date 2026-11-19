@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput } from '../src/autoplay.ts';
+import * as moves from '../src/maneuvers.ts';
 
 const pursuit = (view = 'chase') => createStage(parseStageOptions('?fixture=pursuit&view=' + view));
 const run = (state, ticks, input = {}, ground) => {
@@ -32,7 +33,7 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
   ['immelmann', 90, 145, Math.PI, 240],
   ['split-s', 90, 75, Math.PI, 240],
   ['cobra', 60, 110, 0, 180],
-  ['j-turn', 1, 110, Math.PI, 420],
+  ['j-turn', 20, 110, Math.PI, 420],
 ]) {
   test(`${kind} hands back on tick ${ticks} at the specified altitude and heading`, () => {
     const state = empty();
@@ -41,14 +42,13 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
     const first = { maneuver: kind, turn: 1, climb: 1, boost: true, bomb: true };
     run(state, 1, first);
     if (kind === 'j-turn') {
-      assert.deepEqual([state.player.x, state.player.z], [x, z]);
+      assert.ok(Math.abs(state.player.yaw) > 3.1);
       assert.equal(state.boost, 0.6);
-    } else {
-      assert.equal(state.maneuver?.kind, kind);
-      run(state, ticks - 2, { turn: 1, climb: 1, boost: true });
-      assert.equal(state.maneuver?.kind, kind);
-      run(state, 1);
     }
+    assert.equal(state.maneuver?.kind, kind);
+    run(state, ticks - 2, { turn: 1, climb: 1, boost: true });
+    assert.equal(state.maneuver?.kind, kind);
+    run(state, 1);
     assert.equal(state.tick - startTick, ticks);
     assert.equal(state.maneuver, null);
     assert.equal(state.player.altitude, altitude);
@@ -56,6 +56,7 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
     assert.equal(state.bombs, 3);
     assert.equal(state.maneuverReadyAt, state.tick + cooldown);
     assert.equal(state.invulnerability, 0);
+    if (kind !== 'cobra') assert.ok(Math.hypot(state.player.x - x, state.player.z - z) >= 10);
     run(state, cooldown - 1, { maneuver: 'cobra' });
     assert.equal(state.maneuver, null);
     run(state, 1, { maneuver: 'cobra' });
@@ -75,6 +76,45 @@ test('J-turn requires charge and keeps precise launch altitude', () => {
   assert.equal(state.boost, 0);
   assert.equal(state.player.altitude, 112.5);
   assert.ok(Math.abs(state.player.yaw) > 3.1);
+});
+
+test('C alone queues Cobra, and Space respects the climb and dive selectors', () => {
+  assert.equal(moves.maneuverForKey?.('Space', 0, 1, false), 'immelmann');
+  assert.equal(moves.maneuverForKey?.('Space', 0, -1, false), 'split-s');
+  assert.equal(moves.maneuverForKey?.('KeyC', 0, 0, false), 'cobra');
+  const state = empty();
+  run(state, 1, { maneuver: moves.maneuverForKey('KeyC', 0, 0, false) });
+  assert.equal(state.maneuver?.kind, 'cobra');
+});
+
+test('J-turn snaps its flight heading, traces a displaced U and lets the view catch up', () => {
+  const state = empty();
+  const { x, z } = state.player;
+  run(state, 1, { maneuver: 'j-turn', turn: -1 });
+  assert.ok(Math.abs(state.player.yaw) > 3.1);
+  const wrapped = yaw => Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  assert.ok(Math.abs(wrapped(moves.maneuverViewYaw?.(state))) < 0.001);
+  run(state, 10);
+  assert.ok(state.player.x < x - 3 && state.player.z > z + 3);
+  assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state))) > 0.1);
+  run(state, 9);
+  assert.ok(state.player.x < x - 14 && state.player.z < z - 4);
+  assert.equal(state.maneuverTrail.points.at(-1).x, state.player.x);
+  run(state, 1);
+  assert.ok(state.speed > moves.CRUISE_SPEED);
+  run(state, 18);
+  assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state) - state.player.yaw)) < 1e-6);
+});
+
+test('a loop at the extreme band returns to its launch height and marks the limit', () => {
+  for (const [maneuver, altitude] of [['immelmann', 151], ['split-s', 72]]) {
+    const state = empty();
+    state.player.altitude = altitude;
+    run(state, 1, { maneuver });
+    assert.equal(state.maneuverTrail?.limited, true);
+    run(state, 89);
+    assert.equal(state.player.altitude, altitude);
+  }
 });
 
 test('Split-S at the low band guards terrain clearance throughout the dive', () => {
@@ -127,9 +167,21 @@ test('Cobra lets a close same-band pursuer pass safely into a forward volley', (
   assert.equal(state.speed, 2);
   run(state, 51);
   assert.ok(near.z > state.player.z);
+  assert.ok(moves.formerPursuer(state, moves.activeTrail(state), near));
   assert.equal(state.hull, 8);
   run(state, 16);
   assert.equal(near.hp, 0);
+});
+
+test('the Cobra fixture keeps the close pass available after the pilot waits', () => {
+  const state = createStage(parseStageOptions('?fixture=cobra'));
+  const before = state.enemies.map(enemy => [enemy.x, enemy.z]);
+  run(state, 300);
+  assert.deepEqual(state.enemies.map(enemy => [enemy.x, enemy.z]), before);
+  run(state, 1, { maneuver: moves.maneuverForKey('KeyC', 0, 0, false) });
+  run(state, 40);
+  assert.ok(state.enemies.some(enemy => moves.formerPursuer(state, moves.activeTrail(state), enemy)));
+  assert.equal(state.hull, 8);
 });
 
 test('rear bomb coasts at its release altitude and falls after 27 ticks', () => {

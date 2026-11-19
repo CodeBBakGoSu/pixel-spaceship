@@ -19,10 +19,10 @@ export function cockpitFov(aspect: number, pitch: number): number {
 }
 
 export function frameCockpit(camera: PerspectiveCamera, player: StageState['player'], frame: CockpitFraming,
-  attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number): PitchMark[] {
+  attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number, yaw = player.yaw): PitchMark[] {
   const { width, height, cockpit } = frame;
   const pitch = attitude?.cameraPitch ?? 0, bank = attitude?.cameraBank ?? 0;
-  const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
   camera.fov = cockpitFov(width / height, pitch);
   let shift = clamp(center, 0.29, 0.64);
@@ -49,7 +49,11 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   const heights = [...zero.left, ...zero.right].flatMap(line => [line.from.y, line.to.y]);
   const shiftUp = Math.max(...heights) - (y + glassHeight - 6);
   const shiftDown = Math.min(...heights) - (y + 6);
-  const adjustment = Math.round(shiftUp <= shiftDown ? clamp(0, shiftUp, shiftDown) : (shiftUp + shiftDown) / 2);
+  const strength = Math.min(1, Math.abs(pitch) / (24 * Math.PI / 180));
+  const skyline = (Math.max(...heights) + Math.min(...heights)) / 2;
+  const desired = y + glassHeight * (pitch > 0 ? 0.78 : 0.22);
+  const sweep = (skyline - desired) * strength;
+  const adjustment = Math.round(shiftUp <= shiftDown ? clamp(sweep, shiftUp, shiftDown) : (shiftUp + shiftDown) / 2);
   if (!adjustment) return marks;
 
   // Move the lens rather than clamping the bar, so both scene and HUD keep the same skyline.

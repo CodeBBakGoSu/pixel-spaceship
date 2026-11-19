@@ -2,7 +2,7 @@ import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | LandmarkId | NewEnemyKind;
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'cobra' | LandmarkId | NewEnemyKind;
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -21,11 +21,24 @@ export type Maneuver = {
   altitude: number;
   exitAltitude: number;
   speed: number;
+  side: -1 | 1;
+};
+export type ManeuverTrail = {
+  kind: ManeuverKind;
+  startTick: number;
+  yaw: number;
+  side: -1 | 1;
+  exitAltitude: number;
+  actualExit?: number;
+  limited: boolean;
+  points: Position[];
+  pursuers: number[];
 };
 export type StageInput = {
   turn?: number;
   climb?: number;
   maneuver?: ManeuverKind;
+  maneuverTurn?: number;
   boost?: boolean;
   bomb?: boolean;
   toggleView?: boolean;
@@ -133,7 +146,9 @@ export type StageState = {
   rearBombs: RearBomb[];
   enemyMines: EnemyMine[];
   maneuver: Maneuver | null;
+  maneuverTrail: ManeuverTrail | null;
   maneuverReadyAt: number;
+  cobraStaged: boolean;
   xp: number;
   level: 1 | 2 | 3;
   salvage: number;

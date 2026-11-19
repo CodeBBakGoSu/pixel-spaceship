@@ -7,7 +7,8 @@ import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark, type RadarReadout } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
-import { canManeuver, chooseManeuver, MANEUVERS, maneuverAttitude } from './maneuvers.ts';
+import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, maneuverAttitude,
+  maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, BOSS_TICK, parseStageOptions, requiredXp, stepStage } from './stage.ts';
@@ -36,6 +37,7 @@ const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-
 const safeProbe = $('#safe-area-probe');
 const wipe = $('#view-wipe');
 const rearBombMarker = $('#rear-bomb-marker');
+const maneuverCue = $('#maneuver-cue');
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
@@ -71,9 +73,10 @@ let draftLevel = 0;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
 let pendingStart = false, pendingPause = false, pendingBomb = false, pendingViews = 0;
 let pendingPick: DraftId | undefined;
-let pendingManeuver: ManeuverKind | undefined;
+type ManeuverPress = { kind: ManeuverKind; turn: number };
+let pendingManeuver: ManeuverPress | undefined;
 let stickId: number | null = null;
-let loopPointer: { id: number; x: number; y: number; maneuver: ManeuverKind } | null = null;
+let loopPointer: { id: number; x: number; y: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
@@ -138,6 +141,7 @@ function layoutFlight(): void {
   if (cockpit) {
     setRect('cockpit-message', cockpit.message);
     if (cockpit.help) setRect('cockpit-help', cockpit.help);
+    root.style.setProperty('--maneuver-center-y', `${Math.round(cockpit.aiming.y + cockpit.aiming.height * 0.42)}px`);
   }
   cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t);
   radar.width = Math.max(1, hud.radar.width);
@@ -181,6 +185,7 @@ function resize(): void {
 }
 
 function objectiveText(): string {
+  if (state.cobraStaged) return t(touch ? 'maneuver.demoTouch' : 'maneuver.demoKeys');
   const fixture = options.fixture;
   if (isNewEnemyKind(fixture) && state.enemies.some(enemy => enemy.kind === fixture)) return t(`enemy.${fixture}`);
   if (isLandmarkId(fixture) && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND && !state.boss) return t(`landmark.${fixture}`);
@@ -243,10 +248,15 @@ function updateHud(readout: RadarReadout): void {
   const ready = canManeuver(state, 'immelmann');
   const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
   const loopKey: MessageKey = state.maneuver ? `maneuver.${state.maneuver.kind}` : loopSeconds ? 'hud.loopCooldown' : 'hud.loopReady';
-  const selected = touch ? chooseManeuver(stickX, stickY, false) : keyboardManeuver();
+  const keyboard = keyboardAxes();
+  const selected = touch ? chooseManeuver(stickX, stickY, false) : chooseManeuver(keyboard.turn, keyboard.climb, keys.has('KeyC'));
   const lowBoost = ready && selected === 'j-turn' && state.boost < MANEUVERS['j-turn'].boost;
   setText('#loop-status', t(lowBoost ? 'hud.jTurnLow' : loopKey, { seconds: loopSeconds }));
-  $('#loop-status').dataset.ready = String(ready && !lowBoost);
+  const loopStatus = $('#loop-status');
+  loopStatus.dataset.ready = String(ready && !lowBoost);
+  const last = state.maneuverTrail;
+  const charge = state.maneuver ? 0 : last && loopSeconds > 0 ? 1 - (state.maneuverReadyAt - state.tick) / MANEUVERS[last.kind].cooldown : 1;
+  loopStatus.style.setProperty('--loop-charge', `${Math.round(clamp(charge, 0, 1) * 100)}%`);
   touchLoop.setAttribute('aria-disabled', String(!ready || lowBoost));
   touchLoop.classList.toggle('rear-ready', ready && !lowBoost && readout.rearClose);
   setText('#view-label', t(`view.${state.view}`));
@@ -275,6 +285,30 @@ function updateHud(readout: RadarReadout): void {
     clearTimeout(helpTimer);
     helpTimer = window.setTimeout(() => $('#help').classList.add('fade'), 5000);
   }
+}
+
+function updateManeuverCue(): void {
+  const trail = activeTrail(state);
+  maneuverCue.hidden = !trail || state.phase !== 'playing' || state.tick > trailEnd(trail) + 48;
+  if (!trail || maneuverCue.hidden) return;
+  const { kind } = trail;
+  const name = t(`maneuver.${kind}`);
+  const loop = kind === 'immelmann' || kind === 'split-s';
+  const title = kind === 'immelmann' ? t('maneuver.up', { name }) : kind === 'split-s' ? t('maneuver.down', { name })
+    : kind === 'j-turn' ? t('maneuver.reverse', { name, arrow: trail.side < 0 ? '↶' : '↷' }) : t('maneuver.brake', { name });
+  const pendingFlip = state.tick - trail.startTick + 1 < MANEUVERS[kind].flipTick;
+  const degrees = Math.round((pendingFlip ? trail.yaw + Math.PI : state.player.yaw) * 180 / Math.PI);
+  const heading = String((degrees % 360 + 360) % 360).padStart(3, '0');
+  const delta = Math.round((trail.actualExit ?? trail.exitAltitude) - trail.points[0].alt);
+  const height = `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} m`;
+  const limit = trail.limited ? t(kind === 'immelmann' ? 'maneuver.highLimit' : 'maneuver.lowLimit')
+    : trail.actualExit !== undefined && Math.abs(trail.actualExit - trail.exitAltitude) >= 1 ? t('maneuver.terrainLimit') : '';
+  const ahead = state.enemies.filter(enemy => formerPursuer(state, trail, enemy)).length;
+  const details = t(pendingFlip ? 'maneuver.exitHeading' : 'maneuver.heading', { heading }) + (loop ? ` · ${height}` : '')
+    + (limit ? ` · ${limit}` : '') + (ahead ? ` · ${t('maneuver.ahead', { count: ahead })}` : '');
+  maneuverCue.dataset.kind = kind;
+  setText('#maneuver-name', title);
+  setText('#maneuver-detail', details);
 }
 
 function describeFlight(readout: RadarReadout, clearance: number): void {
@@ -506,7 +540,12 @@ window.addEventListener('keydown', event => {
   if (state.phase === 'playing' && !state.paused) {
     if (code === 'KeyV') pendingViews++;
     if (code === 'KeyX' || code === 'KeyK') pendingBomb = true;
-    if (code === 'Space') pendingManeuver = keyboardManeuver();
+    const { turn, climb } = keyboardAxes();
+    const kind = maneuverForKey(code, turn, climb, keys.has('KeyC'));
+    if (kind) {
+      event.preventDefault();
+      pendingManeuver = { kind, turn };
+    }
   }
   if (code === 'KeyR' && state.rank) pendingStart = true;
 });
@@ -575,7 +614,8 @@ bindHold('#touch-boost', held => { touchBoost = held; });
 touchLoop.addEventListener('pointerdown', event => {
   if (event.button !== 0 || menuKey !== 'playing' || loopPointer) return;
   event.preventDefault();
-  loopPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, maneuver: chooseManeuver(stickX, stickY, false) };
+  loopPointer = { id: event.pointerId, x: event.clientX, y: event.clientY,
+    press: { kind: chooseManeuver(stickX, stickY, false), turn: stickX } };
   touchLoop.setPointerCapture(event.pointerId);
   touchLoop.classList.add('held');
 });
@@ -584,14 +624,14 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const
     if (!loopPointer || event.pointerId !== loopPointer.id) return;
     if (name === 'pointerup' && menuKey === 'playing') {
       const left = loopPointer.x - event.clientX, vertical = Math.abs(event.clientY - loopPointer.y);
-      pendingManeuver = left >= 24 && left > vertical ? 'cobra' : loopPointer.maneuver;
+      pendingManeuver = left >= 24 && left > vertical ? { kind: 'cobra', turn: 0 } : loopPointer.press;
     }
     loopPointer = null;
     touchLoop.classList.remove('held');
   });
 }
 touchLoop.addEventListener('click', event => {
-  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = chooseManeuver(stickX, stickY, false);
+  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = { kind: chooseManeuver(stickX, stickY, false), turn: stickX };
 });
 function bindPress(button: HTMLButtonElement, press: () => void): void {
   button.addEventListener('pointerdown', event => {
@@ -611,11 +651,6 @@ function keyboardAxes() {
   const move = (positive: string, positiveAlt: string, negative: string, negativeAlt: string) =>
     Number(keys.has(positive) || keys.has(positiveAlt)) - Number(keys.has(negative) || keys.has(negativeAlt));
   return { turn: move('KeyD', 'ArrowRight', 'KeyA', 'ArrowLeft'), climb: move('KeyW', 'ArrowUp', 'KeyS', 'ArrowDown') };
-}
-
-function keyboardManeuver(): ManeuverKind {
-  const { turn, climb } = keyboardAxes();
-  return chooseManeuver(turn, climb, keys.has('KeyC'));
 }
 
 function flightInput(): StageInput {
@@ -641,7 +676,8 @@ function advance(): void {
     start: pendingStart,
     pause: pendingPause,
     bomb: pendingBomb || control.bomb,
-    maneuver: pendingManeuver ?? control.maneuver,
+    maneuver: pendingManeuver?.kind ?? control.maneuver,
+    maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
     toggleView: pendingViews > 0 || control.toggleView,
     pick: pendingPick ?? control.pick,
   }, ground);
@@ -681,8 +717,10 @@ function updateRearBombMarker(): void {
 function render(): void {
   if (layoutView !== state.view) layoutFlight();
   const ladder = scene?.draw(state) ?? [];
-  const readout = buildRadar(state);
+  const yaw = maneuverViewYaw(state);
+  const readout = buildRadar(state, yaw);
   updateHud(readout);
+  updateManeuverCue();
   updateRearBombMarker();
   const progress = 1 - state.wipe / WIPE_DURATION;
   wipe.hidden = state.wipe <= 0;
@@ -698,17 +736,18 @@ function render(): void {
     deltaIndicator.setAttribute('aria-label', `${t('hud.altitude')} ${cockpitDelta}`);
   }
   if (cockpit && scene) {
+    const settling = Math.cos(yaw - p.yaw) < 0.999;
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
-      { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 };
-    const track = state.maneuver ? null : readout.priority;
+      (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
+    const track = state.maneuver || settling ? null : readout.priority;
     const point = track && scene.project(track);
     const target = track && point ? cockpitTarget(track, point, cockpit.aiming, state.lock) : null;
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
     cockpitDisplay.draw(state, aim, ladder,
       motion, clearance, impact, readout, target, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
-    navRadar.draw(radarContext, 0, 0, readout, p.yaw, state.tick);
-    if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font);
+    navRadar.draw(radarContext, 0, 0, readout, yaw, state.tick);
+    if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font, yaw);
     lastRadarTick = state.tick;
   }
   dirty = false;
@@ -720,6 +759,9 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting, bombs: state.bombs,
   speed: state.speed, rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
   maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver) },
+  maneuverTrail: state.maneuverTrail && { ...state.maneuverTrail, points: state.maneuverTrail.points.map(point => ({ ...point })),
+    pursuers: [...state.maneuverTrail.pursuers] },
+  cameraYaw: maneuverViewYaw(state),
   maneuverReadyAt: state.maneuverReadyAt,
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
