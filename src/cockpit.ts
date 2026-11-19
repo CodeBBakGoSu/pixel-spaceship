@@ -1,3 +1,4 @@
+import { MANEUVERS } from './maneuvers.ts';
 import type { Point } from './camera.ts';
 import type { Track } from './instruments.ts';
 import type { Lock, StageState } from './stage-types.ts';
@@ -58,4 +59,10 @@ export function cockpitWarnings(state: Pick<StageState, 'hull' | 'maxHull' | 'bo
   result.terrain = terrain;
   result.boost = boost;
   return result;
+}
+
+export function reversalCharge(state: StageState): number {
+  if (state.maneuver || state.tick <= state.graceUntil) return 0;
+  const cooldown = state.maneuverTrail ? MANEUVERS[state.maneuverTrail.kind].cooldown : 1;
+  return Math.max(0, 1 - Math.max(0, state.maneuverReadyAt - state.tick) / cooldown);
 }

@@ -28,7 +28,22 @@
   font-size: 12px;
   font-weight: bold;
 }
-.status{width:195px}.status>div{display:flex;align-items:center;gap:5px;min-height:16px}.status>div>span:first-child{width:38px;color:#d8e0d5}.blocks{color:#78e89c;letter-spacing:1px;font-size:14px}.status small{font-size:10px;color:#d6eced}.track{display:block;width:110px;height:7px;background:#18202b;border:1px solid #0a101b}.track>i{display:block;height:100%;background:#e3a94e}.bombs{color:#fa80b0;letter-spacing:2px}.status-view strong{color:#bceff0;min-width:64px}.status-view span{color:#dbe5e2;font-size:10px}.scorebox{text-align:right;line-height:1.2}.scorebox span,.scorebox small{display:block;font-size:10px;color:#f5d77c}.scorebox strong{display:block;font-size:20px;letter-spacing:.05em}
+.status > div { display: flex; align-items: center; gap: 5px; min-height: 16px; }
+.status > div > span:first-child { width: 40px; color: #d8e0d5; }
+.hull-bars { display: grid; grid-template-columns: repeat(8, 9px); gap: 2px; margin-right: 2px; }
+.hull-bars i { height: 6px; background: #263f41; box-shadow: 0 1px #10121d; }
+.hull-bars .filled { background: #78e89c; }
+.hull-bars.critical .filled { background: #ff9977; }
+#hull-value { color: #e3f2de; font-size: 14px; }
+#hull-warning { padding: 2px 4px; background: #451f24; color: #ffe0c7; white-space: nowrap; }
+.track { display: block; width: 96px; height: 5px; background: #18202b; }
+.track > i { display: block; height: 100%; background: #e3a94e; }
+.bombs { color: #fa80b0; letter-spacing: 1px; font-size: 14px; }
+.status-view strong { color: #bceff0; min-width: 64px; }
+.status-view span { color: #dbe5e2; font-size: 12px; }
+.scorebox { text-align: right; line-height: 1.2; }
+.scorebox span, .scorebox small { display: block; font-size: 12px; color: #f5d77c; }
+.scorebox strong { display: block; font-size: 14px; letter-spacing: .05em; }
 
 .radio {
   position: absolute;
@@ -124,13 +139,6 @@
 .game-overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(6,8,19,.52);z-index:5}.game-card{width:min(420px,calc(100% - 48px));padding:28px;background:#0b111d;border:2px solid #71848c;box-shadow:6px 6px #0a101a;max-height:calc(100% - 24px);overflow:auto;overscroll-behavior:contain;touch-action:pan-y}.card-kicker{color:#f6bb72;font-size:10px;letter-spacing:.14em}.game-card h1{margin:14px 0;font-size:clamp(30px,6vw,50px);line-height:1.2;letter-spacing:-.05em}.game-card p{color:#e0e5d9;font-size:12px;line-height:1.6}.rank-display{margin:15px 0;color:#ffcf66;font-size:30px;font-weight:900}.card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.card-actions button{border:2px solid #e7ddc6;background:#f5c06f;color:#17202a;padding:11px 13px;font:700 12px var(--game-font);cursor:pointer}.card-actions button+button{background:transparent;color:#e7ddc6}.card-hint{margin-top:15px;color:#b9c8c5;font-size:9px;letter-spacing:.08em}.help{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:max-content;max-width:95%;text-align:center;font-size:10px;line-height:1.4;color:#f6f0dd;text-shadow:1px 2px #0a111a;transition:opacity 1.3s;pointer-events:none}.help.fade{opacity:0}
 .touch-controls{position:absolute;inset:0;z-index:4;pointer-events:none}.stick{position:absolute;left:20px;bottom:34px;width:96px;height:96px;border:2px dotted rgba(131,224,240,.75);border-radius:50%;pointer-events:auto;touch-action:none}.stick span{position:absolute;left:30px;top:30px;width:32px;height:32px;background:#6ac9db;border:4px solid #2c7384;border-radius:50%;box-shadow:0 0 0 2px #173d4e}.stick small{position:absolute;left:0;right:0;top:-17px;text-align:center;font-size:8px;color:#b5d6db;text-shadow:1px 1px #111}.touch-button{position:absolute;padding:0;border-radius:50%;font:900 11px var(--game-font);letter-spacing:.03em;color:#fff;pointer-events:auto;touch-action:none;background:rgba(20,16,35,.86);box-shadow:0 0 0 2px rgba(12,12,23,.8)}.touch-button:active,.touch-button.held{filter:brightness(1.7)}.boost{right:28px;bottom:115px;width:56px;height:56px;border:2px solid #e6b34f;color:#f2ce67}.bomb{right:31px;bottom:185px;width:50px;height:50px;border:2px solid #ee719e;color:#ffa5c6}.view{right:105px;bottom:88px;width:52px;height:52px;border:2px solid #ac83e3;color:#d7b6ff}
 @media (max-width: 600px) {
-  .hud { font-size: 11px; }
-  .status { width: 155px; }
-  .status > div { min-height: 14px; }
-  .status > div > span:first-child { width: 30px; }
-  .blocks { font-size: 12px; letter-spacing: 0; }
-  .track { width: 90px; }
-  .scorebox strong { font-size: 16px; }
   .radio { gap: 7px; padding: 5px; }
   .radio canvas { width: 44px; height: 44px; }
   .radio strong { font-size: 11px; line-height: 12px; margin: 1px 0 3px; }
@@ -140,7 +148,7 @@
   .game-card { padding: 22px; }
 }
 
-.status-view time{color:#dce6de;font-size:10px;margin-left:3px}.flight-message{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.flight-message[hidden]{display:none}
+.status-view time{color:#dce6de;font-size:12px;margin-left:3px}.flight-message{position:absolute;top:calc(var(--objective-y) + var(--objective-h) + 6px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(42,15,20,.88);border:1px solid #ff846a;color:#ffd3b4;font-size:11px;font-weight:bold;white-space:nowrap;pointer-events:none}.flight-message[hidden]{display:none}
 #nav-radar{position:absolute;left:var(--radar-x);top:var(--radar-y);width:var(--radar-w);height:var(--radar-h);image-rendering:pixelated;pointer-events:none;opacity:.9}
 #arena-map{position:absolute;left:var(--arena-map-x);top:var(--arena-map-y);width:var(--arena-map-w);height:var(--arena-map-h);image-rendering:pixelated;pointer-events:none;opacity:.92}
 
@@ -148,9 +156,14 @@
 #safe-area-probe{position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 #control-backdrop,.touch-pause[hidden]{display:none}
 .experience.phone-layout #control-backdrop{display:block;position:absolute;left:0;right:0;top:var(--controls-y);bottom:0;pointer-events:none;background:linear-gradient(180deg,rgba(7,15,26,.82),rgba(9,15,28,.96));border-top:1px solid rgba(128,192,194,.35)}
-.experience.phone-layout .hud{font-size:11px}
-.experience.phone-layout .status{width:184px}.experience.phone-layout .status>div{min-height:14px}.experience.phone-layout .status>div>span:first-child{width:30px}.experience.phone-layout .blocks{font-size:12px;letter-spacing:0}.experience.phone-layout .track{width:90px}
-.experience.phone-layout .scorebox{padding-right:52px}.experience.phone-layout .scorebox strong{font-size:16px}
+.experience.phone-layout .hud { font-size: 11px; gap: 5px; }
+.experience.phone-layout .status > div { min-height: 14px; gap: 4px; }
+.experience.phone-layout .status > div > span:first-child { width: 30px; }
+.experience.phone-layout .hull-bars { grid-template-columns: repeat(8, 7px); }
+.experience.phone-layout .track { width: 72px; }
+.experience.phone-layout :is(.status-view strong, .status-view span, .scorebox span, .scorebox small) { font-size: 11px; }
+.experience.phone-layout :is(#hull-value, .bombs, .scorebox strong) { font-size: 12px; }
+.experience.phone-layout .scorebox { padding-right: 52px; }
 .experience.phone-layout .touch-pause{display:block;position:absolute;left:var(--pause-x);top:var(--pause-y);width:var(--pause-w);height:var(--pause-h);z-index:4;pointer-events:auto;touch-action:none;border:1px solid #799399;background:#101a29;color:#e8eee3;font:900 17px var(--game-font)}
 .experience.phone-layout .touch-pause[hidden]{display:none}
 .experience.phone-layout .boss-hud{font-size:9px}.experience.phone-layout .boss-hud>i{height:6px}
@@ -383,9 +396,18 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 #xp-label {
   flex: none;
   white-space: nowrap;
-  padding: 2px 2px 4px;
-  background: linear-gradient(to right, #8fd69c var(--xp-fill, 0%), #213c39 0) bottom / 100% 2px no-repeat;
+  min-width: 96px;
+  padding: 0 0 4px;
+  background: linear-gradient(to right, #8fd69c var(--xp-fill, 0%), #213c39 0) bottom / 96px 4px no-repeat;
 }
+
+.experience.phone-layout #xp-label {
+  min-width: 80px;
+  padding-bottom: 3px;
+  background-size: 80px 3px;
+}
+.experience.phone-layout .status-view strong { min-width: 51px; }
+.experience.phone-layout .status-view time { font-size: 11px; }
 
 #view-wipe {
   position: absolute;
@@ -463,6 +485,7 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .experience.phone-layout .rear-bomb-marker {
   bottom: calc(100% - var(--controls-y) + 30px);
 }
+.rear-danger-cue:not([hidden]) { display: flex; align-items: center; gap: 4px; }
 .rear-danger-cue {
   position: absolute;
   left: 50%;
@@ -499,9 +522,14 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   font-size: 9px;
 }
 .experience.cockpit-view .rear-danger-cue[data-docked="true"] {
+  left: var(--rear-left);
   right: var(--rear-right);
   top: auto;
   bottom: var(--rear-bottom);
+  justify-content: space-between;
+}
+.experience.cockpit-view .rear-danger-cue[data-docked="false"] {
+  top: var(--cockpit-message-y);
 }
 .rear-view-cue {
   position: absolute;
@@ -533,10 +561,10 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 @keyframes rear-danger-pulse { to { border-color: #ffb698; background: #55262b; } }
 @keyframes reversal-pop { from { background: #225354; color: #fff0b9; } }
 .loop[aria-disabled="true"], .bomb[aria-disabled="true"], .flare[aria-disabled="true"] { opacity: .52; }
-.bomb-reload { display: block; width: 21px; height: 4px; background: #34233b; }
+.bomb-reload { display: block; width: 28px; height: 4px; background: #34233b; }
 .bomb-reload > i { display: block; height: 100%; background: #fa80b0; }
 .status > div > span:first-child { flex-shrink: 0; white-space: nowrap; }
-.flare-stock { color: #ffc18b; font-size: 9px; white-space: nowrap; }
+.flare-stock { color: #ffc18b; font-size: 12px; white-space: nowrap; }
 .flare-stock[data-ready="false"] { color: #bd9c86; }
 .loop-status {
   display: inline-flex;
@@ -545,7 +573,7 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   padding: 1px 3px;
   border: 1px solid #5e8582;
   color: #e2eee2;
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
 }
 .loop-status::before {
@@ -557,6 +585,8 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   background: conic-gradient(currentColor var(--loop-charge, 100%), #3d5657 0);
   mask: radial-gradient(circle, transparent 40%, #000 49%);
 }
+.experience.phone-layout .bomb-reload { width: 24px; }
+.experience.phone-layout .flare-stock { font-size: 11px; }
 .loop-status[data-ready="true"] { color: #b4ffce; border-color: #7fc7a4; }
 
 .reversal-cue {
@@ -566,9 +596,9 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   transform: translateX(-50%);
   padding: 5px 10px;
   background: #102b32;
-  border: 1px solid #88eada;
+  border: 1px solid var(--reversal-ink, #88eada);
   box-shadow: 2px 2px #0d171e;
-  color: #caffee;
+  color: var(--reversal-ink, #caffee);
   font-size: clamp(13px, 1.8vw, 19px);
   font-weight: bold;
   line-height: 1;
@@ -584,11 +614,14 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   height: var(--cockpit-message-h);
   line-height: calc(var(--cockpit-message-h) - 2px);
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
+.reversal-cue[data-tier="sweep"] { --reversal-ink: #8ffcf0; }
+.reversal-cue[data-tier="aceWipe"] { --reversal-ink: #ffe08a; background: #392b19; }
+.reversal-cue[data-tier="dominated"] { --reversal-ink: #ffabef; background: #3c2040; }
 .experience.cockpit-view .flight-message[data-reversal="true"] {
-  left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + 112px) / 2);
-  max-width: calc(var(--cockpit-message-w) - 112px);
+  left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + 130px) / 2);
+  max-width: calc(var(--cockpit-message-w) - 130px);
 }
 .experience.cockpit-view .flight-message:not([hidden]) ~ .reversal-cue {
   left: var(--cockpit-message-x);

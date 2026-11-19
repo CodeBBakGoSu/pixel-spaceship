@@ -27,19 +27,20 @@ export function layoutRearInset(hud: HudLayout, height: number, phone: PhoneLayo
 export function layoutRearMirror(cockpit: CockpitLayout, phone: PhoneLayout | null): { rest: Rect; focus: Rect } | null {
   const { altitude, compact, glass, heading } = cockpit;
   const short = glass.height < 100;
-  // On short landscape layouts the mirror sits inside the altitude tape's left edge.
-  const edge = short ? altitude.x - 5 : right(glass) - (compact ? 12 : 18);
-  const end = short ? bottom(glass) - 2 : Math.min(altitude.y, bottom(glass)) - 4;
+  // Portrait uses the glass above the altitude tape. The wide canopy can dock beside it.
+  const portrait = phone?.orientation === 'portrait' || compact && !short;
+  const edge = portrait ? right(glass) - 12 : altitude.x - 5;
+  const end = portrait ? Math.min(altitude.y, bottom(glass)) - 4 : bottom(glass) - 2;
   const beside = glass.y + 3;
   const below = bottom(heading) + 4;
   const besideWidth = Math.min(edge - right(heading) - 5, (end - beside) * REAR_VIEW_ASPECT);
   const belowWidth = Math.min(glass.width * 0.4, (end - below) * REAR_VIEW_ASPECT);
-  const alongside = phone?.orientation !== 'portrait' || besideWidth >= belowWidth;
+  const alongside = !portrait || besideWidth >= belowWidth;
   const y = alongside ? beside : below;
   const availableWidth = alongside ? besideWidth : belowWidth;
-  const width = Math.floor(Math.min(compact ? 112 : 190, alongside ? availableWidth : Math.min(availableWidth, glass.width * 0.32)));
+  const width = Math.floor(Math.min(compact ? 108 : 128, alongside ? availableWidth : Math.min(availableWidth, glass.width * 0.35)));
   if (width < 32) return null;
-  const focusWidth = Math.floor(Math.min(compact ? 138 : 228, availableWidth));
+  const focusWidth = Math.floor(Math.min(compact ? 130 : 156, availableWidth));
   const anchored = (w: number): Rect => ({ x: edge - w, y, width: w, height: Math.round(w / REAR_VIEW_ASPECT) });
   return { rest: anchored(width), focus: anchored(focusWidth) };
 }

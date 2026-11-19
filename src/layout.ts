@@ -8,7 +8,7 @@ export type CockpitLayout = {
   panelScale: number;
   glass: Rect; heading: Rect; speed: Rect; altitude: Rect; aiming: Rect; stores: Rect | null;
   message: Rect; help: Rect | null;
-  dashboard: Rect; warnings: Rect; radar: Rect; damage: Rect; weapons: Rect; gauges: Rect;
+  dashboard: Rect; warnings: Rect; radar: Rect; weapons: Rect; gauges: Rect;
 };
 export type PhoneLayout = HudLayout & {
   orientation: 'portrait' | 'landscape'; buffer: { width: number; height: number };
@@ -60,18 +60,15 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
   const portrait = height >= width, short = height < 480, compact = width < 620 || short;
   const availableWidth = width - safe.left - safe.right;
   const bottom = controls?.y ?? height - safe.bottom;
-  const standardHeight = clamp(Math.round(height * 0.24), 110, 176);
-  // Reserve the canopy and its tapes before widening and raising the desktop rack.
-  const panelSpace = bottom - objective.y - objective.height - 230;
-  const panelScale = controls || portrait || compact ? 1 : clamp(panelSpace / standardHeight, 1, 1.34);
-  const heightWanted = portrait ? clamp(Math.round(width * 0.23), 82, 105)
-    : short && controls ? 52 : Math.round(standardHeight * panelScale);
+  const panelScale = compact || controls ? 1 : clamp(height / 720, 1, 1.34);
+  const heightWanted = portrait ? clamp(Math.round(width * 0.23), 83, 99)
+    : short && controls ? 52 : Math.round(166 * panelScale);
   const dashboard = rect(safe.left, bottom - heightWanted, availableWidth, heightWanted);
   const help = controls ? null : rect(safe.left + 10, dashboard.y - 21, availableWidth - 20, 17);
   const messageHeight = short ? 16 : 22;
   const message = rect(safe.left + 10, (help?.y ?? dashboard.y) - messageHeight - 3, availableWidth - 20, messageHeight);
 
-  const glassInset = compact ? 12 : clamp(Math.round(width * 0.052), 32, 78);
+  const glassInset = compact ? 12 : clamp(Math.round(width * 0.037), 30, 68);
   const glassTop = objective.y + objective.height + 5;
   const glass = rect(safe.left + glassInset, glassTop, availableWidth - 2 * glassInset, Math.max(0, message.y - 3 - glassTop));
   const headingHeight = Math.min(compact ? 28 : 34, Math.floor(glass.height * 0.52));
@@ -93,15 +90,13 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
   const warnings = rect(rackX, dashboard.y + (compact ? 3 : 8), rackWidth, short ? 12 : compact ? 16 : 22 * panelScale);
   const panelTop = warnings.y + warnings.height + (compact ? 3 : 8);
   const panelHeight = bottom - panelTop - (compact ? 4 : 14);
-  const gap = compact ? 4 : 10, columnSpace = rackWidth - 3 * gap;
-  const radarWidth = Math.round(columnSpace * (compact ? 0.235 : 0.25));
-  const damageWidth = Math.round(columnSpace * 0.23);
-  const weaponsWidth = Math.round(columnSpace * (compact ? 0.3 : 0.25));
+  const gap = compact ? 4 : 10, columnSpace = rackWidth - 2 * gap;
+  const radarWidth = Math.round(columnSpace * 0.31);
+  const weaponsWidth = Math.round(columnSpace * 0.39);
   const radar = rect(rackX, panelTop, radarWidth, panelHeight);
-  const damage = rect(radar.x + radar.width + gap, panelTop, damageWidth, panelHeight);
-  const weapons = rect(damage.x + damage.width + gap, panelTop, weaponsWidth, panelHeight);
-  const gauges = rect(weapons.x + weapons.width + gap, panelTop, columnSpace - radarWidth - damageWidth - weaponsWidth, panelHeight);
-  return { compact, panelScale, glass, heading, speed, altitude, aiming, stores, message, help, dashboard, warnings, radar, damage, weapons, gauges };
+  const weapons = rect(radar.x + radar.width + gap, panelTop, weaponsWidth, panelHeight);
+  const gauges = rect(weapons.x + weapons.width + gap, panelTop, columnSpace - radarWidth - weaponsWidth, panelHeight);
+  return { compact, panelScale, glass, heading, speed, altitude, aiming, stores, message, help, dashboard, warnings, radar, weapons, gauges };
 }
 
 // CSS pixels; the canvas still covers the entire viewport, including the safe areas.
@@ -114,7 +109,7 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const objective = rect(left, objectiveY, usableWidth, 22);
   const controlHeight = portrait ? clamp(Math.round(height * 0.19), 146, 170) : clamp(Math.round(height * 0.35), 134, 140);
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
-  const bufferWidth = portrait ? 288 : clamp(Math.round(288 * width / height), 256, 768);
+  const bufferWidth = portrait ? 336 : clamp(Math.round(288 * width / height), 256, 768);
   const buffer = { width: bufferWidth, height: Math.round(bufferWidth * height / width) };
   const cockpit = view === 'cockpit' ? cockpitLayout(width, height, safe, objective, controls) : null;
   const dashboard = cockpit?.dashboard ?? null;
