@@ -624,12 +624,16 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   padding: 0 8px;
   font-size: 12px;
 }
+.experience.cockpit-view .reversal-cue[data-tier]:not([data-tier=""]) {
+  font-size: clamp(13px, 1.6vw, 19px);
+}
 .reversal-cue[data-tier="sweep"] { --reversal-ink: #8ffcf0; }
 .reversal-cue[data-tier="aceWipe"] { --reversal-ink: #ffe08a; background: #392b19; }
 .reversal-cue[data-tier="dominated"] { --reversal-ink: #ffabef; background: #3c2040; }
 .experience.cockpit-view .flight-message[data-reversal="true"] {
-  left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + 130px) / 2);
-  max-width: calc(var(--cockpit-message-w) - 130px);
+  --reversal-dock-width: clamp(130px, 12.5vw, 190px);
+  left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + var(--reversal-dock-width)) / 2);
+  max-width: calc(var(--cockpit-message-w) - var(--reversal-dock-width));
 }
 .experience.cockpit-view .flight-message:not([hidden]) ~ .reversal-cue {
   left: var(--cockpit-message-x);

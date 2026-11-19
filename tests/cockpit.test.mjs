@@ -186,22 +186,14 @@ test('the reticle reflects simulation dwell for the instrument track and stays i
   assert.equal(acquired.locked, true);
 });
 
-test('caution lights respond to hull, ground clearance, descent and boost charge', () => {
+test('cockpit caution lights respond to ground clearance, descent and boost charge', () => {
   const state = createStage(parseStageOptions(''));
-  assert.deepEqual(cockpitWarnings(state, 50, 0), {
-    master: false, lowHull: false, terrain: null, boost: null,
-  });
-  state.hull = 2;
+  assert.deepEqual(cockpitWarnings(state, 50, 0), { terrain: null, boost: null });
   state.boosting = true;
   state.boost = 0.8;
-  assert.deepEqual(cockpitWarnings(state, 36, 0), {
-    master: true, lowHull: true, terrain: 'altLow', boost: 'active',
-  });
-  state.hull = 8;
+  assert.deepEqual(cockpitWarnings(state, 36, 0), { terrain: 'altLow', boost: 'active' });
   state.boost = 0.2;
-  assert.deepEqual(cockpitWarnings(state, 30, -12), {
-    master: true, lowHull: false, terrain: 'pullUp', boost: 'low',
-  });
+  assert.deepEqual(cockpitWarnings(state, 30, -12), { terrain: 'pullUp', boost: 'low' });
 });
 
 test('cockpit copy covers warnings, instruments and targeting in both languages', () => {

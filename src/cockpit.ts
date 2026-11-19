@@ -8,7 +8,7 @@ import type { CockpitLayout, Rect } from './layout.ts';
 export type CockpitMotion = { speed: number; climb: number; turn: number };
 export type CockpitTarget = { point: Point; range: number; locked: boolean; progress: number };
 export type CockpitWarnings = {
-  master: boolean; lowHull: boolean; terrain: 'altLow' | 'pullUp' | null; boost: 'active' | 'low' | null;
+  terrain: 'altLow' | 'pullUp' | null; boost: 'active' | 'low' | null;
 };
 
 const cardinal = ['cockpit.north', 'cockpit.east', 'cockpit.south', 'cockpit.west'] as const;
@@ -48,16 +48,11 @@ export function cockpitTarget(track: Pick<Track, 'id' | 'range'>, point: Point, 
   return { point, range: Math.round(track.range), locked: matching?.ready ?? false, progress: matching?.progress ?? 0 };
 }
 
-export function cockpitWarnings(state: Pick<StageState, 'hull' | 'maxHull' | 'boosting' | 'boost'>, clearance: number, climb: number,
-  result: CockpitWarnings = { master: false, lowHull: false, terrain: null, boost: null }): CockpitWarnings {
-  const lowHull = state.hull <= state.maxHull / 4;
-  const terrain = clearance > 40 ? null
+export function cockpitWarnings(state: Pick<StageState, 'boosting' | 'boost'>, clearance: number, climb: number,
+  result: CockpitWarnings = { terrain: null, boost: null }): CockpitWarnings {
+  result.terrain = clearance > 40 ? null
     : clearance <= 26 || (clearance <= 34 && climb < -4) ? 'pullUp' : 'altLow';
-  const boost = !state.boosting || state.boost <= 0 ? null : state.boost <= 0.25 ? 'low' : 'active';
-  result.master = lowHull || terrain !== null || boost === 'low';
-  result.lowHull = lowHull;
-  result.terrain = terrain;
-  result.boost = boost;
+  result.boost = !state.boosting || state.boost <= 0 ? null : state.boost <= 0.25 ? 'low' : 'active';
   return result;
 }
 

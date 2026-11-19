@@ -650,7 +650,7 @@ export class CockpitDisplay {
   private readonly host: HTMLElement;
   private readonly hud = cockpitSurface(1, 1).context;
   private readonly panels = cockpitSurface(1, 1).context;
-  private readonly warnings: CockpitWarnings = { master: false, lowHull: false, terrain: null, boost: null };
+  private readonly warnings: CockpitWarnings = { terrain: null, boost: null };
   private readonly markerLabels = Array.from({ length: 8 }, (): Rect => ({ x: 0, y: 0, width: 0, height: 0 }));
   private layout: CockpitLayout | null = null;
   private language: Language | null = null;

@@ -534,11 +534,9 @@ function advanceOverdrive(
       pass.killTicks = [...previous, state.tick];
       const count = pass.killTicks.length;
       if (count === 3) pass.burstAt = state.tick;
-      if (count >= 3) {
-        const visible = state.tick < pass.shownUntil ? pass.streak : 0;
-        pass.streak = Math.max(visible, count);
-        pass.shownUntil = state.tick + REVERSAL_CONFIRM;
-      }
+      const visible = state.tick < pass.shownUntil ? pass.streak : 0;
+      pass.streak = Math.max(visible, count);
+      pass.shownUntil = state.tick + REVERSAL_CONFIRM;
     }
   }
   if (!bolt.remaining) shot.life = 0;

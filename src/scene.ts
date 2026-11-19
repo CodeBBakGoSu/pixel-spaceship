@@ -74,6 +74,7 @@ const FLAK_RING_LIMIT = 24;
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
 const DESKTOP_DOWNSCALE = 2;
 const REAR_VIEW_FAR = 640;
+const COCKPIT_TRACER_CLEARANCE = 17;
 const MAIN_CAMERA_LAYER = 1;
 type Framing = {
   width: number;
@@ -544,8 +545,7 @@ export class FlightScene {
     let salvage = 0, magnetTrails = 0;
     for (const pickup of state.pickups) {
       if (salvage === PICKUP_LIMIT) break;
-      const pulling = 'pulling' in pickup && pickup.pulling;
-      const reversal = 'reversal' in pickup && pickup.reversal;
+      const { pulling, reversal } = pickup;
       const pulse = pulling && !this.reducedMotion.matches ? 0.4 * Math.sin(state.tick * 0.36 + salvage) : 0;
       const size = 3 + pickup.xp * 0.8 + pulse;
       const alt = flat ? TOP_FLIGHT + 5 : pickup.alt;
@@ -562,17 +562,22 @@ export class FlightScene {
     upload(this.pickups, salvage);
     upload(this.pickupTrails, magnetTrails);
 
-    for (const [i, shot] of state.shots.entries()) {
+    let bullets = 0;
+    const eye = view === 'cockpit' ? this.cockpit.position : null;
+    for (const shot of state.shots) {
       const hostile = shot.kind === 'hostile';
       const yaw = Math.atan2(shot.vx, shot.vz);
       const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
+      // Keep the closest ends of the boosted tracers out of the pilot's eyeline.
+      if (eye && reversal && (shot.x - eye.x) ** 2 + (shot.alt - eye.y) ** 2 + (shot.z + eye.z) ** 2 < COCKPIT_TRACER_CLEARANCE ** 2) continue;
       const pitch = strafe && !flat ? Math.atan2(shot.vy, Math.hypot(shot.vx, shot.vz)) : 0;
-      const width = hostile ? 2.4 : reversal ? 3.4 : 1.15;
+      const width = hostile ? 2.4 : reversal ? (eye ? 2.6 : 3.4) : 1.15;
+      const length = hostile ? 4.3 : reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2;
       const tint = hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad;
-      this.write(this.bullets, i, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
-        width, width, hostile ? 4.3 : reversal ? 15.5 : strafe ? 9 : 7.2, tint, 0, pitch);
+      this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
+        width, width, length, tint, 0, pitch);
     }
-    upload(this.bullets, state.shots.length);
+    upload(this.bullets, bullets);
 
     let mines = 0;
     for (const mine of state.enemyMines) {

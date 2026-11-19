@@ -322,10 +322,10 @@ function updateHud(readout: RadarReadout): void {
 
 function updateManeuverCue(): void {
   const reversal = state.reversal;
-  const streak = reversal && 'streak' in reversal && typeof reversal.streak === 'number' ? reversal.streak : 0;
-  reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || (!reversal.kills && streak < 3) || state.tick >= reversal.shownUntil;
+  reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || !reversal.kills || state.tick >= reversal.shownUntil;
   flightMessage.dataset.reversal = String(!reversalCue.hidden);
   if (!reversalCue.hidden && reversal) {
+    const { streak } = reversal;
     const tier = streak >= 10 ? 'dominated' : streak >= 6 ? 'aceWipe' : streak >= 3 ? 'sweep' : '';
     reversalCue.dataset.tier = tier;
     setText('#reversal-cue', tier ? t(`hud.${tier}`, { count: streak }) : t('hud.reversalKills', { count: reversal.kills }));
