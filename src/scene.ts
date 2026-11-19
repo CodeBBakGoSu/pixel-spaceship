@@ -1,6 +1,6 @@
 import {
   BoxGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Fog, Group, InstancedBufferAttribute, InstancedMesh, Object3D,
-  Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
+  EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RepeatWrapping, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
   type BufferGeometry, type Camera,
 } from 'three';
@@ -72,7 +72,7 @@ const TOP_FLIGHT = 152;
 const PICKUP_LIMIT = 80;
 const FLAK_RING_LIMIT = 24;
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
-const DESKTOP_DOWNSCALE = 2.5;
+const DESKTOP_DOWNSCALE = 2;
 const REAR_VIEW_FAR = 640;
 const MAIN_CAMERA_LAYER = 1;
 type Framing = {
@@ -133,14 +133,20 @@ export class FlightScene {
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
   private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
-  private readonly airframes = NEW_ENEMY_KINDS.map(kind => {
-    const { faces, palette, size } = enemyAirframe(kind);
+  private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS] as const).map(kind => {
+    const { faces, palette, size } = kind === 'interceptor'
+      ? { faces: droneFaces(kind), palette: dronePalette, size: 0.84 * 1.18 }
+      : enemyAirframe(kind);
     return { kind, mesh: instances(bakeVoxels(faces, palette, size), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0 };
   });
   private readonly airframeByKind = new Map<EnemyKind, (typeof this.airframes)[number]>(this.airframes.map(batch => [batch.kind, batch]));
   private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial.clone());
   private readonly weakPoints = instances(new BoxGeometry(), 10);
+  private readonly weakPointBorder = new LineSegments(new EdgesGeometry(this.weakPoints.geometry),
+    new LineBasicMaterial({ color: 0xffefac }));
   private readonly pickups = instances(new BoxGeometry(), PICKUP_LIMIT);
+  private readonly pickupTrails = instances(new BoxGeometry(), PICKUP_LIMIT,
+    new MeshBasicMaterial({ transparent: true, opacity: 0.58, depthWrite: false }));
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
@@ -159,13 +165,14 @@ export class FlightScene {
   constructor(canvas: HTMLCanvasElement, private readonly world: World, arena: StageState['arena']) {
     this.atmosphere = new FlightAtmosphere(arena);
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x081424);
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.flybyTrails);
+      this.flareVisuals.group, this.flybyTrails, this.pickupTrails, this.weakPointBorder);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -477,12 +484,11 @@ export class FlightScene {
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
       const batch = this.airframeByKind.get(enemy.kind);
-      const size = enemy.kind === 'interceptor' ? 1.18 : 1;
       const warning = (enemy.tell || enemy.maneuver?.phase === 'warning') && Math.floor(state.tick / 7) % 2;
       const paint = (enemy.burnUntil ?? 0) > state.tick ? fireTint : enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069
-        : batch ? 0xffffff : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
+        : batch ? 0xffffff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
-      this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
+      this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, 1, 1, 1, paint, flat ? 0 : enemy.bank);
       if (enemy.flyby && trails + 2 <= this.flybyTrails.instanceMatrix.count) {
         const sideX = 3.2 * Math.cos(enemy.yaw), sideZ = -3.2 * Math.sin(enemy.yaw);
         for (const side of [-1, 1]) {
@@ -507,45 +513,64 @@ export class FlightScene {
     const active = activeWeakPoint(state);
     let weakPoints = 0;
     this.warden.visible = !!active && !!boss;
+    this.weakPointBorder.visible = false;
     if (boss && active) {
       const yaw = Math.atan2(p.x - boss.x, p.z - boss.z);
       this.warden.position.set(boss.x, flat ? TOP_FLIGHT - 5 : boss.alt, -boss.z);
       this.warden.rotation.y = -yaw;
-      this.warden.material.color.setHex(flat && (active.burnUntil ?? 0) > state.tick ? fireTint : 0xffffff);
       if (!flat) {
         this.writeShadow(shadows++, boss.x, boss.z, 22, 8, yaw);
         for (const point of boss.weakPoints) {
           if (!point.hp) continue;
           const highlighted = point.id === active.id;
           const paint = (point.burnUntil ?? 0) > state.tick ? fireTint
-            : highlighted ? active.exposed ? 0xffe289 : (Math.floor(state.tick / 10) % 2 ? 0xe1ac55 : 0x93623f) : 0x455761;
+            : highlighted && active.exposed ? 0xd8a858 : 0x455761;
           const size = point.kind === 'core' ? 6 : 9;
           this.write(this.weakPoints, weakPoints++, point.x, point.z, point.alt, yaw, size, size * 0.83, size * 0.86, paint, Math.PI / 4);
           this.connect(this.weakPoints, weakPoints++, boss, point);
         }
       }
+      if (active.exposed) {
+        const size = active.kind === 'core' ? 6 : 9;
+        this.weakPointBorder.visible = true;
+        this.weakPointBorder.position.set(active.x, flat ? TOP_FLIGHT + 1 : active.alt, -active.z);
+        this.weakPointBorder.rotation.set(0, -yaw, Math.PI / 4, 'YXZ');
+        this.weakPointBorder.scale.set(size * 1.06, size * 0.88, size * 0.91);
+      }
     }
     upload(this.weakPoints, weakPoints);
     upload(this.shadows, shadows);
 
-    let salvage = 0;
+    let salvage = 0, magnetTrails = 0;
     for (const pickup of state.pickups) {
       if (salvage === PICKUP_LIMIT) break;
-      const size = 3 + pickup.xp * 0.8;
-      this.write(this.pickups, salvage++, pickup.x, pickup.z, flat ? TOP_FLIGHT + 5 : pickup.alt, state.tick / 37, size, size, size,
-        pickup.xp >= 2 ? 0xffe49c : 0x8efbe8, Math.PI / 4);
+      const pulling = 'pulling' in pickup && pickup.pulling;
+      const reversal = 'reversal' in pickup && pickup.reversal;
+      const pulse = pulling && !this.reducedMotion.matches ? 0.4 * Math.sin(state.tick * 0.36 + salvage) : 0;
+      const size = 3 + pickup.xp * 0.8 + pulse;
+      const alt = flat ? TOP_FLIGHT + 5 : pickup.alt;
+      const tint = pulling ? reversal ? 0xd6fffc : 0xfff1b4 : pickup.xp >= 2 ? 0xffe49c : 0x8efbe8;
+      this.write(this.pickups, salvage++, pickup.x, pickup.z, alt, state.tick / 37, size, size, size, tint, Math.PI / 4);
+      if (pulling) {
+        const yaw = Math.atan2(p.x - pickup.x, p.z - pickup.z);
+        const trailLength = reversal ? 9 : 6;
+        const offset = (size + trailLength) / 2;
+        this.write(this.pickupTrails, magnetTrails++, pickup.x - Math.sin(yaw) * offset,
+          pickup.z - Math.cos(yaw) * offset, alt, yaw, size * 0.3, size * 0.3, trailLength, tint);
+      }
     }
     upload(this.pickups, salvage);
+    upload(this.pickupTrails, magnetTrails);
 
     for (const [i, shot] of state.shots.entries()) {
       const hostile = shot.kind === 'hostile';
       const yaw = Math.atan2(shot.vx, shot.vz);
       const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
       const pitch = strafe && !flat ? Math.atan2(shot.vy, Math.hypot(shot.vx, shot.vz)) : 0;
-      const width = hostile ? 2.4 : reversal ? 1.9 : 1.15;
-      const tint = hostile ? 0xff7152 : reversal ? 0xa9fff0 : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad;
+      const width = hostile ? 2.4 : reversal ? 3.4 : 1.15;
+      const tint = hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad;
       this.write(this.bullets, i, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
-        width, width, hostile ? 4.3 : reversal ? 12 : strafe ? 9 : 7.2, tint, 0, pitch);
+        width, width, hostile ? 4.3 : reversal ? 15.5 : strafe ? 9 : 7.2, tint, 0, pitch);
     }
     upload(this.bullets, state.shots.length);
 

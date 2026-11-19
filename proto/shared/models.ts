@@ -4,12 +4,12 @@ export type Palette = number[][];
 
 export const shipPalette: Palette = [
   [0, 0, 0], [195, 207, 200], [145, 164, 166], [77, 96, 110],
-  [232, 126, 81], [64, 155, 167], [34, 44, 57], [255, 165, 79], [225, 231, 214],
+  [232, 126, 81], [64, 155, 167], [34, 44, 57], [255, 165, 79], [225, 231, 214], [108, 207, 209],
 ];
 
 export const dronePalette: Palette = [
   [0, 0, 0], [54, 39, 53], [120, 76, 83], [197, 166, 161],
-  [242, 91, 86], [91, 203, 200], [255, 213, 121], [140, 75, 65],
+  [242, 91, 86], [91, 203, 200], [255, 213, 121], [140, 75, 65], [135, 226, 240], [255, 157, 80],
 ];
 
 function makeModel(w: number, l: number, h: number, pivot: [number, number, number], material: (x: number, y: number, z: number) => number): VoxelModel {
@@ -20,7 +20,7 @@ function makeModel(w: number, l: number, h: number, pivot: [number, number, numb
   return { width: w, length: l, height: h, pivot, data };
 }
 
-/** Player craft voxels, copied from src/ship.ts (throwaway proto; do not edit the game). */
+/** Player craft voxels shared by the game and renderer prototypes. */
 export function makeShipModel(): VoxelModel {
   const W = 35, L = 43, H = 18, CENTER_X = 17, CENTER_Y = 21, CENTER_Z = 6;
   const voxels = new Uint8Array(W * L * H);
@@ -32,7 +32,7 @@ export function makeShipModel(): VoxelModel {
     const trailing = 13 - Math.max(0, ax - 10) * 0.3;
     if (ax <= 16 && y >= leading && y <= trailing && z >= 2 && z <= 6) {
       m = ax > 13 || (ax > 8 && y > 8) ? 4 : 2;
-      if (ax > 7 && y === 5) m = 3;
+      if (ax > 7 && y >= 5 && y <= 6) m = 7;
     }
     const halfWidth = y < -17 ? 1 : y < -13 ? 2 : y < -8 ? 3 : y < 11 ? 4 : 3;
     const top = y < -15 ? 6 : y < -10 ? 8 : 10;
@@ -44,33 +44,41 @@ export function makeShipModel(): VoxelModel {
     }
     const engine = ((ax - 5.5) / 3) ** 2 + ((z - 5) / 3) ** 2;
     if (y >= 4 && y <= 18 && engine <= 1) {
-      m = y >= 17 ? (engine < 0.26 ? 7 : 6) : z < 4 ? 3 : 2;
+      m = z < 4 ? 3 : 2;
+      if (y === 16 && engine < 0.42) m = 7;
+      if (y >= 17) m = engine < 0.42 ? 0 : 6;
       if (y === 15 && z >= 6) m = 4;
     }
     if (ax >= 5 && ax <= 6 && y >= 7 && y <= 15 && z >= 8 && z <= 16 - Math.max(0, 10 - y)) m = z > 13 ? 4 : 3;
     const canopyTop = y < -7 || y > 0 ? 10 : y < -4 ? 12 : 14;
     if (y >= -10 && y <= 2 && ax <= 2 && z >= 9 && z <= canopyTop - (ax === 2 ? 2 : 0)) {
       m = ax === 2 || y === 2 || y === -10 ? 3 : 5;
-      if (x === -1 && y >= -5 && y <= -3 && z >= 12) m = 8;
+      if (m === 5 && z === canopyTop && y !== -8 && y !== -4 && y !== 0) m = 9;
+      if (m === 5 && (y === -8 || y === -4 || y === 0)) m = 3;
     }
     if (m) voxels[at(ix, iy, z)] = m;
   }
   return { width: W, length: L, height: H, pivot: [CENTER_X, CENTER_Y, CENTER_Z], data: voxels };
 }
 
-/** Enemy drone voxels, copied from src/models.ts. */
-export function makeDroneModel(): VoxelModel {
+/** Both drones share the swept wing planform and engine attachment points. */
+export function makeDroneModel(kind: 'patrol' | 'interceptor' = 'patrol'): VoxelModel {
   return makeModel(17, 19, 9, [8, 9, 3], (x, y, z) => {
     const ax = Math.abs(x);
-    if (y >= -8 && y <= 8 && ax <= (y < -4 ? 1 : 2) && z >= -2 && z <= 4 - Math.floor(ax / 2)) return y < -4 ? 4 : z > 2 ? 3 : 2;
-    if (y >= -2 + ax * 0.5 && y <= 6 && ax <= 8 && z >= -1 && z <= 1) return ax > 5 ? 4 : 1;
-    if (y > 4 && ax >= 2 && ax <= 4 && z >= -2 && z <= 2) return y === 8 ? 6 : 2;
+    if (kind === 'interceptor' && ax === 3 && y >= 6 && y <= 8 && z === 3) return 8;
+    if (y >= -8 && y <= 8 && ax <= (y < -4 ? 1 : 2) && z >= -2 && z <= 4 - Math.floor(ax / 2)) {
+      if (kind === 'interceptor' && ax === 0 && z === 4 && y >= -5 && y <= 5) return 8;
+      if (kind === 'patrol' && y === 8) return 1;
+      return y < -4 ? 4 : z > 2 ? 3 : 2;
+    }
+    if (y >= -2 + ax * 0.5 && y <= 6 && ax <= 8 && z >= -1 && z <= 1) return ax > 5 ? 9 : 1;
+    if (y > 4 && ax >= 2 && ax <= 4 && z >= -2 && z <= 2) return y === 8 ? (kind === 'patrol' ? 1 : 6) : 2;
     return 0;
   });
 }
 
 export function shipFaces(): Face[] { return buildFaces(makeShipModel()); }
-export function droneFaces(): Face[] { return buildFaces(makeDroneModel()); }
+export function droneFaces(kind?: Parameters<typeof makeDroneModel>[0]): Face[] { return buildFaces(makeDroneModel(kind)); }
 
 /** Solid voxels as {x,y,z,material} in model space (pivot already subtracted in iterate). */
 export function filledVoxels(model: VoxelModel): { x: number; y: number; z: number; material: number }[] {
