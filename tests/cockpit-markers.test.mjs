@@ -135,6 +135,8 @@ test('the J-turn exits with a former pursuer in the desktop and portrait canopy'
     stepStage(state, { maneuver: 'j-turn', maneuverTurn: 1 }, ground);
     for (let tick = 1; tick < MANEUVERS['j-turn'].ticks; tick++) stepStage(state, {}, ground);
     assert.equal(state.maneuver, null);
+    // Keep the contact alive so this test measures marker projection throughout the exit.
+    state.reversal.nextShotAt = Infinity;
     for (let tick = 0; tick < 18; tick++) {
       frameCockpit(camera, state.player, frame, null, ground, 870, maneuverViewYaw(state));
       assert.ok(read().some(marker => marker.former && marker.placement === 'forward'), `${width}px at ${tick} ticks after exit`);
