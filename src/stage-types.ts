@@ -115,7 +115,6 @@ export type WeakPoint = Position & {
   window: number;
   vx: number;
   vz: number;
-  reversalKill?: boolean;
   burnUntil?: number;
   burnNextAt?: number;
 };

@@ -89,6 +89,11 @@ let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
+const REVERSAL_HITSTOP_MS = 60;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const cockpitLayer = $('#cockpit-display');
+const reversalFlash = $('#reversal-flash');
+let hitstopUntil = -Infinity;
 let helpTimer = 0, lastHelp = '';
 let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
@@ -820,7 +825,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   rearView: scene?.rearView && { ...scene.rearView },
   rearDanger: rearDanger && { ...rearDanger },
   rearDangerCue: rearDangerCue.hidden ? null : rearDangerCue.getAttribute('aria-label'),
-  reversal: state.reversal && { ...state.reversal, pursuers: [...state.reversal.pursuers] },
+  reversal: state.reversal && { ...state.reversal, pursuers: [...state.reversal.pursuers], killTicks: [...state.reversal.killTicks] },
   reversalCue: reversalCue.hidden ? null : reversalCue.textContent,
   maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver, state.player.bank),
     controllable: maneuverAllowsControl(state.maneuver) },
@@ -847,14 +852,33 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
     controls: { ...phone.controls }, dashboard: phone.dashboard && { ...phone.dashboard } },
 }) });
 
+function showReversalImpact(): void {
+  if (reducedMotion.matches) {
+    reversalFlash.animate([{ opacity: 0.24 }, { opacity: 0 }], { duration: 120, easing: 'ease-out' });
+    return;
+  }
+  // Move the view and its projected markings together while the rest of the HUD stays still.
+  const keyframes = ['-1px 1px', '1px -1px', '-1px 0px', '0px 0px'].map(translate => ({ translate, easing: 'steps(1, end)' }));
+  canvas.animate(keyframes, 120);
+  if (state.view === 'cockpit') cockpitLayer.animate(keyframes, 120);
+}
+
 function animate(now: number): void {
   const elapsed = Math.max(0, (now - previousTime) / 1000);
   previousTime = now;
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
-  carry += Math.min(0.2, elapsed);
+  carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
   while (carry >= STEP) {
+    const burst = state.reversal?.burstAt;
     advance();
     carry -= STEP;
+    const nextBurst = state.reversal?.burstAt;
+    if (nextBurst !== undefined && nextBurst !== burst) {
+      hitstopUntil = now + REVERSAL_HITSTOP_MS;
+      carry = 0;
+      showReversalImpact();
+      break;
+    }
   }
   if (dirty || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
     render();
