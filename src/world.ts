@@ -40,10 +40,11 @@ export function terrainSurface(sample: Ground, x: number, z: number): number {
 
 export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0): number {
   const forward = 1 / Math.cos(pitch);
-  const slope = Math.abs(Math.tan(pitch)), roll = Math.abs(Math.tan(bank));
-  const across = aspect * Math.tan(fov * Math.PI / 360) / Math.cos(bank) + roll * slope;
+  const slope = Math.abs(Math.tan(pitch)), halfHeight = Math.tan(fov * Math.PI / 360);
+  // At steep bank the vertical frustum adds to the horizontal extent over the terrain.
+  const across = halfHeight * (aspect * Math.abs(Math.cos(bank)) + 1.8 * Math.abs(Math.sin(bank)));
   // Allow 100 m for camera setback and 170 m for the eye-to-ground height difference.
-  const room = TERRAIN_HALF_WIDTH - ARENA.radius - 100 - 170 * Math.hypot(slope, roll * forward);
+  const room = TERRAIN_HALF_WIDTH - ARENA.radius - 100 - 170 * slope;
   return Math.min(875, room / Math.hypot(forward, across));
 }
 

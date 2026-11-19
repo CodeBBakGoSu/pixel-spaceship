@@ -7,10 +7,11 @@ import {
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
+import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
-import type { CockpitLayout, PhoneLayout } from './layout.ts';
-import { activeTrail, formerPursuer, MANEUVERS, maneuverAttitude, maneuverViewYaw,
+import type { CockpitLayout, PhoneLayout, Rect } from './layout.ts';
+import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MAX_BOMBS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
@@ -66,7 +67,7 @@ type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
 const PICKUP_LIMIT = 80;
 const FLAK_RING_LIMIT = 24;
-const TRAIL_COLORS = { immelmann: 0x9cf7bf, 'split-s': 0xffb27a, 'j-turn': 0x86dfff, cobra: 0xffdb83 };
+const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff, cobra: 0xffdb83 };
 const DESKTOP_DOWNSCALE = 2.5;
 const REAR_VIEW_WIDTH = 128;
 const REAR_VIEW_HEIGHT = 56;
@@ -100,7 +101,7 @@ export class FlightScene {
   private readonly rearGlass = new Mesh(this.rearPlane, new MeshBasicMaterial({
     map: this.rearTarget.texture, depthTest: false, depthWrite: false, toneMapped: false,
   }));
-  private rearInsetFits = false;
+  private rearRect: Rect | null = null;
   private rearTick = -Infinity;
   private rearYaw = 0;
   private readonly top = new OrthographicCamera(-1, 1, 1, -1, 0.5, 1200);
@@ -109,8 +110,10 @@ export class FlightScene {
   private camera: Camera = this.top;
   private framing: Framing = { width: 0, height: 0, phone: null, cockpit: null };
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
-  private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial);
-  private readonly trailMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false });
+  private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial.clone());
+  private readonly bodyShimmer = new Mesh(new TorusGeometry(1, 0.032, 4, 24),
+    new MeshBasicMaterial({ color: 0xabf4ff, transparent: true, depthWrite: false }));
+  private readonly trailMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0.94, depthWrite: false });
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
   private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), ENEMY_KINDS.patrol.cap);
@@ -147,7 +150,7 @@ export class FlightScene {
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
-      this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings);
+      this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer);
     this.ghost.visible = false;
     for (const { mesh } of this.airframes) this.scene.add(mesh);
     this.top.up.set(0, 0, -1);
@@ -213,8 +216,12 @@ export class FlightScene {
     this.renderer.setSize(w, h, false);
   }
 
+  get cockpitMirror(): Readonly<Rect> | null {
+    return this.rearRect;
+  }
+
   private layoutRearView({ width, height, phone, cockpit }: Framing): void {
-    this.rearInsetFits = false;
+    this.rearRect = null;
     this.rearTick = -Infinity;
     if (!cockpit || !width || !height) return;
     const { altitude, compact, glass, heading } = cockpit;
@@ -233,11 +240,11 @@ export class FlightScene {
     this.rearInset.scale.set(w * 2 / width, h * 2 / height, 1);
     this.rearLining.scale.set(1 - 2 / w, 1 - 2 / h, 1);
     this.rearGlass.scale.set(1 - 6 / w, 1 - 6 / h, 1);
-    this.rearInsetFits = true;
+    this.rearRect = { x: right - w, y, width: w, height: h };
   }
 
   private drawRearView(state: StageState): void {
-    this.rearInset.visible = state.view === 'cockpit' && this.rearInsetFits;
+    this.rearInset.visible = state.view === 'cockpit' && this.rearRect !== null;
     if (!this.rearInset.visible) return;
     const { x, z, altitude, yaw } = state.player;
     if (state.tick >= this.rearTick && state.tick - this.rearTick < 2 && Math.cos(yaw - this.rearYaw) >= 0) return;
@@ -284,9 +291,9 @@ export class FlightScene {
     const tint = TRAIL_COLORS[trail.kind], fade = clamp(1 - (state.tick - trailEnd(trail)) / TRAIL_LINGER_TICKS, 0, 1);
     const { points } = trail, origin = points[0];
     const plane = flat ? TOP_FLIGHT + 0.5 : undefined;
-    const width = flat ? 2.5 : 1.7;
+    const width = flat ? 4 : 2.8;
     let segments = 0;
-    this.trailMaterial.opacity = fade * 0.85;
+    this.trailMaterial.opacity = fade * 0.94;
     for (let i = 1; i < points.length; i++) this.connect(this.ribbon, segments++, points[i - 1], points[i], width, tint, plane);
     if (state.maneuver) {
       const p = state.player, from = points[points.length - 1];
@@ -349,7 +356,7 @@ export class FlightScene {
       const field = phone?.playfield;
       const m = state.maneuver;
       const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
-      const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : m?.kind === 'j-turn' ? 12 : -14;
+      const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : m?.kind === 'j-turn' ? 29 : -14;
       const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
       const setback = 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat;
       const elevation = 15 + motion * lift;
@@ -378,15 +385,30 @@ export class FlightScene {
     };
   }
 
+  // Keep unclipped screen coordinates so cockpit markers can point outside the glass.
+  projectContact(target: Position, out: ContactProjection): void {
+    projectCameraContact(this.camera, this.framing, target, out, this.vector);
+  }
+
   draw(state: StageState): PitchMark[] {
-    const attitude = state.maneuver ? maneuverAttitude(state.maneuver) : null;
+    const attitude = state.maneuver ? maneuverAttitude(state.maneuver, state.player.bank) : null;
     const ladder = this.updateCamera(state, attitude);
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
     this.ship.visible = external && !(state.invulnerability > 0 && Math.floor(state.tick / 5) % 2);
     this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
-    this.ship.rotation.set(flat ? 0 : (attitude?.pitch ?? state.climbRate * 0.004), -p.yaw, flat ? 0 : (attitude?.roll ?? -p.bank), 'YXZ');
+    const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
+    this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, attitude?.roll ?? (flat ? 0 : -p.bank), 'YXZ');
+    this.ship.material.color.setHex(flat && attitude?.inverted ? 0x9ed9ee : 0xffffff);
+    this.bodyShimmer.visible = this.ship.visible && state.bodyGraceUntil > 0 && state.tick <= state.bodyGraceUntil;
+    if (this.bodyShimmer.visible) {
+      const pulse = (state.tick % 12) / 12;
+      this.bodyShimmer.position.copy(this.ship.position);
+      this.bodyShimmer.quaternion.copy(this.camera.quaternion);
+      this.bodyShimmer.scale.setScalar(13 + pulse * 4);
+      this.bodyShimmer.material.opacity = 0.8 - pulse * 0.55;
+    }
     this.exhaust.update(state, this.camera);
     const trail = activeTrail(state);
     this.drawTrail(state, trail, flat);
@@ -402,7 +424,7 @@ export class FlightScene {
         : batch ? 0xffffff : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
       this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
-      if (formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
+      if (external && formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
       if (!flat && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
       const tell = enemy.tell;
       if (tell?.kind === 'flak' && rings < FLAK_RING_LIMIT) {

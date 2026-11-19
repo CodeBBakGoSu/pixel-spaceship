@@ -527,3 +527,19 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   background: rgba(9, 26, 33, .66);
 }
 .experience.cockpit-view .maneuver-cue strong { font-size: clamp(18px, 3.2vw, 39px); }
+.experience.cockpit-view .maneuver-cue[data-docked="true"] {
+  left: calc(var(--cockpit-message-x) + var(--cockpit-message-w) / 2);
+  top: var(--cockpit-message-y);
+  transform: translateX(-50%);
+  max-width: var(--cockpit-message-w);
+  height: var(--cockpit-message-h);
+  padding: 0 8px;
+  line-height: calc(var(--cockpit-message-h) - 2px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.experience.cockpit-view .maneuver-cue[data-docked="true"] strong { display: inline; font-size: 11px; }
+.experience.cockpit-view .maneuver-cue[data-docked="true"] span { display: inline; margin: 0 0 0 8px; font-size: 9px; }
+.experience.cockpit-view #flight-message:not([hidden]) + .maneuver-cue[data-docked="true"],
+.experience.cockpit-view .maneuver-cue[data-docked="true"]:not([hidden]) ~ .view-tag { visibility: hidden; }

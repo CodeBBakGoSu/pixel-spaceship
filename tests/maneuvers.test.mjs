@@ -30,10 +30,10 @@ test('full autoplay uses a charged J-turn against a distant level pursuer', () =
 });
 
 for (const [kind, ticks, altitude, yaw, cooldown] of [
-  ['immelmann', 90, 145, Math.PI, 240],
-  ['split-s', 90, 75, Math.PI, 240],
+  ['immelmann', 270, 145, Math.PI, 240],
+  ['split-s', 290, 75, Math.PI, 240],
   ['cobra', 60, 110, 0, 180],
-  ['j-turn', 20, 110, Math.PI, 420],
+  ['j-turn', 52, 110, Math.PI, 420],
 ]) {
   test(`${kind} hands back on tick ${ticks} at the specified altitude and heading`, () => {
     const state = empty();
@@ -46,7 +46,7 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
       assert.equal(state.boost, 0.6);
     }
     assert.equal(state.maneuver?.kind, kind);
-    run(state, ticks - 2, { turn: 1, climb: 1, boost: true });
+    run(state, ticks - 2, { boost: true });
     assert.equal(state.maneuver?.kind, kind);
     run(state, 1);
     assert.equal(state.tick - startTick, ticks);
@@ -97,14 +97,49 @@ test('J-turn snaps its flight heading, traces a displaced U and lets the view ca
   run(state, 10);
   assert.ok(state.player.x < x - 3 && state.player.z > z + 3);
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state))) > 0.1);
-  run(state, 9);
-  assert.ok(state.player.x < x - 14 && state.player.z < z - 4);
+  run(state, 15);
+  assert.ok(state.player.z > z + 50);
+  assert.ok(state.player.x < x - 40);
+  run(state, 26);
+  assert.ok(state.player.x < x - 25 && state.player.z > z + 55);
   assert.equal(state.maneuverTrail.points.at(-1).x, state.player.x);
   run(state, 1);
   assert.ok(state.speed > moves.CRUISE_SPEED);
-  run(state, 18);
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state) - state.player.yaw)) < 1e-6);
 });
+
+for (const [kind, flipTick, expectedAltitude] of [['immelmann', 96, 145], ['split-s', 116, 75]]) {
+  test(`${kind} carries flight forward before spending 2.5 seconds level and inverted`, () => {
+    const state = empty();
+    const start = { ...state.player };
+    run(state, 1, { maneuver: kind });
+    let maxForward = 0;
+    for (let tick = 1; tick < flipTick; tick++) {
+      run(state, 1);
+      maxForward = Math.max(maxForward, state.player.z - start.z);
+    }
+    assert.ok(maxForward > 105, `maximum forward travel was ${maxForward} m`);
+    assert.ok(state.player.z > start.z + 90);
+    assert.ok(Math.abs(state.player.x - start.x) >= 18);
+    assert.ok(Math.abs(state.player.yaw) > 3.1);
+    const turnZ = state.player.z;
+    for (let tick = 0; tick < 150; tick++) {
+      run(state, 1);
+      const attitude = moves.maneuverAttitude(state.maneuver);
+      assert.equal(state.player.altitude, expectedAltitude);
+      assert.equal(attitude.inverted, true);
+      assert.equal(attitude.roll, Math.PI);
+    }
+    assert.ok(state.player.z < turnZ - 80);
+    run(state, 12);
+    assert.ok(moves.maneuverAttitude(state.maneuver).roll < Math.PI);
+    run(state, 12);
+    assert.equal(state.maneuver, null);
+    assert.ok(moves.activeTrail(state).points.length >= 90);
+    run(state, 120);
+    assert.ok(moves.activeTrail(state));
+  });
+}
 
 test('a loop at the extreme band returns to its launch height and marks the limit', () => {
   for (const [maneuver, altitude] of [['immelmann', 151], ['split-s', 72]]) {
@@ -112,7 +147,7 @@ test('a loop at the extreme band returns to its launch height and marks the limi
     state.player.altitude = altitude;
     run(state, 1, { maneuver });
     assert.equal(state.maneuverTrail?.limited, true);
-    run(state, 89);
+    run(state, moves.MANEUVERS[maneuver].ticks - 1);
     assert.equal(state.player.altitude, altitude);
   }
 });
@@ -121,7 +156,7 @@ test('Split-S at the low band guards terrain clearance throughout the dive', () 
   const state = empty();
   state.player.altitude = 75;
   run(state, 1, { maneuver: 'split-s' }, () => 49);
-  for (let tick = 2; tick <= 90; tick++) {
+  for (let tick = 2; tick <= moves.MANEUVERS['split-s'].ticks; tick++) {
     run(state, 1, {}, () => 49);
     assert.ok(state.player.altitude >= 71);
   }
@@ -137,23 +172,83 @@ test('pause freezes maneuvers and preserves view-independent flight on resume', 
   run(state, 1, { pause: true });
   run(state, 1, { toggleView: true });
   assert.equal(state.view, 'cockpit');
-  run(state, 88);
+  run(state, moves.MANEUVERS.immelmann.ticks - 2);
   run(baseline, 1, { maneuver: 'immelmann' });
-  run(baseline, 89);
+  run(baseline, moves.MANEUVERS.immelmann.ticks - 1);
   assert.deepEqual(state.player, baseline.player);
   assert.equal(state.maneuverReadyAt, baseline.maneuverReadyAt);
 });
 
-test('after boost the Immelmann brings the high-band rear contact into Twin range', () => {
+test('after boost the Immelmann brings the high-band rear contact into a forward volley while inverted', () => {
   const state = pursuit();
   const high = state.enemies.find(enemy => enemy.alt === 145);
   run(state, 30, { boost: true });
   run(state, 1, { maneuver: 'immelmann' });
-  run(state, 89);
+  run(state, 95);
   assert.equal(state.player.altitude, 145);
-  assert.equal(high.hp, 2);
-  run(state, 36);
+  assert.ok(moves.formerPursuer(state, moves.activeTrail(state), high));
+  run(state, 135);
+  assert.equal(moves.maneuverAttitude(state.maneuver).inverted, true);
   assert.equal(high.hp, 0);
+});
+
+test('the inverted flight accepts live steering and climb commands', () => {
+  const state = empty();
+  const baseline = empty();
+  for (const flight of [state, baseline]) {
+    run(flight, 1, { maneuver: 'split-s' });
+    run(flight, 120);
+  }
+  run(state, 18, { turn: 0.65, climb: 0.45 });
+  run(baseline, 18);
+  assert.ok(Math.abs(state.player.yaw - baseline.player.yaw) > 0.2);
+  assert.ok(Math.abs(state.player.x - baseline.player.x) > 1);
+  assert.ok(state.player.altitude > baseline.player.altitude + 4);
+  assert.equal(moves.maneuverAttitude(state.maneuver, state.player.bank).inverted, true);
+  const beforeRollAltitude = state.player.altitude;
+  run(state, moves.MANEUVERS['split-s'].ticks - state.maneuver.elapsed);
+  assert.equal(state.player.altitude, beforeRollAltitude);
+});
+
+function placeContact(state) {
+  const contact = pursuit().enemies.find(enemy => enemy.alt === 110);
+  const { x, z, altitude: alt } = state.player;
+  Object.assign(contact, { x, z, alt, shotAt: Infinity, maneuverAt: Infinity, hp: 50,
+    course: { target: { x, z }, speed: 0, until: state.tick + 2 } });
+  state.enemies = [contact];
+  return contact;
+}
+
+test('post-maneuver contact grace protects both aircraft through the next 36 ticks', () => {
+  const state = empty();
+  run(state, 1, { maneuver: 'j-turn' });
+  run(state, 50);
+  const finishing = placeContact(state);
+  run(state, 1);
+  assert.equal(state.hull, state.maxHull);
+  assert.ok(finishing.hp > 0);
+  assert.equal(state.maneuver, null);
+  for (let tick = 1; tick <= 36; tick++) {
+    const contact = placeContact(state);
+    run(state, 1);
+    assert.ok(contact.hp > 0, `contact was destroyed at grace tick ${tick}`);
+    assert.equal(state.hull, state.maxHull);
+  }
+  placeContact(state);
+  run(state, 1);
+  assert.equal(state.hull, state.maxHull - 2);
+});
+
+test('hostile shots still damage the player during body grace', () => {
+  const state = empty();
+  run(state, 1, { maneuver: 'j-turn' });
+  run(state, 51);
+  assert.equal(state.maneuver, null);
+  const { x, z, altitude: alt } = state.player;
+  state.shots.push({ x, z, alt, kind: 'hostile', life: 2, damage: 2, vx: 0, vz: 0, volley: 0,
+    nearMiss: false, lockId: null });
+  run(state, 1);
+  assert.equal(state.hull, state.maxHull - 2);
 });
 
 test('Cobra lets a close same-band pursuer pass safely into a forward volley', () => {
@@ -267,7 +362,7 @@ test('the wider Reach rim warns at 60 m and contains all four maneuvers', () => 
     stepStage(state);
     assert.equal(state.boundaryWarning, true);
     Object.assign(player, { x: arena.x + arena.radius - 0.2, z: arena.z });
-    for (let n = 0; n < 90; n++) {
+    for (let n = 0; n < moves.MANEUVERS[kind].ticks; n++) {
       stepStage(state, n === 0 ? { maneuver: kind } : {});
       assert.ok(Math.hypot(player.x - arena.x, player.z - arena.z) <= arena.radius + 1e-9);
     }

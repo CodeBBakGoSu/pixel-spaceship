@@ -7,8 +7,8 @@ import { buildRadar } from '../src/instruments.ts';
 import { createTranslator, strings } from '../src/i18n.ts';
 import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, cockpitTarget } from '../src/cockpit.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
-import { maneuverAttitude } from '../src/maneuvers.ts';
-import { TERRAIN_HALF_WIDTH, World } from '../src/world.ts';
+import { MANEUVERS, maneuverAttitude } from '../src/maneuvers.ts';
+import { terrainFogFar, TERRAIN_HALF_WIDTH, World } from '../src/world.ts';
 
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
 test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
@@ -30,7 +30,7 @@ test('MFDs refresh at 20 Hz, including the first frame and a restarted run', () 
   assert.equal(cockpitMfdDue(10, 0), true);
 });
 
-test('the HUD zero line matches projected terrain during level flight and both half-loops', () => {
+test('the HUD zero line matches projected terrain through upright, vertical and inverted views', () => {
   const safe = { top: 0, right: 0, bottom: 0, left: 0 };
   const limit = 420, terrainAltitude = 35;
   const ground = () => terrainAltitude;
@@ -42,8 +42,9 @@ test('the HUD zero line matches projected terrain during level flight and both h
     for (const maneuver of ['immelmann', 'split-s', 'cobra', 'j-turn']) {
       const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'), ground);
       state.enemies.length = 0;
-      for (let tick = 0; tick <= 90; tick++) {
+      for (let tick = 0; tick <= MANEUVERS[maneuver].ticks; tick++) {
         if (tick) stepStage(state, tick === 1 ? { maneuver } : {}, ground);
+        if (tick > 20 && tick % 3 && tick !== MANEUVERS[maneuver].flipTick) continue;
         const marks = frameCockpit(camera, state.player, framing, state.maneuver && maneuverAttitude(state.maneuver), ground, limit);
 
         // Intersect flat terrain with the camera-space visibility plane and project a line in that intersection.
@@ -55,16 +56,15 @@ test('the HUD zero line matches projected terrain during level flight and both h
         const side = new Vector3(-horizontal.z, 0, horizontal.x);
         const a = terrainPoint.clone().addScaledVector(side, -200).project(camera);
         const b = terrainPoint.clone().addScaledVector(side, 200).project(camera);
+        const ax = (1 + a.x) * width / 2, ay = (1 - a.y) * height / 2;
+        const dx = (b.x - a.x) * width / 2, dy = (a.y - b.y) * height / 2;
 
         const zero = marks.find(mark => mark.angle === 0);
         assert.ok(zero, `${width} px ${maneuver} tick ${tick} has a zero line`);
         const points = [...zero.left, ...zero.right].flatMap(line => [line.from, line.to]);
         for (const point of points) {
-          const x = point.x * 2 / width - 1;
-          const y = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
-          const projectedY = (1 - y) * height / 2;
-          assert.ok(Math.abs(projectedY - point.y) < 0.4,
-            `${width} px ${maneuver} tick ${tick}: terrain y=${projectedY}, HUD y=${point.y}`);
+          const error = Math.abs(dx * (point.y - ay) - dy * (point.x - ax)) / Math.hypot(dx, dy);
+          assert.ok(error < 0.4, `${width} px ${maneuver} tick ${tick}: horizon error ${error} px`);
         }
         const top = framing.cockpit.aiming.y;
         const bottom = top + framing.cockpit.aiming.height;
@@ -72,7 +72,49 @@ test('the HUD zero line matches projected terrain during level flight and both h
           `${width} px ${maneuver} tick ${tick} keeps the horizon in the aiming field`);
         const above = marks.find(mark => mark.angle === 10);
         const below = marks.find(mark => mark.angle === -10);
-        assert.ok(above.left[0].from.y < zero.left[0].from.y && below.left[0].from.y > zero.left[0].from.y);
+        const signedSide = point => dx * (point.y - ay) - dy * (point.x - ax);
+        assert.ok(signedSide(above.left[0].from) * signedSide(below.left[0].from) < 0);
+      }
+    }
+  }
+});
+
+test('the inverted cockpit exchanges sky and ground and rotates its horizon through vertical', () => {
+  const width = 390, height = 844, ground = () => 35;
+  const safe = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { width, height, cockpit: phoneLayout(width, height, safe, 'cockpit').cockpit };
+  const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
+  const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'), ground);
+  state.enemies.length = 0;
+  stepStage(state, { maneuver: 'split-s' }, ground);
+  for (let tick = 2; tick <= 10; tick++) stepStage(state, {}, ground);
+  const marks = frameCockpit(camera, state.player, frame, maneuverAttitude(state.maneuver), ground, 640);
+  const zero = marks.find(mark => mark.angle === 0);
+  const from = zero.left[0].from, to = zero.right.at(-1).to;
+  assert.ok(Math.abs(to.x - from.x) < 0.4);
+  assert.ok(Math.abs(to.y - from.y) > 50);
+
+  for (let tick = 11; tick <= 155; tick++) stepStage(state, {}, ground);
+  frameCockpit(camera, state.player, frame, maneuverAttitude(state.maneuver), ground, 640);
+  const gaze = camera.getWorldDirection(new Vector3());
+  const horizon = camera.position.clone().addScaledVector(gaze, 200);
+  const sky = horizon.clone().setY(horizon.y + 25).project(camera);
+  const terrain = horizon.clone().setY(horizon.y - 25).project(camera);
+  assert.ok(sky.y < terrain.y);
+  assert.ok(new Vector3(0, 1, 0).applyQuaternion(camera.quaternion).y < -0.999);
+});
+
+test('terrain fog remains positive and continuous through a full cockpit roll', () => {
+  for (const [aspect, fov] of [[1.6, 92], [390 / 844, 78]]) {
+    for (const pitch of [0, -0.48, 0.58]) {
+      const upright = terrainFogFar(aspect, fov, pitch);
+      const inverted = terrainFogFar(aspect, fov, pitch, Math.PI);
+      assert.ok(Math.abs(inverted - upright) < 1e-9);
+      for (let angle = -180; angle <= 180; angle++) {
+        const fog = terrainFogFar(aspect, fov, pitch, angle * Math.PI / 180);
+        const next = terrainFogFar(aspect, fov, pitch, (angle + 1) * Math.PI / 180);
+        assert.ok(fog > 245 && fog <= 875);
+        assert.ok(Math.abs(fog - next) < 20);
       }
     }
   }
@@ -195,20 +237,22 @@ test('the zero rung follows a steep Reach stack between grid samples', () => {
   assert.ok(Math.abs(to.y - skyline) < 0.75, `terrain skyline y=${skyline}, HUD y=${to.y}`);
 });
 
-test('the cockpit ladder sweeps down on a climb and up on a dive', () => {
+test('the cockpit ladder sweeps with pitch through an upright climb and an inverted dive', () => {
   const width = 1280, height = 800;
   const safe = { top: 0, right: 0, bottom: 0, left: 0 };
   const cockpit = cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
   const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
   const heights = [];
-  for (const [kind, tick] of [['immelmann', 29], ['split-s', 46]]) {
+  for (const [kind, tick] of [['immelmann', 60], ['split-s', 80]]) {
     const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'));
     state.enemies.length = 0;
     for (let elapsed = 0; elapsed < tick; elapsed++) stepStage(state, elapsed === 0 ? { maneuver: kind } : {});
-    const marks = frameCockpit(camera, state.player, { width, height, cockpit }, maneuverAttitude(state.maneuver), () => 35, 770);
+    const attitude = maneuverAttitude(state.maneuver);
+    const marks = frameCockpit(camera, state.player, { width, height, cockpit }, attitude, () => 35, 770);
     const zero = marks.find(mark => mark.angle === 0);
     const y = (zero.left.at(-1).to.y + zero.right[0].from.y) / 2;
-    heights.push((y - cockpit.aiming.y) / cockpit.aiming.height);
+    const relative = (y - cockpit.aiming.y) / cockpit.aiming.height;
+    heights.push(attitude.inverted ? 1 - relative : relative);
   }
   assert.ok(heights[0] > 0.65 && heights[1] < 0.35, heights.join(' vs '));
 });

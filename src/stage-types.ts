@@ -148,6 +148,7 @@ export type StageState = {
   maneuver: Maneuver | null;
   maneuverTrail: ManeuverTrail | null;
   maneuverReadyAt: number;
+  bodyGraceUntil: number;
   cobraStaged: boolean;
   xp: number;
   level: 1 | 2 | 3;

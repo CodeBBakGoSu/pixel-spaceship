@@ -1,4 +1,4 @@
-import { canManeuver, exitAltitude } from './maneuvers.ts';
+import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS, TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
@@ -83,8 +83,10 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
         const dodge = avoid(enemy.tell, FLAK_RADIUS + 5);
         if (dodge !== undefined) return dodge;
       }
-      const dodge = avoid(enemy, 15);
-      if (dodge !== undefined) return dodge;
+      if (state.tick > state.bodyGraceUntil) {
+        const dodge = avoid(enemy, 15);
+        if (dodge !== undefined) return dodge;
+      }
     }
   }
 }
@@ -118,7 +120,7 @@ function hasRearBombTarget(state: StageState): boolean {
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
   if (state.phase === 'draft') return { pick: state.draft[0] };
   if (state.phase !== 'playing' || state.paused) return {};
-  if (state.maneuver) return {};
+  if (!maneuverAllowsControl(state.maneuver)) return {};
   const p = state.player, target = routeFor(state, mode);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);

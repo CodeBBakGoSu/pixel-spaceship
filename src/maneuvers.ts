@@ -2,17 +2,24 @@ import { BANDS, clamp, MAX_ALTITUDE, MIN_ALTITUDE, STEP } from './stage-combat.t
 import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
 
 export const CRUISE_SPEED = 34;
-const HALF_LOOP_TICKS = 54;
-const ROLL_TICKS = 18;
+export const INVERTED_FLIGHT_TICKS = 150;
+export const BODY_GRACE_TICKS = 36;
+const HALF_LOOP_TICKS = 96;
+const ROLL_IN_TICKS = 20;
+const ROLL_OUT_TICKS = 24;
+const HALF_LOOP_TRAVEL = 96;
+const HALF_LOOP_RADIUS = 45;
+const HALF_LOOP_OFFSET = 22;
 export const MANEUVERS = {
-  immelmann: { ticks: 90, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS },
-  'split-s': { ticks: 90, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS + ROLL_TICKS },
+  immelmann: { ticks: HALF_LOOP_TICKS + INVERTED_FLIGHT_TICKS + ROLL_OUT_TICKS, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS },
+  'split-s': { ticks: ROLL_IN_TICKS + HALF_LOOP_TICKS + INVERTED_FLIGHT_TICKS + ROLL_OUT_TICKS, cooldown: 240, boost: 0,
+    flipTick: ROLL_IN_TICKS + HALF_LOOP_TICKS },
   cobra: { ticks: 60, cooldown: 180, boost: 0, flipTick: 0 },
-  'j-turn': { ticks: 20, cooldown: 420, boost: 0.4, flipTick: 1 },
+  'j-turn': { ticks: 52, cooldown: 420, boost: 0.4, flipTick: 1 },
 };
 export const TRAIL_SAMPLE_TICKS = 3;
-export const TRAIL_LIMIT = Math.ceil(MANEUVERS.immelmann.ticks / TRAIL_SAMPLE_TICKS) + 1;
-export const TRAIL_LINGER_TICKS = 90;
+export const TRAIL_LIMIT = Math.ceil(MANEUVERS['split-s'].ticks / TRAIL_SAMPLE_TICKS) + 1;
+export const TRAIL_LINGER_TICKS = 150;
 const TURN_BURST_TICKS = 18;
 const CAMERA_LAG_TICKS = 3;
 const CAMERA_SWEEP_TICKS = 24;
@@ -52,6 +59,14 @@ export function canManeuver(state: StageState, kind: ManeuverKind): boolean {
     && state.boost >= MANEUVERS[kind].boost;
 }
 
+function isHalfLoop(kind: ManeuverKind): boolean {
+  return kind === 'immelmann' || kind === 'split-s';
+}
+
+export function maneuverAllowsControl(maneuver: Maneuver | null): boolean {
+  return !maneuver || (isHalfLoop(maneuver.kind) && maneuver.elapsed >= MANEUVERS[maneuver.kind].flipTick);
+}
+
 type Frame = {
   forward: number;
   lateral?: number;
@@ -61,38 +76,40 @@ type Frame = {
   reversed: boolean;
 };
 
-function frameAt(m: Maneuver, tick: number): Frame {
+function halfLoopFrame(m: Maneuver, tick: number): Frame {
   const { altitude, exitAltitude: exit } = m;
+  const split = m.kind === 'split-s';
+  const rollIn = split ? ROLL_IN_TICKS : 0;
+  const startDistance = rollIn * CRUISE_SPEED * STEP;
+  if (tick < rollIn) {
+    return { forward: tick * CRUISE_SPEED * STEP, altitude, pitch: 0,
+      roll: Math.PI * ease(tick / rollIn), reversed: false };
+  }
+  const loopTick = tick - rollIn;
+  if (loopTick >= HALF_LOOP_TICKS) {
+    const recovery = clamp((loopTick - HALF_LOOP_TICKS - INVERTED_FLIGHT_TICKS) / ROLL_OUT_TICKS, 0, 1);
+    return { forward: startDistance + HALF_LOOP_TRAVEL, lateral: m.side * HALF_LOOP_OFFSET,
+      altitude: exit, pitch: 0, roll: Math.PI * (1 - ease(recovery)), reversed: true };
+  }
+
+  // Carry the half-ellipse forward and sideways. Its start and finish tangents still point in opposite directions.
+  const u = loopTick / HALF_LOOP_TICKS, angle = Math.PI * u;
+  const sin = Math.sin(angle), cos = Math.cos(angle), progress = ease(u);
+  const rise = exit !== altitude ? 0 : split ? Math.max(MIN_ALTITUDE, altitude - 14) - altitude
+    : Math.min(MAX_ALTITUDE, altitude + 18) - altitude;
+  const forwardTangent = HALF_LOOP_TRAVEL / 2 * sin + HALF_LOOP_RADIUS * cos;
+  const pitch = Math.atan2((split ? -1 : 1) * Math.max(24, Math.abs(exit - altitude)) / 2 * sin, forwardTangent);
+  return { forward: startDistance + HALF_LOOP_TRAVEL * progress + HALF_LOOP_RADIUS * sin,
+    lateral: m.side * HALF_LOOP_OFFSET * progress, altitude: mix(altitude, exit, progress) + rise * sin ** 2,
+    pitch, roll: split ? Math.PI + pitch : 0, reversed: false };
+}
+
+function frameAt(m: Maneuver, tick: number): Frame {
+  const { altitude } = m;
   switch (m.kind) {
-    case 'immelmann': {
-      const apex = Math.min(MAX_ALTITUDE, Math.max(altitude, exit) + 18);
-      if (tick < HALF_LOOP_TICKS) {
-        const u = tick / HALF_LOOP_TICKS;
-        return { forward: 17 * Math.sin(Math.PI * u), altitude: mix(altitude, apex, ease(u)),
-          pitch: Math.PI * u, roll: 0, reversed: false };
-      }
-      const recovery = tick - HALF_LOOP_TICKS;
-      // At the apex, reversing yaw and adding a half roll preserves the inverted mesh pose.
-      return { forward: -CRUISE_SPEED * recovery * STEP,
-        altitude: mix(apex, exit, ease(recovery / (2 * ROLL_TICKS))), pitch: 0,
-        roll: Math.PI * (1 - ease(Math.min(1, recovery / ROLL_TICKS))), reversed: true };
-    }
-    case 'split-s': {
-      if (tick < ROLL_TICKS) {
-        return { forward: CRUISE_SPEED * tick * STEP, altitude, pitch: 0,
-          roll: Math.PI * ease(tick / ROLL_TICKS), reversed: false };
-      }
-      const trough = Math.max(MIN_ALTITUDE, Math.min(altitude, exit) - 12);
-      const dive = tick - ROLL_TICKS, rollDistance = CRUISE_SPEED * ROLL_TICKS * STEP;
-      if (dive < HALF_LOOP_TICKS) {
-        const u = dive / HALF_LOOP_TICKS;
-        return { forward: rollDistance + 17 * Math.sin(Math.PI * u) - 12 * ease(u), altitude: mix(altitude, trough, ease(u)),
-          pitch: -Math.PI * u, roll: Math.PI, reversed: false };
-      }
-      const recovery = dive - HALF_LOOP_TICKS;
-      return { forward: rollDistance - 12 - CRUISE_SPEED * recovery * STEP,
-        altitude: mix(trough, exit, ease(recovery / ROLL_TICKS)), pitch: 0, roll: 0, reversed: true };
-    }
+    case 'immelmann':
+    case 'split-s':
+      return halfLoopFrame(m, tick);
     case 'cobra': {
       const entry = Math.min(tick, COBRA_ENTRY), stall = Math.max(0, Math.min(tick, COBRA_STALL) - COBRA_ENTRY);
       const recovery = Math.max(0, tick - COBRA_STALL);
@@ -103,9 +120,11 @@ function frameAt(m: Maneuver, tick: number): Frame {
         pitch: COBRA_PITCH * ease(entry / COBRA_ENTRY) * (1 - ease(recovery / recoveryTicks)), roll: 0, reversed: false };
     }
     case 'j-turn': {
-      const u = tick / MANEUVERS['j-turn'].ticks, angle = Math.PI * (0.25 * u + 0.75 * ease(u));
-      return { forward: 8 * Math.sin(angle) - 5 * u * u, lateral: m.side * 9 * (1 - Math.cos(angle)), altitude,
-        pitch: 0, roll: m.side * 0.42 * Math.sin(angle), reversed: tick > 0 };
+      const u = tick / MANEUVERS['j-turn'].ticks, angle = Math.PI * (0.65 * u + 0.35 * ease(u));
+      const bend = Math.sin(angle);
+      // Carry wide of the pursuit lane, then come back partway so it stays visible on the reversed heading.
+      return { forward: 60 * ease(u) + 27 * bend, lateral: m.side * (14 * (1 - Math.cos(angle)) + 28 * bend ** 2),
+        altitude, pitch: 0, roll: m.side * 0.64 * bend, reversed: tick > 0 };
     }
   }
 }
@@ -137,9 +156,10 @@ export function maneuverViewYaw(state: StageState): number {
   const { player: p, maneuverTrail: trail } = state;
   if (!trail) return p.yaw;
   const flip = MANEUVERS[trail.kind].flipTick, elapsed = state.tick - trail.startTick + 1;
-  if (!flip || elapsed < flip) return p.yaw;
-  const progress = clamp((elapsed - flip - CAMERA_LAG_TICKS) / CAMERA_SWEEP_TICKS, 0, 1);
-  return p.yaw - trail.side * Math.PI * (1 - ease(progress));
+  if (!flip) return p.yaw;
+  const lead = isHalfLoop(trail.kind) ? 17 : -CAMERA_LAG_TICKS;
+  const progress = ease(clamp((elapsed - flip + lead) / CAMERA_SWEEP_TICKS, 0, 1));
+  return p.yaw + trail.side * Math.PI * (progress - (elapsed >= flip ? 1 : 0));
 }
 
 export function turnExitBurst(state: StageState): number {
@@ -154,14 +174,23 @@ export function formerPursuer(state: StageState, trail: ManeuverTrail | null, en
   return (enemy.x - p.x) * Math.sin(p.yaw) + (enemy.z - p.z) * Math.cos(p.yaw) > 3;
 }
 
-export function maneuverAttitude(maneuver: Maneuver) {
-  const { pitch, roll } = frameAt(maneuver, maneuver.elapsed);
+export function maneuverAttitude(maneuver: Maneuver, bank = 0) {
+  const { kind, elapsed } = maneuver;
+  const { pitch, roll: baseRoll } = frameAt(maneuver, elapsed);
   const cockpitPitch = Math.asin(Math.sin(pitch)), degree = Math.PI / 180;
+  const roll = baseRoll - bank;
+  let cameraBank = roll;
+  if (kind === 'immelmann' && elapsed < HALF_LOOP_TICKS) {
+    // Convert the last part of the pitch-over into a camera roll while the camera follows the turn.
+    cameraBank = Math.PI * ease(clamp((elapsed - HALF_LOOP_TICKS + 23) / 23, 0, 1));
+  } else if (kind === 'split-s' && elapsed >= ROLL_IN_TICKS && elapsed < MANEUVERS['split-s'].flipTick) {
+    cameraBank = Math.PI;
+  }
   return {
     pitch, roll,
     cockpitPitch,
     cameraPitch: clamp(cockpitPitch, -28 * degree, 34 * degree),
-    cameraBank: Math.sin(roll) * 20 * degree + (maneuver.kind === 'immelmann' ? Math.sin(2 * pitch) * 8 * degree : 0),
+    cameraBank,
     inverted: Math.cos(pitch) * Math.cos(roll) < 0,
     stalled: maneuver.kind === 'cobra' && maneuver.elapsed >= COBRA_ENTRY && maneuver.elapsed <= COBRA_STALL,
   };

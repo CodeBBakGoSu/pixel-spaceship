@@ -2,12 +2,13 @@ import './style.css';
 import { autopilotInput, seekStage } from './autoplay.ts';
 import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
-import { cockpitTarget, cockpitWarnings, type CockpitMotion } from './cockpit.ts';
+import { CockpitMarkers } from './cockpit-markers.ts';
+import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark, type RadarReadout } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
-import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, maneuverAttitude,
+import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
@@ -43,6 +44,7 @@ const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getCo
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
 const navRadar = new RadarDisplay();
 const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay'), font);
+const cockpitMarkers = new CockpitMarkers();
 const world = new World();
 const ground = (x: number, z: number) => world.height(x, z);
 const options = parseStageOptions(location.search);
@@ -307,6 +309,7 @@ function updateManeuverCue(): void {
   const details = t(pendingFlip ? 'maneuver.exitHeading' : 'maneuver.heading', { heading }) + (loop ? ` · ${height}` : '')
     + (limit ? ` · ${limit}` : '') + (ahead ? ` · ${t('maneuver.ahead', { count: ahead })}` : '');
   maneuverCue.dataset.kind = kind;
+  maneuverCue.dataset.docked = String(state.tick - trail.startTick >= 15);
   setText('#maneuver-name', title);
   setText('#maneuver-detail', details);
 }
@@ -668,7 +671,7 @@ function flightInput(): StageInput {
 function advance(): void {
   if (!scene || guide) return;
   const before = state.tick, yaw = state.player.yaw;
-  const wasManeuvering = !!state.maneuver;
+  const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousLevel = state.level;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
@@ -693,7 +696,7 @@ function advance(): void {
     motion = {
       speed: ease(motion.speed, state.speed),
       climb: ease(motion.climb, state.climbRate),
-      turn: wasManeuvering || state.maneuver || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
+      turn: !wasFlying || !maneuverAllowsControl(state.maneuver) || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
   }
   if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.level !== previousLevel) {
@@ -729,7 +732,8 @@ function render(): void {
   const clearance = p.altitude - Math.max(ground(p.x, p.z), ground(p.x + Math.sin(p.yaw) * 23, p.z + Math.cos(p.yaw) * 23));
   describeFlight(readout, clearance);
   const deltaIndicator = $('#cockpit-delta');
-  cockpitDelta = cockpit && !state.maneuver && readout.priority ? altitudeDeltaText(readout.priority.alt - p.altitude, t) : null;
+  const instrumentTrack = cockpit && maneuverAllowsControl(state.maneuver) ? readout.priority : null;
+  cockpitDelta = instrumentTrack ? altitudeDeltaText(instrumentTrack.alt - p.altitude, t) : null;
   deltaIndicator.hidden = cockpitDelta === null;
   if (cockpitDelta) {
     setText('#cockpit-delta', cockpitDelta);
@@ -739,12 +743,10 @@ function render(): void {
     const settling = Math.cos(yaw - p.yaw) < 0.999;
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
       (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
-    const track = state.maneuver || settling ? null : readout.priority;
-    const point = track && scene.project(track);
-    const target = track && point ? cockpitTarget(track, point, cockpit.aiming, state.lock) : null;
+    const markers = cockpitMarkers.update(state, cockpit, scene, scene.cockpitMirror);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
     cockpitDisplay.draw(state, aim, ladder,
-      motion, clearance, impact, readout, target, language, t);
+      motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, instrumentTrack?.alt, language, t);
   } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
     navRadar.draw(radarContext, 0, 0, readout, yaw, state.tick);
     if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font, yaw);
@@ -758,11 +760,12 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   view: state.view, airspace: { ...state.arena }, objective: objectiveText(), altitude: state.player.altitude,
   player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting, bombs: state.bombs,
   speed: state.speed, rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
-  maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver) },
+  maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver, state.player.bank),
+    controllable: maneuverAllowsControl(state.maneuver) },
   maneuverTrail: state.maneuverTrail && { ...state.maneuverTrail, points: state.maneuverTrail.points.map(point => ({ ...point })),
     pursuers: [...state.maneuverTrail.pursuers] },
   cameraYaw: maneuverViewYaw(state),
-  maneuverReadyAt: state.maneuverReadyAt,
+  maneuverReadyAt: state.maneuverReadyAt, bodyGraceUntil: state.bodyGraceUntil,
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
@@ -770,7 +773,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   mineCount: state.enemyMines.length,
   weakPointHits: state.boss?.weakPoints.map(point => point.hits) ?? [],
   bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],
-  lock: state.lock && { ...state.lock }, cockpitDelta,
+  lock: state.lock && { ...state.lock }, cockpitDelta, cockpitMarkers: cockpit && scene ? cockpitMarkers.snapshot() : [],
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
   layout: phone && { orientation: phone.orientation, buffer: { ...phone.buffer }, playfield: { ...phone.playfield },
     controls: { ...phone.controls }, dashboard: phone.dashboard && { ...phone.dashboard } },

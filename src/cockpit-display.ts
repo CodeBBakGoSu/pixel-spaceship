@@ -1,8 +1,9 @@
 import { cockpitLadderSpan, type Line, type PitchMark, type Point } from './camera.ts';
 import {
   cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel,
-  type CockpitMotion, type CockpitTarget, type CockpitWarnings,
+  type CockpitMotion, type CockpitWarnings,
 } from './cockpit';
+import { markerRadius, type CockpitMarker } from './cockpit-markers.ts';
 import {
   CockpitLabelAtlas, CockpitLineRaster, cockpitPixel, cockpitSurface, drawCockpitLabel, type CockpitLabel,
 } from './cockpit-pixels';
@@ -159,11 +160,14 @@ class GlassLabels {
   private readonly deltas = new Map<string, CockpitLabel>();
   private readonly tracked = new Map<number, CockpitLabel>();
   private readonly locked = new Map<number, CockpitLabel>();
+  private readonly ranges = new Map<number, CockpitLabel>();
+  private readonly relativeDeltas = new Map<number, CockpitLabel>();
   readonly bearings: CockpitLabel[];
   readonly headingTicks: CockpitLabel[];
   readonly pitch: { left: CockpitLabel; right: CockpitLabel }[];
   readonly inverted: CockpitLabel;
   readonly stall: CockpitLabel;
+  readonly rear: CockpitLabel;
 
   constructor(font: string, private readonly t: Translate) {
     const atlas = this.atlas = new CockpitLabelAtlas(font);
@@ -177,6 +181,7 @@ class GlassLabels {
     });
     this.inverted = atlas.add(t('cockpit.inverted'), amber, 'center');
     this.stall = atlas.add(t('cockpit.stall'), amber, 'center');
+    this.rear = atlas.add(t('cockpit.rearShort'), amber);
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
   }
@@ -207,13 +212,23 @@ class GlassLabels {
     return label;
   }
 
-  contact(value: number, locked: boolean): CockpitLabel {
-    const map = locked ? this.locked : this.tracked;
+  contact(value: number, status: 'lock' | 'track' | null): CockpitLabel {
+    const map = status === 'lock' ? this.locked : status === 'track' ? this.tracked : this.ranges;
     const cached = map.get(value);
     if (cached) return cached;
     const range = this.t('cockpit.range', { value });
-    const label = this.atlas.add(this.t(locked ? 'cockpit.lock' : 'cockpit.track', { range }), locked ? green : '#81bc9d', 'center');
+    const label = this.atlas.add(status ? this.t(`cockpit.${status}`, { range }) : range, status === 'lock' ? green : '#e0f6eb');
     map.set(value, label);
+    return label;
+  }
+
+  relativeDelta(value: number): CockpitLabel {
+    const amount = Math.round(Math.abs(value)), delta = value < 0 ? -amount : amount;
+    const cached = this.relativeDeltas.get(delta);
+    if (cached) return cached;
+    const label = this.atlas.add(`${delta > 0 ? '^' : delta < 0 ? 'v' : '='}${amount}`,
+      delta > 0 ? '#abddff' : delta < 0 ? '#c2bcff' : '#d9f4d7');
+    this.relativeDeltas.set(delta, label);
     return label;
   }
 }
@@ -362,7 +377,7 @@ function rasterLadderSegment(raster: CockpitLineRaster, area: Rect, line: Line, 
   } else raster.line(color, a.x, a.y, b.x, b.y, weight);
 }
 
-function drawAim(c: Context, area: Rect, aim: Point, target: CockpitTarget | null, elapsed: number, labels: GlassLabels): void {
+function drawAim(c: Context, area: Rect, aim: Point): void {
   const x = clamp(aim.x, area.x + 10, right(area) - 10), y = clamp(aim.y, area.y + 10, bottom(area) - 10);
   if (x === aim.x && y === aim.y) {
     fill(c, ink, x - 9, y - 1, 19, 3);
@@ -380,30 +395,127 @@ function drawAim(c: Context, area: Rect, aim: Point, target: CockpitTarget | nul
       pixelLine(c, green, tipX, tipY, tipX + Math.cos(wing) * 7, tipY + Math.sin(wing) * 7);
     }
   }
-  if (!target) return;
+}
 
-  const p = target.point, size = 11, color = target.locked ? green : '#81bc9d';
-  const pulse = target.locked && Math.floor(elapsed * 4) % 2 === 0;
-  const targetTop = Math.round(p.y) - size;
-  c.strokeStyle = pulse ? green : '#254d41';
+function drawMarker(c: Context, marker: CockpitMarker, radius: number, pulse: boolean): void {
+  const x = Math.round(marker.x) + 0.5, y = Math.round(marker.y) + 0.5;
+  const color = marker.locked ? green : marker.color;
+  c.globalAlpha = marker.opacity;
+  c.beginPath();
+  if (marker.boxed) {
+    for (let side = -1; side <= 1; side += 2) for (let vertical = -1; vertical <= 1; vertical += 2) {
+      c.moveTo(x + side * (radius - 5), y + vertical * radius);
+      c.lineTo(x + side * radius, y + vertical * radius);
+      c.lineTo(x + side * radius, y + vertical * (radius - 5));
+    }
+  } else if (marker.placement === 'forward') {
+    c.moveTo(x, y - radius);
+    c.lineTo(x + radius, y);
+    c.lineTo(x, y + radius);
+    c.lineTo(x - radius, y);
+    c.closePath();
+  } else {
+    const dx = Math.cos(marker.angle), dy = Math.sin(marker.angle);
+    const rear = marker.placement === 'rear';
+    for (let n = 0; n < (rear ? 2 : 1); n++) {
+      const shift = rear ? -1 - n * 5 : 0;
+      c.moveTo(x + dx * (shift - 3) - dy * 5, y + dy * (shift - 3) + dx * 5);
+      c.lineTo(x + dx * (shift + 5), y + dy * (shift + 5));
+      c.lineTo(x + dx * (shift - 3) + dy * 5, y + dy * (shift - 3) - dx * 5);
+    }
+  }
+  c.lineJoin = 'bevel';
+  c.strokeStyle = ink;
+  c.lineWidth = 3;
+  c.stroke();
+  c.strokeStyle = color;
   c.lineWidth = 1;
-  c.strokeRect(Math.round(p.x) - size + 0.5, targetTop + 0.5, size * 2, size * 2);
-  for (let dx = -size; dx <= size; dx += size * 2) for (let dy = -size; dy <= size; dy += size * 2) {
-    const cornerX = p.x + dx, cornerY = p.y + dy;
-    fill(c, color, cornerX - (dx > 0 ? 4 : 0), cornerY, 5, 1);
-    fill(c, color, cornerX, cornerY - (dy > 0 ? 4 : 0), 1, 5);
+  c.stroke();
+  if (marker.boxed && pulse) c.strokeRect(x - radius, y - radius, 2 * radius, 2 * radius);
+  if (marker.boxed && !marker.locked && marker.lockProgress > 0) {
+    fill(c, ink, x - radius, y + radius + 2, radius * 2, 2);
+    fill(c, green, x - radius, y + radius + 2, Math.max(1, Math.round(radius * 2 * marker.lockProgress)), 2);
   }
-  const label = labels.contact(target.range, target.locked);
-  const width = Math.ceil(label.advance) + 10;
-  if (target.progress > 0 && !target.locked) {
-    fill(c, ink, p.x - size, targetTop + 24, size * 2, 3);
-    fill(c, green, p.x - size, targetTop + 24, Math.max(1, Math.round(size * 2 * target.progress)), 2);
+  if (marker.former && marker.placement === 'forward') {
+    fill(c, green, x - radius - 4, y - 2, 2, 3);
+    fill(c, green, x + radius + 1, y - 2, 2, 3);
+  } else if (marker.former && marker.placement === 'edge') {
+    fill(c, green, x - Math.cos(marker.angle) * 7 - 1, y - Math.sin(marker.angle) * 7 - 1, 3, 3);
   }
-  const below = targetTop + size * 2 + 8;
-  const labelY = below + 15 <= bottom(area) ? below : Math.max(area.y, targetTop - 19);
-  const labelX = clamp(p.x - width / 2, area.x, right(area) - width);
-  fill(c, pulse ? '#204335' : ink, labelX, labelY, width, 15);
-  drawCockpitLabel(c, label, labelX + width / 2, labelY + 7);
+}
+
+function overlaps(a: Readonly<Rect>, b: Readonly<Rect>): boolean {
+  return a.x < right(b) && right(a) > b.x && a.y < bottom(b) && bottom(a) > b.y;
+}
+
+function placeMarkerLabel(box: Rect, marker: CockpitMarker, layout: CockpitLayout, markers: readonly CockpitMarker[],
+  obstructions: readonly Readonly<Rect>[], used: Rect[], count: number): boolean {
+  const { aiming, compact } = layout;
+  if (box.width + 2 > aiming.width) return false;
+  const radius = markerRadius(marker, compact) + 6;
+  for (let option = marker.placement === 'rear' ? 1 : 0; option < 4; option++) {
+    const x = option === 2 ? marker.x + radius : option === 3 ? marker.x - radius - box.width : marker.x - box.width / 2;
+    const y = option === 0 ? marker.y + radius : option === 1 ? marker.y - radius - box.height : marker.y - box.height / 2;
+    box.x = Math.round(clamp(x, aiming.x + 1, right(aiming) - box.width - 1));
+    box.y = Math.round(y);
+    if (box.y < aiming.y + 1 || bottom(box) > bottom(aiming) - 1 || obstructions.some(rect => overlaps(box, rect))) continue;
+    if (markers.some(other => {
+      const pad = markerRadius(other, compact) + 3;
+      return other.x > box.x - pad && other.x < right(box) + pad && other.y > box.y - pad && other.y < bottom(box) + pad;
+    })) continue;
+    let collision = false;
+    for (let i = 0; i < count; i++) if (overlaps(box, used[i])) collision = true;
+    if (!collision) return true;
+  }
+  return false;
+}
+
+function drawMarkers(c: Context, layout: CockpitLayout, markers: readonly CockpitMarker[], obstructions: readonly Readonly<Rect>[],
+  labels: GlassLabels, boxes: Rect[], tick: number): void {
+  if (!markers.length) return;
+  const { aiming, compact } = layout;
+  c.save();
+  c.beginPath();
+  c.rect(aiming.x, aiming.y, aiming.width, aiming.height);
+  c.clip();
+  const pulse = Math.floor(tick / 15) % 2 === 0;
+  for (const marker of markers) drawMarker(c, marker, markerRadius(marker, compact), marker.locked && pulse);
+  let count = 0, labeledFormerArrow = false;
+  for (const marker of markers) {
+    const arrow = marker.placement === 'edge';
+    if (arrow && (!marker.former || labeledFormerArrow)) continue;
+    const range = labels.contact(Math.round(marker.range), marker.locked ? 'lock' : marker.warden ? 'track' : null);
+    const delta = labels.relativeDelta(marker.delta);
+    const rear = marker.placement === 'rear' ? labels.rear : null;
+    const box = boxes[count];
+    box.width = Math.ceil(range.advance + delta.advance + (rear ? rear.advance + 6 : 0)) + 14;
+    box.height = compact ? 13 : 15;
+    if (!placeMarkerLabel(box, marker, layout, markers, obstructions, boxes, count)) continue;
+    count++;
+    if (arrow) labeledFormerArrow = true;
+    c.globalAlpha = marker.opacity;
+    fill(c, marker.locked && pulse ? '#204335' : ink, box.x, box.y, box.width, box.height);
+    const y = box.y + (box.height - 1) / 2;
+    const x = box.x + (rear ? rear.advance + 6 : 0) + 4;
+    if (rear) drawCockpitLabel(c, rear, box.x + 4, y);
+    drawCockpitLabel(c, range, x, y);
+    drawCockpitLabel(c, delta, x + range.advance + 6, y);
+  }
+  c.restore();
+}
+
+function drawGraceShimmer(c: Context, area: Rect, left: number, tick: number): void {
+  const pulse = 0.18 + 0.24 * (1 + Math.cos(tick * 0.86)) / 2;
+  c.globalAlpha = Math.min(1, (left + 1) / 10) * pulse;
+  c.strokeStyle = '#a8ffe1';
+  c.lineWidth = 1;
+  c.strokeRect(area.x + 1.5, area.y + 1.5, area.width - 3, area.height - 3);
+  for (let side = 0; side < 2; side++) {
+    const x = side ? right(area) - 4 : area.x + 2;
+    const y = area.y + 3 + (area.height - 17) * ((tick * 0.07 + side * 0.5) % 1);
+    fill(c, '#d1ffed', x, y, 2, 11);
+  }
+  c.globalAlpha = 1;
 }
 
 function plate(r: Rect, paint: (c: Context) => void): HTMLCanvasElement {
@@ -564,9 +676,8 @@ export class CockpitDisplay {
   private readonly host: HTMLElement;
   private readonly hud = cockpitSurface(1, 1).context;
   private readonly panels = cockpitSurface(1, 1).context;
-  private readonly readout: { target: CockpitTarget | null; warnings: CockpitWarnings } = {
-    target: null, warnings: { master: false, lowHull: false, terrain: null, boost: null },
-  };
+  private readonly warnings: CockpitWarnings = { master: false, lowHull: false, terrain: null, boost: null };
+  private readonly markerLabels = Array.from({ length: 8 }, (): Rect => ({ x: 0, y: 0, width: 0, height: 0 }));
   private layout: CockpitLayout | null = null;
   private language: Language | null = null;
   private key = '';
@@ -665,14 +776,14 @@ export class CockpitDisplay {
   }
 
   draw(state: StageState, aim: Point | null, marks: PitchMark[], motion: CockpitMotion, clearance: number, impact: number,
-    readout: RadarReadout, target: CockpitTarget | null, language: Language, t: Translate) {
+    readout: RadarReadout, markers: readonly CockpitMarker[], markerObstructions: readonly Readonly<Rect>[],
+    trackAltitude: number | undefined, language: Language, t: Translate): void {
     const layout = this.layout;
-    if (!layout) return null;
+    if (!layout) return;
     if (language !== this.language) this.resize(layout, this.frame.width, this.frame.height, language, t);
     const elapsed = state.tick / 60;
-    this.readout.target = target;
-    const warnings = cockpitWarnings(state, clearance, motion.climb, this.readout.warnings);
-    this.drawGlass(layout, aim, marks, state, motion, target, state.maneuver ? undefined : readout.priority?.alt);
+    const warnings = cockpitWarnings(state, clearance, motion.climb, this.warnings);
+    this.drawGlass(layout, aim, marks, state, motion, markers, markerObstructions, trackAltitude);
 
     const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
     const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
@@ -695,11 +806,10 @@ export class CockpitDisplay {
       this.panels.globalAlpha = 1;
     }
     this.drawGauges(layout, state, motion, flicker);
-    return this.readout;
   }
 
   private drawGlass(layout: CockpitLayout, aim: Point | null, marks: PitchMark[], state: StageState, motion: CockpitMotion,
-    target: CockpitTarget | null, targetAltitude?: number): void {
+    markers: readonly CockpitMarker[], markerObstructions: readonly Readonly<Rect>[], targetAltitude?: number): void {
     const c = this.hud, { compact, speed, heading, altitude, aiming } = layout;
     clearZone(c, heading);
     drawHeading(c, heading, maneuverViewYaw(state), compact, this.labels);
@@ -719,9 +829,9 @@ export class CockpitDisplay {
     if (this.ladder) {
       clearZone(c, aiming);
       const m = state.maneuver;
-      const attitude = m && maneuverAttitude(m);
+      const attitude = m && maneuverAttitude(m, state.player.bank);
       if (m) {
-        const invertedAt = m.kind === 'immelmann' ? 28 : m.kind === 'split-s' ? 10 : Infinity;
+        const invertedAt = m.kind === 'immelmann' ? MANEUVERS.immelmann.flipTick : m.kind === 'split-s' ? 10 : Infinity;
         const flash = Math.max(0, 1 - m.elapsed / 7, m.elapsed >= invertedAt ? 1 - (m.elapsed - invertedAt) / 8 : 0);
         if (flash > 0) {
           c.globalAlpha = flash * 0.19;
@@ -730,7 +840,11 @@ export class CockpitDisplay {
         }
       }
       drawLadder(c, layout, aim, motion, this.labels, this.ladder, marks, attitude);
-      if (aim) drawAim(c, aiming, aim, target, state.tick / 60, this.labels);
+      if (state.bodyGraceUntil > 0 && state.tick <= state.bodyGraceUntil) {
+        drawGraceShimmer(c, aiming, state.bodyGraceUntil - state.tick, state.tick);
+      }
+      if (aim) drawAim(c, aiming, aim);
+      drawMarkers(c, layout, markers, markerObstructions, this.labels, this.markerLabels, state.tick);
     }
   }
 

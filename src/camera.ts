@@ -18,20 +18,26 @@ export function cockpitFov(aspect: number, pitch: number): number {
   return Math.max(60 + Math.abs(pitch) * 66, minimum);
 }
 
+function lensAdjustment(first: number, last: number, min: number, max: number, sweep = 0): number {
+  const low = last - max, high = first - min;
+  return Math.round(low <= high ? clamp(sweep, low, high) : (low + high) / 2);
+}
+
 export function frameCockpit(camera: PerspectiveCamera, player: StageState['player'], frame: CockpitFraming,
   attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number, yaw = player.yaw): PitchMark[] {
   const { width, height, cockpit } = frame;
   const pitch = attitude?.cameraPitch ?? 0, bank = attitude?.cameraBank ?? 0;
+  const bankCos = Math.cos(bank), visualPitch = pitch * bankCos;
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
   camera.fov = cockpitFov(width / height, pitch);
   let shift = clamp(center, 0.29, 0.64);
-  if (cockpit && pitch) {
+  if (cockpit && Math.abs(visualPitch) > 0.001) {
     const { y, height: glassHeight } = cockpit.aiming;
     const margin = Math.min(0.19, glassHeight / height * 0.42);
-    const horizonOffset = Math.tan(pitch) / (2 * Math.tan(camera.fov * Math.PI / 360));
-    const edge = pitch > 0 ? (y + glassHeight) / height - margin : y / height + margin;
-    shift = clamp(pitch > 0 ? Math.min(shift, edge - horizonOffset) : Math.max(shift, edge - horizonOffset), 0.14, 0.82);
+    const horizonOffset = bankCos * Math.tan(pitch) / (2 * Math.tan(camera.fov * Math.PI / 360));
+    const edge = visualPitch > 0 ? (y + glassHeight) / height - margin : y / height + margin;
+    shift = clamp(visualPitch > 0 ? Math.min(shift, edge - horizonOffset) : Math.max(shift, edge - horizonOffset), 0.14, 0.82);
   }
   const viewOffset = Math.round(height * (0.5 - shift));
   camera.setViewOffset(width, height, 0, viewOffset, width, height);
@@ -42,23 +48,24 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   if (!cockpit || cockpit.aiming.height < 20) return [];
 
   const columns = pitchColumns(camera, frame, ground, visibleDepth);
-  const marks = projectPitchLadder(camera, frame.height, columns);
+  if (bankCos < 0) columns.reverse();
+  const marks = projectPitchLadder(camera, width, height, columns);
   const zero = marks.find(mark => mark.angle === 0);
   if (!zero) return marks;
-  const { y, height: glassHeight } = cockpit.aiming;
-  const heights = [...zero.left, ...zero.right].flatMap(line => [line.from.y, line.to.y]);
-  const shiftUp = Math.max(...heights) - (y + glassHeight - 6);
-  const shiftDown = Math.min(...heights) - (y + 6);
-  const strength = Math.min(1, Math.abs(pitch) / (24 * Math.PI / 180));
-  const skyline = (Math.max(...heights) + Math.min(...heights)) / 2;
-  const desired = y + glassHeight * (pitch > 0 ? 0.78 : 0.22);
-  const sweep = (skyline - desired) * strength;
-  const adjustment = Math.round(shiftUp <= shiftDown ? clamp(sweep, shiftUp, shiftDown) : (shiftUp + shiftDown) / 2);
-  if (!adjustment) return marks;
+  const area = cockpit.aiming;
+  const points = [...zero.left, ...zero.right].flatMap(line => [line.from, line.to]);
+  const xs = points.map(point => point.x), ys = points.map(point => point.y);
+  const top = Math.min(...ys), bottom = Math.max(...ys);
+  const strength = Math.min(1, Math.abs(visualPitch) / (24 * Math.PI / 180));
+  const desired = area.y + area.height * (visualPitch > 0 ? 0.78 : 0.22);
+  const adjustY = lensAdjustment(top, bottom, area.y + 6, area.y + area.height - 6, ((top + bottom) / 2 - desired) * strength);
+  const adjustX = Math.abs(Math.sin(bank)) > 0.001
+    ? lensAdjustment(Math.min(...xs), Math.max(...xs), area.x + 6, area.x + area.width - 6) : 0;
+  if (!adjustY && !adjustX) return marks;
 
   // Move the lens rather than clamping the bar, so both scene and HUD keep the same skyline.
-  camera.setViewOffset(width, height, 0, viewOffset + adjustment, width, height);
-  return projectPitchLadder(camera, frame.height, columns);
+  camera.setViewOffset(width, height, adjustX, viewOffset + adjustY, width, height);
+  return projectPitchLadder(camera, width, height, columns);
 }
 
 export const cockpitLadderSpan = (layout: CockpitLayout): number =>
@@ -68,22 +75,22 @@ function pitchColumns(camera: PerspectiveCamera, frame: CockpitFraming, ground: 
   const { width, cockpit } = frame;
   if (!cockpit) return [];
   const eye = camera.position, gaze = camera.getWorldDirection(new Vector3());
+  const right = new Vector3().crossVectors(gaze, WORLD_UP).normalize();
   const span = cockpitLadderSpan(cockpit), center = cockpit.aiming.x + cockpit.aiming.width / 2;
   return [-1, -0.65, -0.3, 0.3, 0.65, 1].map(offset => {
-    const x = center + offset * span, ndcX = x * 2 / width - 1;
-    // Each screen column lies in one plane through the eye, including camera bank and lens shift.
-    const normal = new Vector3(ndcX, 1, 0).unproject(camera).sub(eye)
-      .cross(new Vector3(ndcX, -1, 0).unproject(camera).sub(eye)).normalize();
+    const ndcX = (center + offset * span) * 2 / width - 1;
+    // Slice in an unrolled frame, then project the resulting skyline through the rolled camera.
+    const normal = right.clone().addScaledVector(gaze, -ndcX / camera.projectionMatrix.elements[0]).normalize();
     const horizontal = new Vector3().crossVectors(normal, WORLD_UP).normalize();
     if (horizontal.dot(gaze) < 0) horizontal.negate();
     const vertical = new Vector3().crossVectors(horizontal, normal).normalize();
     if (vertical.y < 0) vertical.negate();
     const elevation = terrainElevation(eye, horizontal, vertical, normal, gaze, ground, camera.near, Math.min(visibleDepth, camera.far));
-    return { x, horizontal, vertical, elevation };
+    return { horizontal, vertical, elevation };
   });
 }
 
-function projectPitchLadder(camera: PerspectiveCamera, height: number, columns: ReturnType<typeof pitchColumns>): PitchMark[] {
+function projectPitchLadder(camera: PerspectiveCamera, width: number, height: number, columns: ReturnType<typeof pitchColumns>): PitchMark[] {
   if (!columns.length || columns.some(column => column.elevation === -Infinity)) return [];
   const eye = camera.position, gaze = camera.getWorldDirection(new Vector3());
 
@@ -92,12 +99,12 @@ function projectPitchLadder(camera: PerspectiveCamera, height: number, columns: 
   for (let angle = -90; angle <= 90; angle += 10) {
     // Sample the middle of each zero segment as well, so it can follow a turn in the terrain edge.
     const samples = angle === 0 ? columns : rungColumns;
-    const points = samples.map(({ x, horizontal, vertical, elevation }): Point | null => {
+    const points = samples.map(({ horizontal, vertical, elevation }): Point | null => {
       const radians = elevation + angle * Math.PI / 180;
       ray.copy(horizontal).multiplyScalar(Math.cos(radians)).addScaledVector(vertical, Math.sin(radians));
       if (ray.dot(gaze) <= 0.001) return null;
       ray.add(eye).project(camera);
-      return { x, y: (1 - ray.y) * height / 2 };
+      return { x: (1 + ray.x) * width / 2, y: (1 - ray.y) * height / 2 };
     });
     if (!points.every((point): point is Point => point !== null)) continue;
     const middle = points.length / 2;

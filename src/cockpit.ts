@@ -39,8 +39,8 @@ export function headingTape(yaw: number, step: 15 | 30, t: ReturnType<typeof cre
   return { bearing, ticks };
 }
 
-export function cockpitTarget(track: Track, point: Point, area: Rect, lock: Lock | null): CockpitTarget | null {
-  const inset = 14;
+export function cockpitTarget(track: Pick<Track, 'id' | 'range'>, point: Point, area: Rect, lock: Lock | null,
+  inset = 14): CockpitTarget | null {
   if (point.x < area.x + inset || point.x > area.x + area.width - inset
     || point.y < area.y + inset || point.y > area.y + area.height - inset) return null;
   const matching = lock?.id === track.id ? lock : null;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Matrix4, Object3D, PerspectiveCamera, Vector3 } from 'three';
 import { EngineExhaust } from '../src/engine-exhaust.ts';
-import { maneuverAttitude } from '../src/maneuvers.ts';
+import { MANEUVERS, maneuverAttitude } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 function exhaustFixture() {
@@ -69,7 +69,7 @@ test('the Cobra recovery pulse is fading out when normal flight resumes', () => 
 test('the same tick reproduces both plumes and keeps their axes attached through inversion', () => {
   const { state, ship, exhaust, camera, plumes } = exhaustFixture();
   stepStage(state, { maneuver: 'immelmann' });
-  for (let i = 0; i < 31; i++) stepStage(state);
+  for (let i = 1; i <= MANEUVERS.immelmann.flipTick + 5; i++) stepStage(state);
   const attitude = maneuverAttitude(state.maneuver);
   assert.ok(attitude.inverted);
   ship.rotation.set(attitude.pitch, -state.player.yaw, attitude.roll, 'YXZ');
