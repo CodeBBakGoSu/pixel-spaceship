@@ -2,7 +2,8 @@ import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
 
-export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | LandmarkId | NewEnemyKind;
+export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
+  | LandmarkId | NewEnemyKind;
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -71,6 +72,9 @@ export type Enemy = Position & {
   fanFired?: boolean;
   farTicks?: number;
   course?: { target: Point; speed: number; until: number };
+  flyby?: { startedAt: number; yaw: number; side: -1 | 1; lane: number } &
+    ({ phase: 'overtake' } | { phase: 'cross'; target: Point });
+  flybyAt?: number;
   burnUntil?: number;
   burnNextAt?: number;
 };
@@ -80,11 +84,13 @@ export type Shot = Position & {
   vz: number;
   life: number;
   damage: number;
-  kind: 'twin' | 'pods' | 'hostile';
   volley: number;
   nearMiss: boolean;
   lockId: number | null;
-};
+} & (
+  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { targetId: number }; reversalTick?: number } |
+  { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never }
+);
 export type RearBomb = Position & { born: number; vx: number; vz: number };
 export type Flare = Position & { born: number; vx: number; vz: number; vy: number };
 export type RearGlimpse = { kind: 'bomb' | 'flare'; since: number; until: number; target?: Position };
@@ -136,7 +142,7 @@ export type StageState = {
   viewTag: number;
   arena: { x: number; z: number; radius: number };
   boundaryWarning: boolean;
-  player: { x: number; z: number; altitude: number; yaw: number; bank: number };
+  player: { x: number; z: number; altitude: number; yaw: number; bank: number; vx?: number; vz?: number };
   speed: number;
   climbRate: number;
   hull: number;
@@ -146,6 +152,7 @@ export type StageState = {
   invulnerability: number;
   boost: number;
   boosting: boolean;
+  boostTicks: number;
   bombs: number;
   bombReadyAt: number;
   bombReloadAt: number | null;
@@ -161,6 +168,14 @@ export type StageState = {
   maneuverTrail: ManeuverTrail | null;
   maneuverReadyAt: number;
   bodyGraceUntil: number;
+  reversal: {
+    startTick: number;
+    until: number;
+    pursuers: readonly number[];
+    kills: number;
+    nextShotAt: number;
+    shownUntil: number;
+  } | null;
   xp: number;
   level: 1 | 2 | 3;
   salvage: number;
@@ -175,6 +190,7 @@ export type StageState = {
   podDamage: number;
   twinAt: number;
   podsAt: number;
+  strafeAt: number;
   score: number;
   enemies: Enemy[];
   pickups: Pickup[];

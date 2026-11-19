@@ -34,6 +34,16 @@ test('guidance separates maneuver selectors from the flare key and touch control
   }
 });
 
+test('the credited reversal counter and rear response copy are localized', () => {
+  const en = createTranslator('en'), ko = createTranslator('ko');
+  assert.equal(en('hud.reversalKills', { count: 6 }), 'x6 REVERSAL!');
+  assert.equal(ko('hud.reversalKills', { count: 6 }), 'x6 반전 격추!');
+  assert.equal(en('hud.rearReverse'), 'REVERSE');
+  assert.equal(ko('hud.rearReverse'), '반전');
+  assert.equal(en('hud.rearEvade'), 'EVADE');
+  assert.equal(ko('hud.rearEvade'), '회피');
+});
+
 test('language defaults to Korean for Korean browser locales', () => {
   for (const locale of ['ko', 'ko-KR', 'KO-kr']) assert.equal(detectLanguage(locale), 'ko');
   for (const locale of ['', 'en-US', 'ja-JP']) assert.equal(detectLanguage(locale), 'en');

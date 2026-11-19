@@ -29,12 +29,12 @@ test('full autoplay uses a charged J-turn against a distant level pursuer', () =
   assert.equal(autopilotInput(state).maneuver, 'j-turn');
 });
 
-for (const [kind, ticks, altitude, yaw, cooldown] of [
-  ['immelmann', 270, 145, Math.PI, 240],
-  ['split-s', 290, 75, Math.PI, 240],
-  ['j-turn', 52, 110, Math.PI, 420],
+for (const [kind, flipTick, ticks, altitude, yaw, cooldown] of [
+  ['immelmann', 78, 252, 145, Math.PI, 240],
+  ['split-s', 98, 272, 75, Math.PI, 240],
+  ['j-turn', 1, 52, 110, Math.PI, 420],
 ]) {
-  test(`${kind} hands back on tick ${ticks} at the specified altitude and heading`, () => {
+  test(`${kind} finishes on tick ${ticks} and starts its cooldown at the flip`, () => {
     const state = empty();
     const { x, z } = state.player;
     const startTick = state.tick;
@@ -43,9 +43,15 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
     if (kind === 'j-turn') {
       assert.ok(Math.abs(state.player.yaw) > 3.1);
       assert.equal(state.boost, 0.6);
+    } else {
+      run(state, flipTick - 2, { boost: true });
+      assert.equal(state.maneuverReadyAt, 0);
+      run(state, 1, { boost: true });
     }
+    const readyAt = startTick + flipTick + cooldown;
+    assert.equal(state.maneuverReadyAt, readyAt);
     assert.equal(state.maneuver?.kind, kind);
-    run(state, ticks - 2, { boost: true });
+    run(state, ticks - flipTick - 1, { boost: true });
     assert.equal(state.maneuver?.kind, kind);
     run(state, 1);
     assert.equal(state.tick - startTick, ticks);
@@ -53,11 +59,13 @@ for (const [kind, ticks, altitude, yaw, cooldown] of [
     assert.equal(state.player.altitude, altitude);
     assert.ok(Math.abs(Math.abs(state.player.yaw) - yaw) < 1e-9);
     assert.equal(state.bombs, 3);
-    assert.equal(state.maneuverReadyAt, state.tick + cooldown);
+    assert.equal(state.maneuverReadyAt, readyAt);
     assert.equal(state.invulnerability, 0);
     assert.ok(Math.hypot(state.player.x - x, state.player.z - z) >= 10);
-    run(state, cooldown - 1, { maneuver: 'immelmann' });
+    run(state, readyAt - state.tick - 1, { maneuver: 'immelmann' });
+    assert.equal(state.tick, readyAt - 1);
     assert.equal(state.maneuver, null);
+    assert.equal(moves.canManeuver(state, 'immelmann'), false);
     run(state, 1, { maneuver: 'immelmann' });
     assert.equal(state.maneuver?.kind, 'immelmann');
   });
@@ -104,14 +112,14 @@ test('J-turn snaps its flight heading, traces a displaced U and lets the view ca
   assert.ok(state.player.z > z + 50);
   assert.ok(state.player.x < x - 40);
   run(state, 26);
-  assert.ok(state.player.x < x - 25 && state.player.z > z + 55);
+  assert.ok(state.player.x < x - 20 && state.player.z > z + 55);
   assert.equal(state.maneuverTrail.points.at(-1).x, state.player.x);
   run(state, 1);
   assert.ok(state.speed > moves.CRUISE_SPEED);
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state) - state.player.yaw)) < 1e-6);
 });
 
-for (const [kind, flipTick, expectedAltitude] of [['immelmann', 96, 145], ['split-s', 116, 75]]) {
+for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['split-s', 98, 75]]) {
   test(`${kind} carries flight forward before spending 2.5 seconds level and inverted`, () => {
     const state = empty();
     const start = { ...state.player };
@@ -138,7 +146,7 @@ for (const [kind, flipTick, expectedAltitude] of [['immelmann', 96, 145], ['spli
     assert.ok(moves.maneuverAttitude(state.maneuver).roll < Math.PI);
     run(state, 12);
     assert.equal(state.maneuver, null);
-    assert.ok(moves.activeTrail(state).points.length >= 90);
+    assert.equal(moves.activeTrail(state).points.length, Math.ceil((flipTick + 150 + 24) / moves.TRAIL_SAMPLE_TICKS) + 1);
     run(state, 120);
     assert.ok(moves.activeTrail(state));
   });
@@ -187,7 +195,7 @@ test('after boost the Immelmann brings the high-band rear contact into a forward
   const high = state.enemies.find(enemy => enemy.alt === 145);
   run(state, 30, { boost: true });
   run(state, 1, { maneuver: 'immelmann' });
-  run(state, 95);
+  run(state, moves.MANEUVERS.immelmann.flipTick - 1);
   assert.equal(state.player.altitude, 145);
   assert.ok(moves.formerPursuer(state, moves.activeTrail(state), high));
   run(state, 135);

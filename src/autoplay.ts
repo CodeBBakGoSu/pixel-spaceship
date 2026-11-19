@@ -3,10 +3,10 @@ import { BEACON_SIGNAL_SECONDS, LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { createStage, stepStage } from './stage.ts';
-import type { Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
-type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home' };
+type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby'] };
 
 function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
   let best: T | null = null, range = Infinity;
@@ -28,6 +28,12 @@ function routeFor(state: StageState, mode: PilotMode): Route {
   }
   const weak = activeWeakPoint(state);
   if (weak) return { ...weak, kind: 'weak' };
+  const pass = state.reversal;
+  if (mode === 'full' && pass && state.tick < pass.until) {
+    const former = nearest(state.enemies.filter(enemy => enemy.hp && inBand(enemy.alt, p.altitude) && pass.pursuers.includes(enemy.id)
+      && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
+    if (former) return { ...former, kind: 'enemy' };
+  }
   if (mode === 'full' && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND
     && (state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
     && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
@@ -142,23 +148,24 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   const climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
   // Extend after each boss pass. Turning tightly around a stationary target would keep it off the nose.
   const extending = target.kind === 'weak' && range < 72 && Math.abs(angle) > Math.PI * 0.58;
-  const turn = extending ? 0 : target.kind === 'home' && range < 34 ? 0.65 : clamp(angle * 2.35, -1, 1);
+  const acceptingPass = mode === 'full' && !!target.flyby && !state.boundaryWarning && Math.abs(angle) > Math.PI / 6;
+  const turn = extending || acceptingPass ? 0 : target.kind === 'home' && range < 34 ? 0.65 : clamp(angle * 2.35, -1, 1);
 
   let view: StageState['view'] = 'overhead';
   if (mode === 'full' && target.kind !== 'home') {
-    if (Math.abs(delta) > 12) view = 'chase';
+    if (Math.abs(delta) > 12 || acceptingPass) view = 'chase';
     else if (target.kind === 'weak' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
   }
   const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb, ground) : undefined;
-  const maneuver = mode === 'full' && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
-  const extend = mode === 'full' && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
+  const maneuver = mode === 'full' && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
+  const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
-  const boost = extend || (range > 155 && Math.abs(angle) < 0.2 && (state.level < 3 || target.kind === 'beacon'));
+  const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (state.level < 3 || target.kind === 'beacon')));
   return {
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
-    bomb: mode === 'full' && !maneuver && hasRearBombTarget(state),
-    flare: flare && !maneuver,
+    bomb: mode === 'full' && !acceptingPass && !maneuver && hasRearBombTarget(state),
+    flare: flare && !maneuver && !acceptingPass,
   };
 }
 

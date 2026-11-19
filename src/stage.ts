@@ -1,5 +1,5 @@
-import { advanceBank } from './flight.ts';
-import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, CRUISE_SPEED, exitAltitude, MANEUVERS,
+import { advanceBank, boostAirspeed, BOOST_TURN_RATE, CRUISE_SPEED, TURN_RATE } from './flight.ts';
+import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage-enemies.ts';
@@ -9,7 +9,7 @@ import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS,
 import {
   acquireAndFire, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, clamp,
   dropFlares, dropRearBomb, fireHostile, hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
-  REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
+  openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
 
@@ -31,6 +31,7 @@ export function parseStageOptions(search: string): StageOptions {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
     fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'flare'
+      || fixture === 'reversal' || fixture === 'flyby' || fixture === 'rear-threat' || fixture === 'strafe'
       || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, 180) : null,
     autoplay: q.get('autoplay') === '1',
@@ -74,7 +75,7 @@ function updateBoss(state: StageState): void {
   positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
   if (state.tick >= boss.shotAt && point?.hp) {
-    for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 54, spread);
+    for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 68, spread);
     boss.shotAt = state.tick + 255;
   }
 }
@@ -178,6 +179,36 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
+  } else if (fixture === 'reversal') {
+    const p = state.player;
+    state.nextWave = WAVES.length;
+    for (const [lateral, aft] of [[-18, 72], [-8, 76], [2, 82], [10, 88], [20, 94], [30, 100]]) {
+      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, 2);
+      enemy.yaw = p.yaw;
+      state.enemies.push(enemy);
+    }
+    state.enemies.push(makeEnemy(state, p.x - 15, p.z - 101, 0));
+  } else if (fixture === 'flyby') {
+    const p = state.player;
+    p.z -= 48;
+    p.altitude = BANDS[2] - 11;
+    state.nextWave = WAVES.length;
+    for (const [lateral, aft, band, kind] of [[-26, 53, 2, 'interceptor'], [31, 64, 1, 'patrol']] as const) {
+      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band, kind);
+      enemy.yaw = p.yaw;
+      state.enemies.push(enemy);
+    }
+  } else if (fixture === 'rear-threat') {
+    const p = state.player;
+    state.speed = CRUISE_SPEED;
+    state.nextWave = WAVES.length;
+    state.enemies.push(makeEnemy(state, p.x - 17, p.z - 62, 2), makeEnemy(state, p.x + 16, p.z - 74, 0));
+    fireHostile(state, { x: p.x, z: p.z - 48, alt: p.altitude }, 78);
+  } else if (fixture === 'strafe') {
+    const p = state.player;
+    p.altitude = BANDS[2];
+    state.nextWave = WAVES.length;
+    state.enemies.push(makeEnemy(state, p.x + 8, p.z + 89, 1), makeEnemy(state, p.x - 18, p.z + 83, 0));
   } else if (fixture === 'draft') {
     state.xp = state.salvage = 6;
     state.salvageBands[1] = 6;
@@ -203,12 +234,12 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
     speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
-    boost: 1, boosting: false, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
+    boost: 1, boosting: false, boostTicks: 0, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
     flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
-    maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0,
+    maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
     xp: 0, level: 1, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
-    twinAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
+    twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options.fixture, ground);
@@ -244,14 +275,14 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number): voi
   for (const enemy of state.enemies) {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
-    if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 160) trail.pursuers.push(enemy.id);
+    if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 190) trail.pursuers.push(enemy.id);
     warnHarrier(state, enemy, maneuver, aft, lateral);
     if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
-    if (aft >= 65 && aft <= 115) {
-      const lane = (enemy.id % 3 - 1) * 5;
+    if (aft >= 34 && aft <= 140) {
+      const lane = clamp(lateral + (enemy.id % 3 - 1) * 3, -28, 28);
       enemy.course = { target: { x: p.x - fx * 64 + fz * lane, z: p.z - fz * 64 - fx * lane },
-        speed: enemy.kind === 'interceptor' ? 30 : 23, until };
+        speed: enemy.kind === 'interceptor' ? 40 : 32, until };
     }
     if (enemy.course) {
       keepInsideArena(enemy.course.target, state.arena);
@@ -273,7 +304,9 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   const p = state.player, a = state.arena, maneuver = state.maneuver;
   if (!input.boost) state.boostRelease = false;
   const boostHeld = controlled && !grace && !!input.boost && !state.boostRelease;
+  const priorBoost = state.boosting;
   state.boosting = boostHeld && state.boost > 0;
+  state.boostTicks = state.boosting ? (priorBoost ? state.boostTicks + 1 : 1) : 0;
   if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35) * STEP, 0, 1);
   let altitude: number;
   if (maneuver && !controlled) {
@@ -284,13 +317,19 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     p.x += fx * motion.distance + fz * motion.slide;
     p.z += fz * motion.distance - fx * motion.slide;
     altitude = motion.altitude;
-    if (motion.reverse) reverseHeading(state, maneuver.yaw);
+    if (motion.reverse) {
+      reverseHeading(state, maneuver.yaw);
+      state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
+      if (maneuver.kind !== 'j-turn' && state.maneuverTrail) openReversal(state, state.maneuverTrail.pursuers);
+    }
   } else {
     if (maneuver) maneuver.elapsed++;
     const turn = clamp(input.turn ?? 0, -1, 1);
     p.bank = advanceBank(p.bank, turn, STEP);
-    p.yaw = angleTo(0, Math.sin(p.yaw + turn * 1.55 * STEP), Math.cos(p.yaw + turn * 1.55 * STEP));
-    state.speed = CRUISE_SPEED * Math.max(state.boosting ? 1.55 : 1, 1 + turnExitBurst(state)) * (1 - Math.abs(turn) * 0.25);
+    const yaw = p.yaw + turn * (state.boosting ? BOOST_TURN_RATE : TURN_RATE) * STEP;
+    p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
+    const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
+    state.speed = thrust * (1 - Math.abs(turn) * 0.25);
     p.x += Math.sin(p.yaw) * state.speed * STEP;
     p.z += Math.cos(p.yaw) * state.speed * STEP;
     altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * STEP;
@@ -384,6 +423,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);
   fly(state, input, ground, grace, controlled);
+  const vx = state.player.vx = (state.player.x - x) / STEP;
+  const vz = state.player.vz = (state.player.z - z) / STEP;
   if (maneuver && state.maneuverTrail && (maneuver.elapsed % TRAIL_SAMPLE_TICKS === 0 || maneuver.elapsed === MANEUVERS[maneuver.kind].ticks)) {
     const { x, z, altitude } = state.player;
     state.maneuverTrail.points.push({ x, z, alt: altitude });
@@ -408,11 +449,13 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     if (input.bomb && !grace) dropRearBomb(state);
     acquireAndFire(state);
   }
-  if (input.flare) dropFlares(state, (state.player.x - x) / STEP, (state.player.z - z) / STEP);
+  if (input.flare) dropFlares(state, vx, vz);
   if (maneuver && maneuver.elapsed === MANEUVERS[maneuver.kind].ticks) {
-    if (state.maneuverTrail) state.maneuverTrail.actualExit = state.player.altitude;
+    if (state.maneuverTrail) {
+      state.maneuverTrail.actualExit = state.player.altitude;
+      if (maneuver.kind === 'j-turn') openReversal(state, state.maneuverTrail.pursuers);
+    }
     state.maneuver = null;
-    state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
     state.bodyGraceUntil = state.tick + BODY_GRACE_TICKS;
   }
   advanceShots(state, ground);

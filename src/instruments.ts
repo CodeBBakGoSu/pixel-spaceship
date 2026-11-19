@@ -1,20 +1,23 @@
 import type { createTranslator } from './i18n.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
-import { activeTrail, exitAltitude, formerPursuer } from './maneuvers.ts';
+import { activeTrail, formerPursuer } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, LANDMARKS, RIM_WARNING } from './reach.ts';
-import { activeWeakPoint, angleTo, HIT_WINDOW, inBand, TICKS_PER_SECOND } from './stage-combat.ts';
+import { activeWeakPoint, angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
-export const RADAR_RANGE = 160;
+export const RADAR_RANGE = 210;
+const REAR_WARNING_SECONDS = 0.8;
+const BODY_RADIUS = 7;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
 export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number; former?: true };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null; former?: true };
 type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
 const MAP_LANDMARKS = Object.entries(LANDMARKS);
+export type RearDanger = Position & { seconds: number } & ({ kind: 'shot' } | { kind: 'contact'; enemyId: number });
 export type RadarReadout = {
   contacts: Blip[]; priority: Track | null; salvage: Track | null;
-  rear: boolean; rearCount: number; rearClose: boolean; rearBandMatch: boolean;
-  rearMarks: AltitudeMark[];
+  rear: boolean; rearCount: number; rearBandMatch: boolean;
+  rearMarks: AltitudeMark[]; rearDanger: RearDanger | null;
   rim: RimTick[]; boundaryBearing: number | null;
 };
 
@@ -88,9 +91,47 @@ export function altitudeDeltaText(delta: number, t: ReturnType<typeof createTran
   return t('cockpit.altDelta', { sign: delta < 0 && value ? '−' : '+', value: String(value).padStart(2, '0') });
 }
 
+function findRearDanger(state: StageState, fx: number, fz: number): RearDanger | null {
+  if (state.phase !== 'playing' || state.paused || state.invulnerability >= REAR_WARNING_SECONDS) return null;
+  const p = state.player;
+  const playerVx = p.vx ?? state.speed * fx, playerVz = p.vz ?? state.speed * fz;
+  const climb = state.climbRate;
+  const impact = (target: Position & { vx: number; vz: number }, radius: number, from: number, until: number): number => {
+    const dx = target.x - p.x, dz = target.z - p.z;
+    const height = target.alt - p.altitude;
+    if (dx * fx + dz * fz >= 0 || Math.abs(height) > HIT_WINDOW) return Infinity;
+    const vx = target.vx - playerVx, vz = target.vz - playerVz;
+    if (dx * vx + dz * vz >= 0) return Infinity;
+    // Stop projecting once the player's climb leaves the target's hit window.
+    const bandExit = climb ? (HIT_WINDOW + Math.sign(climb) * height) / Math.abs(climb) : Infinity;
+    const to = Math.min(REAR_WARNING_SECONDS, bandExit, until);
+    if (from > to) return Infinity;
+    const seconds = impactTime(target, vx, vz, p, radius, from, to);
+    return seconds < state.invulnerability ? Infinity : seconds;
+  };
+  let closest: RearDanger | null = null;
+  for (const shot of state.shots) {
+    if (shot.kind !== 'hostile' || shot.life <= 0) continue;
+    const seconds = impact(shot, HOSTILE_HIT_RADIUS, 0, shot.life);
+    if (seconds < (closest?.seconds ?? Infinity)) closest = { kind: 'shot', x: shot.x, z: shot.z, alt: shot.alt, seconds };
+  }
+  if (closest) return closest;
+
+  const bodyFrom = Math.max(STEP, (state.bodyGraceUntil + 1 - state.tick) * STEP);
+  for (const enemy of state.enemies) {
+    if (enemy.hp <= 0) continue;
+    const seconds = impact(enemy, BODY_RADIUS, bodyFrom, Infinity);
+    if (seconds < (closest?.seconds ?? Infinity)) {
+      closest = { kind: 'contact', enemyId: enemy.id, x: enemy.x, z: enemy.z, alt: enemy.alt, seconds };
+    }
+  }
+  return closest;
+}
+
 export function buildRadar(state: StageState, yaw = state.player.yaw): RadarReadout {
   const p = state.player;
   const sin = Math.sin(yaw), cos = Math.cos(yaw);
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const top = state.view === 'overhead';
   const contacts: Blip[] = [];
   const rim: RimTick[] = [];
@@ -101,9 +142,9 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   };
   const rx = p.x - state.arena.x, rz = p.z - state.arena.z;
   const boundaryBearing = Math.hypot(rx, rz) > state.arena.radius - RIM_WARNING ? angleTo(yaw, rx, rz) : null;
-  let rearCount = 0, rearClose = false, rearBandMatch = false;
+  let rearCount = 0, rearBandMatch = false;
   let rearHigher = false, rearLower = false;
-  const up = exitAltitude(p.altitude, 'immelmann'), down = exitAltitude(p.altitude, 'split-s');
+  const rearDanger = findRearDanger(state, fx, fz);
   const active = activeWeakPoint(state);
   const visible: { track: Track; across: number }[] = [];
   const hostiles: Track[] = [];
@@ -118,16 +159,13 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
       else if (kind !== 'warden' && kind !== 'pod' && kind !== 'core') rimTick('enemy', dx, dz);
       return;
     }
-    if (!top && ahead < 0) {
-      if (kind !== 'salvage' && kind !== 'turret') {
-        rearCount++;
-        rearClose ||= range < 95;
-        rearBandMatch ||= inBand(item.alt, p.altitude);
-        rearHigher ||= item.alt - p.altitude > HIT_WINDOW && inBand(item.alt, up);
-        rearLower ||= p.altitude - item.alt > HIT_WINDOW && inBand(item.alt, down);
-      }
-      return;
+    if (!top && dx * fx + dz * fz < 0 && kind !== 'salvage' && kind !== 'turret') {
+      rearCount++;
+      rearBandMatch ||= inBand(item.alt, p.altitude);
+      rearHigher ||= item.alt - p.altitude > HIT_WINDOW;
+      rearLower ||= p.altitude - item.alt > HIT_WINDOW;
     }
+    if (!top && ahead < 0) return;
     visible.push({ track, across: dx * cos - dz * sin });
   };
   const trail = activeTrail(state);
@@ -140,10 +178,6 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   for (const pickup of state.pickups) scan(pickup, 'salvage');
   const beacon = beaconTrack(state);
   if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('warden', beacon.x - p.x, beacon.z - p.z);
-  if (!top && !rearClose) rearClose = state.shots.some(shot => {
-    const dx = shot.x - p.x, dz = shot.z - p.z;
-    return shot.kind === 'hostile' && dx * sin + dz * cos < 0 && Math.hypot(dx, dz) < 90;
-  });
   const nearest = (tracks: Track[]): Track | null =>
     tracks.reduce<Track | null>((best, track) => !best || track.range < best.range ? track : best, null);
   const forward = visible.map(({ track }) => track);
@@ -168,7 +202,7 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   if (rearBandMatch) rearMarks.push('■');
   if (rearLower) rearMarks.push('▽');
   return { contacts, rim, boundaryBearing, priority: priority ?? nearest(hostiles), salvage,
-    rear: rearCount > 0 || rearClose, rearCount, rearClose, rearBandMatch, rearMarks };
+    rear: rearCount > 0, rearCount, rearBandMatch, rearMarks, rearDanger };
 }
 
 export class RadarDisplay {
@@ -256,8 +290,7 @@ export class RadarDisplay {
       c.lineWidth = 1;
     }
     if (readout.rear) {
-      const pulse = readout.rearClose && Math.floor(tick / 12) % 2 === 0;
-      c.strokeStyle = pulse ? '#ff7965' : '#ffb064';
+      c.strokeStyle = '#a8c5bb';
       c.lineWidth = readout.rearBandMatch ? 2 : 1;
       c.beginPath();
       c.arc(x, y, radius, Math.PI * 0.35, Math.PI * 0.65);

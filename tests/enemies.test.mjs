@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { relocateStragglers } from '../src/spawn-director.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
 
 const world = new World();
@@ -118,18 +120,109 @@ test('a landmark turret fixes a single-band flak position after a 1.4 s warning'
   assert.deepEqual([puff.x, puff.z, puff.alt], [warning.x, warning.z, warning.alt]);
 });
 
-test('an airborne straggler relocates ahead after six seconds without dropping salvage', () => {
-  const state = fixture('hound');
-  const hound = state.enemies[0];
-  hound.z = -553;
-  hound.hp = 2;
-  hound.shotAt = state.tick + 1800;
-  advance(state, 359);
-  assert.ok(hound.z < state.player.z - 380);
+test('an early sortie stages a high patrol in the aft quarter to run a flyby', () => {
+  const state = createStage(parseStageOptions('?autoplay=1'));
+  state.twinAt = state.podsAt = Infinity;
+  for (let i = 0; i < 185; i++) stepStage(state);
+  const patrol = state.enemies.find(enemy => enemy.kind === 'patrol' && enemy.band === 2);
+  assert.equal(patrol?.flyby?.phase, 'overtake');
+  assert.ok(patrol.z < state.player.z);
+});
+
+test('an aft fighter passes a wingtip and sweeps across the nose through a gentle heading correction', () => {
+  for (const turn of [0, 0.07]) {
+    const state = fixture('hound'), p = state.player;
+    state.twinAt = state.podsAt = Infinity;
+    const fighter = makeEnemy(state, p.x + 24, p.z - 52, 2, 'interceptor', 3);
+    Object.assign(fighter, { yaw: p.yaw, maneuverAt: Infinity, shotAt: Infinity });
+    state.enemies = [fighter];
+    let wingtip = false, acrossTheNose = false, priorSide = fighter.x - p.x;
+    for (let i = 0; i < 445 && !acrossTheNose; i++) {
+      const { x, z } = fighter;
+      advance(state, 1, { turn: i < 60 ? turn : 0 });
+      const dx = fighter.x - p.x, dz = fighter.z - p.z, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+      const ahead = dx * fx + dz * fz, side = dx * fz - dz * fx;
+      assert.equal(fighter.band, 2);
+      assert.equal(fighter.alt, 148);
+      assert.ok(Math.hypot(fighter.x - x, fighter.z - z) < 1.5);
+      if (Math.abs(ahead) <= 3) wingtip ||= fighter.flyby?.phase === 'overtake' && side >= 24;
+      if (priorSide > 0 && side <= 0) acrossTheNose ||= fighter.flyby?.phase === 'cross' && ahead >= 48 && ahead <= 100;
+      priorSide = side;
+    }
+    assert.ok(wingtip, `side clearance at turn ${turn}`);
+    assert.ok(acrossTheNose, `nose crossing at turn ${turn}`);
+  }
+});
+
+test('opening patrols arrive far enough out to read before their slower-than-boost bolts fire', () => {
+  const state = createStage(parseStageOptions('?autoplay=1'));
+  state.twinAt = state.podsAt = Infinity;
+  state.player.altitude = 145;
+  advance(state, 120);
+  assert.equal(state.enemies.length, 2);
+  const firstVolley = Math.min(...state.enemies.map(enemy => enemy.shotAt));
+  for (const enemy of state.enemies) {
+    const range = Math.hypot(enemy.x - state.player.x, enemy.z - state.player.z);
+    assert.ok(range >= 115 && range < 138);
+  }
+  assert.ok(firstVolley - state.tick >= 82 && firstVolley - state.tick <= 106);
+  advance(state, firstVolley - state.tick - 1);
+  assert.equal(state.shots.length, 0);
   advance(state, 1);
-  assert.ok(hound.z > state.player.z + 100);
-  assert.equal(hound.hp, 2);
+  assert.ok(state.shots.length > 0 && state.shots.every(shot => shot.kind === 'hostile'
+    && Math.abs(Math.hypot(shot.vx, shot.vz) - 58) < 1e-6));
+});
+
+test('boost opens a gap from the dedicated tail aircraft without turning them into flybys', () => {
+  const state = fixture('hound'), p = state.player;
+  state.twinAt = state.podsAt = Infinity;
+  state.enemies = ['hound', 'harrier'].map(kind => {
+    const enemy = makeEnemy(state, p.x + 20, p.z - 54, 1, kind);
+    return Object.assign(enemy, { yaw: p.yaw, shotAt: Infinity });
+  });
+  advance(state, 60);
+  const before = state.enemies.map(enemy => p.z - enemy.z);
+  for (let i = 0; i < 80; i++) stepStage(state, { boost: true }, ground);
+  for (const [index, enemy] of state.enemies.entries()) {
+    assert.equal(enemy.flyby, undefined);
+    assert.ok(p.z - enemy.z > before[index] + 25);
+  }
+});
+
+test('an airborne straggler re-enters the forward quarter only after staying far aft', () => {
+  const state = fixture('hound'), p = state.player;
+  const patrol = makeEnemy(state, p.x + 36, p.z - 225, 2, 'patrol', -2);
+  patrol.hp = 1;
+  state.enemies = [patrol];
+  for (let i = 0; i < 155; i++) {
+    state.tick++;
+    relocateStragglers(state, ground);
+  }
+  assert.ok(patrol.z < p.z - 200);
+  state.tick++;
+  relocateStragglers(state, ground);
+  const dx = patrol.x - p.x, dz = patrol.z - p.z, range = Math.hypot(dx, dz);
+  assert.ok(dz > 0 && Math.abs(Math.atan2(dx, dz)) <= Math.PI / 3);
+  assert.ok(range >= 175 && range <= 225);
+  assert.equal(patrol.hp, 1);
+  assert.equal(patrol.band, 2);
+  assert.equal(patrol.alt, 143);
   assert.equal(state.pickups.length, 0);
+});
+
+test('stragglers stay put when the rim blocks the forward arc or they are wide of the tail', () => {
+  const state = fixture('hound'), p = state.player;
+  Object.assign(p, { x: 0, z: 455 });
+  const aft = makeEnemy(state, p.x + 20, p.z - 225, 2);
+  const wide = makeEnemy(state, p.x + 335, p.z - 120, 2);
+  const tail = makeEnemy(state, p.x - 10, p.z - 260, 2, 'harrier');
+  state.enemies = [aft, wide, tail];
+  const positions = state.enemies.map(({ x, z }) => [x, z]);
+  for (let i = 0; i < 420; i++) {
+    state.tick++;
+    relocateStragglers(state, ground);
+  }
+  assert.deepEqual(state.enemies.map(({ x, z }) => [x, z]), positions);
 });
 
 test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
@@ -145,11 +238,12 @@ test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
 test('a far turret transfers only to a vacant landmark ahead and keeps its HP', () => {
   const state = fixture('turret');
   const turret = state.enemies[0];
-  Object.assign(state.player, { x: 288, z: 125, yaw: 0, altitude: 145 });
-  Object.assign(turret, { farTicks: 359, hp: 2 });
+  Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 145 });
+  Object.assign(turret, { farTicks: 155, hp: 2 });
   advance(state, 1);
-  assert.ok(turret.x > 200 && turret.z > state.player.z);
+  assert.ok(turret.x > 200 && Math.hypot(turret.x - state.player.x, turret.z - state.player.z) > 175);
   assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
+  assert.equal(turret.band, 1);
   assert.equal(turret.hp, 2);
   assert.equal(state.pickups.length, 0);
 });

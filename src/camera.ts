@@ -10,12 +10,13 @@ export type Point = { x: number; y: number };
 export type Line = { from: Point; to: Point };
 export type PitchMark = { angle: number; left: Line[]; right: Line[] };
 type CockpitFraming = { width: number; height: number; cockpit: CockpitLayout | null };
+type CockpitLens = { widening: number; pullback: number; shake: number };
 
 const WORLD_UP = new Vector3(0, 1, 0);
 
-export function cockpitFov(aspect: number, pitch: number): number {
+export function cockpitFov(aspect: number, pitch: number, widening = 0): number {
   const minimum = 2 * Math.atan(Math.tan(20 * Math.PI / 180) / aspect) * 180 / Math.PI;
-  return Math.max(60 + Math.abs(pitch) * 66, minimum);
+  return Math.max(60 + Math.abs(pitch) * 66, minimum) + widening;
 }
 
 function lensAdjustment(first: number, last: number, min: number, max: number, sweep = 0): number {
@@ -24,13 +25,14 @@ function lensAdjustment(first: number, last: number, min: number, max: number, s
 }
 
 export function frameCockpit(camera: PerspectiveCamera, player: StageState['player'], frame: CockpitFraming,
-  attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number, yaw = player.yaw): PitchMark[] {
+  attitude: ReturnType<typeof maneuverAttitude> | null, ground: Ground, visibleDepth: number, yaw = player.yaw,
+  lens?: CockpitLens): PitchMark[] {
   const { width, height, cockpit } = frame;
   const pitch = attitude?.cameraPitch ?? 0, bank = attitude?.cameraBank ?? 0;
   const bankCos = Math.cos(bank), visualPitch = pitch * bankCos;
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
-  camera.fov = cockpitFov(width / height, pitch);
+  camera.fov = cockpitFov(width / height, pitch, lens?.widening);
   let shift = clamp(center, 0.29, 0.64);
   if (cockpit && Math.abs(visualPitch) > 0.001) {
     const { y, height: glassHeight } = cockpit.aiming;
@@ -41,8 +43,9 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   }
   const viewOffset = Math.round(height * (0.5 - shift));
   camera.setViewOffset(width, height, 0, viewOffset, width, height);
-  camera.position.set(player.x + fx * 5, player.altitude + 2.7, -(player.z + fz * 5));
-  camera.lookAt(player.x + fx * 105, camera.position.y + Math.tan(pitch) * 100, -(player.z + fz * 105));
+  const reach = 5 - (lens?.pullback ?? 0), shake = lens?.shake ?? 0;
+  camera.position.set(player.x + fx * reach + fz * shake, player.altitude + 2.7, -(player.z + fz * reach - fx * shake));
+  camera.lookAt(camera.position.x + fx * 100, camera.position.y + Math.tan(pitch) * 100, camera.position.z - fz * 100);
   camera.rotateZ(bank);
   camera.updateMatrixWorld();
   if (!cockpit || cockpit.aiming.height < 20) return [];

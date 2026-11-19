@@ -4,8 +4,10 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { frameCockpit } from '../src/camera.ts';
 import { CockpitMarkers } from '../src/cockpit-markers.ts';
 import { projectCameraContact } from '../src/contact-projection.ts';
+import { buildRadar } from '../src/instruments.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { MANEUVERS, maneuverViewYaw } from '../src/maneuvers.ts';
+import { fireHostile } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -34,7 +36,7 @@ function fixture(width = 1280, height = 800) {
     return item;
   };
   const face = (attitude = null) => frameCockpit(camera, state.player, frame, attitude, ground, 1060);
-  const read = (mirror = null) => markers.update(state, layout, source, mirror);
+  const read = (mirror = null) => markers.update(state, layout, source, mirror, buildRadar(state).rearDanger);
   face();
   return { camera, enemy, face, layout, projections, read, state };
 }
@@ -67,8 +69,25 @@ test('edge arrows retain the projected direction and rear traffic gets a single 
   assert.ok(layout.aiming.x + layout.aiming.width - arrows[1].x < 20 && Math.cos(arrows[1].angle) > 0.95);
   const aft = markers.filter(({ placement }) => placement === 'rear');
   assert.deepEqual(aft.map(({ id, range, delta }) => [id, range, delta]), [[rear.id, 40, 7]]);
+  assert.equal(aft[0].danger, false);
   assert.deepEqual(projections, [left.id, right.id, farLeft.id, rear.id, fartherRear.id]);
   assert.ok(!markers.some(({ id }) => id === distant.id || id === destroyed.id));
+});
+
+test('the cockpit reuses one rear marker for an incoming bolt ahead of harmless traffic', () => {
+  const { enemy, read, state } = fixture(390, 844);
+  enemy(0, -10, 110);
+  const closing = enemy(0, -22, 110);
+  state.speed = 52;
+  closing.vz = 80;
+  const marker = () => read().find(({ placement }) => placement === 'rear');
+  assert.equal(marker().id, closing.id);
+  assert.equal(marker().danger, true);
+  fireHostile(state, { x: 0, z: -24, alt: 110 }, 100);
+  const rear = read().filter(({ placement }) => placement === 'rear');
+  assert.equal(rear.length, 1);
+  assert.equal(rear[0].range, 24);
+  assert.equal(rear[0].danger, true);
 });
 
 test('the live Warden lock keeps its box and dwell when a closer aircraft is present', () => {

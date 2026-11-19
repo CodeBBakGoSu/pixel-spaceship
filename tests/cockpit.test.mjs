@@ -142,7 +142,7 @@ test('the zero line follows a terrain corner between the ends of a rung', () => 
   const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'), ground);
   state.enemies.length = 0;
   state.player.yaw = 2.29;
-  for (let tick = 0; tick < MANEUVERS.immelmann.flipTick - 25; tick++) {
+  for (let tick = 0; tick < Math.round(MANEUVERS.immelmann.flipTick * 0.74); tick++) {
     stepStage(state, tick === 0 ? { maneuver: 'immelmann' } : {}, ground);
   }
   // Put the clamped camera where the terrain corner crosses the rung.
@@ -244,7 +244,9 @@ test('the cockpit ladder sweeps with pitch through an upright climb and an inver
   const cockpit = cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
   const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
   const heights = [];
-  for (const [kind, tick] of [['immelmann', 60], ['split-s', 80]]) {
+  const climbTick = Math.round(MANEUVERS.immelmann.flipTick * 0.625);
+  const rollIn = MANEUVERS['split-s'].flipTick - MANEUVERS.immelmann.flipTick;
+  for (const [kind, tick] of [['immelmann', climbTick], ['split-s', climbTick + rollIn]]) {
     const state = createStage(parseStageOptions('?fixture=pursuit&view=cockpit'));
     state.enemies.length = 0;
     for (let elapsed = 0; elapsed < tick; elapsed++) stepStage(state, elapsed === 0 ? { maneuver: kind } : {});

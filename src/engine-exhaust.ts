@@ -3,7 +3,7 @@ import {
   LinearFilter, MeshBasicMaterial, Object3D, OrthographicCamera, PerspectiveCamera, PlaneGeometry, Quaternion,
   SRGBColorSpace, Vector3, type BufferAttribute, type Camera,
 } from 'three';
-import { CRUISE_SPEED, MANEUVERS } from './maneuvers.ts';
+import { CRUISE_SPEED, trailEnd } from './maneuvers.ts';
 import { clamp } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 
@@ -108,8 +108,8 @@ export class EngineExhaust {
     const time = state.tick;
     const cruise = clamp(Math.hypot(state.speed, state.climbRate) / CRUISE_SPEED, 0, 1);
     const boost = Number(state.boosting);
-    // The J-turn's longer cooldown records the tick when the handoff pulse starts.
-    const turnAge = time - (state.maneuverReadyAt - MANEUVERS['j-turn'].cooldown);
+    const trail = state.maneuverTrail;
+    const turnAge = trail?.kind === 'j-turn' ? time - trailEnd(trail) : -1;
     const turnPulse = turnAge >= 0 ? Math.max(0, 1 - turnAge / 17) : 0;
     // In wide CHASE the camera is closer to the tail, so the same world-space plume projects longer.
     const chaseForeshortening = camera instanceof PerspectiveCamera ? clamp((camera.aspect - 0.75) / 0.65, 0, 1) : 0;

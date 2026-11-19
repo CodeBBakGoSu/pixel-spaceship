@@ -179,7 +179,7 @@ class GlassLabels {
       return { left: atlas.add(label, green, 'right', '#16312b'), right: atlas.add(label, green, 'left', '#16312b') };
     });
     this.inverted = atlas.add(t('cockpit.inverted'), amber, 'center');
-    this.rear = atlas.add(t('cockpit.rearShort'), amber);
+    this.rear = atlas.add(t('cockpit.rearShort'), '#c6d8ce');
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
   }
@@ -427,7 +427,7 @@ function drawMarker(c: Context, marker: CockpitMarker, radius: number, pulse: bo
   c.lineWidth = 3;
   c.stroke();
   c.strokeStyle = color;
-  c.lineWidth = 1;
+  c.lineWidth = marker.danger ? 2 : 1;
   c.stroke();
   if (marker.boxed && pulse) c.strokeRect(x - radius, y - radius, 2 * radius, 2 * radius);
   if (marker.boxed && !marker.locked && marker.lockProgress > 0) {
@@ -492,7 +492,7 @@ function drawMarkers(c: Context, layout: CockpitLayout, markers: readonly Cockpi
     count++;
     if (arrow) labeledFormerArrow = true;
     c.globalAlpha = marker.opacity;
-    fill(c, marker.locked && pulse ? '#204335' : ink, box.x, box.y, box.width, box.height);
+    fill(c, marker.danger ? '#382326' : marker.locked && pulse ? '#204335' : ink, box.x, box.y, box.width, box.height);
     const y = box.y + (box.height - 1) / 2;
     const x = box.x + (rear ? rear.advance + 6 : 0) + 4;
     if (rear) drawCockpitLabel(c, rear, box.x + 4, y);

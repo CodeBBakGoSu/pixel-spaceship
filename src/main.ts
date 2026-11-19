@@ -6,7 +6,8 @@ import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
-import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark, type RadarReadout } from './instruments.ts';
+import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark,
+  type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
@@ -40,8 +41,11 @@ const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-
 const safeProbe = $('#safe-area-probe');
 const wipe = $('#view-wipe');
 const rearBombMarker = $('#rear-bomb-marker');
+const rearDangerCue = $('#rear-danger-cue');
 const rearViewCue = $('#rear-view-cue');
+const flightMessage = $('#flight-message');
 const maneuverCue = $('#maneuver-cue');
+const reversalCue = $('#reversal-cue');
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
@@ -88,6 +92,7 @@ let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase 
 let helpTimer = 0, lastHelp = '';
 let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
+let rearDanger: RearDanger | null = null;
 const textNodes = new Map<string, HTMLElement>();
 
 function setText(selector: string, copy: string): void {
@@ -271,7 +276,7 @@ function updateHud(readout: RadarReadout): void {
   const charge = state.maneuver ? 0 : last && loopSeconds > 0 ? 1 - (state.maneuverReadyAt - state.tick) / MANEUVERS[last.kind].cooldown : 1;
   loopStatus.style.setProperty('--loop-charge', `${Math.round(clamp(charge, 0, 1) * 100)}%`);
   touchLoop.setAttribute('aria-disabled', String(!ready || lowBoost));
-  touchLoop.classList.toggle('rear-ready', ready && !lowBoost && readout.rearClose);
+  updateRearDangerCue(readout, ready && !lowBoost, flareReady);
   setText('#view-label', t(`view.${state.view}`));
   const cost = requiredXp(state.level);
   const xp = Math.min(cost ?? 0, state.xp);
@@ -301,8 +306,12 @@ function updateHud(readout: RadarReadout): void {
 }
 
 function updateManeuverCue(): void {
+  const reversal = state.reversal;
+  reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || !reversal.kills || state.tick >= reversal.shownUntil;
+  flightMessage.dataset.reversal = String(!reversalCue.hidden);
+  if (!reversalCue.hidden && reversal) setText('#reversal-cue', t('hud.reversalKills', { count: reversal.kills }));
   const trail = activeTrail(state);
-  maneuverCue.hidden = !trail || state.phase !== 'playing' || state.tick > trailEnd(trail) + 48;
+  maneuverCue.hidden = !reversalCue.hidden || !trail || state.phase !== 'playing' || state.tick > trailEnd(trail) + 48;
   if (!trail || maneuverCue.hidden) return;
   const { kind } = trail;
   const name = t(`maneuver.${kind}`);
@@ -359,14 +368,8 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   else if (top && state.altitudeHint) message = 'hud.checkAlt';
   else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
   else if (state.tick < state.bombReadyAt) message = 'hud.bombAway';
-  else if (!top && readout.rearClose && !state.maneuver && !state.altitudeHint) message = touch ? 'hud.rearTouch' : 'hud.rearKeys';
-  const banner = $('#flight-message');
-  banner.hidden = !message;
-  if (message) {
-    const count = readout.rearCount ? ` · ${readout.rearCount}` : '';
-    const layers = readout.rearMarks.length ? ' ' + readout.rearMarks.join('') : '';
-    setText('#flight-message', t(message, { name: threat, warning: `▼ ${t('hud.rear')}${count}${layers}` }));
-  }
+  flightMessage.hidden = !message;
+  if (message) setText('#flight-message', t(message, { name: threat }));
   const tag = $('#view-tag');
   tag.hidden = state.viewTag <= 0 || !!message;
   if (!tag.hidden) setText('#view-tag', t('view.tag', { view: t(`view.${state.view}`) }));
@@ -391,7 +394,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     }
   }
   if (state.view !== 'overhead' && state.altitudeHint && !message && (state.view === 'cockpit' || cue.hidden)) {
-    banner.hidden = false;
+    flightMessage.hidden = false;
     tag.hidden = true;
     setText('#flight-message', t(state.altitudeHint.delta > 0 ? 'hud.climbCue' : 'hud.diveCue'));
   }
@@ -728,6 +731,27 @@ function updateRearBombMarker(): void {
   rearBombMarker.hidden = !offscreen;
 }
 
+function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flareReady: boolean): void {
+  const danger = readout.rearDanger;
+  const neutral = state.view === 'chase' && readout.rearMarks.length > 0;
+  rearDangerCue.hidden = state.phase !== 'playing' || state.paused || (!danger && !neutral);
+  if (rearDangerCue.hidden) return;
+
+  const mirror = scene?.cockpitMirror;
+  const docked = !!mirror && mirror.width >= 94;
+  rearDangerCue.dataset.docked = String(docked);
+  rearDangerCue.dataset.danger = String(!!danger);
+  if (mirror && docked) {
+    rearDangerCue.style.setProperty('--rear-right', `${innerWidth - mirror.x - mirror.width + 3}px`);
+    rearDangerCue.style.setProperty('--rear-bottom', `${innerHeight - mirror.y - mirror.height + 3}px`);
+  }
+  const action = danger?.kind === 'contact' && flareReady ? (touch ? t('control.flareShort') : `C ${t('control.flare')}`)
+    : danger && reversalReady ? (touch ? t('control.loop') : `SPACE ${t('hud.rearReverse')}`)
+    : danger ? t('hud.rearEvade') : readout.rearMarks.join(' ');
+  setText('#rear-danger-action', action);
+  rearDangerCue.setAttribute('aria-label', danger ? `${t('hud.rearDanger')} · ${action}` : t('hud.rear'));
+}
+
 function updateRearViewCue(): void {
   const rect = scene?.rearView;
   const hit = state.rearGlimpse?.kind === 'flare' && !!state.flareHit && state.tick < state.flareHit.until;
@@ -743,9 +767,10 @@ function updateRearViewCue(): void {
 
 function render(): void {
   if (layoutView !== state.view) layoutFlight();
-  const ladder = scene?.draw(state) ?? [];
   const yaw = maneuverViewYaw(state);
   const readout = buildRadar(state, yaw);
+  rearDanger = readout.rearDanger;
+  const ladder = scene?.draw(state, !!rearDanger) ?? [];
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -754,7 +779,8 @@ function render(): void {
   wipe.hidden = state.wipe <= 0;
   if (!wipe.hidden) wipe.style.top = `${progress * 100}%`;
   const p = state.player;
-  const clearance = p.altitude - Math.max(ground(p.x, p.z), ground(p.x + Math.sin(p.yaw) * 23, p.z + Math.cos(p.yaw) * 23));
+  const lookahead = Math.max(27, state.speed * 0.68);
+  const clearance = p.altitude - Math.max(ground(p.x, p.z), ground(p.x + Math.sin(p.yaw) * lookahead, p.z + Math.cos(p.yaw) * lookahead));
   describeFlight(readout, clearance);
   const deltaIndicator = $('#cockpit-delta');
   const instrumentTrack = cockpit && maneuverAllowsControl(state.maneuver) ? readout.priority : null;
@@ -769,7 +795,7 @@ function render(): void {
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
       (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
     const mirror = scene.cockpitMirror;
-    const markers = cockpitMarkers.update(state, cockpit, scene, mirror);
+    const markers = cockpitMarkers.update(state, cockpit, scene, mirror, rearDanger);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
     cockpitDisplay.draw(state, aim, ladder,
       motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, mirror, instrumentTrack?.alt, language, t);
@@ -785,12 +811,17 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   tick: state.tick, elapsed: state.tick / TICKS_PER_SECOND, seed: state.seed, phase: state.phase, paused: state.paused,
   view: state.view, airspace: { ...state.arena }, objective: objectiveText(), altitude: state.player.altitude,
   player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting, bombs: state.bombs,
-  speed: state.speed, rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
+  speed: state.speed, boostTicks: state.boostTicks, speedFeel: scene && { ...scene.speedFeel },
+  rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
   flares: state.flares.map(flare => ({ ...flare })), flareCharges: state.flareCharges,
   flareReadyAt: state.flareReadyAt, flareReloadAt: state.flareReloadAt,
   flareHit: state.flareHit && { ...state.flareHit },
   rearGlimpse: state.rearGlimpse && { ...state.rearGlimpse, target: state.rearGlimpse.target && { ...state.rearGlimpse.target } },
   rearView: scene?.rearView && { ...scene.rearView },
+  rearDanger: rearDanger && { ...rearDanger },
+  rearDangerCue: rearDangerCue.hidden ? null : rearDangerCue.getAttribute('aria-label'),
+  reversal: state.reversal && { ...state.reversal, pursuers: [...state.reversal.pursuers] },
+  reversalCue: reversalCue.hidden ? null : reversalCue.textContent,
   maneuver: state.maneuver && { ...state.maneuver, ...maneuverAttitude(state.maneuver, state.player.bank),
     controllable: maneuverAllowsControl(state.maneuver) },
   maneuverTrail: state.maneuverTrail && { ...state.maneuverTrail, points: state.maneuverTrail.points.map(point => ({ ...point })),
@@ -800,7 +831,13 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
-  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp, burnUntil }) => ({ id, kind, x, z, alt, hp, burnUntil })),
+  tracers: state.shots.filter(shot => shot.reversal || shot.kind === 'strafe').map(shot => ({
+    kind: shot.reversal ? 'reversal' : shot.kind, x: shot.x, z: shot.z, alt: shot.alt, vx: shot.vx, vz: shot.vz,
+    vy: shot.kind === 'strafe' ? shot.vy : 0,
+  })),
+  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp, burnUntil, flyby }) => (
+    { id, kind, x, z, alt, hp, burnUntil, flyby: flyby?.phase ?? null, flybySide: flyby?.side }
+  )),
   mineCount: state.enemyMines.length,
   weakPointHits: state.boss?.weakPoints.map(point => point.hits) ?? [],
   bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],

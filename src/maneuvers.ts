@@ -1,10 +1,11 @@
+import { CRUISE_SPEED } from './flight.ts';
 import { BANDS, clamp, MAX_ALTITUDE, MIN_ALTITUDE, STEP } from './stage-combat.ts';
 import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
 
-export const CRUISE_SPEED = 34;
+export { CRUISE_SPEED } from './flight.ts';
 export const INVERTED_FLIGHT_TICKS = 150;
 export const BODY_GRACE_TICKS = 36;
-const HALF_LOOP_TICKS = 96;
+const HALF_LOOP_TICKS = 78;
 const ROLL_IN_TICKS = 20;
 const ROLL_OUT_TICKS = 24;
 const HALF_LOOP_TRAVEL = 96;
@@ -22,6 +23,7 @@ export const TRAIL_LINGER_TICKS = 150;
 const TURN_BURST_TICKS = 18;
 const CAMERA_LAG_TICKS = 3;
 const CAMERA_SWEEP_TICKS = 24;
+const PITCH_ROLL_TICKS = 19;
 const ease = (u: number): number => (1 - Math.cos(Math.PI * u)) / 2;
 const mix = (start: number, end: number, u: number): number => start + (end - start) * u;
 
@@ -108,7 +110,7 @@ function frameAt(m: Maneuver, tick: number): Frame {
       const u = tick / MANEUVERS['j-turn'].ticks, angle = Math.PI * (0.65 * u + 0.35 * ease(u));
       const bend = Math.sin(angle);
       // Carry wide of the pursuit lane, then come back partway so it stays visible on the reversed heading.
-      return { forward: 60 * ease(u) + 27 * bend, lateral: m.side * (14 * (1 - Math.cos(angle)) + 28 * bend ** 2),
+      return { forward: 68 * ease(u) + 27 * bend, lateral: m.side * (11 * (1 - Math.cos(angle)) + 32 * bend ** 2),
         altitude, pitch: 0, roll: m.side * 0.64 * bend, reversed: tick > 0 };
     }
   }
@@ -161,7 +163,7 @@ export function maneuverAttitude(maneuver: Maneuver, bank = 0) {
   let cameraBank = roll;
   if (kind === 'immelmann' && elapsed < HALF_LOOP_TICKS) {
     // Convert the last part of the pitch-over into a camera roll while the camera follows the turn.
-    cameraBank = Math.PI * ease(clamp((elapsed - HALF_LOOP_TICKS + 23) / 23, 0, 1));
+    cameraBank = Math.PI * ease(clamp((elapsed - HALF_LOOP_TICKS + PITCH_ROLL_TICKS) / PITCH_ROLL_TICKS, 0, 1));
   } else if (kind === 'split-s' && elapsed >= ROLL_IN_TICKS && elapsed < MANEUVERS['split-s'].flipTick) {
     cameraBank = Math.PI;
   }

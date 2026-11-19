@@ -374,7 +374,7 @@
 .guide-body:focus-visible { outline: 2px solid #bceff0; outline-offset: -2px; }
 button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
-.menu-open :is(.objective, .flight-message, .maneuver-cue, .view-tag, .scene-cue, .rear-bomb-marker, .rear-view-cue, .help),
+.menu-open :is(.objective, .flight-message, .maneuver-cue, .reversal-cue, .view-tag, .scene-cue, .rear-bomb-marker, .rear-danger-cue, .rear-view-cue, .help),
 .guide-open :is(.hud, .boss-hud, .radio, #nav-radar, #arena-map, .alt-ruler) {
   visibility: hidden;
 }
@@ -463,6 +463,46 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .experience.phone-layout .rear-bomb-marker {
   bottom: calc(100% - var(--controls-y) + 30px);
 }
+.rear-danger-cue {
+  position: absolute;
+  left: 50%;
+  bottom: calc(54px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  border: 1px solid #728f88;
+  background: #0d2024;
+  color: #bfdbd1;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.rear-danger-cue[data-danger="true"] {
+  border-color: #ff8a76;
+  background: #371a22;
+  color: #ffe0ce;
+}
+.rear-danger-cue[data-danger="true"] > :first-child { color: #ff987e; }
+.experience.phone-layout .rear-danger-cue { bottom: calc(100% - var(--controls-y) + 52px); }
+.experience[data-view="overhead"] .rear-danger-cue {
+  padding: 2px 5px;
+  font-size: 9px;
+}
+.experience.phone-layout[data-view="overhead"] .rear-danger-cue { bottom: calc(100% - var(--controls-y) + 30px); }
+.experience.cockpit-view .rear-danger-cue {
+  left: auto;
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  top: calc(var(--objective-y) + var(--objective-h) + 6px);
+  bottom: auto;
+  transform: none;
+  padding: 2px 4px;
+  font-size: 9px;
+}
+.experience.cockpit-view .rear-danger-cue[data-docked="true"] {
+  right: var(--rear-right);
+  top: auto;
+  bottom: var(--rear-bottom);
+}
 .rear-view-cue {
   position: absolute;
   padding: 2px 4px;
@@ -486,11 +526,12 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   border: 3px solid #87cdb1;
   color: #dbf7e6;
 }
-.loop.rear-ready { border-color: #fccb83; box-shadow: 0 0 0 2px #573920; }
 @media (prefers-reduced-motion: no-preference) {
-  .loop.rear-ready { animation: rear-ready 1s steps(2, end) infinite alternate; }
+  .rear-danger-cue[data-danger="true"] { animation: rear-danger-pulse .36s steps(2, end) infinite alternate; }
+  .reversal-cue { animation: reversal-pop .18s steps(3, end) both; }
 }
-@keyframes rear-ready { to { border-color: #d69c5b; } }
+@keyframes rear-danger-pulse { to { border-color: #ffb698; background: #55262b; } }
+@keyframes reversal-pop { from { background: #225354; color: #fff0b9; } }
 .loop[aria-disabled="true"], .bomb[aria-disabled="true"], .flare[aria-disabled="true"] { opacity: .52; }
 .bomb-reload { display: block; width: 21px; height: 4px; background: #34233b; }
 .bomb-reload > i { display: block; height: 100%; background: #fa80b0; }
@@ -517,6 +558,43 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   mask: radial-gradient(circle, transparent 40%, #000 49%);
 }
 .loop-status[data-ready="true"] { color: #b4ffce; border-color: #7fc7a4; }
+
+.reversal-cue {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--objective-y) + var(--objective-h) + 35px);
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  background: #102b32;
+  border: 1px solid #88eada;
+  box-shadow: 2px 2px #0d171e;
+  color: #caffee;
+  font-size: clamp(13px, 1.8vw, 19px);
+  font-weight: bold;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.experience.phone-layout:not(.cockpit-view) .reversal-cue {
+  top: auto;
+  bottom: calc(100% - var(--controls-y) + 76px);
+}
+.experience.cockpit-view .reversal-cue {
+  top: var(--cockpit-message-y);
+  height: var(--cockpit-message-h);
+  line-height: calc(var(--cockpit-message-h) - 2px);
+  padding: 0 8px;
+  font-size: 11px;
+}
+.experience.cockpit-view .flight-message[data-reversal="true"] {
+  left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + 112px) / 2);
+  max-width: calc(var(--cockpit-message-w) - 112px);
+}
+.experience.cockpit-view .flight-message:not([hidden]) ~ .reversal-cue {
+  left: var(--cockpit-message-x);
+  transform: none;
+}
+.experience.cockpit-view .reversal-cue:not([hidden]) ~ .view-tag { visibility: hidden; }
 
 .maneuver-cue {
   --cue-color: #bde1ff;

@@ -11,6 +11,7 @@ import { projectCameraContact, type ContactProjection } from './contact-projecti
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
+import { FlightAtmosphere } from './flight-atmosphere.ts';
 import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
@@ -108,6 +109,10 @@ export class FlightScene {
   private rearTick = -Infinity;
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   private readonly rearFlash = new Color(0xffedde);
+  private readonly atmosphere: FlightAtmosphere;
+  private lastMotionTick = -1;
+  private boostLens = 0;
+  private readonly flightView = { fov: 0, setback: 0, streaks: 0, shake: 0 };
   private readonly top = new OrthographicCamera(-1, 1, 1, -1, 0.5, 1200);
   private readonly chase = new PerspectiveCamera(59, 1, 0.8, 1060);
   private readonly cockpit = new PerspectiveCamera(60, 1, 0.65, 1060);
@@ -121,6 +126,9 @@ export class FlightScene {
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
   private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), ENEMY_KINDS.patrol.cap);
+  private readonly flybyTrails = instances(new BoxGeometry(), 48, new MeshBasicMaterial({
+    color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
+  }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
@@ -149,16 +157,18 @@ export class FlightScene {
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
 
   constructor(canvas: HTMLCanvasElement, private readonly world: World, arena: StageState['arena']) {
+    this.atmosphere = new FlightAtmosphere(arena);
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x081424);
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
-    this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena));
+    this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group);
+      this.flareVisuals.group, this.flybyTrails);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
+    this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     for (const marker of [this.bodyShimmer, this.ghost, this.pursuitRings]) marker.layers.set(MAIN_CAMERA_LAYER);
     for (const camera of [this.top, this.chase, this.cockpit]) camera.layers.enable(MAIN_CAMERA_LAYER);
     this.ghost.visible = false;
@@ -232,6 +242,10 @@ export class FlightScene {
     return this.rearRect;
   }
 
+  get speedFeel(): Readonly<typeof this.flightView> {
+    return this.flightView;
+  }
+
   get cockpitMirror(): Readonly<Rect> | null {
     return this.framing.cockpit ? this.rearRect : null;
   }
@@ -246,7 +260,7 @@ export class FlightScene {
     this.rearTarget.texture.repeat.x = -crop;
   }
 
-  private drawRearView(state: StageState): void {
+  private drawRearView(state: StageState, rearDanger: boolean): void {
     const { tick, view } = state;
     const glimpse = state.phase === 'playing' ? state.rearGlimpse : null;
     const reveal = glimpseWipe(tick, glimpse, this.reducedMotion.matches);
@@ -274,6 +288,9 @@ export class FlightScene {
       const activeColor = this.color.setHex(glimpse.kind === 'bomb' ? 0xf490af : 0xffb363);
       activeColor.lerp(this.rearFlash, flash * 0.55);
       bezel.lerp(activeColor, reveal);
+    } else if (view === 'cockpit' && rearDanger) {
+      const pulse = this.reducedMotion.matches || Math.floor(tick / 8) % 2 ? 1 : 0.55;
+      bezel.lerp(this.color.setHex(0xff6256), pulse);
     }
 
     if (tick >= this.rearTick && tick - this.rearTick < 2) return;
@@ -356,11 +373,15 @@ export class FlightScene {
     this.write(this.shadows, index, x, z, this.ground(x, z) + 0.9, yaw, sx, 1, sz);
   }
 
-  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): PitchMark[] {
+  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null, shake: number): PitchMark[] {
     const { width, height, phone } = this.framing;
     const p = state.player, yaw = maneuverViewYaw(state), fx = Math.sin(yaw), fz = Math.cos(yaw);
     const aspect = width / Math.max(1, height);
+    const lens = this.boostLens;
+    const view = this.flightView;
+    view.shake = state.view === 'overhead' ? 0 : shake;
     if (state.view === 'overhead') {
+      view.fov = view.setback = 0;
       this.fog.far = 875;
       const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
       const center = phone ? phone.shipY / height : 0.57;
@@ -376,10 +397,14 @@ export class FlightScene {
     } else if (state.view === 'cockpit') {
       this.camera = this.cockpit;
       const pitch = attitude?.cameraPitch ?? 0;
-      this.fog.far = terrainFogFar(aspect, cockpitFov(aspect, pitch), pitch, attitude?.cameraBank);
+      const widening = 4 * lens, pullback = 1.4 * lens;
+      view.fov = cockpitFov(aspect, pitch, widening);
+      view.setback = pullback;
+      this.fog.far = terrainFogFar(aspect, view.fov, pitch, attitude?.cameraBank);
       // The last ~5% of terrain contrast blends into the sky under Three's smoothstep fog.
       const visibleDepth = this.fog.near + (this.fog.far - this.fog.near) * 0.865;
-      return frameCockpit(this.cockpit, p, this.framing, attitude, this.ground, visibleDepth, yaw);
+      return frameCockpit(this.cockpit, p, this.framing, attitude, this.ground, visibleDepth, yaw,
+        { widening, pullback, shake });
     } else {
       const camera = this.chase;
       const field = phone?.playfield;
@@ -387,16 +412,18 @@ export class FlightScene {
       const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
       const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : 29;
       const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
-      const setback = 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat;
+      view.setback = 8 * lens;
+      const setback = 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat + view.setback;
       const elevation = 15 + motion * lift;
       const lookHeight = 1 + (m?.kind === 'immelmann' || m?.kind === 'split-s' ? (attitude?.cameraPitch ?? 0) * 48 : 0);
       const center = field ? (field.y + field.height * 0.39) / height : 0.43;
       const shift = clamp(center, 0.29, 0.64);
-      camera.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI);
+      camera.fov = view.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI) + 10 * lens;
       this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(lookHeight - elevation, 105 + setback));
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
-      camera.position.set(p.x - fx * setback, p.altitude + elevation, -(p.z - fz * setback));
-      camera.lookAt(p.x + fx * 105, p.altitude + lookHeight, -(p.z + fz * 105));
+      const eyeX = p.x + fz * shake, eyeZ = p.z - fx * shake;
+      camera.position.set(eyeX - fx * setback, p.altitude + elevation, -(eyeZ - fz * setback));
+      camera.lookAt(eyeX + fx * 105, p.altitude + lookHeight, -(eyeZ + fz * 105));
       this.camera = camera;
     }
     this.camera.updateMatrixWorld();
@@ -445,7 +472,7 @@ export class FlightScene {
     this.drawTrail(state, trail, flat, external);
     const fireTint = Math.floor(state.tick / 6) % 2 ? 0xff9564 : 0xffbf78;
 
-    let shadows = 0, drones = 0, rings = 0, marked = 0;
+    let shadows = 0, drones = 0, rings = 0, marked = 0, trails = 0;
     if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
@@ -456,6 +483,13 @@ export class FlightScene {
         : batch ? 0xffffff : enemy.kind === 'interceptor' ? 0xa9c2ff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
       this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, size, size, size, paint, flat ? 0 : enemy.bank);
+      if (enemy.flyby && trails + 2 <= this.flybyTrails.instanceMatrix.count) {
+        const sideX = 3.2 * Math.cos(enemy.yaw), sideZ = -3.2 * Math.sin(enemy.yaw);
+        for (const side of [-1, 1]) {
+          this.write(this.flybyTrails, trails++, enemy.x - 0.15 * enemy.vx + side * sideX,
+            enemy.z - 0.15 * enemy.vz + side * sideZ, flat ? TOP_FLIGHT + 1 : enemy.alt, enemy.yaw, 0.64, 0.48, 11.2);
+        }
+      }
       if (external && formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
       if (!flat && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
       const tell = enemy.tell;
@@ -466,6 +500,7 @@ export class FlightScene {
     }
     upload(this.drones, drones);
     upload(this.pursuitRings, marked);
+    upload(this.flybyTrails, trails);
     for (const { mesh, count } of this.airframes) upload(mesh, count);
 
     const boss = state.boss;
@@ -505,9 +540,12 @@ export class FlightScene {
     for (const [i, shot] of state.shots.entries()) {
       const hostile = shot.kind === 'hostile';
       const yaw = Math.atan2(shot.vx, shot.vz);
+      const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
+      const pitch = strafe && !flat ? Math.atan2(shot.vy, Math.hypot(shot.vx, shot.vz)) : 0;
+      const width = hostile ? 2.4 : reversal ? 1.9 : 1.15;
+      const tint = hostile ? 0xff7152 : reversal ? 0xa9fff0 : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad;
       this.write(this.bullets, i, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
-        hostile ? 2.4 : 1.15, hostile ? 2.4 : 1.15, hostile ? 4.3 : 7.2,
-        hostile ? 0xff7152 : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
+        width, width, hostile ? 4.3 : reversal ? 12 : strafe ? 9 : 7.2, tint, 0, pitch);
     }
     upload(this.bullets, state.shots.length);
 
@@ -565,14 +603,25 @@ export class FlightScene {
     this.flareVisuals.update(state, flat ? TOP_FLIGHT + 7 : undefined, chase ? this.chase : undefined);
   }
 
-  draw(state: StageState): PitchMark[] {
+  draw(state: StageState, rearDanger = false): PitchMark[] {
+    const reduceMotion = this.reducedMotion.matches;
+    const delta = state.tick - this.lastMotionTick;
+    if (delta < 0 || reduceMotion) this.boostLens = 0;
+    this.lastMotionTick = state.tick;
+    const ticks = clamp(delta, 0, 12);
+    const target = reduceMotion ? 0 : Number(state.boosting);
+    this.boostLens += (target - this.boostLens) * (1 - Math.exp(-ticks / (target ? 4.5 : 8)));
+    const ignition = state.boostTicks;
+    const shake = !reduceMotion && ignition > 0 && ignition <= 8 ? Math.sin(ignition * 1.8) * (9 - ignition) * 0.028 : 0;
     const attitude = state.maneuver ? maneuverAttitude(state.maneuver, state.player.bank) : null;
-    const ladder = this.updateCamera(state, attitude);
+    const ladder = this.updateCamera(state, attitude, shake);
+    this.flightView.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
+      state.speed, ticks, reduceMotion);
     this.updatePlayer(state, attitude);
     this.updateWorld(state, state.view);
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
-    this.drawRearView(state);
+    this.drawRearView(state, rearDanger);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
     return ladder;

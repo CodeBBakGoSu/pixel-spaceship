@@ -1,5 +1,6 @@
 import { cockpitTarget } from './cockpit.ts';
 import type { ContactProjection } from './contact-projection.ts';
+import type { RearDanger } from './instruments.ts';
 import type { CockpitLayout, Rect } from './layout.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
 import { activeWeakPoint, clamp, inBand } from './stage-combat.ts';
@@ -9,7 +10,7 @@ export type CockpitMarker = {
   id: number; x: number; y: number; angle: number;
   placement: 'forward' | 'edge' | 'rear';
   range: number; delta: number; opacity: number; color: string;
-  boxed: boolean; former: boolean; warden: boolean; locked: boolean; lockProgress: number;
+  boxed: boolean; former: boolean; warden: boolean; locked: boolean; lockProgress: number; danger: boolean;
 };
 type ContactSource = { projectContact(contact: Position, out: ContactProjection): void };
 const TRACK_RANGE = 420;
@@ -17,7 +18,7 @@ const arrowRadius = 9;
 
 const newMarker = (): CockpitMarker => ({
   id: 0, x: 0, y: 0, angle: 0, placement: 'forward', range: 0, delta: 0, opacity: 1, color: '',
-  boxed: false, former: false, warden: false, locked: false, lockProgress: 0,
+  boxed: false, former: false, warden: false, locked: false, lockProgress: 0, danger: false,
 });
 const nearest = (a: CockpitMarker, b: CockpitMarker) => a.range - b.range || a.id - b.id;
 const forwardPriority = (a: CockpitMarker, b: CockpitMarker) =>
@@ -49,7 +50,8 @@ export class CockpitMarkers {
     return this.selected.map(marker => ({ ...marker }));
   }
 
-  update(state: StageState, layout: CockpitLayout, source: ContactSource, mirror: Readonly<Rect> | null): readonly CockpitMarker[] {
+  update(state: StageState, layout: CockpitLayout, source: ContactSource, mirror: Readonly<Rect> | null,
+    danger: RearDanger | null = null): readonly CockpitMarker[] {
     const { aiming, compact } = layout;
     this.selected.length = this.forward.length = this.edges.length = this.blockers.length = 0;
     if (aiming.width < 30 || aiming.height < 22) return this.selected;
@@ -69,7 +71,7 @@ export class CockpitMarkers {
 
     const player = state.player, trail = activeTrail(state), weak = activeWeakPoint(state);
     let rear: CockpitMarker | null = null, used = 0;
-    const scan = (target: Position & { id: number }, former: boolean, warden: boolean, firing: boolean) => {
+    const scan = (target: Position & { id: number }, former: boolean, warden: boolean, firing: boolean, urgent = false) => {
       const range = Math.hypot(target.x - player.x, target.z - player.z);
       if (range > TRACK_RANGE) return;
       source.projectContact(target, this.projected);
@@ -87,14 +89,16 @@ export class CockpitMarkers {
       marker.locked = false;
       marker.lockProgress = 0;
       marker.boxed = false;
+      marker.danger = urgent;
       marker.opacity = clamp(1 - (range - 130) / 440, former ? 0.7 : 0.34, 1);
       const sameBand = inBand(target.alt, player.altitude);
       marker.color = firing || (sameBand && range < 70) ? '#ff8a7d' : warden || sameBand ? '#ffd593'
         : marker.delta > 0 ? '#abddff' : '#c2bcff';
 
-      if (depth <= 0.05) {
+      if (urgent || depth <= 0.05) {
         marker.placement = 'rear';
-        if (!rear || nearest(marker, rear) < 0) rear = marker;
+        marker.color = urgent ? '#ff8772' : sameBand ? '#c6d8ce' : marker.delta > 0 ? '#abddff' : '#c2bcff';
+        if (!rear || urgent || (!rear.danger && nearest(marker, rear) < 0)) rear = marker;
       } else if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
         && !this.blocked(x, y, inset)) {
         marker.placement = 'forward';
@@ -105,9 +109,11 @@ export class CockpitMarkers {
       }
     };
     for (const enemy of state.enemies) if (enemy.hp > 0) {
-      scan(enemy, formerPursuer(state, trail, enemy), false, !!enemy.tell || enemy.maneuver?.phase === 'diving');
+      scan(enemy, formerPursuer(state, trail, enemy), false, !!enemy.tell || enemy.maneuver?.phase === 'diving',
+        danger?.kind === 'contact' && enemy.id === danger.enemyId);
     }
     if (weak) scan(weak, false, true, false);
+    if (danger?.kind === 'shot') scan({ ...danger, id: -1 }, false, false, false, true);
 
     this.forward.sort(nearest);
     const box = this.forward.find(marker => marker.id === state.lock?.id) ?? this.forward[0];
