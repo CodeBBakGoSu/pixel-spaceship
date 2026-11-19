@@ -1,6 +1,6 @@
 import { cockpitLadderSpan, type Line, type PitchMark, type Point } from './camera.ts';
 import {
-  cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel,
+  cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel, reversalCharge,
   type CockpitMotion, type CockpitWarnings,
 } from './cockpit';
 import { markerRadius, type CockpitMarker } from './cockpit-markers.ts';
@@ -123,8 +123,8 @@ function drawChrome(c: Context, layout: CockpitLayout): void {
     stroke(c, lip, '#4c5d6b', 2);
   }
   fill(c, '#344454', d.x, bottom(d) - 3, d.width, 1);
-  for (const [i, p] of [layout.radar, layout.damage, layout.weapons, layout.gauges].entries()) {
-    const screen = i < 3;
+  for (const [i, p] of [layout.radar, layout.weapons, layout.gauges].entries()) {
+    const screen = i < 2;
     fill(c, '#324452', p.x, p.y, p.width, p.height);
     fill(c, '#0a141c', p.x + 1, p.y + 1, p.width - 2, p.height - 2);
     fill(c, screen ? '#0b201f' : '#101a27', p.x + 3, p.y + 3, p.width - 6, p.height - 7);
@@ -527,7 +527,7 @@ type WarningCell = { rect: Rect; variants: HTMLCanvasElement[]; painted: number 
 
 function warningCells(layout: CockpitLayout, t: Translate, font: string): WarningCell[] {
   const r = layout.warnings, { compact, panelScale } = layout;
-  const names = [t(compact ? 'cockpit.cautionShort' : 'cockpit.masterCaution'), t('cockpit.lowHull'),
+  const names = [t(compact ? 'cockpit.cautionShort' : 'cockpit.masterCaution'),
     t('cockpit.altLow'), t('control.boost'), t('control.loop')];
   return names.map((label, i) => {
     const x = r.x + Math.round(r.width * i / names.length);
@@ -542,9 +542,9 @@ function warningCells(layout: CockpitLayout, t: Translate, font: string): Warnin
         compact ? 10 : Math.round(12 * panelScale));
     });
     const variants = [variant(label, false, true, false), variant(label, true, true, false), variant(label, true, true, true)];
-    if (i === 2) variants.push(variant(t('cockpit.pullUp'), true, true, false), variant(t('cockpit.pullUp'), true, true, true));
-    if (i === 3) variants.push(variant(label, true, false, false), variant(label, true, false, true));
-    if (i === 4) {
+    if (i === 1) variants.push(variant(t('cockpit.pullUp'), true, true, false), variant(t('cockpit.pullUp'), true, true, true));
+    if (i === 2) variants.push(variant(label, true, false, false), variant(label, true, false, true));
+    if (i === 3) {
       variants.push(variant(t('hud.loopReadyShort'), true, false, true));
       const maxSeconds = MANEUVERS['j-turn'].cooldown / TICKS_PER_SECOND;
       for (let seconds = 1; seconds <= maxSeconds; seconds++) {
@@ -568,31 +568,6 @@ function drawStores(c: Context, r: Rect, weapons: WeaponReadout): void {
   for (const [i, label] of [weapons.gun, weapons.pods, weapons.bombs].entries()) {
     if (i > 0) fill(c, '#38554e', r.x + i * cell, r.y + 3, 1, r.height - 6);
     text(c, label, r.x + (i + 0.5) * cell, y, green, 'center');
-  }
-}
-
-const wing = ['      +      ', '      +      ', '     +++     ', ' +   +++   + ', ' ++ +++++ ++ ', ' +++++++++++ ', '+++++++++++++', '  +++ + +++  ', '      +      '];
-
-function drawDamage(c: Context, r: Rect, state: StageState, compact: boolean, hit: boolean, scale: number): void {
-  const color = state.hull <= state.maxHull / 4 || hit ? amber : green;
-  const center = middle(r), unit = r.height < 40 ? 1 : compact ? 2 : 5;
-  const spriteTop = Math.round(center.y - wing.length * unit / 2 - (compact ? 1 : 0));
-  const spriteX = center.x - wing[0].length * unit / 2;
-  for (let row = 0; row < wing.length; row++) {
-    const line = wing[row];
-    for (let i = 0; i < line.length; i++) {
-      if (line[i] !== '+') continue;
-      const side = i < 6 ? i : line.length - i - 1;
-      const shade = state.hull <= 2 && side < 3 ? '#875744' : i === 6 ? color : hit ? '#d88756' : '#498d71';
-      fill(c, shade, spriteX + i * unit, spriteTop + row * unit, unit, unit);
-    }
-  }
-  const gap = compact ? 2 : Math.round(4 * scale), length = Math.min(r.width - 12, compact ? 70 : 138 * scale);
-  const block = Math.floor((length - gap * (state.maxHull - 1)) / state.maxHull);
-  const total = state.maxHull * block + gap * (state.maxHull - 1);
-  for (let i = 0; i < state.maxHull; i++) {
-    fill(c, i < state.hull ? color : '#3e594f', center.x - total / 2 + i * (block + gap),
-      bottom(r) - (compact ? 12 : 22 * scale), block, compact ? 5 : 7 * scale);
   }
 }
 
@@ -633,7 +608,7 @@ function gaugeRow(r: Rect, compact: boolean, scale: number): GaugeRow {
 }
 
 function drawGaugeFaces(c: Context, row: GaugeRow, showLabels: boolean, compact: boolean, t: Translate, font: string, scale: number): void {
-  const labels = [t('hud.speed'), t('hud.boost'), t('hud.hull')];
+  const labels = [t('hud.speed'), t('hud.boost'), t('hud.reverseShort')];
   const { centers, y, radius, width } = row;
   for (const [i, x] of centers.entries()) {
     c.fillStyle = '#080f1a'; c.strokeStyle = '#647580'; c.lineWidth = 2;
@@ -683,7 +658,6 @@ export class CockpitDisplay {
   private labels!: GlassLabels;
   private ladder: CockpitLineRaster | null = null;
   private readonly radar = new RadarDisplay();
-  private airframeLabel!: HTMLCanvasElement;
   private gauges!: { face: HTMLCanvasElement; row: GaugeRow };
   private caution: WarningCell[] = [];
   private readonly stores = new Map<number, HTMLCanvasElement>();
@@ -691,14 +665,11 @@ export class CockpitDisplay {
 
   private lastMfd: number | null = null;
   private lastFlicker = -1;
-  private lastHit = false;
-  private lastHull = -1;
-  private lastMaxHull = -1;
   private lastWeapon = -1;
   private lastStores = -1;
   private lastSpeed = -1;
   private lastBoost = -1;
-  private lastGaugeHull = -1;
+  private lastReversalCharge = -1;
   private lastGaugeFlicker = -1;
   private lastG = -1;
 
@@ -746,17 +717,12 @@ export class CockpitDisplay {
     this.gauges = {
       row, face: plate(layout.gauges, c => drawGaugeFaces(c, row, layout.gauges.height >= 40, compact, t, this.font, panelScale)),
     };
-    this.airframeLabel = plate(layout.damage, c => {
-      c.font = `${compact ? 10 : Math.round(12 * panelScale)}px ${this.font}`;
-      text(c, t('cockpit.airframe'), layout.damage.x + (compact ? 6 : 12 * panelScale),
-        layout.damage.y + (layout.damage.height < 40 ? 8 : 11 * panelScale));
-    });
     this.caution = warningCells(layout, t, this.font);
     this.weapons.clear();
     this.stores.clear();
     this.lastMfd = null;
-    this.lastFlicker = this.lastHull = this.lastMaxHull = this.lastWeapon = this.lastStores = -1;
-    this.lastSpeed = this.lastBoost = this.lastGaugeHull = this.lastGaugeFlicker = this.lastG = -1;
+    this.lastFlicker = this.lastWeapon = this.lastStores = -1;
+    this.lastSpeed = this.lastBoost = this.lastReversalCharge = this.lastGaugeFlicker = this.lastG = -1;
   }
 
   private cacheWeapons(layout: CockpitLayout, key: number, state: StageState, t: Translate): void {
@@ -786,18 +752,17 @@ export class CockpitDisplay {
 
     const amberPulse = Math.floor(elapsed * 4) % 2 === 0 ? 1 : 0;
     const boostPulse = Math.floor(elapsed * 3) % 2 === 0 ? 1 : 0;
-    updateWarning(this.panels, this.caution[0], warnings.master ? 1 + amberPulse : 0);
-    updateWarning(this.panels, this.caution[1], warnings.lowHull ? 1 + amberPulse : 0);
-    updateWarning(this.panels, this.caution[2], warnings.terrain ? (warnings.terrain === 'pullUp' ? 3 : 1) + amberPulse : 0);
-    updateWarning(this.panels, this.caution[3], warnings.boost === 'active' ? 3 + boostPulse : warnings.boost === 'low' ? 1 + amberPulse : 0);
+    updateWarning(this.panels, this.caution[0], (warnings.terrain || warnings.boost === 'low') ? 1 + amberPulse : 0);
+    updateWarning(this.panels, this.caution[1], warnings.terrain ? (warnings.terrain === 'pullUp' ? 3 : 1) + amberPulse : 0);
+    updateWarning(this.panels, this.caution[2], warnings.boost === 'active' ? 3 + boostPulse : warnings.boost === 'low' ? 1 + amberPulse : 0);
     const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
-    updateWarning(this.panels, this.caution[4], state.maneuver ? 2 : state.tick <= state.graceUntil ? 0 : 3 + loopSeconds);
+    updateWarning(this.panels, this.caution[3], state.maneuver ? 2 : state.tick <= state.graceUntil ? 0 : 3 + loopSeconds);
 
     const flicker = impact > 0.45 && Math.floor(impact * 12) % 2 === 0 ? 0.6 : 1;
     const refresh = cockpitMfdDue(this.lastMfd, elapsed);
     if (refresh) {
       this.lastMfd = elapsed;
-      this.drawMfds(layout, state, impact > 0, flicker, t);
+      this.drawMfds(layout, state, flicker, t);
       const { radar } = layout;
       this.panels.globalAlpha = flicker;
       clearZone(this.panels, radar);
@@ -847,16 +812,9 @@ export class CockpitDisplay {
     }
   }
 
-  private drawMfds(layout: CockpitLayout, state: StageState, hit: boolean, flicker: number, t: Translate): void {
-    const c = this.panels, { compact, damage, stores, weapons } = layout;
+  private drawMfds(layout: CockpitLayout, state: StageState, flicker: number, t: Translate): void {
+    const c = this.panels, { stores, weapons } = layout;
     c.globalAlpha = flicker;
-    if (state.hull !== this.lastHull || state.maxHull !== this.lastMaxHull || hit !== this.lastHit || flicker !== this.lastFlicker) {
-      blitPlate(c, damage, this.airframeLabel);
-      drawDamage(c, damage, state, compact, hit, layout.panelScale);
-      this.lastHull = state.hull;
-      this.lastMaxHull = state.maxHull;
-      this.lastHit = hit;
-    }
     const weapon = (state.bombs * (MAX_FLARES + 1) + state.flareCharges) * 12 + state.podRank * 4 + state.twinRank;
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
       if (!this.weapons.has(weapon)) this.cacheWeapons(layout, weapon, state, t);
@@ -873,18 +831,18 @@ export class CockpitDisplay {
 
   private drawGauges(layout: CockpitLayout, state: StageState, motion: CockpitMotion, flicker: number): void {
     // A steady instrument retains its pixels. Clamp away drift past the ends of the dial.
-    const speed = clamp(motion.speed / 100, 0, 1), boost = state.boost, hull = state.hull / state.maxHull;
-    if (Math.abs(speed - this.lastSpeed) < 1e-6 && boost === this.lastBoost && hull === this.lastGaugeHull && flicker === this.lastGaugeFlicker) return;
+    const speed = clamp(motion.speed / 100, 0, 1), boost = state.boost, charge = reversalCharge(state);
+    if (Math.abs(speed - this.lastSpeed) < 1e-6 && boost === this.lastBoost && charge === this.lastReversalCharge && flicker === this.lastGaugeFlicker) return;
     this.lastSpeed = speed;
     this.lastBoost = boost;
-    this.lastGaugeHull = hull;
+    this.lastReversalCharge = charge;
     this.lastGaugeFlicker = flicker;
     const c = this.panels, { centers, y, radius } = this.gauges.row;
     c.globalAlpha = flicker;
     blitPlate(c, layout.gauges, this.gauges.face);
     drawNeedle(c, centers[0], y, radius, speed, layout.compact, layout.panelScale);
     drawNeedle(c, centers[1], y, radius, boost, layout.compact, layout.panelScale);
-    drawNeedle(c, centers[2], y, radius, hull, layout.compact, layout.panelScale);
+    drawNeedle(c, centers[2], y, radius, charge, layout.compact, layout.panelScale);
     c.globalAlpha = 1;
   }
 }

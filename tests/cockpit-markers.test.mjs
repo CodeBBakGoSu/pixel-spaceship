@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { frameCockpit } from '../src/camera.ts';
-import { CockpitMarkers } from '../src/cockpit-markers.ts';
+import { CockpitMarkers, markerRadius } from '../src/cockpit-markers.ts';
 import { projectCameraContact } from '../src/contact-projection.ts';
 import { buildRadar } from '../src/instruments.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
@@ -114,7 +114,8 @@ test('former pursuers survive inversion and retain altitude data when diverted a
   state.maneuverTrail = { kind: 'immelmann', startTick: state.tick - 30, yaw: 0, side: 1,
     exitAltitude: 110, limited: false, points: [{ x: 0, z: 0, alt: 110 }], pursuers: [contact.id, hiddenByMirror.id] };
   face({ pitch: Math.PI, roll: 0, cockpitPitch: 0, cameraPitch: 0, cameraBank: Math.PI, inverted: true });
-  const [visible, obscured] = read({ x: 1080, y: 210, width: 120, height: 100 });
+  const mirror = { x: 1080, y: 210, width: 120, height: 100 };
+  const [visible, obscured] = read(mirror);
   assert.equal(visible.id, contact.id);
   assert.equal(visible.placement, 'forward');
   assert.equal(visible.former, true);
@@ -123,7 +124,9 @@ test('former pursuers survive inversion and retain altitude data when diverted a
   assert.equal(obscured.placement, 'edge');
   assert.equal(obscured.former, true);
   assert.equal(obscured.delta, -18);
-  assert.ok(obscured.x < 1070 || obscured.y > 320);
+  const padding = markerRadius(obscured, false);
+  assert.ok(obscured.x + padding <= mirror.x || obscured.x - padding >= mirror.x + mirror.width
+    || obscured.y + padding <= mirror.y || obscured.y - padding >= mirror.y + mirror.height);
 });
 
 test('the J-turn exits with a former pursuer in the desktop and portrait canopy', () => {

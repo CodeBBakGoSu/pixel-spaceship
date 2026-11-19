@@ -26,7 +26,7 @@ for (const [width,height] of sizes) for (const safe of insets) for (const view o
     assert.equal(l.flare.y, l.bomb.y);
     assert.ok(l.bomb.x - l.flare.x - l.flare.width <= 10);
     assert.ok(contains(l.hud,l.pause));assert.ok(l.pause.width>=44 && l.pause.height>=44);
-    if(view==='cockpit')assert.ok(l.dashboard);else assert.equal(l.dashboard,null);
+    if(view==='cockpit')assert.ok(l.dashboard.height >= 83 && l.dashboard.height <= 99);else assert.equal(l.dashboard,null);
   });
 }
 
@@ -43,11 +43,11 @@ test('landscape phone has usable, separated zones and controls', () => {
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 
-test('the desktop cockpit has a larger instrument rack with room for the canopy', () => {
-  const hud = desktopLayout(1280, 800, insets[0]);
-  const cockpit = cockpitLayout(1280, 800, insets[0], hud.objective);
-  assert.ok(cockpit.dashboard.height >= 229 && cockpit.dashboard.height <= 264);
-  assert.ok(cockpit.radar.height >= 161 && cockpit.radar.height <= 186);
+test('the desktop cockpit widens the canopy above a 166px instrument rack', () => {
+  const hud = desktopLayout(1280, 720, insets[0]);
+  const cockpit = cockpitLayout(1280, 720, insets[0], hud.objective);
+  assert.equal(cockpit.dashboard.height, 166);
+  assert.ok(cockpit.glass.width > 1150);
   assert.ok(cockpit.aiming.height >= 200);
   assert.ok(contains(cockpit.dashboard, cockpit.gauges));
 });
@@ -55,7 +55,7 @@ test('the desktop cockpit has a larger instrument rack with room for the canopy'
 test('phone scene buffers use finer pixels while the cockpit clears the controls', () => {
   const portrait = phoneLayout(390, 844, insets[1], 'cockpit');
   const landscape = phoneLayout(844, 390, insets[1], 'cockpit');
-  assert.deepEqual(portrait.buffer, { width: 288, height: 623 });
+  assert.deepEqual(portrait.buffer, { width: 336, height: 727 });
   assert.deepEqual(landscape.buffer, { width: 623, height: 288 });
   for (const layout of [portrait, landscape]) {
     assert.equal(layout.dashboard.y + layout.dashboard.height, layout.controls.y);
@@ -77,7 +77,7 @@ for (const [width, height] of [[1280, 720], ...sizes]) {
   });
 }
 
-for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const safe of insets) {
+for (const [width, height] of [[1280, 720], [1920, 1080], ...sizes, [844, 390]]) for (const safe of insets) {
   test(`guide reserves separate heading, content and action areas at ${width}x${height}, safe ${safe.top}`, () => {
     const guide = guideLayout(width, height, safe);
     const safeArea = { x: safe.left, y: safe.top, width: width - safe.left - safe.right, height: height - safe.top - safe.bottom };
@@ -93,9 +93,9 @@ for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const sa
   });
 }
 
-for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const safe of insets) {
+for (const [width, height] of [[1280, 720], [1920, 1080], ...sizes, [844, 390]]) for (const safe of insets) {
   test(`cockpit zones stay separate at ${width}x${height}, safe ${safe.top}`, () => {
-    const phone = width < 1280 ? phoneLayout(width, height, safe, 'cockpit') : null;
+    const phone = width < 1000 ? phoneLayout(width, height, safe, 'cockpit') : null;
     const hud = phone ?? desktopLayout(width, height, safe);
     const cockpit = cockpitLayout(width, height, safe, hud.objective, phone?.controls);
     if (phone) assert.deepEqual(phone.dashboard, cockpit.dashboard);
@@ -111,7 +111,7 @@ for (const [width, height] of [[1280, 720], ...sizes, [844, 390]]) for (const sa
 
     for (const [outer, children] of [
       [cockpit.glass, [cockpit.heading, cockpit.speed, cockpit.altitude, cockpit.aiming, ...(cockpit.stores ? [cockpit.stores] : [])]],
-      [cockpit.dashboard, [cockpit.warnings, cockpit.radar, cockpit.damage, cockpit.weapons, cockpit.gauges]],
+      [cockpit.dashboard, [cockpit.warnings, cockpit.radar, cockpit.weapons, cockpit.gauges]],
     ]) {
       for (const [i, child] of children.entries()) {
         assert.ok(contains(outer, child));

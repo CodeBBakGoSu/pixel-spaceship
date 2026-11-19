@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
+import { RearMirrorThreat } from '../src/instruments.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror } from '../src/rear-glimpse.ts';
 
@@ -29,7 +30,7 @@ test('the rear inset clears the objective, instruments and phone controls', () =
 });
 
 test('the cockpit mirror can expand without covering fixed instruments', () => {
-  for (const [width, height, mobile] of [[1280, 800, false], [390, 844, true], [844, 390, true]]) {
+  for (const [width, height, mobile] of [[1280, 720, false], [1920, 1080, false], [360, 780, true], [390, 844, true], [430, 932, true], [844, 390, true]]) {
     const phone = mobile ? phoneLayout(width, height, safe, 'cockpit') : null;
     const hud = phone ?? desktopLayout(width, height, safe);
     const cockpit = cockpitLayout(width, height, safe, hud.objective, phone?.controls);
@@ -38,7 +39,8 @@ test('the cockpit mirror can expand without covering fixed instruments', () => {
     assert.equal(focus.x + focus.width, rest.x + rest.width);
     assert.equal(focus.y, rest.y);
     assert.ok(focus.width >= rest.width);
-    if (width === 390) assert.ok(focus.width > rest.width);
+    if (width >= 1280) assert.deepEqual([rest.width, rest.height], [128, 56]);
+    if (mobile && height > width) assert.ok(rest.width >= 104 && rest.width <= 112 && focus.width > rest.width);
     for (const region of [cockpit.heading, cockpit.altitude, cockpit.message, cockpit.dashboard]) {
       assert.equal(intersects(focus, region), false);
     }
@@ -85,4 +87,26 @@ test('a delayed bomb blast stays in the rear feed after the pilot turns', () => 
   const impact = new Vector3(blast.x, blast.alt, -blast.z).project(camera);
   assert.ok(Math.abs(impact.z) < 1);
   assert.ok(Math.abs(impact.x) < 0.35 && Math.abs(impact.y) < 0.35);
+});
+
+test('the rear mirror confirms one closing contact, keeps it briefly, and clears contacts outside range', () => {
+  const first = { id: 1, kind: 'fighter', x: -40, z: -70, alt: 124, hp: 1, vx: 0, vz: 75 };
+  const second = { id: 2, kind: 'fighter', x: 0, z: -140, alt: 110, hp: 1, vx: 0, vz: 55 };
+  const state = { tick: 300, speed: 50, player: { x: 0, z: 0, yaw: 0, altitude: 110 }, enemies: [first, second] };
+  const mirror = new RearMirrorThreat();
+  assert.equal(mirror.update(state), null);
+  state.tick += 9;
+  const primary = mirror.update(state);
+  assert.deepEqual([primary.id, primary.side, primary.height], [first.id, 'Left', 'Above']);
+  Object.assign(second, { x: 30, z: -40, alt: 95, vz: 120 });
+  state.tick++;
+  assert.equal(mirror.update(state).id, first.id);
+  state.tick += 9;
+  assert.equal(mirror.update(state).id, first.id);
+  state.tick += 5;
+  const next = mirror.update(state);
+  assert.deepEqual([next.id, next.side, next.height], [second.id, 'Right', 'Below']);
+  second.z = -145;
+  state.tick++;
+  assert.equal(mirror.update(state), null);
 });

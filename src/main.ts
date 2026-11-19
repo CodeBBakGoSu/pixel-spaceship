@@ -3,18 +3,18 @@ import { autopilotInput, seekStage } from './autoplay.ts';
 import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
-import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
+import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
-import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, relativeMark,
+import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
-import { activeTrail, canManeuver, chooseManeuver, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
+import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, BOSS_TICK, parseStageOptions, requiredXp, stepStage } from './stage.ts';
-import { BOMB_RELOAD_TICKS, canDropFlare, clamp, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE, STEP,
+import { BOMB_RELOAD_TICKS, canDropFlare, clamp, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { DraftId, Effect, ManeuverKind, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -46,6 +46,11 @@ const rearViewCue = $('#rear-view-cue');
 const flightMessage = $('#flight-message');
 const maneuverCue = $('#maneuver-cue');
 const reversalCue = $('#reversal-cue');
+const hullBar = $('#hull-bars');
+const hullWarning = $('#hull-warning');
+const hullSegments = [...hullBar.children];
+let paintedHull = -1;
+const mirrorThreat = new RearMirrorThreat();
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
 const font = getComputedStyle(document.documentElement).getPropertyValue('--game-font').trim();
@@ -255,7 +260,13 @@ function updateRadio(): void {
 }
 
 function updateHud(readout: RadarReadout): void {
-  setText('#hull-bars', '▮'.repeat(state.hull) + '▯'.repeat(state.maxHull - state.hull));
+  if (paintedHull !== state.hull) {
+    hullSegments.forEach((segment, index) => segment.classList.toggle('filled', index < state.hull));
+    paintedHull = state.hull;
+  }
+  setText('#hull-value', `${state.hull}/${state.maxHull}`);
+  hullWarning.hidden = state.hull > state.maxHull / 4;
+  hullBar.classList.toggle('critical', !hullWarning.hidden);
   $('#boost-bar').style.width = `${state.boost * 100}%`;
   setText('#bombs', '◆'.repeat(state.bombs) + '◇'.repeat(MAX_BOMBS - state.bombs));
   const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / BOMB_RELOAD_TICKS;
@@ -277,8 +288,7 @@ function updateHud(readout: RadarReadout): void {
   setText('#loop-status', t(lowBoost ? 'hud.jTurnLow' : loopKey, { seconds: loopSeconds }));
   const loopStatus = $('#loop-status');
   loopStatus.dataset.ready = String(ready && !lowBoost);
-  const last = state.maneuverTrail;
-  const charge = state.maneuver ? 0 : last && loopSeconds > 0 ? 1 - (state.maneuverReadyAt - state.tick) / MANEUVERS[last.kind].cooldown : 1;
+  const charge = reversalCharge(state);
   loopStatus.style.setProperty('--loop-charge', `${Math.round(clamp(charge, 0, 1) * 100)}%`);
   touchLoop.setAttribute('aria-disabled', String(!ready || lowBoost));
   updateRearDangerCue(readout, ready && !lowBoost, flareReady);
@@ -312,9 +322,14 @@ function updateHud(readout: RadarReadout): void {
 
 function updateManeuverCue(): void {
   const reversal = state.reversal;
-  reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || !reversal.kills || state.tick >= reversal.shownUntil;
+  const streak = reversal && 'streak' in reversal && typeof reversal.streak === 'number' ? reversal.streak : 0;
+  reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || (!reversal.kills && streak < 3) || state.tick >= reversal.shownUntil;
   flightMessage.dataset.reversal = String(!reversalCue.hidden);
-  if (!reversalCue.hidden && reversal) setText('#reversal-cue', t('hud.reversalKills', { count: reversal.kills }));
+  if (!reversalCue.hidden && reversal) {
+    const tier = streak >= 10 ? 'dominated' : streak >= 6 ? 'aceWipe' : streak >= 3 ? 'sweep' : '';
+    reversalCue.dataset.tier = tier;
+    setText('#reversal-cue', tier ? t(`hud.${tier}`, { count: streak }) : t('hud.reversalKills', { count: reversal.kills }));
+  }
   const trail = activeTrail(state);
   maneuverCue.hidden = !reversalCue.hidden || !trail || state.phase !== 'playing' || state.tick > trailEnd(trail) + 48;
   if (!trail || maneuverCue.hidden) return;
@@ -738,8 +753,11 @@ function updateRearBombMarker(): void {
 
 function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flareReady: boolean): void {
   const danger = readout.rearDanger;
+  const running = state.phase === 'playing' && !state.paused;
+  if (!running || state.view !== 'cockpit') mirrorThreat.clear();
+  const threat = running && state.view === 'cockpit' ? mirrorThreat.update(state) : null;
   const neutral = state.view === 'chase' && readout.rearMarks.length > 0;
-  rearDangerCue.hidden = state.phase !== 'playing' || state.paused || (!danger && !neutral);
+  rearDangerCue.hidden = !running || (!danger && !neutral && !threat);
   if (rearDangerCue.hidden) return;
 
   const mirror = scene?.cockpitMirror;
@@ -747,14 +765,35 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
   rearDangerCue.dataset.docked = String(docked);
   rearDangerCue.dataset.danger = String(!!danger);
   if (mirror && docked) {
+    rearDangerCue.style.setProperty('--rear-left', `${mirror.x + 3}px`);
     rearDangerCue.style.setProperty('--rear-right', `${innerWidth - mirror.x - mirror.width + 3}px`);
     rearDangerCue.style.setProperty('--rear-bottom', `${innerHeight - mirror.y - mirror.height + 3}px`);
   }
-  const action = danger?.kind === 'contact' && flareReady ? (touch ? t('control.flareShort') : `C ${t('control.flare')}`)
+  let position = '▼', description = t('hud.rear');
+  let action = danger?.kind === 'contact' && flareReady ? (touch ? t('control.flareShort') : `C ${t('control.flare')}`)
     : danger && reversalReady ? (touch ? t('control.loop') : `SPACE ${t('hud.rearReverse')}`)
     : danger ? t('hud.rearEvade') : readout.rearMarks.join(' ');
+  if (danger) description = t('hud.rearDanger');
+  else if (threat) {
+    const bearing = { Left: '←', Centre: '•', Right: '→' }[threat.side];
+    const altitude = { Above: '↑', Level: '=', Below: '↓' }[threat.height];
+    position = bearing + altitude;
+    description += ` · ${t(`hud.rear${threat.side}`)} ${t(`hud.rear${threat.height}`)}`;
+    const kind = (['j-turn', 'immelmann', 'split-s'] as const)
+      .find(kind => canManeuver(state, kind) && inBand(threat.alt, exitAltitude(state.player.altitude, kind)));
+    const seconds = Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND);
+    if (kind) {
+      const direction = kind === 'immelmann' ? '↑' : kind === 'split-s' ? '↓' : threat.lateral < 0 ? '←' : '→';
+      action = `${t('hud.reverseShort')} ${direction}`;
+    } else if (flareReady && threat.height !== 'Above' && Math.abs(threat.lateral) <= 22 && threat.distance <= 80) {
+      action = t('hud.rearFlare', { count: state.flareCharges });
+    } else {
+      action = seconds > 0 ? t('hud.rearCooldown', { seconds }) : t('hud.rearEvade');
+    }
+  }
+  setText('#rear-position', position);
   setText('#rear-danger-action', action);
-  rearDangerCue.setAttribute('aria-label', danger ? `${t('hud.rearDanger')} · ${action}` : t('hud.rear'));
+  rearDangerCue.setAttribute('aria-label', `${description} · ${action}`);
 }
 
 function updateRearViewCue(): void {

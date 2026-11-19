@@ -36,9 +36,11 @@
   <div id="control-backdrop" aria-hidden="true"></div>
   <header class="hud" data-label="aria.hud">
     <div class="status">
-      <div><span data-i18n="hud.hull"></span><b id="hull-bars" class="blocks"></b></div>
-      <div><span data-i18n="hud.boost"></span><i class="track"><i id="boost-bar"></i></i></div>
-      <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b><i class="bomb-reload" aria-hidden="true"><i id="bomb-reload-bar"></i></i><span id="flare-stock" class="flare-stock"></span><output id="loop-status" class="loop-status"></output></div>
+      <div class="hull-status"><span data-i18n="hud.hull"></span><span id="hull-bars" class="hull-bars" aria-hidden="true">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </span><b id="hull-value"></b><strong id="hull-warning" data-i18n="cockpit.lowHull" hidden></strong></div>
+      <div><span data-i18n="hud.boost"></span><i class="track"><i id="boost-bar"></i></i><output id="loop-status" class="loop-status"></output></div>
+      <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b><i class="bomb-reload" aria-hidden="true"><i id="bomb-reload-bar"></i></i><span id="flare-stock" class="flare-stock"></span></div>
       <div class="status-view"><strong id="view-label"></strong><span id="xp-label"></span><time id="segment-timer"></time></div>
     </div>
     <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small></div>
@@ -63,7 +65,7 @@
   <div id="reversal-cue" class="reversal-cue" role="status" hidden></div>
   <div id="scene-cue" class="scene-cue" aria-hidden="true" hidden></div>
   <div id="rear-bomb-marker" class="rear-bomb-marker" aria-hidden="true" hidden>◆↓</div>
-  <div id="rear-danger-cue" class="rear-danger-cue" role="status" hidden><span aria-hidden="true">▼</span> <span id="rear-danger-action"></span></div>
+  <div id="rear-danger-cue" class="rear-danger-cue" role="status" hidden><span id="rear-position" aria-hidden="true">▼</span><span id="rear-danger-action"></span></div>
   <div id="rear-view-cue" class="rear-view-cue" role="status" hidden></div>
   <samp id="cockpit-delta" class="screen-reader" hidden></samp>
   <div id="view-tag" class="view-tag" hidden></div>

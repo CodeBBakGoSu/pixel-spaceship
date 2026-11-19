@@ -340,3 +340,53 @@ export class RadarDisplay {
     c.stroke();
   }
 }
+
+// The mirror follows a closing aircraft long enough to read a response.
+export class RearMirrorThreat {
+  private current: number | null = null;
+  private holdUntil = 0;
+  private pending: number | null = null;
+  private pendingSince = 0;
+  private lastTick = 0;
+
+  clear(): void {
+    this.current = this.pending = null;
+    this.holdUntil = this.pendingSince = 0;
+  }
+
+  update(state: StageState) {
+    const { player, tick } = state;
+    if (tick < this.lastTick) this.clear();
+    this.lastTick = tick;
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+    const vx = player.vx ?? state.speed * fx, vz = player.vz ?? state.speed * fz;
+    let current = null, best = null;
+    for (const enemy of state.enemies) {
+      if (enemy.hp <= 0 || enemy.kind === 'turret') continue;
+      const dx = enemy.x - player.x, dz = enemy.z - player.z;
+      const aft = -(dx * fx + dz * fz), distance = Math.hypot(dx, dz);
+      if (aft <= 0 || distance > 140) continue;
+      const closing = -(dx * (enemy.vx - vx) + dz * (enemy.vz - vz)) / distance;
+      if (closing <= 0 && enemy.id !== this.current) continue;
+      const lateral = dx * fz - dz * fx, delta = enemy.alt - player.altitude;
+      const threat = { id: enemy.id, alt: enemy.alt, distance, lateral,
+        side: lateral < -aft * 0.25 ? 'Left' as const : lateral > aft * 0.25 ? 'Right' as const : 'Centre' as const,
+        height: delta > HIT_WINDOW ? 'Above' as const : delta < -HIT_WINDOW ? 'Below' as const : 'Level' as const,
+        score: distance / Math.max(5, closing) + Math.abs(delta) * 0.08, closing };
+      if (enemy.id === this.current) current = threat;
+      if (closing > 0 && (!best || threat.score < best.score)) best = threat;
+    }
+
+    if ((best?.id ?? null) !== this.pending) {
+      this.pending = best?.id ?? null;
+      this.pendingSince = tick;
+    }
+    if (best && best.id === current?.id) this.holdUntil = tick + 15;
+    if (best && tick >= this.pendingSince + 9 && (!current || tick >= this.holdUntil)) {
+      this.current = best.id;
+      this.holdUntil = tick + 15;
+      return best;
+    }
+    return current && (current.closing > 0 || tick < this.holdUntil) ? current : null;
+  }
+}
