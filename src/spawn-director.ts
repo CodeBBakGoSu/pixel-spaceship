@@ -153,7 +153,6 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
     const position = entry(state, ground, kind, BANDS[band] + offset, yaw, member.range, escape, turns);
     if (!position) continue;
     const enemy = makeEnemy(state, position.x, position.z, band, kind, offset);
-    enemy.yaw = Math.atan2(p.x - position.x, p.z - position.z);
     enemy.shotAt += Math.floor(random(state) * 21);
     enemies.push(enemy);
     if (kind === 'bomber') addBomberEscort(state, enemy, ground);
@@ -170,6 +169,10 @@ function moveToEntry(state: StageState, enemy: Enemy, point: Point): void {
   enemy.maneuverAt = Math.max(enemy.maneuverAt, state.tick + 90);
   enemy.maneuver = null;
   enemy.alt = BANDS[enemy.band] + enemy.offset;
+  delete enemy.flightSpeed;
+  delete enemy.closeRange;
+  delete enemy.longRange;
+  delete enemy.terrainTurn;
   delete enemy.course;
   delete enemy.flyby;
   delete enemy.tell;
