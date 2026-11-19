@@ -44,14 +44,20 @@ const TWIN_RANGE = 175;
 const TWIN_MUZZLE = 6;
 const LOCK_RANGE = 175;
 const POD_RANGE = 62;
-const REVERSAL_WINDOW = 90;
-const REVERSAL_CADENCE = 7;
+const REVERSAL_WINDOW = 120;
+const REVERSAL_CADENCE = 4;
+const REVERSAL_SPEED = 485;
+const REVERSAL_HITS = 3;
+const REVERSAL_STREAK_TICKS = 21;
+const REVERSAL_SPREAD = [0, -0.055, 0.055, -0.11, 0.11];
+const REVERSAL_MUZZLES = [0, -2.2, 2.2, -4.4, 4.4];
 const REVERSAL_CONFIRM = 60;
-const STRAFE_CADENCE = 42;
+const STRAFE_CADENCE = 33;
 const STRAFE_SPEED = 230;
-const STRAFE_CONE = Math.PI / 9;
-const STRAFE_MIN_RANGE = 45;
-const STRAFE_RANGE = 100;
+const STRAFE_CONE = 38 * Math.PI / 180;
+const STRAFE_MIN_RANGE = 28;
+const STRAFE_RANGE = 135;
+const STRAFE_BAND_WINDOW = 12;
 
 export const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 export const angleTo = (yaw: number, dx: number, dz: number): number => {
@@ -106,14 +112,11 @@ type Aim = Position & { vx?: number; vz?: number; id: number; window?: number };
 
 function fireFriendly(
   state: StageState, kind: 'twin' | 'pods', offsets: number[], target: Aim | null, lockId: number | null,
-  reversal?: Shot['reversal'],
 ): void {
   const p = state.player;
   const forwardX = Math.sin(p.yaw), forwardZ = Math.cos(p.yaw);
   const lead = target ? Math.hypot(target.x - p.x, target.z - p.z) / BOLT_SPEED : 0;
   const volley = ++state.nextVolley;
-  const pass = state.reversal;
-  const reversalTick = kind === 'twin' && pass && state.tick < pass.until ? pass.startTick : undefined;
   for (const side of offsets) {
     if (state.shots.length >= SHOT_LIMIT) break;
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
@@ -125,15 +128,41 @@ function fireFriendly(
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
       damage: kind === 'twin' ? state.twinDamage : state.podDamage,
-      life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId, reversal, reversalTick,
+      life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId,
     });
   }
+}
+
+type RankedTarget = { enemy: Enemy; range: number };
+
+function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal']>, targets: RankedTarget[]): void {
+  if (!targets.length || state.shots.length >= SHOT_LIMIT) return;
+  const p = state.player;
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+  const volley = ++state.nextVolley;
+  targets.sort((a, b) => a.range - b.range);
+  for (let i = 0; i < REVERSAL_SPREAD.length && state.shots.length < SHOT_LIMIT; i++) {
+    const { enemy, range } = targets[i % targets.length];
+    const side = REVERSAL_MUZZLES[i];
+    const x = p.x + fx * TWIN_MUZZLE + fz * side;
+    const z = p.z + fz * TWIN_MUZZLE - fx * side;
+    const lead = range / REVERSAL_SPEED;
+    const aim = Math.atan2(enemy.x + enemy.vx * lead - x, enemy.z + enemy.vz * lead - z);
+    const yaw = aim + (i < targets.length ? 0 : REVERSAL_SPREAD[i]);
+    state.shots.push({
+      x, z, alt: p.altitude, kind: 'twin',
+      vx: Math.sin(yaw) * REVERSAL_SPEED, vz: Math.cos(yaw) * REVERSAL_SPEED,
+      damage: state.twinDamage, life: 0.44, volley, nearMiss: false, lockId: null,
+      reversal: { remaining: REVERSAL_HITS, hits: [] }, reversalTick: pass.startTick,
+    });
+  }
+  pass.nextShotAt = state.tick + REVERSAL_CADENCE;
 }
 
 export function openReversal(state: StageState, pursuers: readonly number[]): void {
   state.reversal = {
     startTick: state.tick, until: state.tick + REVERSAL_WINDOW, pursuers: [...pursuers],
-    kills: 0, nextShotAt: state.tick, shownUntil: state.tick,
+    kills: 0, killTicks: [], streak: 0, nextShotAt: state.tick, shownUntil: state.tick,
   };
 }
 
@@ -150,7 +179,7 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,
     vx: dx / lead + target.vx, vz: dz / lead + target.vz, vy,
-    damage: 1, life: (p.altitude - BANDS[targetBand] + HIT_WINDOW) / -vy,
+    damage: 1, life: (p.altitude - BANDS[targetBand] + STRAFE_BAND_WINDOW) / -vy,
     volley: ++state.nextVolley, nearMiss: false, lockId: null,
   });
   state.strafeAt = state.tick + STRAFE_CADENCE;
@@ -178,12 +207,12 @@ export function acquireAndFire(state: StageState): void {
   let left: Enemy | null = null, right: Enemy | null = null;
   let leftRange = POD_RANGE, rightRange = POD_RANGE;
   const reversal = state.reversal;
-  const reversalReady = reversal && state.tick < reversal.until && state.tick >= reversal.nextShotAt;
-  let pursuer: Enemy | null = null, secondPursuer: Enemy | null = null;
-  let pursuerRange = TWIN_RANGE, secondPursuerRange = TWIN_RANGE;
+  const overdrive = reversal && state.tick < reversal.until ? reversal : null;
+  const reversalReady = overdrive && state.tick >= overdrive.nextShotAt;
+  const overdriveTargets: RankedTarget[] = [];
   const lowerBand = state.tick < state.strafeAt ? null
     : inBand(p.altitude, BANDS[2]) ? 1 : inBand(p.altitude, BANDS[1]) ? 0 : null;
-  let strafe: Enemy | null = null, strafeRange = STRAFE_RANGE;
+  const strafeTargets: RankedTarget[] = [];
   for (const enemy of state.enemies) {
     if (!enemy.hp) continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
@@ -198,22 +227,7 @@ export function acquireAndFire(state: StageState): void {
         wrong = enemy;
         wrongRange = range;
       }
-      if (sameBand && reversalReady && reversal.pursuers.includes(enemy.id)) {
-        if (range <= pursuerRange) {
-          secondPursuer = pursuer;
-          secondPursuerRange = pursuerRange;
-          pursuer = enemy;
-          pursuerRange = range;
-        } else if (range <= secondPursuerRange) {
-          secondPursuer = enemy;
-          secondPursuerRange = range;
-        }
-      }
-      if (lowerBand !== null && range >= STRAFE_MIN_RANGE && range <= strafeRange && angle <= STRAFE_CONE
-        && inBand(enemy.alt, BANDS[lowerBand])) {
-        strafe = enemy;
-        strafeRange = range;
-      }
+      if (sameBand && reversalReady && range <= TWIN_RANGE) overdriveTargets.push({ enemy, range });
     } else if (sameBand && angle >= Math.PI * 0.2) {
       if (bearing < 0 && range < leftRange) {
         left = enemy;
@@ -223,6 +237,8 @@ export function acquireAndFire(state: StageState): void {
         rightRange = range;
       }
     }
+    if (lowerBand !== null && range >= STRAFE_MIN_RANGE && range <= STRAFE_RANGE && angle <= STRAFE_CONE
+      && inBand(enemy.alt, BANDS[lowerBand], STRAFE_BAND_WINDOW)) strafeTargets.push({ enemy, range });
   }
 
   if (!twin && wrong) {
@@ -233,22 +249,23 @@ export function acquireAndFire(state: StageState): void {
     state.altitudeHint = null;
   }
 
-  const primary = state.tick >= state.twinAt ? twin : null;
+  const primary = state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
   if (primary) {
     fireFriendly(state, 'twin', state.twinRank === 3 ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && weak ? weak.id : null);
     state.twinAt = state.tick + (state.twinRank === 1 ? 21 : 13);
   }
-  if (reversal && pursuer && state.shots.length < SHOT_LIMIT) {
-    const target = primary?.id === pursuer.id && secondPursuer ? secondPursuer : pursuer;
-    fireFriendly(state, 'twin', [0], target, null, { targetId: target.id });
-    reversal.nextShotAt = state.tick + REVERSAL_CADENCE;
-  }
+  if (overdrive && reversalReady) fireOverdrive(state, overdrive, overdriveTargets);
   if (state.tick >= state.podsAt && (left || right)) {
     if (left) fireFriendly(state, 'pods', [-6], left, null);
     if (right) fireFriendly(state, 'pods', [6], right, null);
     state.podsAt = state.tick + (state.podRank === 1 ? 43 : 25);
   }
-  if (strafe && lowerBand !== null && state.shots.length < SHOT_LIMIT) fireStrafe(state, strafe, lowerBand);
+  if (lowerBand !== null) {
+    strafeTargets.sort((a, b) => a.range - b.range);
+    for (let i = 0; i < Math.min(2, strafeTargets.length) && state.shots.length < SHOT_LIMIT; i++) {
+      fireStrafe(state, strafeTargets[i].enemy, lowerBand);
+    }
+  }
 }
 
 function showRearLaunch(state: StageState, kind: RearGlimpse['kind']): void {
@@ -466,7 +483,7 @@ function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, 
 }
 
 function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }>, ground: Ground): void {
-  const bandAltitude = BANDS[shot.targetBand], floor = bandAltitude - HIT_WINDOW;
+  const bandAltitude = BANDS[shot.targetBand], floor = bandAltitude - STRAFE_BAND_WINDOW;
   const travel = Math.min(STEP, (shot.alt - floor) / -shot.vy);
   if (travel <= 0) {
     shot.life = 0;
@@ -476,7 +493,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
   let first = groundImpact(shot, dx, dz, ground, dy);
   let hit: Enemy | null = null;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || !inBand(enemy.alt, bandAltitude)) continue;
+    if (!enemy.hp || !inBand(enemy.alt, bandAltitude, STRAFE_BAND_WINDOW)) continue;
     const time = descendingImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS);
     if (time < first) {
       first = time;
@@ -488,6 +505,44 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
   shot.z += dz;
   shot.alt += dy;
   shot.life = first < Infinity || shot.alt <= floor || travel < STEP ? 0 : shot.life - STEP;
+}
+
+function advanceOverdrive(
+  state: StageState, shot: Shot, bolt: NonNullable<Shot['reversal']>, dx: number, dz: number, terrain: number,
+): boolean {
+  const pass = state.reversal?.startTick === shot.reversalTick ? state.reversal : null;
+  let hit = false;
+  while (bolt.remaining > 0) {
+    let target: Enemy | null = null, first = terrain;
+    for (const enemy of state.enemies) {
+      if (!enemy.hp || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt)) continue;
+      const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
+      if (time < first) {
+        target = enemy;
+        first = time;
+      }
+    }
+    if (!target) break;
+    hit = true;
+    bolt.hits.push(target.id);
+    bolt.remaining--;
+    hurtEnemy(state, target, shot.damage * (pass?.pursuers.includes(target.id) ? 2 : 1));
+    if (target.shotDown && pass) {
+      target.reversalKill = true;
+      pass.kills++;
+      const previous = pass.killTicks.filter(tick => state.tick - tick <= REVERSAL_STREAK_TICKS);
+      pass.killTicks = [...previous, state.tick];
+      const count = pass.killTicks.length;
+      if (count === 3) pass.burstAt = state.tick;
+      if (count >= 3) {
+        const visible = state.tick < pass.shownUntil ? pass.streak : 0;
+        pass.streak = Math.max(visible, count);
+        pass.shownUntil = state.tick + REVERSAL_CONFIRM;
+      }
+    }
+  }
+  if (!bolt.remaining) shot.life = 0;
+  return hit;
 }
 
 export function advanceShots(state: StageState, ground: Ground): void {
@@ -508,6 +563,8 @@ export function advanceShots(state: StageState, ground: Ground): void {
         hurtPlayer(state);
         shot.life = 0;
       }
+    } else if (shot.reversal) {
+      if (advanceOverdrive(state, shot, shot.reversal, dx, dz, terrain)) resolved.add(shot.volley);
     } else {
       let enemyHit: Enemy | null = null;
       let bossHit = false;
@@ -543,13 +600,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (enemyHit) {
-        if (!shot.reversal || shot.reversal.targetId === enemyHit.id) {
-          hurtEnemy(state, enemyHit, shot.damage);
-          if (!enemyHit.hp && reversal && shot.reversalTick === reversal.startTick && reversal.pursuers.includes(enemyHit.id)) {
-            reversal.kills++;
-            reversal.shownUntil = state.tick + REVERSAL_CONFIRM;
-          }
-        }
+        hurtEnemy(state, enemyHit, shot.damage);
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (miss < terrain && !shot.nearMiss && !misses.has(shot.volley)) {

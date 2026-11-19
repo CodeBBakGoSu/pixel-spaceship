@@ -40,123 +40,119 @@ test('reversal opens at the half-loop flips and the J-turn control handoff', () 
       stepStage(state);
     }
     assert.equal(state.reversal.startTick, state.tick, kind);
-    assert.equal(state.reversal.until - state.tick, 90);
+    assert.equal(state.reversal.until - state.tick, 120);
     assert.deepEqual(state.reversal.pursuers, [target.id]);
   }
 });
 
-test('rapid Twin fire uses the original pursuers, forward cone, range, and matching altitude', () => {
+test('overdrive replaces the regular Twin volley with a five-bolt spread against any forward contact', () => {
   const state = flight();
-  state.twinAt = Infinity;
-  const stranger = contact(state, 0, 40, 1);
-  const former = contact(state, 12, 80, 1);
-  const wrongBand = contact(state, 0, 45, 2);
-  const outOfCone = contact(state, 35, 28, 1);
-  const tooFar = contact(state, 0, 176, 1);
-  const snapshot = [former.id, wrongBand.id, outOfCone.id, tooFar.id];
-  combat.openReversal(state, snapshot);
-  snapshot.push(stranger.id);
-
+  contact(state, 0, 40, 1);
+  combat.openReversal(state, []);
   combat.acquireAndFire(state);
-  assert.equal(state.shots.length, 1);
-  assert.equal(state.shots[0].reversal?.targetId, former.id);
-  assert.equal(state.shots[0].kind, 'twin');
-  assert.equal(Math.round(Math.hypot(state.shots[0].vx, state.shots[0].vz)), 320);
-  state.tick += 6;
+  assert.equal(state.shots.length, 5);
+  assert.equal(new Set(state.shots.map(shot => shot.vx)).size, 5);
+  assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.reversal && Math.hypot(shot.vx, shot.vz) > combat.BOLT_SPEED));
+  state.tick += 3;
   combat.acquireAndFire(state);
-  assert.equal(state.shots.length, 1);
+  assert.equal(state.shots.length, 5);
   state.tick++;
   combat.acquireAndFire(state);
-  assert.equal(state.shots.length, 2);
+  assert.equal(state.shots.length, 10);
   state.tick = state.reversal.until;
   combat.acquireAndFire(state);
-  assert.equal(state.shots.length, 2);
+  assert.equal(state.shots.filter(shot => shot.reversal).length, 10);
 });
 
-test('the follow-up separates onto a second former pursuer and counts each real Twin kill once', () => {
+test('one overdrive bolt pierces three distinct contacts and doubles damage only to former pursuers', () => {
   const state = flight();
-  const first = contact(state, -8, 50, 1), second = contact(state, 15, 69, 1);
-  const stacked = contact(state, 15, 69, 2);
-  first.hp = second.hp = 1;
-  combat.openReversal(state, [first.id, second.id, stacked.id]);
-  combat.acquireAndFire(state);
-  assert.equal(state.shots.filter(shot => !shot.reversal).length, 2);
-  assert.equal(state.shots.find(shot => shot.reversal)?.reversal.targetId, second.id);
-  assert.equal(state.reversal.kills, 0);
-
-  sweep(state, 23);
-  assert.equal(first.hp, 0);
-  assert.equal(second.hp, 0);
-  assert.equal(stacked.hp, 2);
-  assert.equal(state.reversal.kills, 2);
-  assert.ok(state.reversal.shownUntil > state.tick);
-});
-
-test('a stray aircraft can block the extra Twin bolt without taking bonus damage', () => {
-  const state = flight();
-  state.twinAt = Infinity;
-  const blocker = contact(state, 0, 30, 1), former = contact(state, 0, 65, 1);
+  const stranger = contact(state, 0, 35, 1), former = contact(state, 0, 47, 1);
+  const stacked = contact(state, 0, 47, 2);
+  const third = contact(state, 0, 61, 1), fourth = contact(state, 0, 75, 1);
+  for (const target of [stranger, former, third, fourth]) target.hp = 4;
   combat.openReversal(state, [former.id]);
   combat.acquireAndFire(state);
-  assert.equal(state.shots.length, 1);
-
-  sweep(state, 24);
-  assert.equal(blocker.hp, 2);
+  state.shots = [state.shots.find(shot => shot.vx === 0)];
+  sweep(state, 22);
+  assert.equal(stranger.hp, 3);
   assert.equal(former.hp, 2);
-  assert.equal(state.shots.length, 0);
-  assert.equal(state.reversal.kills, 0);
+  assert.equal(stacked.hp, 2);
+  assert.equal(third.hp, 3);
+  assert.equal(fourth.hp, 4);
 });
 
-test('both Twin volleys and rapid follow-ups can confirm a late reversal kill', () => {
+test('three overdrive kills in 21 ticks trigger a burst and extend the cue past the firing window', () => {
+  const state = flight();
+  const targets = [35, 48, 61].map(z => contact(state, 0, z, 1));
+  for (const target of targets) target.hp = 1;
+  combat.openReversal(state, []);
+  state.tick = state.reversal.until - 1;
+  combat.acquireAndFire(state);
+  sweep(state, 16);
+  assert.equal(state.reversal.kills, 3);
+  assert.equal(state.reversal.streak, 3);
+  assert.ok(state.reversal.burstAt > state.reversal.until);
+  const { shownUntil } = state.reversal;
+  sweep(state, shownUntil - state.tick);
+  assert.equal(state.reversal, null);
+});
+
+test('overdrive does not bypass the Warden lock or raise its damage per regular Twin volley', () => {
+  const damage = [];
   for (const boosted of [false, true]) {
-    const state = flight();
-    const former = contact(state, 0, 80, 1);
-    former.hp = 1;
-    combat.openReversal(state, [former.id]);
-    if (boosted) state.twinAt = Infinity;
-    else state.reversal.nextShotAt = Infinity;
-    state.tick = state.reversal.until - 1;
+    const state = createStage(parseStageOptions('?fixture=boss'));
+    const point = state.boss.weakPoints[state.boss.index];
+    state.player.altitude = point.alt;
+    state.player.yaw = Math.atan2(point.x - state.player.x, point.z - state.player.z);
+    if (boosted) {
+      const escort = contact(state, 18, 55, 2);
+      combat.openReversal(state, [escort.id, point.id]);
+    }
+    for (let i = 0; i < 20; i++) combat.acquireAndFire(state);
+    assert.ok(state.shots.every(shot => shot.lockId === null));
+    assert.equal(point.hp, point.maxHp);
     combat.acquireAndFire(state);
-    sweep(state, 17);
-    assert.equal(former.hp, 0);
-    assert.equal(state.reversal?.kills, 1, boosted ? 'rapid follow-up' : 'regular volley');
-    const shownUntil = state.reversal.shownUntil;
-    sweep(state, shownUntil - state.tick - 1);
-    assert.equal(state.reversal.kills, 1);
-    sweep(state, 1);
-    assert.equal(state.reversal, null);
+    assert.equal(state.shots.filter(shot => shot.lockId === point.id).length, 2);
+    sweep(state, 45);
+    damage.push(point.maxHp - point.hp);
   }
+  assert.equal(damage[0], 2);
+  assert.equal(damage[1], damage[0]);
 });
 
-test('basic downward strafe adds one slower bolt on an independent 0.7 s cadence', () => {
+test('basic downward strafe fires at two distinct targets on a 0.55 s cadence', () => {
   const state = flight();
   state.twinRank = 3;
   state.twinDamage = 4;
   contact(state, -14, 70, 1);
-  contact(state, 10, 82, 0);
+  const first = contact(state, 10, 82, 0), second = contact(state, -65, 100, 0);
   combat.acquireAndFire(state);
 
   assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 4);
-  const [strafe] = state.shots.filter(shot => shot.kind === 'strafe');
+  const [strafe, other] = state.shots.filter(shot => shot.kind === 'strafe');
+  assert.ok(other && other.vx < 0);
   assert.ok(strafe);
   assert.equal(strafe.damage, 1);
   assert.equal(strafe.targetBand, 0);
   assert.ok(strafe.vy < 0);
   assert.ok(Math.abs(Math.hypot(strafe.vx, strafe.vy, strafe.vz) - 230) < 1e-6);
 
-  state.tick += 41;
-  combat.acquireAndFire(state);
-  assert.equal(state.shots.filter(shot => shot.kind === 'strafe').length, 1);
-  state.tick++;
+  state.tick += 32;
   combat.acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'strafe').length, 2);
+  state.tick++;
+  combat.acquireAndFire(state);
+  assert.equal(state.shots.filter(shot => shot.kind === 'strafe').length, 4);
+  sweep(state, 40);
+  assert.equal(first.hp, 0);
+  assert.equal(second.hp, 0);
 });
 
-test('strafe clamps acquisition to a single lower band and a narrow forward lane', () => {
+test('strafe clamps acquisition to a single lower band and a 38-degree forward lane', () => {
   for (const [altitude, x, z, band, fires] of [
-    [145, 0, 45, 1, true], [110, 0, 100, 0, true], [145, 0, 70, 0, false],
-    [75, 0, 70, 1, false], [145, 0, 44, 1, false], [145, 0, 101, 1, false],
-    [145, 30, 70, 1, false], [130, 0, 70, 1, false],
+    [145, 0, 28, 1, true], [110, 0, 135, 0, true], [145, 0, 70, 0, false],
+    [75, 0, 70, 1, false], [145, 0, 27, 1, false], [145, 0, 136, 1, false],
+    [145, 50, 70, 1, true], [145, 63, 70, 1, false], [130, 0, 70, 1, false],
   ]) {
     const state = flight(altitude);
     contact(state, x, z, band);
@@ -204,12 +200,12 @@ test('a missed strafe remains limited to aircraft in its selected lower band', (
 
   state.enemies.length = 0;
   const outsideBand = contact(state, 0, 73, 1), twoDown = contact(state, 0, 114, 0);
-  outsideBand.alt = 101.9;
+  outsideBand.alt = 97.9;
   sweep(state, 60);
   assert.equal(outsideBand.hp, 2);
   assert.equal(twoDown.hp, 2);
   assert.equal(point.hp, point.maxHp);
-  assert.ok(Math.abs(strafe.alt - 102) < 1e-6);
+  assert.ok(Math.abs(strafe.alt - 98) < 1e-6);
   assert.equal(state.shots.length, 0);
 });
 

@@ -41,10 +41,28 @@ test('the stack fixture has the same planar contact at 75, 110 and 145 m in ever
     assert.equal(state.tick, 30 * 60);
     assert.deepEqual(state.enemies.map(e => e.alt), [75, 110, 145]);
     assert.ok(state.enemies.every(e => e.x === state.enemies[0].x && e.z === state.enemies[0].z));
-    run(state, 44);
+    for (let i = 0; i < 44 && !state.pickups.length; i++) run(state, 1);
     assert.deepEqual(state.enemies.map(e => e.alt), [75, 145]);
     assert.equal(state.pickups[0].alt, 110);
   }
+});
+
+test('a real-terrain Immelmann earns ACE WIPE from all six fixture pursuers', () => {
+  const state = stage('?fixture=reversal');
+  const original = state.enemies.filter(enemy => enemy.alt === 145).map(enemy => enemy.id);
+  const lower = state.enemies.find(enemy => enemy.alt === 75);
+  assert.equal(original.length, 6);
+  run(state, 1, { maneuver: 'immelmann' });
+  for (let i = 0; i < 120 && state.reversal?.streak !== 6; i++) run(state, 1);
+  const pass = state.reversal;
+  assert.ok(pass.burstAt >= pass.startTick);
+  assert.equal(pass.streak, 6);
+  assert.equal(pass.killTicks.length, 6);
+  assert.ok(pass.killTicks.at(-1) - pass.killTicks[0] <= 21);
+  assert.equal(pass.burstAt, pass.killTicks[2]);
+  assert.deepEqual(pass.pursuers, [...original, lower.id]);
+  assert.ok(state.tick - pass.startTick <= 60);
+  assert.deepEqual(state.enemies.map(enemy => enemy.id), [lower.id]);
 });
 
 test('hit and miss feedback use the bolt launch height and emit one miss for a paired volley', () => {
@@ -87,20 +105,22 @@ test('shot and body overlap only damage the player through the inclusive eight-m
   assert.equal(state.hull, 6);
 });
 
-test('salvage pulls from 22 m and collects inside 8 m, only while inside the altitude window', () => {
+test('salvage pulls from 42 m and collects inside 8 m, only while inside the altitude window', () => {
   const state = stage('?fixture=stack');
   state.enemies = [];
   const { x, z } = state.player;
-  state.pickups = [{ id: 10, x, z: z + 21, alt: 75, xp: 2, born: state.tick }];
+  state.pickups = [{ id: 10, x, z: z + 42, alt: 75, xp: 2, born: state.tick }];
   run(state, 3);
-  assert.equal(state.pickups[0].z, z + 21);
+  assert.equal(state.pickups[0].z, z + 42);
   state.player.altitude = 83;
   run(state, 1);
-  assert.ok(state.pickups[0].z < z + 21);
+  assert.ok(Math.abs(state.pickups[0].z - (z + 42 - (state.speed + 45) / 60)) < 1e-6);
+  assert.equal(state.pickups[0].pulling, true);
   state.player.altitude = 90;
   const afterPull = state.pickups[0].z;
   run(state, 3);
   assert.equal(state.pickups[0].z, afterPull);
+  assert.equal(state.pickups[0].pulling, false);
   state.player.altitude = 83;
   state.pickups[0].z = state.player.z + 7;
   run(state, 1);

@@ -75,10 +75,11 @@ export type Enemy = Position & {
   flyby?: { startedAt: number; yaw: number; side: -1 | 1; lane: number } &
     ({ phase: 'overtake' } | { phase: 'cross'; target: Point });
   flybyAt?: number;
+  reversalKill?: boolean;
   burnUntil?: number;
   burnNextAt?: number;
 };
-export type Pickup = Position & { id: number; xp: number; born: number };
+export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean };
 export type Shot = Position & {
   vx: number;
   vz: number;
@@ -88,7 +89,7 @@ export type Shot = Position & {
   nearMiss: boolean;
   lockId: number | null;
 } & (
-  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { targetId: number }; reversalTick?: number } |
+  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
   { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never }
 );
 export type RearBomb = Position & { born: number; vx: number; vz: number };
@@ -110,6 +111,7 @@ export type WeakPoint = Position & {
   window: number;
   vx: number;
   vz: number;
+  reversalKill?: boolean;
   burnUntil?: number;
   burnNextAt?: number;
 };
@@ -173,6 +175,9 @@ export type StageState = {
     until: number;
     pursuers: readonly number[];
     kills: number;
+    killTicks: number[];
+    streak: number;
+    burstAt?: number;
     nextShotAt: number;
     shownUntil: number;
   } | null;

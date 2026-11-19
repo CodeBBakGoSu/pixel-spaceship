@@ -208,7 +208,11 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
     const p = state.player;
     p.altitude = BANDS[2];
     state.nextWave = WAVES.length;
-    state.enemies.push(makeEnemy(state, p.x + 8, p.z + 89, 1), makeEnemy(state, p.x - 18, p.z + 83, 0));
+    state.enemies.push(
+      makeEnemy(state, p.x + 8, p.z + 89, 1),
+      makeEnemy(state, p.x - 60, p.z + 99, 1),
+      makeEnemy(state, p.x - 18, p.z + 83, 0),
+    );
   } else if (fixture === 'draft') {
     state.xp = state.salvage = 6;
     state.salvageBands[1] = 6;
@@ -356,26 +360,35 @@ function advanceSalvage(state: StageState, ground: Ground): void {
     state.score += xp * 100;
     state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
       alt: enemy.kind === 'turret' ? Math.max(BANDS[0], ground(enemy.x, enemy.z) + 22) : enemy.alt,
-      xp, born: state.tick });
+      xp, born: state.tick, reversal: enemy.reversalKill });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
   }
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
+  const horizontalSpeed = Math.hypot(p.vx ?? 0, p.vz ?? 0);
   state.pickups = state.pickups.filter(pickup => {
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
-    if (!inBand(p.altitude, pickup.alt)) return true;
+    if (!inBand(p.altitude, pickup.alt)) {
+      pickup.pulling = false;
+      return true;
+    }
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
-    if (range <= 8) {
+    if (range > 8 && (pickup.pulling || range <= 42)) {
+      const speed = Math.min(155, horizontalSpeed + (pickup.reversal ? 75 : 45));
+      const pull = Math.min(range, speed * STEP) / range;
+      const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
+      pickup.pulling = true;
+      if (ground(x, z) < pickup.alt && ground((pickup.x + x) / 2, (pickup.z + z) / 2) < pickup.alt) {
+        pickup.x = x;
+        pickup.z = z;
+      }
+    }
+    if (Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
       state.xp += pickup.xp;
       state.salvage += pickup.xp;
       const band = pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
       state.salvageBands[band] += pickup.xp;
       return false;
-    }
-    if (range <= 22) {
-      const pull = 24 * STEP / range;
-      pickup.x += dx * pull;
-      pickup.z += dz * pull;
     }
     return true;
   });
