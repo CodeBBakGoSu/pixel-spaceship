@@ -371,7 +371,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
         if (enemy.kind === 'turret') enemy.bank = 0;
         delete enemy.entry;
       }
-      // Incoming ships are shootable. Their weapons and contact damage start at engagement.
+      // Fly-in skips attack AI. Collision checks use the entry flag until arrival.
       continue;
     }
     const dx = p.x - enemy.x, dz = p.z - enemy.z, range = Math.hypot(dx, dz);

@@ -82,7 +82,7 @@ function updateBoss(state: StageState, ground: Ground): void {
   }
   positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
-  if (state.tick >= boss.shotAt && point?.hp) {
+  if (!boss.entry && state.tick >= boss.shotAt && point?.hp) {
     for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 68, spread);
     boss.shotAt = state.tick + 255;
   }

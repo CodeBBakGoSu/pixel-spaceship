@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Matrix4, Object3D, PerspectiveCamera, Vector3 } from 'three';
-import { EngineExhaust } from '../src/engine-exhaust.ts';
+import { Matrix4, Mesh, Object3D, PerspectiveCamera, Raycaster, Vector3 } from 'three';
+import { shipFaces, shipPalette } from '../proto/shared/models.ts';
+import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { EngineExhaust, SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { MANEUVERS, maneuverAttitude } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -79,5 +81,21 @@ test('the same tick reproduces both plumes and keeps their axes attached through
     const nozzle = new Vector3().applyMatrix4(matrix).applyMatrix4(ship.matrixWorld);
     const tip = new Vector3(0, 0, 1).applyMatrix4(matrix).applyMatrix4(ship.matrixWorld);
     assert.ok(tip.sub(nozzle).normalize().distanceTo(expected) < 1e-6);
+  }
+});
+
+test('both plume emitters sit in open, recessed nozzles on the baked hull', () => {
+  const { state, exhaust, camera, plumes } = exhaustFixture();
+  exhaust.update(state, camera);
+  const hull = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE));
+  const aft = new Vector3(0, 0, -1), matrix = new Matrix4();
+  for (let i = 0; i < 2; i++) {
+    plumes.getMatrixAt(i, matrix);
+    const socket = new Vector3().setFromMatrixPosition(matrix);
+    const rear = socket.clone().add(new Vector3(0, 0, 2));
+    const [pocket] = new Raycaster(rear, aft).intersectObject(hull);
+    const [collar] = new Raycaster(rear.clone().add(new Vector3(0, 1.42, 0)), aft).intersectObject(hull);
+    assert.ok(pocket && socket.z - pocket.point.z > 0.9);
+    assert.ok(collar && Math.abs(collar.point.z - socket.z) < 0.08);
   }
 });

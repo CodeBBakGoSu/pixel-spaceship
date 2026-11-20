@@ -1,5 +1,5 @@
 import { Mesh, MeshGeometry, Rectangle, Texture } from 'pixi.js';
-import { droneFaces, dronePalette, filledVoxels, makeShipModel, shipPalette } from '@shared/models';
+import { droneFaces, dronePalette, filledVoxels, makeShipModel, shipPalette, SHIP_VOXEL_SUBDIVISIONS } from '@shared/models';
 import { BANDS, type SimState, type ViewName } from '@shared/sim';
 import { projectModel, VoxelProjector } from '../../../src/voxel.ts';
 import { project, type Camera, type Projection } from './camera';
@@ -97,10 +97,11 @@ export function createShipStack() {
   // The slice order changes in the index buffer, so draw this mesh directly.
   geometry.batchMode = 'no-batch';
   const mesh = new Mesh({ geometry, texture: nearestTexture(sheet) });
+  const cellSize = 1 / SHIP_VOXEL_SUBDIVISIONS;
   const corners = [
     [-px - 0.5, py + 0.5], [width - px - 0.5, py + 0.5],
     [width - px - 0.5, py - length + 0.5], [-px - 0.5, py - length + 0.5],
-  ];
+  ].map(([x, forward]) => [x * cellSize, forward * cellSize]);
   const point: Projection = { x: 0, y: 0, depth: 0, scale: 0 };
 
   return {
@@ -117,10 +118,11 @@ export function createShipStack() {
       const cosBank = Math.cos(bank);
       for (const layer of layers) {
         layer.depth = 0;
+        const heightOffset = layer.alt * cellSize;
         for (let corner = 0; corner < corners.length; corner++) {
           const [x, forward] = corners[corner];
-          const lateral = x * cosBank + layer.alt * sinBank;
-          const alt = player.alt + layer.alt * cosBank - x * sinBank;
+          const lateral = x * cosBank + heightOffset * sinBank;
+          const alt = player.alt + heightOffset * cosBank - x * sinBank;
           project(camera, player.x + lateral * cosYaw + forward * sinYaw,
             player.z - lateral * sinYaw + forward * cosYaw, alt, point);
           const offset = (layer.vertex + corner) * 2;

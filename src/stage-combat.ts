@@ -67,11 +67,15 @@ export const angleTo = (yaw: number, dx: number, dz: number): number => {
 export const inBand = (first: number, second: number, window = HIT_WINDOW): boolean =>
   Math.abs(first - second) <= window;
 
+function weakPointExposed(boss: Boss, tick: number): boolean {
+  return !boss.entry && tick >= boss.exposeTick;
+}
+
 export function activeWeakPoint(state: StageState): (WeakPoint & { exposed: boolean }) | null {
   const boss = state.boss;
   if (!boss) return null;
   const point = boss.weakPoints[boss.index];
-  return point && point.hp > 0 ? { ...point, exposed: state.tick >= boss.exposeTick } : null;
+  return point && point.hp > 0 ? { ...point, exposed: weakPointExposed(boss, state.tick) } : null;
 }
 
 export function hurtPlayer(state: StageState): void {
@@ -309,7 +313,7 @@ function blast(state: StageState, bomb: RearBomb): void {
   state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, BOMB_CLEAR_RADIUS));
   state.enemyMines = state.enemyMines.filter(mine => !nearBomb(bomb, mine, BOMB_CLEAR_RADIUS));
   for (const enemy of state.enemies) {
-    if (enemy.hp && nearBomb(bomb, enemy, BOMB_BLAST_RADIUS) && inBand(enemy.alt, bomb.alt)) hurtEnemy(state, enemy, 4);
+    if (enemy.hp && !enemy.entry && nearBomb(bomb, enemy, BOMB_BLAST_RADIUS) && inBand(enemy.alt, bomb.alt)) hurtEnemy(state, enemy, 4);
   }
   const point = activeWeakPoint(state);
   if (state.boss && point?.exposed && nearBomb(bomb, point, BOMB_BLAST_RADIUS) && inBand(point.alt, bomb.alt, point.window)) {
@@ -372,11 +376,12 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     state.flareReloadAt = state.flareCharges < MAX_FLARES ? state.tick + FLARE_RELOAD_TICKS : null;
   }
   if (state.flareHit && state.tick >= state.flareHit.until) state.flareHit = null;
+  // Burns already active on a returning craft keep aging during fly-in.
   for (const enemy of state.enemies) {
-    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL)) hurtEnemy(state, enemy, 1);
+    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL) && !enemy.entry) hurtEnemy(state, enemy, 1);
   }
   const boss = state.boss;
-  const point = boss && state.tick >= boss.exposeTick ? boss.weakPoints[boss.index] : null;
+  const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
   if (boss && point && burnTick(point, state.tick, WARDEN_BURN_INTERVAL)) hurtWeakPoint(state, boss, 1);
 
   let alive = 0;
@@ -389,7 +394,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     let hit: Enemy | null = null;
     let first = terrain;
     for (const enemy of state.enemies) {
-      if (!enemy.hp) continue;
+      if (!enemy.hp || enemy.entry) continue;
       const time = descendingImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS);
       if (time < first) {
         first = time;
@@ -446,7 +451,7 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     const point = activeWeakPoint(state);
     const close = (target: Position, window = HIT_WINDOW): boolean =>
       inBand(target.alt, bomb.alt, window) && nearBomb(bomb, target, BOMB_PROXIMITY);
-    if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && close(enemy))
+    if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && !enemy.entry && close(enemy))
       && !(point?.exposed && close(point, point.window))) return true;
     blast(state, bomb);
     return false;
@@ -498,7 +503,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
   let first = groundImpact(shot, dx, dz, ground, dy);
   let hit: Enemy | null = null;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || !inBand(enemy.alt, bandAltitude, STRAFE_BAND_WINDOW)) continue;
+    if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, STRAFE_BAND_WINDOW)) continue;
     const time = descendingImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS);
     if (time < first) {
       first = time;
@@ -520,7 +525,7 @@ function advanceOverdrive(
   while (bolt.remaining > 0) {
     let target: Enemy | null = null, first = terrain;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt)) continue;
+      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt)) continue;
       const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
       if (time < first) {
         target = enemy;
@@ -574,7 +579,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
       let first = terrain;
       let miss = terrain, delta = 0;
       for (const enemy of state.enemies) {
-        if (!enemy.hp) continue;
+        if (!enemy.hp || enemy.entry) continue;
         const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
         if (inBand(shot.alt, enemy.alt)) {
           if (time < first) {
@@ -588,7 +593,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
       }
       const boss = state.boss;
       const point = boss?.weakPoints[boss.index];
-      if (boss && point?.hp && state.tick >= boss.exposeTick) {
+      if (boss && point?.hp && weakPointExposed(boss, state.tick)) {
         const time = impactTime(shot, dx, dz, point, point.kind === 'core' ? 4.5 : 7);
         if (time < first && shot.lockId === point.id && inBand(shot.alt, point.alt, point.window)) {
           first = time;

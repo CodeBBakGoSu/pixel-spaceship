@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { sampleFlyIn } from '../src/fly-in.ts';
 import { BOSS_TICK, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
-import { BANDS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { activeWeakPoint, advanceFlares, advanceRearBombs, advanceShots, BANDS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { makeEnemy } from '../src/stage-enemies.ts';
 import { LANDMARKS } from '../src/reach.ts';
 import { World } from '../src/world.ts';
 
@@ -12,10 +13,33 @@ const ground = (x, z) => world.height(x, z);
 const planarDistance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const launch = seed => {
   const state = createStage(parseStageOptions(`?t=0&seed=${seed}`), ground);
-  state.twinAt = state.podsAt = Infinity;
+  state.twinAt = state.podsAt = state.strafeAt = Infinity;
   return state;
 };
 const tick = state => stepStage(state, {}, ground);
+
+function openingPatrol() {
+  const state = launch(1);
+  while (state.tick < 94) tick(state);
+  state.enemies.length = 1;
+  const [patrol] = state.enemies;
+  assert.ok(patrol?.entry);
+  return { state, patrol };
+}
+
+function incomingWarden() {
+  const state = launch(42);
+  state.tick = BOSS_TICK - 1;
+  state.nextWave = -1;
+  tick(state);
+  assert.ok(state.boss?.entry);
+  return { state, boss: state.boss };
+}
+
+function boltAt({ x, z, alt }, overrides = {}) {
+  return { kind: 'twin', x, z: z - 7, alt, vx: 0, vz: 320,
+    life: 0.5, damage: 1, volley: 1, nearMiss: false, lockId: null, ...overrides };
+}
 
 test('the opening patrols start beyond the rim, bank and slow into their scheduled wave', () => {
   const state = launch(1);
@@ -73,29 +97,135 @@ test('wave paths replay exactly by seed and retain the opening front and aft bea
   assert.notDeepEqual(sample(1), sample(42));
 });
 
-test('an inbound ship takes weapon hits without damaging the player on contact', () => {
-  const state = launch(1);
-  while (state.tick < 85) tick(state);
-  state.enemies.length = 1;
-  const [patrol] = state.enemies;
-  assert.ok(patrol?.entry);
-  const next = sampleFlyIn(patrol.entry, state.tick + 1, ground);
-  Object.assign(state.player, { x: next.x, z: next.z, altitude: next.alt });
-  const hull = state.hull, hp = patrol.hp;
-  state.shots.push({ kind: 'twin', x: next.x, z: next.z - 2, alt: next.alt, vx: 0, vz: 320,
-    life: 0.5, damage: 1, volley: 1, nearMiss: false, lockId: null });
+for (const [name, overrides] of [
+  ['Twin', {}],
+  ['pod', { kind: 'pods', damage: 2 }],
+  ['overdrive', { damage: 2, vz: 485, reversal: { remaining: 3, hits: [] } }],
+  ['strafe', { kind: 'strafe', damage: 2, targetBand: 1, vz: 210, vy: -90 }],
+]) {
+  test(`an inbound patrol passes through ${name} bolts and deals no contact damage`, () => {
+    const { state, patrol } = openingPatrol();
+    const next = sampleFlyIn(patrol.entry, state.tick + 1, ground);
+    Object.assign(state.player, { x: next.x, z: next.z, altitude: next.alt });
+    const hull = state.hull, hp = patrol.hp;
+    patrol.shotAt = state.tick;
+    const shot = boltAt(next, structuredClone(overrides));
+    state.shots.push(shot);
+    tick(state);
+    assert.ok(planarDistance(state.player, patrol) < 7);
+    assert.equal(state.hull, hull);
+    assert.equal(patrol.hp, hp);
+    assert.equal(patrol.hitUntil, 0);
+    assert.equal(patrol.shotDown, false);
+    assert.equal(state.score, 0);
+    assert.equal(state.xp, 0);
+    assert.deepEqual(state.pickups, []);
+    assert.deepEqual(state.effects, []);
+    assert.deepEqual(state.shots, [shot]);
+    assert.ok(planarDistance(shot, patrol) < 6);
+    assert.equal(shot.nearMiss, false);
+    assert.deepEqual(shot.reversal, overrides.reversal);
+  });
+}
+
+test('a patrol takes damage on arrival and drops collectible salvage when shot down', () => {
+  const { state, patrol } = openingPatrol();
+  const { arriveAt, target } = patrol.entry;
+  while (state.tick < arriveAt - 1) tick(state);
+  state.shots.push(boltAt(target));
   tick(state);
-  assert.ok(planarDistance(state.player, patrol) < 7);
-  assert.equal(state.hull, hull);
-  assert.equal(patrol.hp, hp - 1);
+  assert.equal(patrol.entry, undefined);
+  assert.equal(patrol.hp, 1);
+  assert.equal(state.shots.length, 0);
+
+  state.shots.push(boltAt(patrol));
+  tick(state);
+  assert.equal(state.enemies.includes(patrol), false);
+  assert.equal(state.score, 100);
+  assert.equal(state.xp, 0);
+  assert.equal(state.pickups.length, 1);
+  const [{ x, z, alt }] = state.pickups;
+  Object.assign(state.player, { x, z, altitude: alt });
+  tick(state);
+  assert.equal(state.pickups.length, 0);
+  assert.equal(state.xp, 1);
+  assert.equal(state.salvage, 1);
+});
+
+for (const kind of ['patrol', 'Warden']) {
+  test(`rear bombs, flares and ongoing burns pass over an inbound ${kind}`, () => {
+    let state, target;
+    if (kind === 'patrol') {
+      const { state: flight, patrol } = openingPatrol();
+      state = flight;
+      target = patrol;
+    } else {
+      const { state: flight, boss } = incomingWarden();
+      state = flight;
+      boss.exposeTick = state.tick;
+      target = boss.weakPoints[boss.index];
+    }
+    const { x, z, alt, hp } = target;
+    const bomb = { x, z, alt, vx: 0, vz: 0, born: state.tick };
+    state.rearBombs.push(bomb);
+    advanceRearBombs(state, ground);
+    assert.deepEqual(state.rearBombs, [bomb]);
+
+    // An engaged patrol can still trigger the bomb next to the inbound target.
+    const engaged = makeEnemy(state, x + 12, z, 1);
+    engaged.alt = alt;
+    state.enemies.push(engaged);
+    advanceRearBombs(state, ground);
+    assert.equal(engaged.hp, 0);
+    assert.equal(target.hp, hp);
+    assert.deepEqual(state.rearBombs, []);
+
+    const flare = { x, z, alt, vx: 0, vz: 0, vy: -7, born: state.tick };
+    state.flares.push(flare);
+    advanceFlares(state, ground);
+    assert.deepEqual(state.flares, [flare]);
+    assert.equal(target.hp, hp);
+    assert.equal(target.burnUntil, undefined);
+    assert.equal(state.flareHit, null);
+
+    target.burnUntil = state.tick + 10;
+    target.burnNextAt = state.tick;
+    advanceFlares(state, ground);
+    assert.equal(target.hp, hp);
+  });
+}
+
+test('locked shots pass through the inbound Warden even if its expose timer expires early', () => {
+  const { state, boss } = incomingWarden();
+  const { arriveAt } = boss.entry;
+  const point = boss.weakPoints[boss.index];
+  const assertShotPasses = () => {
+    const shot = boltAt(point, { lockId: point.id });
+    state.shots.push(shot);
+    advanceShots(state, ground);
+    assert.equal(point.hp, point.maxHp);
+    assert.equal(point.hits, 0);
+    assert.ok(state.shots.includes(shot));
+    state.shots.length = 0;
+  };
+  assertShotPasses();
+  boss.exposeTick = state.tick;
+  boss.shotAt = state.tick;
+  assertShotPasses();
+  assert.equal(activeWeakPoint(state).exposed, false);
+  while (state.tick < arriveAt - 1) {
+    tick(state);
+    assert.deepEqual(state.shots, []);
+  }
+  tick(state);
+  assert.equal(boss.entry, undefined);
+  assert.equal(activeWeakPoint(state).exposed, true);
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 3);
 });
 
 test('Warden crosses the rim during the existing shield signal and stops at the atoll', () => {
-  const state = launch(42);
-  state.tick = BOSS_TICK - 1;
-  state.nextWave = -1;
-  tick(state);
-  const boss = state.boss, approach = boss.entry;
+  const { state, boss } = incomingWarden();
+  const approach = boss.entry;
   assert.ok(approach && planarDistance(boss, state.arena) >= state.arena.radius + 50);
   assert.equal(boss.exposeTick, BOSS_TICK + 3 * TICKS_PER_SECOND);
   assert.ok(approach.arriveAt < boss.exposeTick);
@@ -103,4 +233,12 @@ test('Warden crosses the rim during the existing shield signal and stops at the 
   assert.equal(boss.entry, undefined);
   assert.deepEqual([boss.x, boss.z, boss.alt], [LANDMARKS.atoll.x, LANDMARKS.atoll.z, BANDS[1]]);
   assert.equal(state.shots.length, 0);
+  assert.equal(activeWeakPoint(state).exposed, false);
+  while (state.tick < boss.exposeTick) tick(state);
+  assert.equal(activeWeakPoint(state).exposed, true);
+  const point = boss.weakPoints[boss.index];
+  state.shots.push(boltAt(point, { lockId: point.id }));
+  advanceShots(state, ground);
+  assert.equal(point.hp, point.maxHp - 1);
+  assert.equal(point.hits, 1);
 });

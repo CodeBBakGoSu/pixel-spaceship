@@ -4,7 +4,7 @@ import {
   Scene, Sphere, Vector3, WebGLRenderer, WebGLRenderTarget,
 } from 'three';
 import { bindViewToggle, mountHud } from '../../shared/hud.ts';
-import { droneFaces, dronePalette, shipFaces, shipPalette } from '../../shared/models.ts';
+import { droneFaces, dronePalette, shipFaces, shipPalette, SHIP_VOXEL_SUBDIVISIONS } from '../../shared/models.ts';
 import { createSim, MAX_BULLETS, parseOptions, stepSim, terrainHeight } from '../../shared/sim.ts';
 import { bakeDistantDrone, bakeOverheadDrone, bakeVoxels } from './voxel-geometry.ts';
 
@@ -41,7 +41,7 @@ function makeTerrain(): Mesh {
 }
 
 const voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
-const ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, 0.44), voxelMaterial);
+const ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, 0.44 / SHIP_VOXEL_SUBDIVISIONS), voxelMaterial);
 const droneSize = 0.64;
 const droneGeometry = bakeVoxels(droneFaces(), dronePalette, droneSize);
 const distantGeometry = bakeDistantDrone(droneSize);
