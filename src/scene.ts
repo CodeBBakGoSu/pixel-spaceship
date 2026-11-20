@@ -11,6 +11,8 @@ import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
+import { FLIGHT_FEEL } from './data/flight-feel.ts';
+import { WING_TRAIL } from './data/flight-world.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
@@ -20,18 +22,21 @@ import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
 import { FlightAtmosphere } from './flight-atmosphere.ts';
+import { cameraBank, FlightMotion } from './flight-feel.ts';
+import { FlightSurface } from './flight-surface.ts';
 import { HostileVisuals } from './hostile-visuals.ts';
 import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
 import { hitWindow } from './loadout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
+import { choosePostTier, FlightPost, installSteppedHaze, visibleHazeCutoff } from './post.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
 import { rollAltitude, rollAttitude } from './roll.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT,
   STEP, TICKS_PER_SECOND } from './stage-combat.ts';
-import type { ManeuverTrail, Position, Roll, Shot, StageState } from './stage-types.ts';
+import type { Effect, ManeuverTrail, Position, Roll, Shot, StageState } from './stage-types.ts';
 import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
@@ -139,6 +144,8 @@ type Framing = {
   cockpit: CockpitLayout | null;
 };
 
+export type FlightRenderOptions = { enabled?: boolean; fixture?: string | null };
+
 export class FlightScene {
   private readonly renderer: WebGLRenderer;
   private readonly world: World;
@@ -167,10 +174,21 @@ export class FlightScene {
   private rearTick = -Infinity;
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   private readonly rearFlash = new Color(0xffedde);
+  private readonly feelEnabled: boolean;
+  private readonly fixture: string | null;
   private readonly atmosphere: FlightAtmosphere;
+  private readonly surface: FlightSurface | null;
+  private readonly post: FlightPost | null;
+  private readonly motion = new FlightMotion();
+  private readonly seenBlasts = new WeakSet<Effect>();
   private lastMotionTick = -1;
   private boostLens = 0;
-  private readonly flightView = { fov: 0, setback: 0, streaks: 0, shake: 0 };
+  private readonly cockpitPose = { cameraPitch: 0, cameraBank: 0 };
+  private readonly cockpitLens = { widening: 0, pullback: 0, shake: 0, shakeVertical: 0 };
+  private readonly flightView = {
+    fov: 0, setback: 0, streaks: 0, shake: 0, boost: 0, sink: 0, shipBank: 0, cameraBank: 0, rearBank: 0, yawLag: 0,
+    cloudFlash: 0, trailSegments: 0, wakeMarks: 0, clearance: 0,
+  };
   private readonly top = new OrthographicCamera(-1, 1, 1, -1, 0.5, 1200);
   private readonly chase = new PerspectiveCamera(59, 1, 0.8, 1060);
   private readonly cockpit = new PerspectiveCamera(60, 1, 0.65, 1060);
@@ -236,9 +254,13 @@ export class FlightScene {
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
   private readonly hostileVisuals = new HostileVisuals(this.ground);
 
-  constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena']) {
+  constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena'], options: FlightRenderOptions = {}) {
     this.world = world;
-    this.atmosphere = new FlightAtmosphere(arena);
+    this.feelEnabled = options.enabled ?? true;
+    this.fixture = options.fixture ?? null;
+    this.atmosphere = new FlightAtmosphere(arena, this.feelEnabled);
+    this.surface = this.feelEnabled ? new FlightSurface(this.ground, world.texture) : null;
+    this.post = this.feelEnabled ? new FlightPost(this.target.texture) : null;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x081424);
@@ -251,14 +273,20 @@ export class FlightScene {
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
-    this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
+    if (this.feelEnabled) this.atmosphere.wind.layers.set(MAIN_CAMERA_LAYER);
+    else this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
+    if (this.surface) {
+      this.surface.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
+      this.scene.add(this.surface.group);
+    }
     for (const marker of [this.bodyShimmer, this.ghost, this.pursuitRings]) marker.layers.set(MAIN_CAMERA_LAYER);
     for (const camera of [this.top, this.chase, this.cockpit]) camera.layers.enable(MAIN_CAMERA_LAYER);
     this.ghost.visible = false;
     for (const { mesh } of this.airframes) this.scene.add(mesh);
+    if (this.feelEnabled) installSteppedHaze(this.scene);
     this.top.up.set(0, 0, -1);
     this.screenCamera.position.z = 1;
-    this.screen.add(new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial({
+    this.screen.add(this.post?.mesh ?? new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial({
       map: this.target.texture, depthTest: false, depthWrite: false, toneMapped: false,
     })));
     this.rearTarget.texture.offset.x = 1;
@@ -317,6 +345,7 @@ export class FlightScene {
     this.rearTick = -Infinity;
     const buffer = phone?.buffer ?? { width: Math.ceil(width / DESKTOP_DOWNSCALE), height: Math.ceil(height / DESKTOP_DOWNSCALE) };
     const w = Math.max(1, buffer.width), h = Math.max(1, buffer.height);
+    this.post?.resize(w, h, choosePostTier(!!phone));
     if (this.target.width === w && this.target.height === h) return;
     this.target.setSize(w, h);
     // Keep the back buffer the same size as the target. The canvas presents it
@@ -330,6 +359,14 @@ export class FlightScene {
 
   get speedFeel(): Readonly<typeof this.flightView> {
     return this.flightView;
+  }
+
+  get cloudPass(): number {
+    return this.atmosphere.cloudPass;
+  }
+
+  shock(kind: 'hit' | 'parry', tick: number): void {
+    if (this.feelEnabled && !this.reducedMotion.matches) this.motion.shock(kind, tick);
   }
 
   get cockpitMirror(): Readonly<Rect> | null {
@@ -360,7 +397,7 @@ export class FlightScene {
     this.rearTarget.texture.repeat.x = -crop;
   }
 
-  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean): void {
+  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean, forwardBank: number): void {
     const { tick, view } = state;
     const glimpse = state.phase === 'playing' ? state.rearGlimpse : null;
     const reveal = glimpseWipe(tick, glimpse, this.reducedMotion.matches);
@@ -374,11 +411,15 @@ export class FlightScene {
         height: Math.round((rest.width + grow) / REAR_VIEW_ASPECT) };
     } else if (view !== 'cockpit' && this.rearSlot) {
       const width = Math.round(this.rearSlot.width * reveal);
-      if (width < 8) return;
-      this.rearRect = { ...this.rearSlot, width };
-      crop = (width - 6) / (this.rearSlot.width - 6);
+      if (width >= 8) {
+        this.rearRect = { ...this.rearSlot, width };
+        crop = (width - 6) / (this.rearSlot.width - 6);
+      }
     }
-    if (!this.rearRect) return;
+    if (!this.rearRect) {
+      this.flightView.rearBank = 0;
+      return;
+    }
     this.placeRearView(this.rearRect, crop);
     this.rearInset.visible = true;
     const bezel = this.rearBezel.material.color;
@@ -402,7 +443,8 @@ export class FlightScene {
 
     if (!hostileColorsChanged && tick >= this.rearTick && tick - this.rearTick < 2) return;
     this.rearTick = tick;
-    frameRearCamera(this.rearCamera, state.player, reveal > 0, reveal > 0 ? glimpse?.target : undefined);
+    this.flightView.rearBank = forwardBank;
+    frameRearCamera(this.rearCamera, state.player, reveal > 0, reveal > 0 ? glimpse?.target : undefined, forwardBank);
     // TOP uses a flattened altitude plane. Rebuild world instances only on rear-feed updates.
     if (view === 'overhead') this.updateWorld(state, 'rear');
     else if (view === 'chase') this.flareVisuals.update(state);
@@ -440,7 +482,13 @@ export class FlightScene {
     this.ghost.visible = false;
     const roll = state.roll;
     if (roll) {
-      this.drawRollTrail(state, roll, flat);
+      const intervals = FLIGHT_FEEL.rollTrailMinimumIntervals;
+      const minimumAge = WING_TRAIL.intervalTicks[this.framing.phone ? 'phone' : 'desktop'] * intervals;
+      if (this.surface && this.fixture !== 'roll' && roll.elapsed >= minimumAge && this.surface.trailSegments >= 2 * intervals) {
+        upload(this.ribbon, 0);
+      } else {
+        this.drawRollTrail(state, roll, flat);
+      }
       return;
     }
     if (!trail) {
@@ -516,15 +564,19 @@ export class FlightScene {
     this.write(this.shadows, index, x, z, this.ground(x, z) + 0.9, yaw, sx, 1, sz);
   }
 
-  private updateCamera(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null, shake: number): PitchMark[] {
+  private updateCamera(state: StageState, yaw: number, ignitionShake: number): PitchMark[] {
     const { width, height, phone } = this.framing;
-    const p = state.player, yaw = maneuverViewYaw(state), fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const p = state.player, feel = this.feelEnabled;
     const aspect = width / Math.max(1, height);
     const lens = this.boostLens;
     const view = this.flightView;
+    const shake = feel ? this.motion.shake : ignitionShake;
+    const shakeVertical = feel ? this.motion.shakeVertical : 0;
     view.shake = state.view === 'overhead' ? 0 : shake;
+    view.boost = lens;
+    view.sink = view.yawLag = 0;
     if (state.view === 'overhead') {
-      view.fov = view.setback = 0;
+      view.fov = view.setback = view.cameraBank = 0;
       this.fog.far = 875;
       const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
       const center = phone ? phone.shipY / height : 0.57;
@@ -539,15 +591,18 @@ export class FlightScene {
       this.camera = this.top;
     } else if (state.view === 'cockpit') {
       this.camera = this.cockpit;
-      const pitch = attitude?.cameraPitch ?? 0;
-      const widening = 4 * lens, pullback = 1.4 * lens;
+      const { cameraPitch: pitch, cameraBank: bank } = this.cockpitPose;
+      const cockpitLens = this.cockpitLens;
+      const widening = cockpitLens.widening = (feel ? FLIGHT_FEEL.cockpitWidening : 4) * lens;
+      const pullback = cockpitLens.pullback = 1.4 * lens;
+      cockpitLens.shake = shake;
+      cockpitLens.shakeVertical = shakeVertical;
       view.fov = cockpitFov(aspect, pitch, widening);
       view.setback = pullback;
-      this.fog.far = terrainFogFar(aspect, view.fov, pitch, attitude?.cameraBank);
-      // The last ~5% of terrain contrast blends into the sky under Three's smoothstep fog.
-      const visibleDepth = this.fog.near + (this.fog.far - this.fog.near) * 0.865;
-      return frameCockpit(this.cockpit, p, this.framing, attitude, this.ground, visibleDepth, yaw,
-        { widening, pullback, shake });
+      view.cameraBank = bank;
+      this.fog.far = terrainFogFar(aspect, view.fov, pitch, bank);
+      const visibleDepth = visibleHazeCutoff(this.fog.near, this.fog.far, feel);
+      return frameCockpit(this.cockpit, p, this.framing, this.cockpitPose, this.ground, visibleDepth, yaw, cockpitLens);
     } else {
       const camera = this.chase;
       const field = phone?.playfield;
@@ -555,18 +610,27 @@ export class FlightScene {
       const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
       const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : 29;
       const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
-      view.setback = 8 * lens;
-      const setback = 46 + Math.max(0, 1 - aspect) * 30 + motion * retreat + view.setback;
-      const elevation = 15 + motion * lift;
-      const lookHeight = 1 + (m?.kind === 'immelmann' || m?.kind === 'split-s' ? (attitude?.cameraPitch ?? 0) * 48 : 0);
+      const baseSetback = 46 + Math.max(0, 1 - aspect) * 30;
+      view.setback = (feel ? -baseSetback * FLIGHT_FEEL.chaseCloser : 8) * lens;
+      view.sink = feel ? FLIGHT_FEEL.chaseSink * lens : 0;
+      const setback = baseSetback + motion * retreat + view.setback;
+      const elevation = 15 + motion * lift - view.sink;
+      const lookHeight = 1 + (m?.kind === 'immelmann' || m?.kind === 'split-s' ? this.cockpitPose.cameraPitch * 48 : 0);
       const center = field ? (field.y + field.height * 0.39) / height : 0.43;
       const shift = clamp(center, 0.29, 0.64);
-      camera.fov = view.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI) + 10 * lens;
-      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(lookHeight - elevation, 105 + setback));
+      const widening = (feel ? FLIGHT_FEEL.chaseWidening : 10) * lens;
+      camera.fov = view.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI) + widening;
+      view.cameraBank = feel ? this.motion.chaseBank : 0;
+      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(lookHeight - elevation, 105 + setback), view.cameraBank);
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
+      const followYaw = feel ? this.motion.chaseYaw : yaw;
+      const fx = Math.sin(followYaw), fz = Math.cos(followYaw);
       const eyeX = p.x + fz * shake, eyeZ = p.z - fx * shake;
-      camera.position.set(eyeX - fx * setback, p.altitude + elevation, -(eyeZ - fz * setback));
-      camera.lookAt(eyeX + fx * 105, p.altitude + lookHeight, -(eyeZ + fz * 105));
+      const eyeY = p.altitude + shakeVertical;
+      camera.position.set(eyeX - fx * setback, eyeY + elevation, -(eyeZ - fz * setback));
+      camera.lookAt(eyeX + fx * 105, eyeY + lookHeight, -(eyeZ + fz * 105));
+      if (view.cameraBank) camera.rotateZ(view.cameraBank);
+      view.yawLag = yaw - followYaw;
       this.camera = camera;
     }
     this.camera.updateMatrixWorld();
@@ -595,7 +659,9 @@ export class FlightScene {
     this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
     const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
-    this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, attitude?.roll ?? (flat ? 0 : -p.bank), 'YXZ');
+    const bank = attitude?.roll ?? (flat && !this.feelEnabled ? 0 : -p.bank);
+    this.flightView.shipBank = bank;
+    this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, bank, 'YXZ');
     this.ship.material.color.setHex(flat && attitude?.inverted ? 0x9ed9ee : 0xffffff);
     this.weaponMounts.update(state.run?.weaponLevels, state.run?.evolutions);
     this.bodyShimmer.visible = this.ship.visible && state.bodyGraceUntil > 0 && state.tick <= state.bodyGraceUntil;
@@ -685,7 +751,7 @@ export class FlightScene {
     const fireTint = Math.floor(state.tick / 6) % 2 ? 0xff9564 : 0xffbf78;
 
     let shadows = 0, drones = 0, gnats = 0, rings = 0, marked = 0, trails = 0, chestMarkers = 0;
-    if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
+    if (chase && !this.surface) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
       if (enemy.kind === 'gnat') {
@@ -879,34 +945,73 @@ export class FlightScene {
     this.flareVisuals.update(state, flat ? TOP_FLIGHT + 7 : undefined, chase ? this.chase : undefined);
   }
 
+  private noteBlasts(state: StageState): void {
+    const p = state.player, range = FLIGHT_FEEL.explosionRange;
+    let strength = 0;
+    for (const effect of state.effects) {
+      if (effect.kind !== 'bomb-blast' && effect.kind !== 'flak' && effect.kind !== 'burst') continue;
+      if (this.seenBlasts.has(effect)) continue;
+      this.seenBlasts.add(effect);
+      const distance = Math.hypot(effect.x - p.x, effect.alt - p.altitude, effect.z - p.z);
+      const scale = effect.kind === 'burst' ? FLIGHT_FEEL.burstSize : 1;
+      if (distance < range) strength = Math.max(strength, (1 - distance / range) * scale);
+    }
+    if (strength > 0) this.motion.shock('explosion', state.tick, strength);
+  }
+
   draw(state: StageState, rearDanger = false): PitchMark[] {
     const reduceMotion = this.reducedMotion.matches;
+    const phone = !!this.framing.phone;
     const delta = state.tick - this.lastMotionTick;
-    if (delta < 0 || reduceMotion) this.boostLens = 0;
     this.lastMotionTick = state.tick;
     const ticks = clamp(delta, 0, 12);
-    const target = reduceMotion ? 0 : Number(state.boosting);
-    this.boostLens += (target - this.boostLens) * (1 - Math.exp(-ticks / (target ? 4.5 : 8)));
-    const ignition = state.boostTicks;
-    const shake = !reduceMotion && ignition > 0 && ignition <= 8 ? Math.sin(ignition * 1.8) * (9 - ignition) * 0.028 : 0;
+    const yaw = maneuverViewYaw(state);
+    const bank = -state.player.bank;
     let attitude = state.maneuver ? maneuverAttitude(state.maneuver, state.player.bank) : null;
     if (state.roll) {
       const pose = this.rollPose;
-      pose.roll = rollAttitude(state.roll);
+      pose.roll = rollAttitude(state.roll) + (this.feelEnabled ? bank : 0);
       pose.cameraBank = reduceMotion ? 0 : pose.roll;
       pose.inverted = Math.cos(pose.roll) < 0;
       attitude = pose;
     }
-    const ladder = this.updateCamera(state, attitude, shake);
-    this.flightView.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
-      state.speed, ticks, reduceMotion);
+    this.cockpitPose.cameraPitch = attitude?.cameraPitch ?? 0;
+    let ignitionShake = 0, rearBank = 0;
+    if (this.feelEnabled) {
+      const spinning = !!state.roll;
+      if (!reduceMotion) this.noteBlasts(state);
+      this.motion.advance(state, yaw, spinning ? this.rollPose.roll : bank, spinning, phone, reduceMotion);
+      this.boostLens = this.motion.boost;
+      rearBank = this.cockpitPose.cameraBank = cameraBank(attitude?.cameraBank ?? bank, 'cockpit', phone, reduceMotion, spinning);
+    } else {
+      if (delta < 0 || reduceMotion) this.boostLens = 0;
+      const target = reduceMotion ? 0 : Number(state.boosting);
+      this.boostLens += (target - this.boostLens) * (1 - Math.exp(-ticks / (target ? 4.5 : 8)));
+      const ignition = state.boostTicks;
+      if (!reduceMotion && ignition > 0 && ignition <= 8) ignitionShake = Math.sin(ignition * 1.8) * (9 - ignition) * 0.028;
+      this.cockpitPose.cameraBank = attitude?.cameraBank ?? 0;
+    }
+    const ladder = this.updateCamera(state, yaw, ignitionShake);
+    const view = this.flightView;
+    view.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
+      state, ticks, reduceMotion, this.boostLens, phone, this.fixture);
+    view.cloudFlash = this.atmosphere.cloudFlash;
     this.updatePlayer(state, attitude);
+    const surface = this.surface;
+    if (surface) {
+      const plane = state.view === 'overhead' ? TOP_FLIGHT + 1 : undefined;
+      surface.update(state, this.ship, this.camera, plane, ticks, this.boostLens, phone, this.fixture);
+      view.trailSegments = surface.trailSegments;
+      view.wakeMarks = surface.wakeMarks;
+      view.clearance = surface.clearance;
+    }
     this.updateWorld(state, state.view);
     const hostileColorsChanged = this.hostileVisuals.update(state);
     this.hostileVisuals.setView(this.target.height, state.view === 'overhead' ? TOP_FLIGHT + 6 : undefined);
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
-    this.drawRearView(state, rearDanger, hostileColorsChanged);
+    this.drawRearView(state, rearDanger, hostileColorsChanged, rearBank);
+    this.post?.prepare(this.renderer, this.boostLens, view.cloudFlash, state.tick);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
     return ladder;

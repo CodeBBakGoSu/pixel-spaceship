@@ -1,9 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CombatAudio } from '../src/combat-audio.ts';
+import { FLIGHT_AUDIO } from '../src/data/flight-audio.ts';
+import { mapFlightAudio } from '../src/flight-audio.ts';
 
 const gesture = { isTrusted: true };
 const sounds = ['hit', 'graze', 'warning', 'muzzle', 'roll', 'parry'];
+const levelFlight = Object.freeze({
+  phase: 'playing', paused: false, tick: 80, speed: 52, climbRate: 0,
+  player: Object.freeze({ x: 0, z: 0, altitude: 110, yaw: 0, bank: 0, vx: 0, vz: 52 }),
+  enemies: Object.freeze([]),
+});
+
+function audioParam(value) {
+  return {
+    value, targets: [],
+    setTargetAtTime(target, now, timeConstant) {
+      this.value = target;
+      this.targets.push({ target, now, timeConstant });
+    },
+  };
+}
 
 function browserAudio(t) {
   const storage = new Map();
@@ -20,6 +37,8 @@ function browserAudio(t) {
       currentTime = 0;
       destination = {};
       started = [];
+      nodes = [];
+      buffers = [];
       rejectResume = false;
 
       constructor() {
@@ -32,28 +51,50 @@ function browserAudio(t) {
         return Promise.resolve();
       }
 
-      createGain() {
-        const gain = {
-          value: 1,
-          setTargetAtTime(value) { this.value = value; },
+      node(kind, fields) {
+        const node = {
+          kind, outputs: [], inputs: [], ...fields,
+          connect(target) {
+            this.outputs.push(target);
+            target.inputs?.push(this);
+          },
         };
-        this.master = { gain, connect() {} };
-        return this.master;
+        this.nodes.push(node);
+        return node;
+      }
+
+      createGain() {
+        const node = this.node('gain', { gain: audioParam(1) });
+        this.master ??= node;
+        return node;
+      }
+
+      createOscillator() {
+        return this.node('oscillator', {
+          frequency: audioParam(440),
+          starts: 0,
+          start() { this.starts++; },
+        });
+      }
+
+      createBiquadFilter() {
+        return this.node('filter', { frequency: audioParam(350), Q: audioParam(1) });
       }
 
       createBuffer(channels, length, sampleRate) {
         assert.equal(channels, 1);
         const samples = new Float32Array(length);
-        return { duration: length / sampleRate, getChannelData: () => samples };
+        const buffer = { duration: length / sampleRate, getChannelData: () => samples };
+        this.buffers.push(buffer);
+        return buffer;
       }
 
       createBufferSource() {
         const context = this;
-        return {
-          buffer: null,
-          connect: node => assert.equal(node, context.master),
+        return this.node('buffer-source', {
+          buffer: null, loop: false,
           start() { context.started.push(this.buffer); },
-        };
+        });
       }
     },
   };
@@ -67,6 +108,7 @@ test('combat audio works as a no-op without a browser', () => {
     audio.unlock(gesture);
     audio.setMuted(true);
     audio.setVolume(0.5);
+    audio.updateFlight(levelFlight, 0, 60, 0, true);
     for (const sound of sounds) audio.play(sound);
   });
 });
@@ -196,4 +238,117 @@ test('cue buffers are deterministic, brief, and keep the muzzle tick quiet', t =
   }
   assert.ok(peaks[3] < peaks[0] / 4);
   assert.ok(peaks.reduce((total, peak) => total + peak, 0) < 1);
+});
+
+test('flight audio uses one silent-until-active bed that fades through pause and resumes in place', t => {
+  const { instances, userActivation } = browserAudio(t);
+  const audio = new CombatAudio();
+  audio.updateFlight(levelFlight, 0.45, 32, 0, true);
+  assert.equal(instances.length, 0);
+
+  userActivation.hasBeenActive = true;
+  audio.unlock(gesture);
+  const [context] = instances;
+  const originalCount = context.nodes.length;
+  audio.updateFlight(levelFlight, 0.45, 32, 0, false);
+  assert.equal(context.nodes.length, originalCount);
+  audio.updateFlight(levelFlight, 0.45, 32, 0, true);
+  const bed = context.master.inputs.find(node => node.kind === 'gain');
+  const oscillator = context.nodes.find(node => node.kind === 'oscillator');
+  assert.equal(bed.gain.value, 1);
+  assert.equal(oscillator.type, 'sawtooth');
+  assert.equal(oscillator.starts, 1);
+  assert.equal(context.nodes.filter(node => node.loop).length, 1);
+  assert.equal(context.nodes.filter(node => node.kind === 'filter').length, 4);
+  assert.equal(oscillator.frequency.value, mapFlightAudio(52, 0.45, 0, 0, 32).engineHz);
+
+  const graphSize = context.nodes.length;
+  const pitchEvents = oscillator.frequency.targets.length;
+  for (let i = 1; i < 10; i++) audio.updateFlight({ ...levelFlight, tick: 80 + i }, 0.45, 32, 0, true);
+  assert.equal(oscillator.frequency.targets.length, pitchEvents);
+  audio.updateFlight({ ...levelFlight, paused: true }, 0.45, 32, 0, true);
+  assert.equal(bed.gain.value, 0);
+  assert.ok(bed.gain.targets.at(-1).timeConstant > 0);
+  audio.updateFlight(levelFlight, 0, 80, 0, true);
+  assert.equal(bed.gain.value, 1);
+  assert.equal(context.nodes.length, graphSize);
+  assert.equal(oscillator.starts, 1);
+
+  context.state = 'suspended';
+  audio.updateFlight(levelFlight, 0, 80, 0, true);
+  assert.equal(bed.gain.value, 0);
+  audio.unlock(gesture);
+  audio.updateFlight(levelFlight, 0, 80, 0, true);
+  assert.equal(instances.length, 1);
+  assert.equal(bed.gain.value, 1);
+  assert.equal(context.nodes.length, graphSize);
+});
+
+test('flyby and cloud cues play once, respect cooldown and ignore passes while inactive', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  const voices = () => context.nodes.filter(node => node.kind === 'buffer-source' && !node.loop);
+  audio.updateFlight(levelFlight, 0, 65, 5, true);
+  assert.equal(voices().length, 0, 'an earlier cloud is silent on activation');
+
+  const enemy = Object.freeze({ x: 17, z: -1, alt: 110, vx: 0, vz: -48, hp: 2, kind: 'patrol' });
+  const passing = Object.freeze({ ...levelFlight, tick: 81, enemies: Object.freeze([enemy]) });
+  const snapshot = JSON.stringify(passing);
+  audio.updateFlight(passing, 0, 65, 6, true);
+  assert.equal(voices().length, 2);
+  assert.equal(voices()[0].outputs[0], voices()[1].outputs[0]);
+  assert.equal(voices()[0].outputs[0].outputs[0], context.master);
+  assert.equal(JSON.stringify(passing), snapshot);
+
+  context.currentTime = 0.05;
+  audio.updateFlight({ ...passing, tick: 82 }, 0, 65, 6, true);
+  assert.equal(voices().length, 2);
+  context.currentTime = 1;
+  audio.updateFlight({ ...passing, tick: 83 }, 0, 65, 7, false);
+  audio.updateFlight({ ...passing, tick: 84 }, 0, 65, 7, true);
+  assert.equal(voices().length, 2);
+
+  audio.setMuted(true);
+  audio.updateFlight({ ...passing, tick: 85 }, 0, 65, 8, true);
+  assert.equal(context.master.gain.value, 0);
+  audio.setMuted(false);
+  audio.updateFlight({ ...passing, tick: 86 }, 0, 65, 8, true);
+  assert.equal(voices().length, 2);
+  audio.updateFlight({ ...passing, tick: 87 }, 0, 65, 9, true);
+  assert.equal(voices().length, 4);
+});
+
+test('flight buffers are finite and repeatable and the combined mix reserves peak headroom', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  for (let i = 0; i < 2; i++) {
+    const audio = new CombatAudio();
+    audio.unlock(gesture);
+    audio.updateFlight(levelFlight, 1, 22, 0, true);
+  }
+  const [first, second] = instances;
+  const noiseLoop = first.nodes.find(node => node.loop).buffer;
+  assert.ok(noiseLoop.duration >= 1);
+  let ceiling = 0;
+  for (let i = 0; i < first.buffers.length; i++) {
+    const buffer = first.buffers[i], samples = buffer.getChannelData(0);
+    assert.deepEqual(samples, second.buffers[i].getChannelData(0));
+    let peak = 0;
+    for (const value of samples) {
+      assert.ok(Number.isFinite(value));
+      peak = Math.max(peak, Math.abs(value));
+    }
+    assert.ok(peak > 0.01 && peak <= 1);
+    if (buffer === noiseLoop) continue;
+    assert.equal(Math.abs(samples[0]), 0);
+    assert.equal(Math.abs(samples.at(-1)), 0);
+    ceiling += peak;
+  }
+  const loudest = mapFlightAudio(1000, 1, 1.6, -80, 0);
+  ceiling += loudest.engineGain * (1 + FLIGHT_AUDIO.engine.noiseMix)
+    + loudest.afterburnerGain + loudest.windGain + loudest.rushGain;
+  assert.ok(ceiling * first.master.outputs[0].gain.value < 1);
 });

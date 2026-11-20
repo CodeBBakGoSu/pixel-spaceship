@@ -63,7 +63,8 @@ export function glimpseWipe(tick: number, glimpse: { since: number; until: numbe
   return fraction * fraction * (3 - 2 * fraction);
 }
 
-export function frameRearCamera(camera: PerspectiveCamera, player: StageState['player'], active: boolean, target?: Position): void {
+export function frameRearCamera(camera: PerspectiveCamera, player: StageState['player'], active: boolean, target?: Position,
+  forwardBank = 0): void {
   const { x, z, altitude, yaw } = player;
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   // A wider view of the tail keeps the payload in the lens as soon as it drops.
@@ -71,5 +72,7 @@ export function frameRearCamera(camera: PerspectiveCamera, player: StageState['p
   camera.position.set(x + offset * fx, altitude + 4, -(z + offset * fz));
   if (target) camera.lookAt(target.x, target.alt, -target.z);
   else camera.lookAt(x - 100 * fx, altitude - (active ? 9 : 2), -(z - 100 * fz));
+  // The screen mirrors this texture horizontally. Use the same up vector as the forward view.
+  camera.rotateZ(-forwardBank);
   camera.updateMatrixWorld();
 }

@@ -1,8 +1,9 @@
 import { type HostileShape } from './data/hostile-fire.ts';
 import { HOSTILE_SHOT_LIMIT, PICKUP_LIMIT, PLAYER_SHOT_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
+import { BOOST_SPEED } from './flight.ts';
 import type { CombatEvents } from './hostile-events.ts';
-import { advanceShots, BANDS, clamp, MINE_LIMIT } from './stage-combat.ts';
+import { advanceShots, BANDS, clamp, MINE_LIMIT, STEP } from './stage-combat.ts';
 import { makeEnemy } from './stage-enemies.ts';
 import type { Band, Ground, Shot, StageState } from './stage-types.ts';
 import { makePacedWarden } from './warden.ts';
@@ -15,6 +16,7 @@ const STRESS_TICK = 26_640;
 
 export function createHostileFixture(state: StageState, query: URLSearchParams, ground: Ground) {
   const stress = query.get('stress') === '1';
+  const boostFlight = stress && query.get('flight') === 'boost';
   const cue = query.get('cue');
   const requested = query.get('shape');
   const closeup = SHAPES.find(shape => shape === requested);
@@ -41,6 +43,19 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
 
   function fillStress(events?: CombatEvents): void {
     pose(110);
+    if (boostFlight) {
+      const turnRate = 1.7, radius = BOOST_SPEED / turnRate;
+      const angle = (state.tick - STRESS_TICK) * STEP * turnRate;
+      p.x += radius * (1 - Math.cos(angle));
+      p.z += radius * Math.sin(angle);
+      p.yaw = angle;
+      p.vx = BOOST_SPEED * Math.sin(angle);
+      p.vz = BOOST_SPEED * Math.cos(angle);
+      p.bank = 1.2;
+      state.speed = BOOST_SPEED;
+      state.boosting = true;
+      state.boostTicks = 32;
+    }
     state.hull = state.maxHull;
     state.xp = 0;
     state.boss ??= makePacedWarden(state, p.x + 18, p.z + 146);

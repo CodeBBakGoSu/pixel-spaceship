@@ -112,3 +112,13 @@ Heat 0, seeds 1–100 per profile. Desktop (80 Gnats) and mobile (50) gave the s
 | Weak | 6% → 5% | 1% → 2% | 273.2 → 276.4 s | 0 → 0 |
 
 Chromium with ANGLE Vulkan on an RTX 4090 ran 300 frame intervals per view at 1920×1080 and emulated 390×844. The stress fixture held the Warden, 24 regular enemies, the full 80/50 Gnat cap, 192 projectiles, and 16 mines. Each view held 60 FPS. Desktop p95 was 16.8 ms TOP and 16.7 ms CHASE and COCKPIT. Emulated portrait was 16.8 ms across all views.
+
+## Stage 7b
+
+The desktop and mobile Heat 0 reports match Stage 7a byte for byte for all 100 seeds per profile. All six Legacy and six Survivors full-view replays per cap also match the Stage 7a terminal hashes. In Chromium, the same seed 11 Legacy input stream drew all three views with effects enabled and disabled. It cleared at tick 7,522 with the same terminal hash and different pixels.
+
+Boost adds 12° in CHASE and 8° in COCKPIT over a 0.25 s attack and 0.5 s release. CHASE follows 40% of the ship bank, draws 16% closer on boost, and sinks 3 m. The cockpit and mirrored rear view follow the full bank on desktop. Phone camera bank caps at 25°. Reduced motion removes camera shake, boost lens changes, and camera roll. Wind streaks ease with boost, and the pooled wingtip ribbons appear above 1.1 times cruise speed or during a roll. Foam and dust start below 45 m of terrain clearance. Desktop uses half-resolution bloom inside the existing render buffer. Phone keeps the vignette and ten-step haze.
+
+The production preview at port 5181 has fixed `?fixture=bank&bank=1.5`, `?fixture=boost`, `?fixture=trails`, `?fixture=low`, `?fixture=low&surface=land`, `?fixture=cloud`, `?fixture=hud`, and `?fixture=roll&cue=parry` scenes. Append `view=top|chase|cockpit`, `lang=en|ko`, or `touch=1` to select the view, language, and touch layout. Add `fx=0` to disable Stage 7b effects. The low-water fixture flies at a fixed 25 m of terrain clearance within the existing LOW band.
+
+The final RTX 4090 Chromium run sampled 300 animation-frame intervals per view using `?fixture=bullets&stress=1&flight=boost`. The fixture sustained the Warden, 24 regular enemies, 80 desktop or 50 phone Gnats, 192 shots (64 hostile), and 16 mines while banking and boosting with live wingtip trails. Both 1920×1080 desktop (960×540 buffer) and 390×844 emulated portrait at DPR 3 (336×727 buffer) measured 60.00 FPS in every view. Frame p95 was 16.7 ms in TOP and CHASE and 16.8 ms in COCKPIT at both sizes.

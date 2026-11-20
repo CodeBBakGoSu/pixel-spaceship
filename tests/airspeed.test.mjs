@@ -46,11 +46,14 @@ test('boost adds more wind streaks in a forward view while TOP and reduced motio
   const air = new FlightAtmosphere(state.arena);
   const camera = new PerspectiveCamera(60, 1.6);
   camera.updateMatrixWorld();
-  const cruise = air.update(camera, 52, 1, false);
+  state.speed = 52;
+  const cruise = air.update(camera, state, 1, false, 0, false);
   assert.ok(cruise > 0);
-  assert.ok(air.update(camera, 91, 1, false) > cruise);
-  assert.equal(air.update(camera, 91, 1, true), 0);
+  state.speed = 91;
+  assert.ok(air.update(camera, state, 1, false, 1, false) > cruise);
+  assert.equal(air.update(camera, state, 1, true, 1, false), 0);
   assert.equal(air.group.visible, true);
-  assert.equal(air.update(null, 91, 1, false), 0);
-  assert.equal(air.group.visible, false);
+  assert.equal(air.update(null, state, 1, false, 1, true), 0);
+  assert.equal(air.wind.count, 0);
+  assert.equal(air.group.visible, true); // The shared world clouds stay visible from TOP.
 });

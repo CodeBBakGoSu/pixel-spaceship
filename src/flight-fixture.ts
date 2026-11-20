@@ -1,12 +1,16 @@
+import { FLIGHT_SURFACE } from './data/flight-world.ts';
 import { ROLLS } from './data/roll.ts';
-import { CRUISE_SPEED } from './flight.ts';
+import { BOOST_SPEED, CRUISE_SPEED } from './flight.ts';
+import { cloudFixturePoint } from './flight-atmosphere.ts';
 import type { CombatEvents } from './hostile-events.ts';
+import { LANDMARKS } from './reach.ts';
 import { stepStage } from './stage.ts';
 import { clamp } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
 
 export function isFlightFixture(name: string | null): boolean {
-  return name === 'hud' || name === 'bank' || name === 'roll';
+  return name === 'hud' || name === 'bank' || name === 'roll' || name === 'boost'
+    || name === 'trails' || name === 'low' || name === 'cloud';
 }
 
 export function primeFlightFixture(state: StageState, query: URLSearchParams, ground: Ground, events?: CombatEvents): void {
@@ -27,6 +31,22 @@ export function primeFlightFixture(state: StageState, query: URLSearchParams, gr
   if (fixture === 'bank') {
     const bank = Number(query.get('bank') ?? 1.5);
     p.bank = Number.isFinite(bank) ? clamp(bank, -1.5, 1.5) : 1.5;
+  } else if (fixture === 'boost' || fixture === 'trails') {
+    state.boosting = true;
+    state.boostTicks = 32;
+    state.speed = BOOST_SPEED;
+    if (fixture === 'trails') p.bank = 1.12;
+  } else if (fixture === 'low') {
+    const land = query.get('surface') === 'land';
+    const point = land ? LANDMARKS.ridge : LANDMARKS.strait;
+    const clearance = land ? FLIGHT_SURFACE.fixture.landClearance : FLIGHT_SURFACE.fixture.waterClearance;
+    Object.assign(p, {
+      x: point.x, z: point.z, bank: 0.22, yaw: land ? -0.66 : 0,
+      altitude: ground(point.x, point.z) + clearance,
+    });
+  } else if (fixture === 'cloud') {
+    const point = cloudFixturePoint(state.arena);
+    Object.assign(p, { x: point.x, z: point.z, altitude: point.altitude });
   } else if (fixture === 'roll') {
     const cue = query.get('cue'), side = query.get('side') === 'left' ? -1 : 1;
     const aileron = query.get('kind') === 'aileron';

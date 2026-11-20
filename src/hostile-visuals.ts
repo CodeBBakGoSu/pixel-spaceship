@@ -5,6 +5,7 @@ import {
   type IUniform,
 } from 'three';
 import { HOSTILE_HIT_RADIUS, type HostileShape } from './data/hostile-fire.ts';
+import { STEPPED_HAZE_GLSL } from './post.ts';
 import { hostileCanHit, inBand, SHOT_LIMIT, STEP } from './stage-combat.ts';
 import type { Ground, Shot, StageState } from './stage-types.ts';
 
@@ -22,6 +23,9 @@ const BULLET_RADIUS = HOSTILE_HIT_RADIUS * 0.49;
 
 const BAND_FRAGMENT = /* glsl */`
   #include <fog_pars_fragment>
+  #ifdef FLIGHT_STEPPED_HAZE
+    ${STEPPED_HAZE_GLSL}
+  #endif
   vec3 bandColor(float tone) {
     if (tone < 0.5) return vec3(1.0, 0.095, 0.054);
     if (tone < 1.5) return vec3(0.15, 0.27, 0.41);
@@ -30,11 +34,17 @@ const BAND_FRAGMENT = /* glsl */`
   }
   float rangeFade() {
     #ifdef FOG_EXP2
-      return exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+      float fade = exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
     #elif defined(USE_FOG)
-      return 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
+      float fade = 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
     #else
-      return 1.0;
+      float fade = 1.0;
+    #endif
+    #ifdef FLIGHT_STEPPED_HAZE
+      float amount = 1.0 - fade;
+      return 1.0 - flightHazeStep(amount);
+    #else
+      return fade;
     #endif
   }
 `;

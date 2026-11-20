@@ -1,16 +1,23 @@
+import { FLIGHT_AUDIO } from './data/flight-audio.ts';
+import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
+
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
 const CUE_HEADROOM = 0.85;
 const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
 
-const COOLDOWN_SECONDS = { hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12 };
+const COOLDOWN_SECONDS = {
+  hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12,
+  flyby: FLIGHT_AUDIO.cues.flyby.cooldown, cloud: FLIGHT_AUDIO.cues.cloud.cooldown,
+};
 export type CombatSound = keyof typeof COOLDOWN_SECONDS;
 
 interface AudioOutput {
   context: AudioContext;
   master: GainNode;
   buffers: Record<CombatSound, AudioBuffer>;
+  flight?: FlightAudio;
 }
 
 function storedMute(): boolean {
@@ -35,8 +42,20 @@ function synthesize(
   return buffer;
 }
 
+function synthesizeWhoosh(context: AudioContext, sound: FlightSound): AudioBuffer {
+  const { seconds, attack, filter, sweep, gain, seed } = FLIGHT_AUDIO.cues[sound];
+  let noiseSeed: number = seed;
+  let lowPass = 0;
+  return synthesize(context, seconds, (elapsed, progress) => {
+    noiseSeed = (Math.imul(noiseSeed, 1664525) + 1013904223) >>> 0;
+    const noise = noiseSeed / 0x80000000 - 1;
+    lowPass += (filter + sweep * (1 - progress)) * (noise - lowPass);
+    return gain * lowPass * attackDecay(elapsed, progress, attack);
+  });
+}
+
 function synthesizeCues(context: AudioContext): AudioOutput['buffers'] {
-  // Only the graze buffer uses noise. This generator belongs to the synth alone.
+  // The cue generator has its own noise and filter state.
   let noiseSeed = 0x5fe4a91b;
   let lowPass = 0;
   let bass = 0;
@@ -74,6 +93,8 @@ function synthesizeCues(context: AudioContext): AudioOutput['buffers'] {
       const tone = Math.sin(TAU * 760 * elapsed) + 0.51 * Math.sin(TAU * 1340 * elapsed);
       return 0.073 * tone * attackDecay(elapsed, progress, 0.002);
     }),
+    flyby: synthesizeWhoosh(context, 'flyby'),
+    cloud: synthesizeWhoosh(context, 'cloud'),
   };
 }
 
@@ -81,7 +102,7 @@ export class CombatAudio {
   private output: AudioOutput | undefined;
   private isMuted = storedMute();
   private level = DEFAULT_VOLUME;
-  private readonly nextPlayAt: Record<CombatSound, number> = { hit: 0, graze: 0, warning: 0, muzzle: 0, roll: 0, parry: 0 };
+  private readonly nextPlayAt: Partial<Record<CombatSound, number>> = {};
 
   get muted(): boolean { return this.isMuted; }
   get volume(): number { return this.level; }
@@ -115,7 +136,10 @@ export class CombatAudio {
         context = new Context();
         const master = context.createGain();
         master.gain.value = this.isMuted ? 0 : this.level;
-        master.connect(context.destination);
+        const headroom = context.createGain();
+        headroom.gain.value = FLIGHT_AUDIO.mixHeadroom;
+        master.connect(headroom);
+        headroom.connect(context.destination);
         this.output = { context, master, buffers: synthesizeCues(context) };
       } catch {
         void context?.close().catch(() => {});
@@ -132,15 +156,26 @@ export class CombatAudio {
     const { context, master, buffers } = this.output;
     if (context.state !== 'running') return;
     const now = context.currentTime;
-    if (now < this.nextPlayAt[sound]) return;
+    if (now < (this.nextPlayAt[sound] ?? 0)) return;
+    const destination = sound === 'flyby' || sound === 'cloud' ? this.output.flight?.bus : master;
+    if (!destination) return;
 
     const buffer = buffers[sound];
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(master);
+    source.connect(destination);
     source.start(now);
     // Each cue gets one voice, so frequent muzzle ticks cannot crowd out the hit or warning.
     this.nextPlayAt[sound] = now + Math.max(COOLDOWN_SECONDS[sound], buffer.duration);
+  }
+
+  updateFlight(state: FlightAudioState, boostAmount: number, clearance: number, cloudPass: number, active: boolean): void {
+    const output = this.output;
+    if (!output) return;
+    const audible = active && state.phase === 'playing' && !state.paused && !this.isMuted && this.level > 0
+      && output.context.state === 'running';
+    if (audible && !output.flight) output.flight = new FlightAudio(output.context, output.master, this.play.bind(this));
+    output.flight?.update(state, boostAmount, clearance, cloudPass, audible);
   }
 
   private updateGain(): void {

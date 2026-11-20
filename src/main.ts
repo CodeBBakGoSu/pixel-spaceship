@@ -87,6 +87,7 @@ const world = new World();
 const ground = (x: number, z: number) => world.height(x, z);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
+const effectsEnabled = query.get('fx') !== '0';
 const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
 if (demoBullets || flightFixture) {
@@ -131,7 +132,7 @@ const hangarDisplay = createHangarDisplay($('#hangar-panel'), {
 });
 let scene: FlightScene | null = null;
 try {
-  scene = new FlightScene(canvas, world, state.arena);
+  scene = new FlightScene(canvas, world, state.arena, { enabled: effectsEnabled, fixture: query.get('fixture') });
 } catch (error) {
   console.error(error);
 }
@@ -173,7 +174,6 @@ let parryNoticeUntil = 0;
 const projectedShip = { x: 0, y: 0, depth: 0 };
 const feedbackTarget = { x: 0, z: 0, alt: 0 };
 let feedbackAnchor: { x: number; y: number } | null = null;
-const effectsEnabled = query.get('fx') !== '0';
 const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   muzzle(shot, shape, x, z, alt) {
     const age = primingBullets ? query.has('shape') ? 3 : 10 : 0;
@@ -188,6 +188,7 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   },
   hit(damage, x, z, alt) {
     if (!primingBullets) visualFreezeUntil = frameNow + HIT_FREEZE_MS;
+    scene?.shock('hit', state.tick);
     feedback.hit(state, damage, x, z, alt, frameNow);
     audio.play('hit');
     if (state.view === 'cockpit') audio.play('warning');
@@ -197,6 +198,7 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
     visualFreezeUntil = frameNow + HIT_FREEZE_MS;
     parryNoticeUntil = state.tick + 44;
     scene?.hostileGraze(shot, x, z, alt, state.tick);
+    scene?.shock('parry', state.tick);
     audio.play('parry');
   },
 } : undefined;
@@ -753,7 +755,10 @@ audioToggle.addEventListener('click', toggleAudio);
 audioVolume.value = String(Math.round(audio.volume * 100));
 audioVolume.addEventListener('input', () => audio.setVolume(audioVolume.valueAsNumber / 100));
 for (const type of ['pointerdown', 'pointerup', 'click', 'keydown'] as const) {
-  window.addEventListener(type, event => audio.unlock(event), { capture: true });
+  window.addEventListener(type, event => {
+    audio.unlock(event);
+    if (flightFixture) dirty = true;
+  }, { capture: true });
 }
 $('#checkpoint-resume').addEventListener('click', resumeCheckpoint);
 $('#retreat-action').addEventListener('click', () => { pendingRetreat = true; });
@@ -905,7 +910,14 @@ function updateAutoResume(now: number): boolean {
 }
 
 window.addEventListener('blur', interruptFlight);
-document.addEventListener('visibilitychange', () => { if (document.hidden) interruptFlight(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    audio.updateFlight(state, 0, Infinity, scene?.cloudPass ?? 0, false);
+    interruptFlight();
+  } else {
+    dirty = true;
+  }
+});
 
 function steerMouse(event: PointerEvent): void {
   if (event.pointerType === 'touch' || menuKey !== 'playing') return;
@@ -1165,6 +1177,8 @@ function render(now: number): void {
   if (effectsEnabled && readout.rearDanger && !rearDanger) audio.play('warning');
   rearDanger = readout.rearDanger;
   const ladder = redrawFlight ? scene?.draw(state, !!rearDanger) : undefined;
+  if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass,
+    effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
