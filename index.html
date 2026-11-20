@@ -137,6 +137,16 @@
           <span data-i18n="audio.volume"></span>
           <input id="audio-volume" type="range" min="0" max="100" step="1" value="30" />
         </label>
+        <!-- --- S7f lane --- -->
+        <div class="render-quality-settings">
+          <label for="render-quality" data-i18n="quality.label"></label>
+          <select id="render-quality">
+            <option value="high" data-i18n="quality.high"></option>
+            <option value="medium" data-i18n="quality.medium"></option>
+            <option value="low" data-i18n="quality.low"></option>
+          </select>
+          <span id="render-quality-status" role="status" hidden></span>
+        </div>
       </div>
       <div id="hangar-panel" hidden></div>
     </div>

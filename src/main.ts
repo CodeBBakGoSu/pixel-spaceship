@@ -37,6 +37,10 @@ import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
+// --- S7f lane ---
+import { COMPARISON_DIVISOR } from './data/render-quality.ts';
+import { primeFidelityFixture } from './fidelity-fixture.ts';
+import { initialRenderQuality, parseRenderQuality, saveRenderQuality } from './render-quality.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const root = $('.experience');
@@ -90,7 +94,10 @@ const query = new URLSearchParams(location.search);
 const effectsEnabled = query.get('fx') !== '0';
 const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
-if (demoBullets || flightFixture) {
+// --- S7f lane ---
+const fidelityFixture = query.get('fixture') === 'fidelity';
+const comparisonScale = fidelityFixture && query.get('compare') === String(COMPARISON_DIVISOR) ? COMPARISON_DIVISOR : undefined;
+if (demoBullets || flightFixture || fidelityFixture) {
   query.set('mode', 'survivors');
   query.set('t', '0');
 }
@@ -107,6 +114,10 @@ const storage = {
   getItem: (key: string) => localStorage.getItem(key),
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
 };
+// --- S7f lane ---
+const renderQualitySetting = $<HTMLSelectElement>('#render-quality');
+const renderQualityStatus = $('#render-quality-status');
+let preferredRenderQuality = initialRenderQuality(query, storage);
 let checkpointData = persistent ? readCheckpointData() : null;
 let interrupted = false, resumeAt = 0;
 let language = initialLanguage(location.search, navigator.language, storage);
@@ -132,7 +143,9 @@ const hangarDisplay = createHangarDisplay($('#hangar-panel'), {
 });
 let scene: FlightScene | null = null;
 try {
-  scene = new FlightScene(canvas, world, state.arena, { enabled: effectsEnabled, fixture: query.get('fixture') });
+  scene = new FlightScene(canvas, world, state.arena, {
+    enabled: effectsEnabled, fixture: query.get('fixture'), quality: preferredRenderQuality, comparisonScale,
+  });
 } catch (error) {
   console.error(error);
 }
@@ -287,6 +300,8 @@ function applyLanguage(): void {
   setText('#guide-boss-copy', state.run ? `${t('guide.sortieTiming', sortieTiming)} ${t('guide.bossHint')}` : t('guide.bossHint'));
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
   refreshAudioControl();
+  // --- S7f lane ---
+  refreshRenderQuality();
   menuKey = lastHelp = lastFlightKey = '';
   layoutFlight();
   updateMenu();
@@ -304,6 +319,31 @@ for (const button of languageButtons) {
     applyLanguage();
   });
 }
+
+// --- S7f lane ---
+function refreshRenderQuality(): void {
+  renderQualitySetting.value = preferredRenderQuality;
+  const active = scene?.renderQuality;
+  renderQualityStatus.hidden = !active || active === preferredRenderQuality;
+  renderQualityStatus.textContent = active && active !== preferredRenderQuality
+    ? t('quality.active', { tier: t(`quality.${active}`) }) : '';
+}
+
+renderQualitySetting.addEventListener('change', () => {
+  const tier = parseRenderQuality(renderQualitySetting.value);
+  if (!tier) return;
+  preferredRenderQuality = tier;
+  saveRenderQuality(tier, storage);
+  scene?.setRenderQuality(tier);
+  const url = new URL(location.href);
+  if (url.searchParams.has('quality')) {
+    url.searchParams.delete('quality');
+    history.replaceState(history.state, '', url);
+  }
+  refreshRenderQuality();
+  dirty = true;
+});
+document.addEventListener('visibilitychange', () => scene?.observeRenderFrame(null));
 
 function setRect(name: string, box: Rect): void {
   for (const [part, value] of Object.entries({ x: box.x, y: box.y, w: box.width, h: box.height })) {
@@ -809,6 +849,9 @@ function flushSpaceInput(): void {
 }
 
 window.addEventListener('keydown', event => {
+  // --- S7f lane ---
+  const focused = document.activeElement;
+  if (focused instanceof HTMLSelectElement || focused instanceof HTMLInputElement) return;
   const { code } = event;
   if (code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) {
     event.preventDefault();
@@ -1028,7 +1071,8 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
-  if (flightFixture || (bulletFixture && !bulletFixture.stress)) return;
+  // --- S7f lane ---
+  if (flightFixture || fidelityFixture || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
@@ -1267,7 +1311,9 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],
   lock: state.lock && { ...state.lock }, cockpitDelta, cockpitMarkers: cockpit && scene ? cockpitMarkers.snapshot() : [],
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
-  layout: phone && { orientation: phone.orientation, buffer: { ...phone.buffer }, playfield: { ...phone.playfield },
+  // --- S7f lane ---
+  renderQuality: { preferred: preferredRenderQuality, active: scene?.renderQuality, width: canvas.width, height: canvas.height },
+  layout: phone && { orientation: phone.orientation, buffer: { width: canvas.width, height: canvas.height }, playfield: { ...phone.playfield },
     controls: { ...phone.controls }, dashboard: phone.dashboard && { ...phone.dashboard } },
 }) });
 
@@ -1301,6 +1347,13 @@ function animate(now: number): void {
       break;
     }
   }
+  // --- S7f lane ---
+  const timingFlight = state.phase === 'playing' && !state.paused && !document.hidden && !guide
+    && !flightFixture && !fidelityFixture && (!bulletFixture || bulletFixture.stress);
+  if (scene?.observeRenderFrame(timingFlight ? elapsed * 1000 : null)) {
+    refreshRenderQuality();
+    dirty = true;
+  }
   if (dirty || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
     render(now);
     lastRenderTick = state.tick;
@@ -1319,9 +1372,11 @@ async function start(): Promise<void> {
   resize();
   applyLanguage();
   previousTime = performance.now();
-  if (flightFixture) {
+  // --- S7f lane ---
+  if (flightFixture || fidelityFixture) {
     frameNow = previousTime;
-    primeFlightFixture(state, query, ground, combatEvents);
+    if (fidelityFixture) primeFidelityFixture(state, query);
+    else primeFlightFixture(state, query, ground, combatEvents);
     motion.speed = state.speed;
     motion.climb = state.climbRate;
     cueTime = frameNow;

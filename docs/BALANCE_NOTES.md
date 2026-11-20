@@ -122,3 +122,15 @@ Boost adds 12° in CHASE and 8° in COCKPIT over a 0.25 s attack and 0.5 s relea
 The production preview at port 5181 has fixed `?fixture=bank&bank=1.5`, `?fixture=boost`, `?fixture=trails`, `?fixture=low`, `?fixture=low&surface=land`, `?fixture=cloud`, `?fixture=hud`, and `?fixture=roll&cue=parry` scenes. Append `view=top|chase|cockpit`, `lang=en|ko`, or `touch=1` to select the view, language, and touch layout. Add `fx=0` to disable Stage 7b effects. The low-water fixture flies at a fixed 25 m of terrain clearance within the existing LOW band.
 
 The final RTX 4090 Chromium run sampled 300 animation-frame intervals per view using `?fixture=bullets&stress=1&flight=boost`. The fixture sustained the Warden, 24 regular enemies, 80 desktop or 50 phone Gnats, 192 shots (64 hostile), and 16 mines while banking and boosting with live wingtip trails. Both 1920×1080 desktop (960×540 buffer) and 390×844 emulated portrait at DPR 3 (336×727 buffer) measured 60.00 FPS in every view. Frame p95 was 16.7 ms in TOP and CHASE and 16.8 ms in COCKPIT at both sizes.
+
+## Stage 7f merge
+
+Fidelity adds finer airframes and salvage sprites and lets the player select an adaptive render quality. Quality changes resize the Stage 7b post targets alongside the world buffer. The three-view replay gate retained all 24 Stage 7a hashes, and fidelity on/off tests retain the same terminal state. The 100-seed Heat 0 batch per pilot produced byte-identical JSON and CSV before and after integration on each cap. See the [Fidelity lane notes](lanes/S7f.md) for the model budgets and render quality settings.
+
+| Pilot | Clears before → after | Warden defeats before → after | Median survival before → after | Median run | Median kills |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 96% → 96% | 95% → 95% | 600.0 → 600.0 s | 592.6 s | 744.5 |
+| Average | 65% → 65% | 64% → 64% | 600.0 → 600.0 s | 590.4 s | 696 |
+| Weak | 5% → 5% | 2% → 2% | 276.4 → 276.4 s | 276.4 s | 191.5 |
+
+The integrated max-load boost fixture at High measured p95 frame times of 16.8/16.7/16.7 ms in desktop TOP/CHASE/COCKPIT, and 16.7/16.8/16.7 ms in emulated portrait. Chromium recorded 300 intervals per view using ANGLE Vulkan on an RTX 4090. Desktop used 1920×1080 and portrait 390×844. The desktop COCKPIT repeat averaged 59.8 FPS with one dropped interval after warming up. The other five view and viewport combinations averaged 60.0 FPS.

@@ -1,4 +1,5 @@
 import type { Segment } from './camera.ts';
+import { LEGACY_PHONE_BUFFER, MEDIUM_PHONE_WIDTH_FRACTION, RENDER_QUALITY, type RenderQuality } from './data/render-quality.ts';
 
 export type Insets = { top: number; right: number; bottom: number; left: number };
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -111,7 +112,8 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const objective = rect(portrait ? left : radio.x, objectiveY, radio.width, 22);
   const controlHeight = portrait ? clamp(Math.round(height * 0.19), 146, 170) : clamp(Math.round(height * 0.35), 134, 140);
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
-  const bufferWidth = portrait ? 336 : clamp(Math.round(288 * width / height), 256, 768);
+  const { portraitWidth, landscapeHeight, minWidth, maxWidth } = LEGACY_PHONE_BUFFER;
+  const bufferWidth = portrait ? portraitWidth : clamp(Math.round(landscapeHeight * width / height), minWidth, maxWidth);
   const buffer = { width: bufferWidth, height: Math.round(bufferWidth * height / width) };
   const cockpit = view === 'cockpit' ? cockpitLayout(width, height, safe, objective, controls) : null;
   const dashboard = cockpit?.dashboard ?? null;
@@ -135,4 +137,23 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
     radar, alt, pause, stick, stickLabel, loop, roll, boost, bomb, flare, view: viewButton,
     shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), cockpit };
+}
+
+// --- S7f lane ---
+export function renderBuffer(width: number, height: number, phone: PhoneLayout | null, tier: RenderQuality,
+  comparisonScale?: number): { width: number; height: number; cssScale: number | null } {
+  const quality = RENDER_QUALITY[tier];
+  const scale = comparisonScale ?? (phone ? quality.phoneDivisor : quality.desktopDivisor);
+  if (scale === null && phone) {
+    // Keep the old phone buffer between High and Low even on extreme viewport widths.
+    const { min, max } = MEDIUM_PHONE_WIDTH_FRACTION;
+    const w = Math.max(1, clamp(phone.buffer.width, Math.ceil(width * min), Math.floor(width * max)));
+    return { width: w, height: Math.max(1, Math.round(w * height / width)), cssScale: null };
+  }
+  const divisor = scale ?? 1;
+  return {
+    width: Math.max(1, Math.ceil(width / divisor)), height: Math.max(1, Math.ceil(height / divisor)),
+    // The viewport clips up to two spare CSS pixels at the right and bottom.
+    cssScale: Number.isInteger(divisor) ? divisor : null,
+  };
 }

@@ -1,65 +1,145 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Object3D } from 'three';
-import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
+import { Mesh, Object3D, Raycaster, Vector3 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
+import { SWARM_CAPS } from '../src/data/phases.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
-import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { HostileVisuals } from '../src/hostile-visuals.ts';
-import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
+import * as models from '../src/models.ts';
 import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
 import { SHOT_LIMIT, STEP } from '../src/stage-combat.ts';
+import * as voxels from '../src/voxel.ts';
 import { orbitDroneGeometry, WeaponMounts } from '../src/weapon-render.ts';
 
-const triangleCount = (faces, palette) => bakeVoxels(faces, palette, 1).index.count / 3;
+const bake = ({ faces, palette, size }) => bakeVoxels(faces, palette, size);
+const triangleCount = geometry => geometry.index.count / 3;
+const craftTriangles = model => triangleCount(bake(model));
+const enemyKinds = ['patrol', 'interceptor', ...NEW_ENEMY_KINDS];
 
-test('finer player voxels preserve the interceptor world dimensions', () => {
-  assert.ok(SHIP_VOXEL_SIZE < 0.62);
-  const hull = bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE);
-  hull.computeBoundingBox();
-  const [low, high] = [hull.boundingBox.min, hull.boundingBox.max];
-  const expected = [-10.23, -2.79, -12.71, 10.23, 6.51, 11.47];
-  [...low.toArray(), ...high.toArray()].forEach((value, i) => {
-    assert.ok(Math.abs(value - expected[i]) < 1e-5, `bound ${i}: ${value}`);
+function assertBounds(geometry, expected, label) {
+  geometry.computeBoundingBox();
+  const { min, max } = geometry.boundingBox;
+  [...min.toArray(), ...max.toArray()].forEach((value, i) => {
+    assert.ok(Math.abs(value - expected[i]) < 1e-5, `${label} bound ${i}: ${value}`);
   });
+}
+
+function assertSameSilhouette(low, detailed, label) {
+  const origin = low.faces[0];
+  for (const [side, axes] of [[0, ['y', 'z']], [2, ['x', 'z']], [4, ['x', 'y']]]) {
+    const footprint = ({ faces, size }) => new Set(faces.filter(face => face.side === side).map(face =>
+      axes.map(axis => Math.round(face[axis] * size / low.size - origin[axis])).join(',')));
+    const before = footprint(low), after = footprint(detailed);
+    assert.equal(after.size, before.size, `${label} profile ${side} area`);
+    for (const cell of before) assert.ok(after.has(cell), `${label} profile ${side} lost cell ${cell}`);
+  }
+}
+
+test('refining a voxel keeps its center and supports new half-cell material and cavity details', () => {
+  const model = { width: 2, length: 1, height: 1, pivot: [0.5, 0, 0], data: Uint8Array.of(1, 2) };
+  const refined = voxels.refineVoxelModel(model, (x, y, z, material, sample) => {
+    if (x === -0.25 && y === -0.25 && z === 0.25) return 0;
+    if (material === 2 && sample(x - 1, y, z) === 1 && z > 0) return 3;
+    return material;
+  });
+  assert.deepEqual(refined.pivot, [1.5, 0.5, 0.5]);
+  assert.deepEqual([...refined.data], [1, 1, 2, 2, 1, 1, 2, 2, 1, 0, 3, 3, 1, 1, 3, 3]);
+  assert.deepEqual([...model.data], [1, 2]);
 });
 
-test('player and Warden details fit the craft budgets and the heaviest legal cap mix', () => {
-  const playerFaces = shipFaces();
-  assert.ok(playerFaces.some(face => face.material === 9 && face.side === 4), 'teal canopy panels');
-  const player = triangleCount(playerFaces, shipPalette);
-  const warden = triangleCount(wardenFaces(), wardenPalette);
+test('0.155 m player voxels preserve the world dimensions and the exhaust sockets', () => {
+  const player = models.playerAirframe(true);
+  assert.equal(player.size, 0.155);
+  assert.ok(player.faces.some(face => face.material === 9 && face.side === 4), 'teal canopy panels');
+  assertSameSilhouette(models.playerAirframe(false), player, 'player');
+  const hull = new Mesh(bake(player));
+  assertBounds(hull.geometry, [-10.23, -2.79, -12.71, 10.23, 6.51, 11.47], 'player');
+
+  const aft = new Vector3(0, 0, -1);
+  for (const x of [-3.41, 3.41]) {
+    const rear = new Vector3(x, -0.62, 13.43);
+    const [pocket] = new Raycaster(rear, aft).intersectObject(hull);
+    const [collar] = new Raycaster(rear.clone().add(new Vector3(0, 1.42, 0)), aft).intersectObject(hull);
+    assert.ok(pocket && pocket.point.z < 10.53, `exhaust ${x} has an open throat`);
+    assert.ok(collar && Math.abs(collar.point.z - 11.43) < 0.08, `exhaust ${x} retains its collar`);
+  }
+});
+
+test('every enemy and the Warden keep their silhouettes at double voxel density', () => {
+  for (const kind of enemyKinds) {
+    const low = models.enemyAirframe(kind, false), detailed = models.enemyAirframe(kind, true);
+    assert.equal(detailed.size, low.size / 2, kind);
+    assertSameSilhouette(low, detailed, kind);
+    const coarseGeometry = bake(low);
+    coarseGeometry.computeBoundingBox();
+    const { min, max } = coarseGeometry.boundingBox;
+    assertBounds(bake(detailed), [...min.toArray(), ...max.toArray()], kind);
+  }
+  const warden = models.wardenAirframe(true), coarseWarden = models.wardenAirframe(false);
+  assert.equal(warden.size, 0.325);
+  assertSameSilhouette(coarseWarden, warden, 'Warden');
+  const coarseGeometry = bake(coarseWarden);
+  coarseGeometry.computeBoundingBox();
+  const { min, max } = coarseGeometry.boundingBox;
+  assertBounds(bake(warden), [...min.toArray(), ...max.toArray()], 'Warden');
+});
+
+function cappedEnemyTriangles(detailed) {
+  const kinds = enemyKinds.map(kind => [kind, craftTriangles(models.enemyAirframe(kind, detailed))]);
+  const byCost = kinds.flatMap(([kind, count]) => Array(ENEMY_KINDS[kind].cap).fill(count)).sort((a, b) => b - a);
+  return cap => byCost.slice(0, cap).reduce((sum, count) => sum + count, 0);
+}
+
+test('the low craft LOD stays within the existing airframe caps', () => {
+  const player = craftTriangles(models.playerAirframe(false));
+  const warden = craftTriangles(models.wardenAirframe(false));
   assert.ok(player <= 1620, `player: ${player}`);
   assert.ok(warden > 1204 && warden <= 1500, `Warden: ${warden}`);
-
-  const kinds = [
-    ['patrol', triangleCount(droneFaces(), dronePalette)],
-    ['interceptor', triangleCount(droneFaces('interceptor'), dronePalette)],
-    ...NEW_ENEMY_KINDS.map(kind => {
-      const { faces, palette } = enemyAirframe(kind);
-      return [kind, triangleCount(faces, palette)];
-    }),
-  ];
-  const byCost = kinds.flatMap(([kind, count]) => Array(ENEMY_KINDS[kind].cap).fill(count)).sort((a, b) => b - a);
-  const atCap = cap => byCost.slice(0, cap).reduce((sum, count) => sum + count, 0);
+  const atCap = cappedEnemyTriangles(false);
   const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity }));
   const boss = player + warden + atCap(enemyLimit({ boss: {} }));
   assert.ok(wave <= 6032 * 1.25, `wave: ${wave}`);
   assert.ok(boss <= 5360 * 1.25, `boss: ${boss}`);
+  const mobileStress = wave + warden + triangleCount(models.gnatGeometry(false)) * SWARM_CAPS.mobile;
+  assert.ok(mobileStress <= 10000, `mobile max-load fixture: ${mobileStress}`);
 });
 
-test('a full Gnat swarm adds one instanced batch and at most 1,280 triangles', () => {
+test('the detailed craft LOD adds geometry within the combined wave and Warden budgets', () => {
+  const player = craftTriangles(models.playerAirframe(true));
+  const warden = craftTriangles(models.wardenAirframe(true));
+  assert.ok(player >= 2200 && player <= 3400, `player: ${player}`);
+  assert.ok(warden > 1500 && warden <= 3600, `Warden: ${warden}`);
+  for (const kind of enemyKinds) {
+    const low = craftTriangles(models.enemyAirframe(kind, false));
+    const detailed = craftTriangles(models.enemyAirframe(kind, true));
+    assert.ok(detailed > low * 1.2 && detailed <= 1200, `${kind}: ${low} → ${detailed}`);
+  }
+  const atCap = cappedEnemyTriangles(true);
+  const swarm = triangleCount(models.gnatGeometry(true)) * SWARM_CAPS.desktop;
+  const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity })) + swarm;
+  const boss = player + warden + atCap(enemyLimit({ boss: {} })) + swarm;
+  assert.ok(wave <= 17500, `wave with swarm: ${wave}`);
+  assert.ok(boss <= 16500, `Warden with swarm: ${boss}`);
+  // The profiling fixture also stacks a Warden on the largest wave and swarm.
+  assert.ok(wave + warden <= 21000, `desktop max-load fixture: ${wave + warden}`);
+});
+
+test('each Gnat LOD fits a full swarm in one instanced world batch', () => {
   assert.equal(typeof flightScene.makeGnatBatch, 'function');
-  const batch = flightScene.makeGnatBatch();
-  assert.ok(batch.isInstancedMesh);
-  assert.equal(batch.count, 0);
-  assert.equal(batch.instanceMatrix.count, 80);
-  assert.equal(batch.instanceColor.count, 80);
-  assert.equal(batch.layers.mask, 1, 'the world batch remains visible in the rear camera');
-  const triangles = batch.geometry.index.count / 3;
-  assert.ok(triangles > 0 && triangles * 80 <= 1280, `swarm: ${triangles * 80}`);
+  for (const detailed of [false, true]) {
+    const batch = flightScene.makeGnatBatch(detailed);
+    assert.ok(batch.isInstancedMesh);
+    assert.equal(batch.count, 0);
+    assert.equal(batch.instanceMatrix.count, SWARM_CAPS.desktop);
+    assert.equal(batch.instanceColor.count, SWARM_CAPS.desktop);
+    assert.equal(batch.layers.mask, 1, 'the world batch remains visible in the rear camera');
+    assertBounds(batch.geometry, [-4.3, -0.95, -4.4, 4.3, 1.25, 3.5], 'Gnat');
+    const triangles = triangleCount(batch.geometry);
+    if (detailed) assert.ok(triangles > 16 && triangles <= 24, `detailed Gnat: ${triangles}`);
+    else assert.equal(triangles, 16);
+  }
 });
 
 test('carrier beacons and crates share a single small world instance batch', () => {
