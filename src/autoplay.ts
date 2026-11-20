@@ -21,12 +21,16 @@ function nearest<T extends Position>(items: T[], x: number, z: number): T | null
 }
 
 function routeFor(state: StageState, mode: PilotMode): Route {
-  const p = state.player;
-  if (mode === 'top' && state.boss) {
-    const { x, z, alt } = state.boss;
+  const p = state.player, boss = state.boss;
+  if (mode === 'top' && boss) {
+    const { x, z, alt } = boss.entry?.target ?? boss;
     return { x, z, alt, kind: 'weak' };
   }
   const weak = activeWeakPoint(state);
+  if (weak && boss?.entry) {
+    const { target } = boss.entry;
+    return { x: weak.x + target.x - boss.x, z: weak.z + target.z - boss.z, alt: weak.alt + target.alt - boss.alt, kind: 'weak' };
+  }
   if (weak) return { ...weak, kind: 'weak' };
   const pass = state.reversal;
   if (mode === 'full' && pass && state.tick < pass.until) {
@@ -39,7 +43,7 @@ function routeFor(state: StageState, mode: PilotMode): Route {
     && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
     return { ...LANDMARKS.atoll, kind: 'beacon' };
   }
-  const enemy = nearest(state.enemies, p.x, p.z);
+  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry), p.x, p.z);
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
     const needsXp = mode === 'full' && state.level < 3;
@@ -90,7 +94,7 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
         const dodge = avoid(enemy.tell, FLAK_RADIUS + 5);
         if (dodge !== undefined) return dodge;
       }
-      if (state.tick > state.bodyGraceUntil) {
+      if (!enemy.entry && state.tick > state.bodyGraceUntil) {
         const dodge = avoid(enemy, 15);
         if (dodge !== undefined) return dodge;
       }

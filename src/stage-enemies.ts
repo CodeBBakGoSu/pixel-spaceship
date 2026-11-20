@@ -1,4 +1,5 @@
 import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
+import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { nearestBand } from './maneuvers.ts';
 import { keepInsideArena } from './reach.ts';
 import { angleTo, BANDS, clamp, fireHostile, FLAK_LIFE, inBand, MINE_LIMIT, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
@@ -84,6 +85,22 @@ function headingDelta(yaw: number, target: number): number {
   return Math.atan2(Math.sin(delta), Math.cos(delta));
 }
 
+function bankToward(enemy: Enemy, yaw: number): void {
+  const turn = clamp(headingDelta(enemy.yaw, yaw), -MAX_TURN, MAX_TURN);
+  enemy.yaw += turn;
+  enemy.bank += (-turn / STEP * 0.16 - enemy.bank) * STEERING_BLEND;
+}
+
+export function beginEnemyFlyIn(state: StageState, enemy: Enemy, ground: Ground, anchor: Point, bend: number): void {
+  const { x, z, alt, kind } = enemy;
+  const path = planFlyIn(state, anchor, { x, z, alt }, {
+    ticks: WAVE_FLY_IN_TICKS, bend, exitSpeed: kind === 'turret' ? 0 : ENEMY_KINDS[kind].speed,
+    clearance: kind === 'turret' ? 5 : undefined,
+  });
+  enemy.entry = path;
+  Object.assign(enemy, sampleFlyIn(path, state.tick, ground));
+}
+
 function rangeMode(active: boolean | undefined, range: number, threshold: number, margin: number): boolean {
   return range < threshold + (active === undefined ? 0 : active ? margin : -margin);
 }
@@ -122,9 +139,7 @@ function steer(state: StageState, enemy: Enemy, ground: Ground, targetYaw: numbe
     delete enemy.terrainTurn;
   }
 
-  const turn = clamp(headingDelta(enemy.yaw, targetYaw), -MAX_TURN, MAX_TURN);
-  enemy.yaw += turn;
-  enemy.bank += (-turn / STEP * 0.16 - enemy.bank) * STEERING_BLEND;
+  bankToward(enemy, targetYaw);
   enemy.vx = Math.sin(enemy.yaw) * speed;
   enemy.vz = Math.cos(enemy.yaw) * speed;
 }
@@ -207,7 +222,7 @@ function moveFlyby(state: StageState, enemy: Enemy, ground: Ground, fx: number, 
 
 function pursuitBoost(state: StageState, enemy: Enemy): number {
   for (const spotter of state.enemies) {
-    if (spotter.kind === 'spotter' && spotter.hp && Math.hypot(spotter.x - enemy.x, spotter.z - enemy.z) <= 125) return 1.2;
+    if (spotter.kind === 'spotter' && spotter.hp && !spotter.entry && Math.hypot(spotter.x - enemy.x, spotter.z - enemy.z) <= 125) return 1.2;
   }
   return 1;
 }
@@ -347,6 +362,18 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const enemy of state.enemies) {
     if (!enemy.hp) continue;
+    if (enemy.entry) {
+      const { yaw, ...pose } = sampleFlyIn(enemy.entry, state.tick, ground);
+      bankToward(enemy, yaw);
+      Object.assign(enemy, pose);
+      if (state.tick >= enemy.entry.arriveAt) {
+        enemy.flightSpeed = enemy.entry.exitSpeed;
+        if (enemy.kind === 'turret') enemy.bank = 0;
+        delete enemy.entry;
+      }
+      // Incoming ships are shootable. Their weapons and contact damage start at engagement.
+      continue;
+    }
     const dx = p.x - enemy.x, dz = p.z - enemy.z, range = Math.hypot(dx, dz);
     const angle = Math.atan2(dx, dz);
     if (enemy.kind === 'turret') {

@@ -161,6 +161,19 @@ test('strafe clamps acquisition to a single lower band and a 38-degree forward l
   }
 });
 
+test('strafe intercepts an approaching craft faster than the bolt and skips a receding craft', () => {
+  const state = flight(145);
+  const target = contact(state, 0, 110, 1);
+  target.vz = 300;
+  combat.acquireAndFire(state);
+  assert.equal(state.shots.some(shot => shot.kind === 'strafe'), false);
+  target.vz = -300;
+  combat.acquireAndFire(state);
+  const bolt = state.shots.find(shot => shot.kind === 'strafe');
+  assert.ok(bolt && bolt.vy < 0 && bolt.life > 0);
+  assert.ok(Math.abs(Math.hypot(bolt.vx, bolt.vy, bolt.vz) - 230) < 1e-6);
+});
+
 test('descending strafe catches a contact entering its height window mid-tick', () => {
   const state = flight(145), target = contact(state, 0, 70, 1);
   combat.acquireAndFire(state);

@@ -52,6 +52,15 @@ export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
 export type Ground = (x: number, z: number) => number;
 export type Band = 0 | 1 | 2;
+export type FlyIn = {
+  origin: Position;
+  target: Position;
+  startedAt: number;
+  arriveAt: number;
+  bend: number;
+  exitSpeed: number;
+  clearance: number;
+};
 export type Enemy = Position & {
   id: number;
   kind: EnemyKind;
@@ -65,6 +74,7 @@ export type Enemy = Position & {
   shotDown: boolean;
   band: Band;
   offset: number;
+  entry?: FlyIn;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
   tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
@@ -122,6 +132,7 @@ export type Boss = {
   x: number;
   z: number;
   alt: number;
+  entry?: FlyIn;
   weakPoints: WeakPoint[];
   orbitAngle: number;
   orbitStartTick: number;

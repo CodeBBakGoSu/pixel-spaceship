@@ -157,12 +157,13 @@ test('an aft fighter passes a wingtip and sweeps across the nose through a gentl
 
 test('opening patrols arrive far enough out to read before their slower-than-boost bolts fire', () => {
   const state = createStage(parseStageOptions('?autoplay=1'));
-  state.twinAt = state.podsAt = Infinity;
+  state.twinAt = state.podsAt = state.strafeAt = Infinity;
   state.player.altitude = 145;
   advance(state, 120);
-  assert.equal(state.enemies.length, 2);
-  const firstVolley = Math.min(...state.enemies.map(enemy => enemy.shotAt));
-  for (const enemy of state.enemies) {
+  const engaged = state.enemies.filter(enemy => !enemy.entry);
+  assert.equal(engaged.length, 2);
+  const firstVolley = Math.min(...engaged.map(enemy => enemy.shotAt));
+  for (const enemy of engaged) {
     const range = Math.hypot(enemy.x - state.player.x, enemy.z - state.player.z);
     assert.ok(range >= 115 && range < 138);
   }
@@ -202,6 +203,11 @@ test('an airborne straggler re-enters the forward quarter only after staying far
   assert.ok(patrol.z < p.z - 200);
   state.tick++;
   relocateStragglers(state, ground);
+  assert.ok(patrol.entry && Math.hypot(patrol.x, patrol.z) > state.arena.radius);
+  while (patrol.entry) {
+    state.tick++;
+    advanceEnemies(state, ground);
+  }
   const dx = patrol.x - p.x, dz = patrol.z - p.z, range = Math.hypot(dx, dz);
   assert.ok(dz > 0 && Math.abs(Math.atan2(dx, dz)) <= Math.PI / 3);
   assert.ok(range >= 175 && range <= 225);
@@ -242,29 +248,33 @@ test('a far turret transfers only to a vacant landmark ahead and keeps its HP', 
   Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 145 });
   Object.assign(turret, { farTicks: 155, hp: 2 });
   advance(state, 1);
-  assert.ok(turret.x > 200 && Math.hypot(turret.x - state.player.x, turret.z - state.player.z) > 175);
+  const { x, z } = state.player;
+  assert.ok(turret.entry && turret.alt > 140);
+  while (turret.entry && state.phase === 'playing') advance(state, 1);
+  assert.equal(turret.entry, undefined);
+  assert.ok(turret.x > 200 && Math.hypot(turret.x - x, turret.z - z) > 175);
   assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
   assert.equal(turret.band, 1);
   assert.equal(turret.hp, 2);
   assert.equal(state.pickups.length, 0);
 });
 
-test('seeded sorties keep enemy turns within 3.2 radians per second', () => {
+test('seeded sorties keep fly-in and combat turns within 3.2 radians per second', () => {
   const kinds = new Set();
   for (const seed of [1, 11, 53]) {
     const state = createStage(parseStageOptions('?autoplay=1&seed=' + seed), ground);
     state.twinAt = state.podsAt = Infinity;
     state.graceUntil = Infinity;
     for (let tick = 0; tick < 105 * 60; tick++) {
-      const before = new Map(state.enemies.map(enemy => [enemy.id, { x: enemy.x, z: enemy.z, yaw: enemy.yaw }]));
+      const before = new Map(state.enemies.map(enemy => [enemy.id, enemy.yaw]));
       stepStage(state, { turn: Math.sin(tick / 137) * 0.6 }, ground);
       for (const enemy of state.enemies) {
         if (!enemy.hp) continue;
         const previous = before.get(enemy.id);
-        // Re-entry teleports stragglers and sets a new initial heading.
-        if (!previous || Math.hypot(enemy.x - previous.x, enemy.z - previous.z) > 2) continue;
+        // A straggler gets a fresh heading only when sent to the off-screen origin.
+        if (previous === undefined || enemy.entry?.startedAt === state.tick) continue;
         kinds.add(enemy.kind);
-        const delta = enemy.yaw - previous.yaw;
+        const delta = enemy.yaw - previous;
         const turn = Math.atan2(Math.sin(delta), Math.cos(delta));
         assert.ok(Math.abs(turn) <= 3.2 / 60 + 1e-9, `${enemy.kind} turned ${turn} rad at tick ${tick} (seed ${seed})`);
       }

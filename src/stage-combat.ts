@@ -174,7 +174,12 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
   // Solve for where a constant-speed bolt and the moving target will meet in 3D.
   const speedDifference = STRAFE_SPEED ** 2 - target.vx ** 2 - target.vz ** 2;
   const along = dx * target.vx + dz * target.vz;
-  const lead = (along + Math.sqrt(along ** 2 + speedDifference * (dx ** 2 + dz ** 2 + dy ** 2))) / speedDifference;
+  const distanceSquared = dx ** 2 + dz ** 2 + dy ** 2;
+  const discriminant = along ** 2 + speedDifference * distanceSquared;
+  if (discriminant < 0) return;
+  const closing = Math.sqrt(discriminant) - along;
+  if (closing <= 0) return;
+  const lead = distanceSquared / closing;
   const vy = dy / lead;
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,

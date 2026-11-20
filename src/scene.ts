@@ -127,7 +127,7 @@ export class FlightScene {
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
   private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), ENEMY_KINDS.patrol.cap);
-  private readonly flybyTrails = instances(new BoxGeometry(), 48, new MeshBasicMaterial({
+  private readonly enemyTrails = instances(new BoxGeometry(), 48, new MeshBasicMaterial({
     color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
   }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
@@ -173,7 +173,7 @@ export class FlightScene {
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
     this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.flybyTrails, this.pickupTrails, this.weakPointBorder);
+      this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -495,11 +495,15 @@ export class FlightScene {
         : batch ? 0xffffff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
       this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, 1, 1, 1, paint, flat ? 0 : enemy.bank);
-      if (enemy.flyby && trails + 2 <= this.flybyTrails.instanceMatrix.count) {
-        const sideX = 3.2 * Math.cos(enemy.yaw), sideZ = -3.2 * Math.sin(enemy.yaw);
+      if ((enemy.entry || enemy.flyby) && trails + 2 <= this.enemyTrails.instanceMatrix.count) {
+        const fx = Math.sin(enemy.yaw), fz = Math.cos(enemy.yaw);
+        const sideX = 3.2 * fz, sideZ = -3.2 * fx;
+        const length = enemy.entry ? clamp(Math.hypot(enemy.vx, enemy.vz) * 0.09 + 7, 9, 54) : 11.2;
+        const aftX = enemy.entry ? (6 + length / 2) * fx : 0.15 * enemy.vx;
+        const aftZ = enemy.entry ? (6 + length / 2) * fz : 0.15 * enemy.vz;
         for (const side of [-1, 1]) {
-          this.write(this.flybyTrails, trails++, enemy.x - 0.15 * enemy.vx + side * sideX,
-            enemy.z - 0.15 * enemy.vz + side * sideZ, flat ? TOP_FLIGHT + 1 : enemy.alt, enemy.yaw, 0.64, 0.48, 11.2);
+          this.write(this.enemyTrails, trails++, enemy.x - aftX + side * sideX,
+            enemy.z - aftZ + side * sideZ, flat ? TOP_FLIGHT + 1 : enemy.alt, enemy.yaw, enemy.entry ? 1.15 : 0.64, 0.48, length);
         }
       }
       if (external && formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
@@ -512,7 +516,7 @@ export class FlightScene {
     }
     upload(this.drones, drones);
     upload(this.pursuitRings, marked);
-    upload(this.flybyTrails, trails);
+    upload(this.enemyTrails, trails);
     for (const { mesh, count } of this.airframes) upload(mesh, count);
 
     const boss = state.boss;

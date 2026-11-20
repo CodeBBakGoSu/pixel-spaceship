@@ -1,4 +1,5 @@
 import { advanceBank, boostAirspeed, BOOST_TURN_RATE, CRUISE_SPEED, TURN_RATE } from './flight.ts';
+import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
@@ -17,6 +18,7 @@ export { activeWeakPoint } from './stage-combat.ts';
 export const END_TICK = 180 * TICKS_PER_SECOND;
 export const BOSS_TICK = 105 * TICKS_PER_SECOND;
 const BOSS_SIGNAL = 3 * TICKS_PER_SECOND;
+const BOSS_FLY_IN_TICKS = 2 * TICKS_PER_SECOND;
 const BOSS_ORBIT_PER_TICK = 0.010;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
 const seaLevel: Ground = () => 35;
@@ -69,9 +71,15 @@ function positionWeakPoints(boss: Boss, tick: number): void {
   }
 }
 
-function updateBoss(state: StageState): void {
+function updateBoss(state: StageState, ground: Ground): void {
   const boss = state.boss;
   if (!boss) return;
+  if (boss.entry) {
+    const { x, z, alt } = sampleFlyIn(boss.entry, state.tick, ground);
+    for (const point of boss.weakPoints) point.alt += alt - boss.alt;
+    Object.assign(boss, { x, z, alt });
+    if (state.tick >= boss.entry.arriveAt) delete boss.entry;
+  }
   positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
   if (state.tick >= boss.shotAt && point?.hp) {
@@ -277,6 +285,7 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number): voi
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const until = state.tick + (kind === 'immelmann' || kind === 'split-s' ? spec.flipTick : spec.ticks) + 30;
   for (const enemy of state.enemies) {
+    if (enemy.entry) continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
     if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 190) trail.pursuers.push(enemy.id);
@@ -444,18 +453,20 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   if (state.tick === BOSS_TICK && !state.boss) {
-    state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
+    const boss = state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
+    boss.entry = planFlyIn(state, state.arena, { x: boss.x, z: boss.z, alt: boss.alt },
+      { ticks: BOSS_FLY_IN_TICKS, bend: 0.23, exitSpeed: 0 });
     trimEscorts(state);
   }
   const wave = WAVES[state.nextWave];
-  if (wave && state.tick === wave.time * TICKS_PER_SECOND) {
+  if (wave && state.tick >= wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) {
     spawnWave(state, wave, ground);
     state.nextWave++;
   }
 
   relocateStragglers(state, ground);
   advanceEnemies(state, ground);
-  updateBoss(state);
+  updateBoss(state, ground);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
@@ -477,7 +488,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.tick > state.bodyGraceUntil) {
     const p = state.player;
     for (const enemy of state.enemies) {
-      if (enemy.hp && inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < 7) {
+      if (enemy.hp && !enemy.entry && inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < 7) {
         hurtPlayer(state);
         enemy.hp = 0;
       }

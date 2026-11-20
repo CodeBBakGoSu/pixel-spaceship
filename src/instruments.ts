@@ -119,7 +119,7 @@ function findRearDanger(state: StageState, fx: number, fz: number): RearDanger |
 
   const bodyFrom = Math.max(STEP, (state.bodyGraceUntil + 1 - state.tick) * STEP);
   for (const enemy of state.enemies) {
-    if (enemy.hp <= 0) continue;
+    if (enemy.hp <= 0 || enemy.entry) continue;
     const seconds = impact(enemy, BODY_RADIUS, bodyFrom, Infinity);
     if (seconds < (closest?.seconds ?? Infinity)) {
       closest = { kind: 'contact', enemyId: enemy.id, x: enemy.x, z: enemy.z, alt: enemy.alt, seconds };
