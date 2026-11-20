@@ -74,6 +74,16 @@ test('Warden escort trimming preserves living carriers for their scheduled loot'
   assert.ok(state.enemies.includes(carrier));
 });
 
+test('Heat 5 adds wingmen to the first carrier and carries through the tier armor', () => {
+  const state = game();
+  state.heat = 5;
+  state.tick = CHESTS[0].second * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS;
+  advanceChestSpawns(state, ground);
+  assert.deepEqual(state.enemies.map(enemy => enemy.carrier), [CHESTS[0].id, undefined, undefined]);
+  assert.equal(state.enemies[0].hp, 8);
+  assert.ok(state.enemies.slice(1).every(enemy => enemy.formation.leader === state.enemies[0].id));
+});
+
 test('only an engaged carrier kill drops one crate and collection requires its altitude', () => {
   const state = game();
   state.tick = CHESTS[0].second * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS;

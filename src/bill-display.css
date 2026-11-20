@@ -1,0 +1,27 @@
+.bill-display {
+  position: absolute;
+  z-index: 2;
+  left: var(--hud-x);
+  top: calc(var(--objective-y) + var(--objective-h) + 10px);
+  max-width: min(300px, var(--hud-w));
+  padding: 5px 8px;
+  border: 1px solid #ad915a;
+  border-left: 3px solid #ffd886;
+  background: rgba(15, 24, 35, .91);
+  color: #f4e7c7;
+  font: 700 11px/1.3 var(--game-font);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.bill-display-header { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; }
+.bill-display-header time { color: #ffe3a7; white-space: nowrap; }
+.bill-display-detail { margin-top: 2px; color: #d7e2ea; }
+.bill-display[data-bill="paid"] { border-color: #79bc99; color: #c1f3cf; }
+.bill-display[data-bill="interest"] { border-color: #b68169; color: #ffd1b0; }
+.menu-open .bill-display, .bill-display[hidden] { display: none; }
+.experience.phone-layout .bill-display {
+  top: calc(var(--objective-y) + var(--objective-h) + 5px);
+  max-width: calc(var(--objective-w) - 115px);
+  padding: 4px 6px;
+  font-size: 10px;
+}

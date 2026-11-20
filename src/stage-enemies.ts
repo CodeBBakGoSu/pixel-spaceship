@@ -1,4 +1,6 @@
 import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
+import { HEAT_TIERS } from './data/meta.ts';
+import { REGULAR_FIRE_INTERVAL_SCALE } from './data/run-balance.ts';
 import { GNAT } from './data/phases.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { nearestBand } from './maneuvers.ts';
@@ -17,12 +19,16 @@ const ESCORT_SPAN = 19, ESCORT_AFT = 13;
 const FLYBY_SPEED = 76, FLYBY_LANE = 31, LANE_LEEWAY = 32, CROSS_AHEAD = 62;
 const CROSS_TRAVEL = 92, CROSS_EXIT = 43;
 
+function shotInterval(state: StageState, ticks: number): number {
+  return state.run ? Math.round(ticks * REGULAR_FIRE_INTERVAL_SCALE * HEAT_TIERS[state.heat].shotIntervalScale) : ticks;
+}
+
 export function makeEnemy(state: StageState, x: number, z: number, band: Band, kind: EnemyKind = 'patrol', offset = 0): Enemy {
   const spec = ENEMY_KINDS[kind];
   return {
     id: ++state.nextId, kind, x, z, alt: BANDS[band] + offset, hp: spec.hp,
     yaw: Math.atan2(state.player.x - x, state.player.z - z), vx: 0, vz: 0, bank: 0,
-    band, offset, shotAt: state.tick + spec.firstShot,
+    band, offset, shotAt: state.tick + shotInterval(state, spec.firstShot),
     maneuverAt: state.tick + (kind === 'harrier' ? 0 : 102), maneuver: null, hitUntil: 0, shotDown: false,
   };
 }
@@ -236,7 +242,7 @@ function moveSkimmer(state: StageState, enemy: Enemy, ground: Ground, angle: num
   if (state.tick >= enemy.shotAt && range <= 176) {
     fireHostile(state, enemy, boltSpeed, -0.14);
     fireHostile(state, enemy, boltSpeed, 0.14);
-    enemy.shotAt = state.tick + 240;
+    enemy.shotAt = state.tick + shotInterval(state, 240);
   }
 }
 
@@ -250,7 +256,7 @@ function moveSpotter(state: StageState, enemy: Enemy, ground: Ground, angle: num
     if (state.tick < enemy.tell.until) return;
     fireHostile(state, enemy, boltSpeed);
     delete enemy.tell;
-    enemy.shotAt = state.tick + 150;
+    enemy.shotAt = state.tick + shotInterval(state, 150);
   } else if (state.tick >= enemy.shotAt && range <= 195) {
     enemy.tell = { kind: 'snipe', until: state.tick + 90 };
   }
@@ -267,7 +273,7 @@ function moveTail(state: StageState, enemy: Enemy, ground: Ground, kind: 'hound'
   if (state.tick >= enemy.shotAt && aft >= slot - 11 && aft <= slot + 26
     && Math.abs(dx * fz - dz * fx) < (harrier ? 33 : 23) && enemy.maneuver?.phase !== 'diving') {
     fireHostile(state, enemy, boltSpeed);
-    enemy.shotAt = state.tick + (harrier ? 240 : 180);
+    enemy.shotAt = state.tick + shotInterval(state, harrier ? 240 : 180);
   }
 }
 
@@ -279,7 +285,7 @@ function moveFlanker(state: StageState, enemy: Enemy, ground: Ground, fx: number
   steer(state, enemy, ground, Math.atan2(vx, vz), Math.min(speed, Math.hypot(vx, vz)));
   if (state.tick >= enemy.shotAt && Math.hypot(dx, dz) < 106) {
     fireHostile(state, enemy, boltSpeed);
-    enemy.shotAt = state.tick + 240;
+    enemy.shotAt = state.tick + shotInterval(state, 240);
   }
 }
 
@@ -308,7 +314,7 @@ function moveBomber(state: StageState, enemy: Enemy, ground: Ground, angle: numb
   if (state.tick < enemy.shotAt || range > 165 || state.enemyMines.length >= MINE_LIMIT) return;
   state.enemyMines.push({ x: enemy.x - Math.sin(enemy.yaw) * 12, z: enemy.z - Math.cos(enemy.yaw) * 12,
     alt: enemy.alt, born: state.tick });
-  enemy.shotAt = state.tick + 250;
+  enemy.shotAt = state.tick + shotInterval(state, 250);
 }
 
 function moveTurret(state: StageState, enemy: Enemy, angle: number, range: number): void {
@@ -318,7 +324,7 @@ function moveTurret(state: StageState, enemy: Enemy, angle: number, range: numbe
     if (state.tick < until) return;
     state.effects.push({ x, z, alt, kind: 'flak', life: FLAK_LIFE });
     delete enemy.tell;
-    enemy.shotAt = state.tick + 270;
+    enemy.shotAt = state.tick + shotInterval(state, 270);
   } else if (state.tick >= enemy.shotAt && range <= 175) {
     const p = state.player;
     const target = { x: p.x + Math.sin(p.yaw) * 52, z: p.z + Math.cos(p.yaw) * 52 };
@@ -407,7 +413,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
       if (pass?.phase === 'cross' && state.tick >= enemy.shotAt
         && pass.side * (dz * Math.sin(pass.yaw) - dx * Math.cos(pass.yaw)) <= 0) {
         fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed);
-        enemy.shotAt = state.tick + 255;
+        enemy.shotAt = state.tick + shotInterval(state, 255);
       }
       continue;
     }
@@ -443,7 +449,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
     if ((enemy.kind === 'patrol' || enemy.kind === 'interceptor') && range < 185
       && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
       fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed);
-      enemy.shotAt = state.tick + 255 + Math.floor(random(state.run ? state.streams.combat : state) * 105);
+      enemy.shotAt = state.tick + shotInterval(state, 255 + Math.floor(random(state.run ? state.streams.combat : state) * 105));
     }
   }
 }

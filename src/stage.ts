@@ -7,15 +7,20 @@ import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { random, rngStream } from './stage-random.ts';
 import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
-import { HEAT_ARMOR_SCALES, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT, REGULAR_SALVAGE_MULTIPLIER,
-  RUN_BEACON_LEAD_SECONDS, WEAPON_FX_LIMIT } from './data/run-balance.ts';
-import { BUFFS, BUFF_IDS, CHESTS, DRAFT_RULES, WEAPON_IDS } from './data/items.ts';
+import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
+  REGULAR_SALVAGE_MULTIPLIER, RUN_BEACON_LEAD_SECONDS, SURVIVOR_START_HULL, SURVIVOR_XP_SCALE, WEAPON_FX_LIMIT } from './data/run-balance.ts';
+import { HEAT_TIERS } from './data/meta.ts';
+import { BUFFS, CHESTS, DRAFT_RULES } from './data/items.ts';
+import { billXpScale, createBillState, finishBillTick, noteBillKill, noteBillPickup, startBillTick } from './bills.ts';
 import { advanceChestSpawns, collectChest, createChestState, dropCarrierChest, rollChestRewards } from './chests.ts';
 import { buffTuning } from './loadout.ts';
+import { aceRank, createRunMetrics, draftPool, hangarLoadout, normalizeHeat, normalizeProfile, settleRun } from './meta.ts';
 import { applyRunPick, availableEvolutions, banishRunCard, createProgression, evolveWeapon, openRunDraft,
   rerollRunDraft, rollBonusUpgrade, runXpCost, skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
+import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
+import { firePacedWarden, makePacedWarden, pacedExposureTick, positionPacedWeakPoints } from './warden.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS,
@@ -101,6 +106,11 @@ function updateBoss(state: StageState, ground: Ground): void {
     Object.assign(boss, { x, z, alt });
     if (state.tick >= boss.entry.arriveAt) delete boss.entry;
   }
+  if (boss.paced) {
+    positionPacedWeakPoints(boss, state.heat, state.tick);
+    firePacedWarden(state, boss);
+    return;
+  }
   positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
   if (!boss.entry && state.tick >= boss.shotAt && point?.hp) {
@@ -116,8 +126,8 @@ function advanceWeakPoint(state: StageState): boolean {
   if (next === -1) return true;
   boss.index = next;
   boss.changedTick = state.tick;
-  boss.exposeTick = state.tick + BOSS_SIGNAL;
-  boss.shotAt = boss.exposeTick + 90;
+  boss.exposeTick = boss.paced ? pacedExposureTick(boss, state.heat, next, state.tick) : state.tick + BOSS_SIGNAL;
+  if (!boss.paced) boss.shotAt = boss.exposeTick + 90;
   state.lock = null;
   return false;
 }
@@ -128,6 +138,7 @@ export function requiredXp(level: number, survivor = false): number | null {
 
 function openDraft(state: StageState, pending: Outcome | null): void {
   if (state.run) {
+    refreshDraftPool(state);
     state.draft = openRunDraft(state.run, state.hull > DRAFT_RULES.riskHull).map(card => card.id);
   } else {
     const nextTwin: DraftId = state.twinRank === 1 ? 'twin-2' : 'twin-3';
@@ -174,17 +185,22 @@ export function chestEvolutions(state: StageState) {
 
 export function grantBonusUpgrade(state: StageState, rng: { rng: number }): ChestReward | null {
   if (!state.run) return null;
+  refreshDraftPool(state);
   const card = rollBonusUpgrade(state.run, rng);
   applyGearEffects(state, card);
   return { kind: 'upgrade', id: card.id, ...(card.maxLevel && card.nextLevel > card.currentLevel ? { level: card.nextLevel } : {}) };
 }
 
+function refreshDraftPool(state: StageState): void {
+  if (state.run && !state.daily) Object.assign(state.run, draftPool(state.profile, state.metrics));
+}
+
 function resolveChest(state: StageState, choice: NonNullable<StageInput['chestPick']>): void {
   const { offer } = state.chests;
-  if (!state.run || !offer) return;
+  if (!state.run) return;
   if (state.chestReveal) {
     if (choice === 'continue') {
-      state.chests.opened++;
+      if (offer) state.chests.opened++;
       state.chests.offer = null;
       state.chestReveal = null;
       state.graceUntil = state.tick + 18;
@@ -192,7 +208,7 @@ function resolveChest(state: StageState, choice: NonNullable<StageInput['chestPi
     }
     return;
   }
-  if (choice === 'continue') return;
+  if (!offer || choice === 'continue') return;
   const candidates = chestEvolutions(state);
   if (candidates.length ? choice === 'open' || !candidates.includes(choice) : choice !== 'open') return;
   const evolved = choice === 'open' ? null : evolveWeapon(state.run, choice);
@@ -353,22 +369,32 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
 
 export function createStage(options: StageOptions = parseStageOptions(''), ground: Ground = seaLevel): StageState {
   const x = ARENA.x, z = ARENA.z - 85;
+  const survivor = options.mode === 'survivors';
+  const profile = normalizeProfile(options.profile), daily = survivor && !!options.daily;
+  const hangar = hangarLoadout(profile, daily);
+  const rank = options.aceRank ?? aceRank(profile);
+  const run = survivor ? createProgression(options.seed, {
+    ...draftPool(daily ? normalizeProfile(null) : profile),
+    rank, rerolls: hangar.rerolls, banishes: hangar.banishes, skips: hangar.skips,
+  }) : null;
+  if (daily && run) run.weaponSlots = run.buffSlots = DRAFT_RULES.maxSlots;
+  const hull = survivor ? SURVIVOR_START_HULL + hangar.hull : 8;
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    run: options.mode === 'survivors'
-      ? createProgression(options.seed, { rank: options.aceRank, weapons: WEAPON_IDS, buffs: BUFF_IDS }) : null,
+    run, profile, daily, hangar, metrics: createRunMetrics(), killBandTicks: [-1, -1, -1],
+    ejectorUsed: false, summary: null, phaseNotice: null, bills: createBillState(), lastHitTick: -1,
     chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
-    aceRank: options.aceRank ?? 0,
-    heat: Number.isFinite(options.heat) ? clamp(Math.floor(options.heat!), 0, HEAT_ARMOR_SCALES.length - 1) : 0,
+    aceRank: rank,
+    heat: daily ? 0 : normalizeHeat(options.heat),
     weaponFireAt: {}, railChargeAt: null, seekerEchoAt: -1, weaponFx: [], ionWake: [], orbitDrones: [], nextBayDrop: null,
     streams: { spawn: rngStream(options.seed, 'spawn'), chest: rngStream(options.seed, 'chest'),
       bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat') },
     view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
-    speed: 0, climbRate: 0, hull: 8, maxHull: 8, hitsTaken: 0, rank: null, invulnerability: 0,
+    speed: 0, climbRate: 0, hull, maxHull: hull, hitsTaken: 0, rank: null, invulnerability: 0,
     boost: 1, boosting: false, boostTicks: 0, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
     flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
     maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
@@ -387,9 +413,18 @@ function finish(state: StageState, outcome: Outcome): void {
   const hits = state.hitsTaken;
   state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits === 3 ? 'B' : 'C';
   if (outcome === 'clear') state.score += 2500;
+  if (state.run && !state.summary) {
+    const settlement = settleRun(state.profile, state.metrics, {
+      outcome, score: state.score, credits: state.run.credits, heat: state.heat,
+    });
+    state.summary = { seconds: state.tick / TICKS_PER_SECOND, wardenCache: outcome === 'clear',
+      credits: state.daily ? 0 : settlement.credits, unlocked: state.daily ? [] : settlement.unlocked };
+    if (!state.daily) state.profile = settlement.profile;
+  }
 }
 
 function startManeuver(state: StageState, kind: ManeuverKind, turn: number): void {
+  if (state.run) state.metrics.maneuvers++;
   const p = state.player, spec = MANEUVERS[kind];
   const maneuver: Maneuver = {
     kind, elapsed: 0, yaw: p.yaw,
@@ -510,6 +545,8 @@ function advanceSalvage(state: StageState, ground: Ground): void {
     const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
     const xp = chest ? chest.carrierXp : ENEMY_KINDS[enemy.kind].xp * (state.run && enemy.kind !== 'gnat' ? REGULAR_SALVAGE_MULTIPLIER : 1);
     if (chest) dropCarrierChest(state, enemy, ground);
+    noteSortieKill(state, enemy);
+    if (state.run) noteBillKill(state, enemy);
     state.kills++;
     state.score += xp * 100;
     state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
@@ -522,6 +559,8 @@ function advanceSalvage(state: StageState, ground: Ground): void {
   const horizontalSpeed = Math.hypot(p.vx ?? 0, p.vz ?? 0);
   const magnet = buffTuning(state, 'magnet-core');
   const beacon = buffTuning(state, 'salvage-beacon');
+  const magnetScale = state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1;
+  const xpScale = state.run ? SURVIVOR_XP_SCALE * billXpScale(state) * state.hangar.xpScale : 1;
   state.pickups = state.pickups.filter(pickup => {
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
     if (!pickup.collected && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
@@ -530,7 +569,7 @@ function advanceSalvage(state: StageState, ground: Ground): void {
     }
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
-    if (!pickup.collected && range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1))) {
+    if (!pickup.collected && range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1) * magnetScale)) {
       const speed = Math.min(155, horizontalSpeed + (pickup.reversal ? 75 : 45));
       const pull = Math.min(range, speed * STEP) / range;
       const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
@@ -541,18 +580,36 @@ function advanceSalvage(state: StageState, ground: Ground): void {
       }
     }
     if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
-      const adjusted = pickup.xp * (beacon?.xpScale ?? 1) + state.xpRemainder;
+      const adjusted = pickup.xp * (beacon?.xpScale ?? 1) * xpScale + state.xpRemainder;
       const whole = Math.floor(adjusted + 1e-9);
       state.xp += whole;
       state.xpRemainder = Math.max(0, adjusted - whole);
       state.salvage += pickup.xp;
-      if (state.run) state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
+      if (state.run) {
+        state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
+        state.metrics.orbs++;
+        noteBillPickup(state, pickup);
+      }
       const band = pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
       state.salvageBands[band] += pickup.xp;
       return false;
     }
     return true;
   });
+}
+
+function applyBillReward(state: StageState): void {
+  const event = finishBillTick(state);
+  const run = state.run;
+  if (!event?.paid || !run) return;
+  const { repair, rerolls, upgrades, chestPicks } = event.definition.reward;
+  if (repair) state.hull = repair === 'full' ? state.maxHull : Math.min(state.maxHull, state.hull + repair);
+  if (rerolls) run.rerolls = Math.min(DRAFT_RULES.maxRerolls, run.rerolls + rerolls);
+  run.credits += BILL_CREDIT_BONUS;
+  if (upgrades || chestPicks) {
+    const cards = Array.from({ length: upgrades ?? chestPicks ?? 0 }, () => grantBonusUpgrade(state, state.streams.bills));
+    state.chestReveal = cards.filter((card): card is ChestReward => card !== null);
+  }
 }
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
@@ -571,10 +628,17 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
   if (state.phase !== 'playing') {
     if (input.start) {
-      Object.assign(state, createStage({ ...parseStageOptions(''), seed: state.seed, view: state.initialView, time: 0,
-        mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile, aceRank: state.aceRank,
-        heat: state.heat }, ground));
+      const launch = input.launch;
+      Object.assign(state, createStage({ ...parseStageOptions(''), seed: launch?.seed ?? state.seed,
+        view: state.initialView, time: 0, mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile,
+        profile: launch?.profile ?? state.profile, daily: launch?.daily ?? state.daily, heat: launch?.heat ?? state.heat,
+        aceRank: launch ? undefined : Math.max(aceRank(state.profile), state.aceRank) }, ground));
     }
+    return;
+  }
+  if (input.retreat && state.run) {
+    state.paused = false;
+    finish(state, 'retreated');
     return;
   }
   if (input.pause) {
@@ -585,6 +649,10 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.paused) return;
 
   state.tick++;
+  if (state.run) {
+    advancePhasePacing(state);
+    startBillTick(state);
+  }
   const grace = state.tick <= state.graceUntil;
   const glimpse = state.rearGlimpse;
   if (glimpse) {
@@ -608,6 +676,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);
   fly(state, input, ground, grace, controlled);
+  if (state.run && state.boosting) state.metrics.boostTicks++;
   const vx = state.player.vx = (state.player.x - x) / STEP;
   const vz = state.player.vz = (state.player.z - z) / STEP;
   if (maneuver && state.maneuverTrail && (maneuver.elapsed % TRAIL_SAMPLE_TICKS === 0 || maneuver.elapsed === MANEUVERS[maneuver.kind].ticks)) {
@@ -616,7 +685,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   if (state.tick === bossTick(state) && !state.boss) {
-    const boss = state.boss = makeBoss(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
+    const boss = state.boss = (state.run ? makePacedWarden : makeBoss)(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
     boss.entry = planFlyIn(state, state.arena, { x: boss.x, z: boss.z, alt: boss.alt },
       { ticks: BOSS_FLY_IN_TICKS, bend: 0.23, exitSpeed: 0 });
     trimEscorts(state);
@@ -639,7 +708,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
-    if (input.bomb && !grace) dropRearBomb(state);
+    if (input.bomb && !grace) {
+      const charges = state.bombs;
+      dropRearBomb(state);
+      if (state.run && state.bombs < charges) state.metrics.manualBombs++;
+    }
     acquireAndFire(state);
     if (state.run) advanceRangedWeapons(state, ground);
   }
@@ -658,6 +731,10 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     advanceAutoOrdnance(state, !!maneuverEnded && maneuver.kind === 'j-turn');
   }
   advanceShots(state, ground);
+  if (state.run) {
+    state.metrics.peakAceWipe = Math.max(state.metrics.peakAceWipe, state.reversal?.streak ?? 0);
+    if (state.boss) state.metrics.weakPointHits = state.boss.weakPoints.reduce((sum, point) => sum + point.hits, 0);
+  }
   if (state.weaponFx.length > WEAPON_FX_LIMIT) state.weaponFx.splice(0, state.weaponFx.length - WEAPON_FX_LIMIT);
   advanceEnemyHazards(state, ground);
 
@@ -671,11 +748,13 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     }
   }
   advanceSalvage(state, ground);
+  if (state.run && state.hull) applyBillReward(state);
   const defeated = advanceWeakPoint(state);
   const outcome = defeated ? 'clear' : state.tick >= endTick(state) ? 'timeout' : null;
   const cost = requiredXp(state.level, !!state.run);
   if (!state.hull) finish(state, 'lost');
-  else if (state.run && collectChest(state)) {
+  else if (state.run && (state.chestReveal || collectChest(state))) {
+    if (state.chests.offer) state.hull = Math.min(state.maxHull, state.hull + CARRIER_REPAIR_HULL);
     state.phase = 'chest';
     state.resultPending = outcome;
     state.boosting = false;

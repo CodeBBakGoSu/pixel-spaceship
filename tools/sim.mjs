@@ -60,7 +60,7 @@ function runSortie(args, profile, seed, ground) {
     weapons: Object.fromEntries(WEAPON_IDS.filter(id => stage.run.weaponLevels[id]).map(id => [id, stage.run.weaponLevels[id]])),
     buffs: Object.fromEntries(BUFF_IDS.filter(id => stage.run.buffLevels[id]).map(id => [id, stage.run.buffLevels[id]])),
     evolutions: WEAPON_IDS.flatMap(id => stage.run.evolutions[id] ? [stage.run.evolutions[id]] : []),
-    chests: stage.chests.opened, billsOffered: 0, billsPaid: 0,
+    chests: stage.chests.opened, billsOffered: stage.bills.offered, billsPaid: stage.bills.paid,
     stateHash: createHash('sha256').update(JSON.stringify(stage)).digest('hex'),
   };
 }

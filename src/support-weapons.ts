@@ -1,7 +1,7 @@
 import { WEAPONS } from './data/items.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { buffTuning, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
-import { activeWeakPoint, clamp, HIT_WINDOW, hurtEnemy, hurtWeakPoint, inBand, projectileRoom, STEP,
+import { activeWeakPoint, clamp, HIT_WINDOW, hurtEnemy, hurtWeakPoint, inBand, projectileRoom, rearWeaponCredit, STEP,
   TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Ground, Position, StageState } from './stage-types.ts';
 
@@ -38,7 +38,7 @@ function advanceWake(state: StageState, level: number): void {
   const next = state.tick + weaponCooldown(state, 'ion', plasma ? evolved.hitCooldownTicks : tuning.hitCooldownTicks);
   for (const enemy of state.enemies) {
     if (!enemy.hp || enemy.entry || state.tick < (enemy.ionReadyAt ?? 0) || !crossesWake(trail, enemy, width, window, plasma)) continue;
-    hurtEnemy(state, enemy, damage);
+    hurtEnemy(state, enemy, damage, { weapon: 'ion' });
     enemy.ionReadyAt = next;
   }
   const boss = state.boss, point = boss?.weakPoints[boss.index];
@@ -81,7 +81,7 @@ function advanceDrones(state: StageState, level: number): void {
       if (!enemy.hp || enemy.entry || !inBand(drone.alt, enemy.alt, window)) continue;
       const range = Math.hypot(drone.x - enemy.x, drone.z - enemy.z);
       if (range <= tuning.hitRadius && state.tick >= (enemy.droneReadyAt ?? 0)) {
-        hurtEnemy(state, enemy, damage);
+        hurtEnemy(state, enemy, damage, { weapon: 'drones' });
         enemy.droneReadyAt = next;
       }
       if (shotRoom && enemy.hp && range < best) {
@@ -151,7 +151,7 @@ function advanceAegis(state: StageState): void {
   const window = hitWindow(state);
   for (const enemy of state.enemies) {
     if (!enemy.hp || enemy.entry || state.tick < (enemy.aegisReadyAt ?? 0) || !colliding(enemy, window)) continue;
-    hurtEnemy(state, enemy, damage);
+    hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, 'pods'));
     enemy.aegisReadyAt = next;
   }
   const boss = state.boss;

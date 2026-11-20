@@ -8,14 +8,15 @@ import {
 } from '../src/stage-combat.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
 import { weaponCooldown } from '../src/loadout.ts';
+import { STARTER_BUFFS, STARTER_WEAPONS } from '../src/data/meta.ts';
 
 const ground = () => 35;
 const start = () => createStage(parseStageOptions('?mode=survivors&t=0'), ground);
 
-test('all ten weapons and buffs are eligible in a new phase sortie', () => {
+test('a new phase sortie draws from the five starter weapons and five starter buffs', () => {
   const state = start();
-  assert.equal(state.run.weapons.length, 10);
-  assert.equal(state.run.buffs.length, 10);
+  assert.deepEqual(state.run.weapons, STARTER_WEAPONS);
+  assert.deepEqual(state.run.buffs, STARTER_BUFFS);
 });
 
 test('Band Lens admits a direct Twin shot outside the unmodified window', () => {
@@ -80,9 +81,9 @@ test('Salvage Beacon carries sub-unit XP across pickups and boosts run credits',
   }
   stepStage(state, {}, ground);
   assert.equal(state.salvage, 10);
-  assert.equal(state.xp, 13);
+  assert.equal(state.xp, 14);
   assert.ok(Math.abs(state.run.credits - 13) < 1e-9);
-  assert.ok(state.xpRemainder < 1e-9);
+  assert.ok(Math.abs(state.xpRemainder - 0.95) < 1e-9);
 });
 
 test('Overdrive Coil extends a reversal and Capacitor shortens the forward firing cadence', () => {
@@ -232,7 +233,7 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   state.shots.push(bolt);
   advanceShots(state, ground);
   assert.ok(!state.shots.includes(bolt));
-  assert.equal(state.hull, 8);
+  assert.equal(state.hull, state.maxHull);
 });
 
 test('Phoenix Flares drop one automatic flare and spread at level five without spending a manual charge', () => {

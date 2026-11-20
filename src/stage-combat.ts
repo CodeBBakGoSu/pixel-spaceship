@@ -1,7 +1,7 @@
-import type { Band, Boss, Effect, Enemy, Flare, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
+import type { Band, Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
   WeakPoint } from './stage-types.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
-import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
+import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, SURVIVOR_PLAYER_DAMAGE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
@@ -88,18 +88,39 @@ export function activeWeakPoint(state: StageState): (WeakPoint & { exposed: bool
 export function hurtPlayer(state: StageState): void {
   if (state.invulnerability > 0 || !state.hull) return;
   const p = state.player;
-  state.hull = Math.max(0, state.hull - 2);
+  state.hull = Math.max(0, state.hull - (state.run ? SURVIVOR_PLAYER_DAMAGE : 2));
+  if (!state.hull && state.run && state.hangar.ejector && !state.ejectorUsed) {
+    state.ejectorUsed = true;
+    state.hull = Math.ceil(state.maxHull / 2);
+  }
   state.hitsTaken++;
+  state.lastHitTick = state.tick;
   state.invulnerability = 1;
   state.effects.push({ kind: 'hit', x: p.x, z: p.z, alt: p.altitude, life: 0.36 });
 }
 
-export function hurtEnemy(state: StageState, enemy: Enemy, damage: number): void {
+export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credit?: KillCredit): void {
   if (!enemy.hp || enemy.entry) return;
   enemy.hp = Math.max(0, enemy.hp - criticalDamage(state, damage));
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
+  if (state.run && enemy.shotDown && credit) enemy.killCredit = credit;
   state.effects.push({ kind: 'hit', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.16 });
+}
+
+type RearWeapon = Extract<KillCredit['weapon'], 'pods' | 'phoenix' | 'bomb-bay' | 'manual-flare' | 'manual-bomb'>;
+
+export function rearWeaponCredit(state: StageState, enemy: Enemy, weapon: RearWeapon): KillCredit {
+  const { x, z, yaw } = state.player, dx = enemy.x - x, dz = enemy.z - z;
+  const aft = dx * Math.sin(yaw) + dz * Math.cos(yaw) < 0;
+  const pursuing = enemy.kind === 'hound' || enemy.kind === 'harrier' || dx * enemy.vx + dz * enemy.vz < 0;
+  return aft && pursuing ? { weapon, rear: true } : { weapon };
+}
+
+function friendlyShotCredit(state: StageState, enemy: Enemy, shot: Shot): KillCredit {
+  if (shot.kind === 'pods') return rearWeaponCredit(state, enemy, 'pods');
+  const weapon = 'weapon' in shot ? shot.weapon : 'twin';
+  return shot.lockId === enemy.id ? { weapon, locked: true } : { weapon };
 }
 
 export function hurtWeakPoint(state: StageState, boss: Boss, damage: number): void {
@@ -394,7 +415,9 @@ function blast(state: StageState, bomb: RearBomb): void {
   const window = hitWindow(state);
   for (const enemy of state.enemies) {
     if (enemy.hp && !enemy.entry && belowLaunchBand(enemy) && nearBomb(bomb, enemy, radius)
-      && inBand(enemy.alt, bomb.alt, window)) hurtEnemy(state, enemy, damage);
+      && inBand(enemy.alt, bomb.alt, window)) {
+      hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, bomb.weapon ?? 'manual-bomb'));
+    }
   }
   const point = activeWeakPoint(state);
   if (state.boss && point?.exposed && belowLaunchBand(point) && nearBomb(bomb, point, radius)
@@ -445,22 +468,25 @@ export function dropFlares(state: StageState, vx: number, vz: number): void {
   showRearLaunch(state, 'flare');
 }
 
-function setBurn(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare): void {
+function setBurn(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare, credit?: KillCredit): void {
   if (!target.hp) return;
   if (state.tick >= (target.burnUntil ?? 0)) target.burnNextAt = state.tick + interval;
   const bonus = buffTuning(state, 'flare-bay')?.burnBonusTicks ?? 0;
   const until = state.tick + (flare.burnTicks ?? FLARE_BURN_TICKS) + bonus;
   target.burnUntil = Math.max(target.burnUntil ?? 0, until);
+  if (state.run && credit && 'shotDown' in target && (flare.damage ?? 1) >= (target.burnDamage ?? 1)) target.burnCredit = credit;
   if (flare.damage !== undefined) target.burnDamage = Math.max(target.burnDamage ?? 1, flare.damage);
 }
 
-function ignite(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare): void {
-  setBurn(state, target, interval, flare);
+function ignite(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare, credit?: KillCredit): void {
+  setBurn(state, target, interval, flare, credit);
   if (flare.spread) {
     const window = hitWindow(state);
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || enemy.id === target.id || !inBand(target.alt, enemy.alt, window)) continue;
-      if (Math.hypot(enemy.x - target.x, enemy.z - target.z) <= flare.spread) setBurn(state, enemy, FLARE_BURN_INTERVAL, flare);
+      if (Math.hypot(enemy.x - target.x, enemy.z - target.z) <= flare.spread) {
+        setBurn(state, enemy, FLARE_BURN_INTERVAL, flare, rearWeaponCredit(state, enemy, flare.weapon ?? 'manual-flare'));
+      }
     }
   }
   // Keep the camera on the first impact while the rest of the volley arrives.
@@ -476,6 +502,7 @@ function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): bo
     delete target.burnUntil;
     delete target.burnNextAt;
     delete target.burnDamage;
+    if ('shotDown' in target) delete target.burnCredit;
     return false;
   }
   if (tick < target.burnNextAt) return false;
@@ -525,7 +552,9 @@ export function advanceFlares(state: StageState, ground: Ground): void {
   if (state.flareHit && state.tick >= state.flareHit.until) state.flareHit = null;
   // Burns already active on a returning craft keep aging during fly-in.
   for (const enemy of state.enemies) {
-    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL) && !enemy.entry) hurtEnemy(state, enemy, enemy.burnDamage ?? 1);
+    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL) && !enemy.entry) {
+      hurtEnemy(state, enemy, enemy.burnDamage ?? 1, enemy.burnCredit);
+    }
   }
   const boss = state.boss;
   const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
@@ -555,8 +584,9 @@ export function advanceFlares(state: StageState, ground: Ground): void {
       hurtWeakPoint(state, boss, flare.damage ?? 1);
       ignite(state, point, WARDEN_BURN_INTERVAL, flare);
     } else if (hit) {
-      hurtEnemy(state, hit, flare.damage ?? 1);
-      ignite(state, hit, FLARE_BURN_INTERVAL, flare);
+      const credit = rearWeaponCredit(state, hit, flare.weapon ?? 'manual-flare');
+      hurtEnemy(state, hit, flare.damage ?? 1, credit);
+      ignite(state, hit, FLARE_BURN_INTERVAL, flare, credit);
     } else if (terrain === Infinity) {
       flare.x += dx;
       flare.z += dz;
@@ -705,7 +735,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
       }
     }
     if (hit) {
-      hurtEnemy(state, hit, shot.damage);
+      hurtEnemy(state, hit, shot.damage, { weapon: 'twin' });
       shot.life = 0;
     }
   }
@@ -748,7 +778,7 @@ function advancePiercingShot(
     hit = true;
     bolt.hits.push(target.id);
     bolt.remaining--;
-    hurtEnemy(state, target, shot.damage * (pass?.pursuers.includes(target.id) ? 2 : 1));
+    hurtEnemy(state, target, shot.damage * (pass?.pursuers.includes(target.id) ? 2 : 1), friendlyShotCredit(state, target, shot));
     if (target.shotDown && pass) {
       target.reversalKill = true;
       pass.kills++;
@@ -850,7 +880,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (enemyHit) {
-        hurtEnemy(state, enemyHit, shot.damage);
+        hurtEnemy(state, enemyHit, shot.damage, friendlyShotCredit(state, enemyHit, shot));
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (miss < terrain && !shot.nearMiss && !misses.has(shot.volley)) {

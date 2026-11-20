@@ -39,7 +39,7 @@ test('three seeds per profile make the same replay hashes and profile reports on
   for (const row of first.profiles) {
     assert.ok(Math.abs(row.clearRate - row.bossClearRate - row.timeoutRate) < 1e-12);
     assert.equal(Object.values(row.endHull).reduce((sum, count) => sum + count, 0), 3);
-    assert.equal(row.billsPaidPct, null);
+    assert.ok(row.billsPaidPct >= 0 && row.billsPaidPct <= 100);
     assert.ok(Object.hasOwn(row.weapons, 'twin'));
   }
 });

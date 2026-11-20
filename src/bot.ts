@@ -100,6 +100,8 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
   let nextScout = 0;
   let preferredBand: Band = 1;
   let seeksAltitude = false;
+  let latestBill: string | null = null;
+  let handlesBill = false;
   let held: StageInput = {};
   return (state, ground) => {
     if (state.phase === 'chest') {
@@ -127,7 +129,13 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
       seeksAltitude = random(rng) < profile.altitudeUse;
       preferredBand = seeksAltitude ? scoutBand(state, profile) : nearestBand(state.player.altitude);
     }
+    const activeBill = state.bills.active?.id ?? null;
+    if (activeBill !== latestBill) {
+      latestBill = activeBill;
+      handlesBill = !!activeBill && random(rng) < profile.billsHandling;
+    }
     const perceived = perceive(state, profile, preferredBand);
+    if (!handlesBill) perceived.bills = { ...state.bills, active: null };
     const base = autopilotInput(perceived, 'full', ground);
     const aimOffset = (random(rng) * 2 - 1) * profile.aimErrorRad;
     const useManeuvers = random(rng) < profile.maneuverUse;

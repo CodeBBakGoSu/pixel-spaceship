@@ -1,8 +1,11 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
-import type { ChestId, DraftChoiceId, EvolutionId, WeaponId } from './data/items.ts';
+import type { ChestId, DraftChoiceId, EvolutionId, GearId, WeaponId } from './data/items.ts';
+import type { RunPhase } from './data/phases.ts';
 import type { ChestState } from './chests.ts';
+import type { BillState } from './bills.ts';
+import type { Profile, RunMetrics, hangarLoadout } from './meta.ts';
 import type { RunProgression } from './progression.ts';
 import type { RangedShotFields } from './ranged-weapons.ts';
 
@@ -19,10 +22,12 @@ export type StageOptions = {
   mobile?: boolean;
   aceRank?: number;
   heat?: number;
+  profile?: Profile;
+  daily?: boolean;
 };
 export type LegacyDraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
 export type DraftId = LegacyDraftId | DraftChoiceId;
-export type Outcome = 'clear' | 'timeout' | 'lost';
+export type Outcome = 'clear' | 'timeout' | 'lost' | 'retreated';
 export type ManeuverKind = 'immelmann' | 'split-s' | 'j-turn';
 export type Maneuver = {
   kind: ManeuverKind;
@@ -59,9 +64,13 @@ export type StageInput = {
   banish?: DraftChoiceId;
   skip?: boolean;
   chestPick?: WeaponId | 'open' | 'continue';
+  retreat?: boolean;
+  launch?: { profile: Profile; heat: number; seed: number; daily: boolean };
 };
 
 export type ChestReward = { kind: 'evolution'; id: EvolutionId } | { kind: 'upgrade'; id: DraftChoiceId; level?: number };
+export type KillCredit = { weapon?: WeaponId | 'manual-flare' | 'manual-bomb'; locked?: boolean; rear?: boolean };
+export type RunSummary = { seconds: number; credits: number; unlocked: GearId[]; wardenCache: boolean };
 
 export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
@@ -92,6 +101,7 @@ export type Enemy = Position & {
   entry?: FlyIn;
   leaveAt?: number;
   carrier?: ChestId;
+  killCredit?: KillCredit;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
   tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
@@ -110,6 +120,7 @@ export type Enemy = Position & {
   burnUntil?: number;
   burnNextAt?: number;
   burnDamage?: number;
+  burnCredit?: KillCredit;
   ionReadyAt?: number;
   droneReadyAt?: number;
   aegisReadyAt?: number;
@@ -174,6 +185,7 @@ export type Boss = {
   z: number;
   alt: number;
   entry?: FlyIn;
+  paced?: true;
   weakPoints: WeakPoint[];
   orbitAngle: number;
   orbitStartTick: number;
@@ -191,6 +203,16 @@ export type StageState = {
   rng: number;
   streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }>;
   run: RunProgression | null;
+  profile: Profile;
+  daily: boolean;
+  hangar: ReturnType<typeof hangarLoadout>;
+  metrics: RunMetrics;
+  killBandTicks: [number, number, number];
+  ejectorUsed: boolean;
+  summary: RunSummary | null;
+  phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;
+  bills: BillState;
+  lastHitTick: number;
   chests: ChestState;
   chestReveal: ChestReward[] | null;
   swarmCap: number;

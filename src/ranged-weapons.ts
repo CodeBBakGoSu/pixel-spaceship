@@ -1,4 +1,4 @@
-import { WEAPONS } from './data/items.ts';
+import { WEAPONS, type WeaponId } from './data/items.ts';
 import { RANGED_EVOLUTION_TUNING } from './data/ranged-evolutions.ts';
 import { familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
@@ -38,11 +38,11 @@ function lockedPoint(state: StageState, id = state.lock?.ready ? state.lock.id :
   return point?.exposed && point.id === id ? point : null;
 }
 
-function hitTarget(state: StageState, target: Target, damage: number): void {
+function hitTarget(state: StageState, target: Target, damage: number, weapon: WeaponId): void {
   if (weakPoint(target)) {
     if (state.boss) hurtWeakPoint(state, state.boss, damage);
   } else {
-    hurtEnemy(state, target, damage);
+    hurtEnemy(state, target, damage, { weapon });
   }
 }
 
@@ -148,7 +148,7 @@ function advanceRail(state: StageState, source: Position, level: number, ground:
   if (charge !== null && state.tick >= charge) {
     const damage = weaponDamage(state, 'rail', rail.damage[level - 1]);
     for (const target of contacts) {
-      if (onRail(target)) hitTarget(state, target, damage);
+      if (onRail(target)) hitTarget(state, target, damage, 'rail');
     }
     for (const line of lines) state.weaponFx.push({ kind: 'rail-beam', ...line, radius: width, until: state.tick + BEAM_TICKS });
     state.railChargeAt = null;
@@ -214,7 +214,7 @@ function fireStormCrown(state: StageState, source: Position, contacts: Target[],
     for (const target of contacts) {
       if (used.has(target.id) || !inBand(orb.alt, target.alt, targetWindow(state, target))
         || range2(orb, target) > tuning.radius ** 2 || visibleFraction(orb, target, ground) < 1) continue;
-      hitTarget(state, target, damage * tuning.damageScale);
+      hitTarget(state, target, damage * tuning.damageScale, 'arc');
       used.add(target.id);
       struck = true;
     }
@@ -250,7 +250,7 @@ function fireArc(state: StageState, source: Position, level: number, ground: Gro
     if (!target) break;
     const to = pose(target);
     const scale = i > 0 && nearestBand(from.alt) !== nearestBand(to.alt) ? arc.adjacentScale : 1;
-    hitTarget(state, target, damage * scale);
+    hitTarget(state, target, damage * scale, 'arc');
     used.add(target.id);
     state.weaponFx.push({ kind: 'arc-link', from, to, until: state.tick + LINK_TICKS });
     from = to;
@@ -260,7 +260,7 @@ function fireArc(state: StageState, source: Position, level: number, ground: Gro
     for (const enemy of state.enemies) {
       if (engaged(enemy) && !used.has(enemy.id) && range2(from, enemy) <= arc.explosionRadius ** 2
         && inBand(from.alt, enemy.alt, hitWindow(state)) && visibleFraction(from, enemy, ground) >= 1) {
-        hurtEnemy(state, enemy, damage * arc.explosionScale);
+        hurtEnemy(state, enemy, damage * arc.explosionScale, { weapon: 'arc' });
       }
     }
     state.weaponFx.push({ kind: 'arc-blast', from, radius: arc.explosionRadius, until: state.tick + BLAST_TICKS });
@@ -335,10 +335,13 @@ function explode(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' |
     && visibleFraction(shot, target, ground) >= 1;
   for (const target of state.enemies) {
     if (!engaged(target) || (!isFlak && Math.abs(nearestBand(target.alt) - shot.sourceBand) > 1)) continue;
-    if (matches(target)) hurtEnemy(state, target, shot.damage);
+    if (matches(target)) {
+      const credit = !isFlak && shot.targetId === target.id ? { weapon: shot.weapon, locked: true } : { weapon: shot.weapon };
+      hurtEnemy(state, target, shot.damage, credit);
+    }
   }
   const point = lockedPoint(state, shot.lockId);
-  if (point && matches(point)) hitTarget(state, point, shot.damage);
+  if (point && matches(point)) hitTarget(state, point, shot.damage, shot.weapon);
   state.weaponFx.push({
     kind: isFlak ? 'flak-blast' : 'seeker-blast',
     from: { x: shot.x, z: shot.z, alt: skybreaker ? BANDS[1] : shot.alt },
@@ -376,7 +379,7 @@ function advanceShards(
       }
     }
     if (!victim) return terrain;
-    hurtEnemy(state, victim, shot.damage);
+    hurtEnemy(state, victim, shot.damage, { weapon: 'flak' });
     if (!shot.pierce || --shot.pierce.remaining <= 0) return first;
     shot.pierce.hits.push(victim.id);
   }

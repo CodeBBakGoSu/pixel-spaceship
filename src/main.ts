@@ -1,23 +1,27 @@
 import './style.css';
 import { autopilotInput, seekStage } from './autoplay.ts';
+import { updateBillDisplay } from './bill-display.ts';
 import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
-import { CHESTS, DRAFT_RULES, EVOLUTIONS } from './data/items.ts';
+import { BUFF_IDS, CHESTS, DRAFT_RULES, EVOLUTIONS, WEAPON_IDS } from './data/items.ts';
+import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
+import { createHangarDisplay } from './hangar-display.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
+import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, bossTick, chestEvolutions, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
 import { bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { ChestReward, DraftId, Effect, LegacyDraftId, ManeuverKind, StageInput } from './stage-types.ts';
+import type { ChestReward, DraftId, Effect, LegacyDraftId, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -68,6 +72,10 @@ const query = new URLSearchParams(location.search);
 if (!query.has('mode') && !query.has('fixture')) query.set('mode', 'survivors');
 const options = parseStageOptions(query.toString());
 options.mobile = options.touch || coarse.matches;
+const PROFILE_KEY = 'aster-wing.pilot.v1';
+const persistent = options.mode === 'survivors' && !options.autoplay && !options.fixture && options.time === null;
+let profile = persistent ? readPilot() : normalizeProfile(null);
+options.profile = profile;
 const state = seekStage(options, ground);
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
@@ -75,6 +83,25 @@ const storage = {
 };
 let language = initialLanguage(location.search, navigator.language, storage);
 let t = createTranslator(language);
+let launchHeat: Heat = 0, launchDaily = false, pendingRetreat = false;
+const hangarDisplay = createHangarDisplay($('#hangar-panel'), {
+  onPurchase(id) {
+    if (state.phase === 'playing') return;
+    const next = purchaseUpgrade(profile, id);
+    if (!next) return;
+    profile = next;
+    persistPilot();
+    renderHangar();
+  },
+  onHeat(heat) {
+    launchHeat = normalizeHeat(heat, profile.maxHeat);
+    renderHangar();
+  },
+  onDaily(daily) {
+    launchDaily = daily;
+    renderHangar();
+  },
+});
 let scene: FlightScene | null = null;
 try {
   scene = new FlightScene(canvas, world, state.arena);
@@ -122,6 +149,30 @@ function setText(selector: string, copy: string): void {
     textNodes.set(selector, node);
   }
   if (node.textContent !== copy) node.textContent = copy;
+}
+
+function readPilot(): Profile {
+  try {
+    return normalizeProfile(JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null'));
+  } catch {
+    return normalizeProfile(null);
+  }
+}
+
+function persistPilot(): void {
+  if (!persistent) return;
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* Continue with the in-memory pilot. */ }
+}
+
+function renderHangar(): void {
+  hangarDisplay.update(profile, state.paused ? normalizeHeat(state.heat) : launchHeat, state.paused ? state.daily : launchDaily,
+    t, state.paused ? state.metrics : undefined);
+}
+
+function launchSettings(): StageInput['launch'] {
+  if (!state.run) return;
+  const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return { seed: launchDaily ? dailySeed(day) ?? options.seed : options.seed, heat: launchHeat, daily: launchDaily, profile };
 }
 
 function applyLanguage(): void {
@@ -235,7 +286,7 @@ function objectiveText(): string {
   }
   const seconds = Math.ceil((state.boss.exposeTick - state.tick) / TICKS_PER_SECOND);
   if (state.view === 'overhead') return point.exposed ? t('objective.boss') : t('objective.bossSignal', { seconds });
-  const part = t(point.kind === 'core' ? 'boss.core' : point.band === 2 ? 'boss.high' : 'boss.low');
+  const part = t(point.kind === 'core' ? 'boss.core' : point.band === 2 ? 'boss.high' : point.band === 1 ? 'boss.mid' : 'boss.low');
   return (point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds })) + navigation;
 }
 
@@ -276,6 +327,15 @@ function updateRadio(): void {
 }
 
 function updateHud(readout: RadarReadout): void {
+  updateBillDisplay(state, t);
+  const notice = state.phaseNotice, banner = $('#phase-banner');
+  banner.hidden = !notice || state.phase !== 'playing' || state.paused;
+  if (notice && !banner.hidden) {
+    const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.wardenInbound') : t(`phase.${notice.phase}`);
+    const lull = notice.kind === 'lull'
+      ? ' · ' + (notice.repaired ? t('phase.lullRepair', { hull: notice.repaired }) : t('phase.lull')) : '';
+    setText('#phase-banner', context + lull);
+  }
   if (paintedMaxHull !== state.maxHull) {
     while (hullSegments.length > state.maxHull) hullSegments.pop()?.remove();
     while (hullSegments.length < state.maxHull) {
@@ -463,7 +523,7 @@ function updateChestMenu(): void {
   const reward = state.chestReveal;
   const choices = $('#chest-choices'), reels = $('#chest-reels');
   const candidates = reward ? [] : chestEvolutions(state);
-  setText('#chest-kicker', t(evolving ? 'chest.evolution' : 'chest.supply'));
+  setText('#chest-kicker', t(!chest ? 'bill.cache' : evolving ? 'chest.evolution' : 'chest.supply'));
   setText('#chest-heading', t(reward ? 'chest.rewards' : evolving ? 'chest.evolution' : 'chest.supply'));
   setText('#chest-detail', reward ? '' : t(candidates.length ? 'chest.pick' : evolving ? 'chest.fallback' : 'chest.supplyCopy'));
   $('#chest-kicker').hidden = !reward;
@@ -520,6 +580,10 @@ function updateMenu(): void {
   draftCard.hidden = !drafting;
   chestCard.hidden = status !== 'chest';
   gameCard.hidden = !showing || drafting || status === 'guide' || status === 'chest';
+  $('#hangar-panel').hidden = !state.run || !persistent || !(status === 'title' || status === 'paused' || state.summary);
+  $('#run-summary').hidden = !state.summary;
+  $('#retreat-action').hidden = !state.run || status !== 'paused';
+  if (!$('#hangar-panel').hidden) renderHangar();
   if (showing) {
     resetTouch();
     pendingBomb = pendingFlare = false;
@@ -586,16 +650,40 @@ function updateMenu(): void {
       setText('#card-copy', t('menu.webgl.copy'));
       setText('#primary-action', t('menu.webgl.action'));
     } else {
-      const outcome = state.phase as 'clear' | 'timeout' | 'lost';
+      const outcome = state.phase as Outcome;
       setText('#card-kicker', t('menu.result.kicker'));
       setText('#card-title', t(`menu.${outcome}.title`));
       setText('#card-copy', t('menu.result.copy', { hull: state.hull, maxHull: state.maxHull, hits: state.hitsTaken, salvage: state.salvage, score: state.score }));
       setText('#rank-display', t('menu.result.rank', { rank: state.rank ?? '' }));
       setText('#primary-action', t('menu.result.action'));
       setText('#card-hint', t('menu.result.hint'));
+      renderSummary();
     }
     if (oldStatus && oldStatus !== 'guide') primary.focus({ preventScroll: true });
   }
+}
+
+function renderSummary(): void {
+  const run = state.run, summary = state.summary;
+  const panel = $('#run-summary');
+  if (!run || !summary) return;
+  const gear = WEAPON_IDS.filter(id => run.weaponLevels[id]).map(id => t(`item.${run.evolutions[id] ?? id}.title`))
+    .concat(BUFF_IDS.filter(id => run.buffLevels[id]).map(id => t(`item.${id}.title`)));
+  const copy = [
+    t('menu.summary.stats', { time: clockText(Math.floor(summary.seconds)), kills: state.kills, levels: state.level - 1,
+      paid: state.bills.paid, offered: state.bills.offered }),
+    t('menu.summary.loadout', { gear: gear.join(' · ') }),
+    state.daily ? t('menu.summary.daily', { seed: state.seed }) : t('menu.summary.credits', { credits: summary.credits }),
+  ];
+  if (summary.wardenCache) copy.push(t('menu.summary.warden'));
+  if (summary.unlocked.length) copy.push(t('menu.summary.unlocked', {
+    gear: summary.unlocked.map(id => t(`item.${id}.title`)).join(' · '),
+  }));
+  panel.replaceChildren(...copy.map(line => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = line;
+    return paragraph;
+  }));
 }
 
 function openGuide(mode: 'launch' | 'help'): void {
@@ -630,6 +718,7 @@ function choose(index: number): void {
 }
 
 primary.addEventListener('click', action);
+$('#retreat-action').addEventListener('click', () => { pendingRetreat = true; });
 chestAction.addEventListener('click', () => { pendingChest = state.chestReveal ? 'continue' : 'open'; });
 guidePrimary.addEventListener('click', () => closeGuide(true));
 guideSkip.addEventListener('click', () => closeGuide(true));
@@ -820,12 +909,15 @@ function flightInput(): StageInput {
 function advance(): void {
   if (!scene || guide) return;
   const before = state.tick, yaw = state.player.yaw;
+  const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
     ...control,
     start: pendingStart,
+    launch: pendingStart ? launchSettings() : undefined,
+    retreat: pendingRetreat,
     pause: pendingPause,
     bomb: pendingBomb || control.bomb,
     flare: pendingFlare || control.flare,
@@ -836,10 +928,15 @@ function advance(): void {
     ...pendingDraft,
   }, ground);
   pendingStart = pendingPause = pendingBomb = pendingFlare = false;
+  pendingRetreat = false;
   if (pendingViews) pendingViews--;
   pendingDraft = {};
   pendingChest = undefined;
   pendingManeuver = undefined;
+  if (state.summary && state.summary !== priorSummary) {
+    profile = state.profile;
+    persistPilot();
+  }
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
     const ease = (from: number, to: number) => from + (to - from) * 0.19;
@@ -994,6 +1091,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
   kills: state.kills, fodderCount: state.enemies.filter(enemy => enemy.kind === 'gnat').length,
+  heat: state.heat, daily: state.daily, maxHull: state.maxHull, billsPaid: state.bills.paid,
   weaponLevels: state.run?.weaponLevels, buffLevels: state.run?.buffLevels, swarmCap: state.swarmCap,
   tracers: state.shots.filter(shot => shot.reversal || shot.kind === 'strafe').map(shot => ({
     kind: shot.reversal ? 'reversal' : shot.kind, x: shot.x, z: shot.z, alt: shot.alt, vx: shot.vx, vz: shot.vz,

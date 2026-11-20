@@ -33,12 +33,18 @@ function routeFor(state: StageState, mode: PilotMode): Route {
     const { target } = boss.entry;
     return { x: weak.x + target.x - boss.x, z: weak.z + target.z - boss.z, alt: weak.alt + target.alt - boss.alt, kind: 'weak' };
   }
-  if (weak) return { ...weak, kind: 'weak' };
+  if (weak && (!boss?.paced || weak.exposed || boss.exposeTick - state.tick <= 8 * TICKS_PER_SECOND)) {
+    return { ...weak, kind: 'weak' };
+  }
   if (mode === 'full' && state.run) {
     const chest = nearest(state.chests.drops, p.x, p.z);
     if (chest) return { ...chest, kind: 'pickup' };
     const carrier = nearest(state.enemies.filter(enemy => enemy.carrier && !enemy.entry && enemy.hp > 0), p.x, p.z);
     if (carrier) return { ...carrier, kind: 'enemy' };
+    if (state.bills.active?.id === 'high-recovery') {
+      const salvage = nearest(state.pickups.filter(pickup => pickup.alt >= (BANDS[1] + BANDS[2]) / 2), p.x, p.z);
+      if (salvage) return { ...salvage, kind: 'pickup' };
+    }
   }
   const pass = state.reversal;
   if (mode === 'full' && pass && state.tick < pass.until) {
@@ -46,7 +52,7 @@ function routeFor(state: StageState, mode: PilotMode): Route {
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
     if (former) return { ...former, kind: 'enemy' };
   }
-  if (mode === 'full' && state.tick >= beaconTick(state)
+  if (mode === 'full' && !boss && state.tick >= beaconTick(state)
     && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
     && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
     return { ...LANDMARKS.atoll, kind: 'beacon' };

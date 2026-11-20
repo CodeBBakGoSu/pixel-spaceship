@@ -45,3 +45,13 @@ With four weapons equipped, mounts add at most 288 triangles and three orbit dro
 The four carrier arrivals use the authored times and an isolated placement stream. They award 30 salvage XP and leave their cache in their altitude band. Supply caches roll 1, 3, or 5 upgrades. Evolution caches offer one eligible recipe with 1–2 bonus upgrades or three upgrades when the build has no completed pair. Each reward uses the chest stream and favors upgrading owned gear. Family bonuses count equipped weapons, including evolved forms, and apply the highest eligible tier.
 
 The six full-view replays opened all four caches and evolved one or two weapons on both caps. They cleared in 494.45–507.62 s, with 618–691 kills and 24–25 level-ups. The same RTX 4090 stress fixture with four evolved weapons held 60 FPS in all three views. Desktop p95 stayed at or below 16.8 ms and emulated portrait at 16.7 ms. The chest batch adds at most 144 triangles and the fourth Collector drone costs 36.
+
+## Stage 4
+
+- New profiles draw from the five starter weapons and five starter buffs in the design. Quest progress makes new gear available on the next draft or cache roll and carries into later sorties. A daily sortie uses the KST date seed, fixed starter gear, base hull, Heat 0, and four slots of each type.
+- The five Bills open at 1:00, 2:30, 4:15, 5:45, and 7:15. Progress comes from actual flight events. Unpaid Bills reduce XP by 25% until the next offer. Paid upgrades use the Bills stream. A retreat settles quest progress and pays half credits.
+- The phase director starts each sortie at 10 hull, repairs two at each 15-second lull, and repairs one on carrier-cache pickup. A 15% XP multiplier compensates for terrain, missed pickups, and Bill interest while keeping the level-cost curve.
+- The Warden arrives at 8:00. Three pods fire different salvos during the shield cycle. The core opens at 9:48 after the pods are destroyed. Heat 4 adds a middle relay. The sortie clock stops at 10:00.
+- Heat now uses cumulative effects from the design. Heat 1 grants 15% armor, Heat 2 speeds hostile salvos, Heat 3 reduces attraction radius, Heat 4 adds a relay, and Heat 5 adds carrier escorts. The reward multiplier is 15% per tier.
+
+All six full-view seeds cleared on each cap in 592.40–599.68 s, with 708–765 kills and 26–27 level-ups. The Warden was active for 112.40–119.68 s. The RTX 4090 stress fixture held 60 FPS in all views at 1920×1080 and emulated 390×844, with p95 at or below 16.8 ms on both caps.

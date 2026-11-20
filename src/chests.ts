@@ -1,6 +1,6 @@
 import { CARRIER_TUNING, CHEST_PICKUP_RADIUS } from './data/chest-tuning.ts';
 import { CHESTS, type ChestId } from './data/items.ts';
-import { HEAT_ARMOR_SCALES } from './data/run-balance.ts';
+import { HEAT_TIERS } from './data/meta.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { buffTuning } from './loadout.ts';
 import { keepInsideArena } from './reach.ts';
@@ -44,7 +44,8 @@ export function advanceChestSpawns(state: StageState, ground: Ground): void {
   const chest = CHESTS[state.chests.next];
   if (!chest || state.tick < chest.second * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) return;
   const regular = state.enemies.filter(enemy => enemy.hp > 0 && enemy.kind !== 'gnat');
-  const escort = 'escort' in chest && chest.escort;
+  const heat = HEAT_TIERS[state.heat];
+  const escort = heat.carrierEscort || ('escort' in chest && chest.escort);
   // A saturated wave leaves the event pending until its slots are available.
   if (regular.length + (escort ? 3 : 1) > enemyLimit(state)
     || regular.filter(enemy => enemy.kind === 'bomber').length >= ENEMY_KINDS.bomber.cap) return;
@@ -60,7 +61,7 @@ export function advanceChestSpawns(state: StageState, ground: Ground): void {
 
   const carrier = makeEnemy(state, position.x, position.z, position.band, 'bomber');
   carrier.carrier = chest.id;
-  carrier.hp = Math.round(tuning.hp * HEAT_ARMOR_SCALES[state.heat]);
+  carrier.hp = Math.round(tuning.hp * heat.armorScale);
   carrier.yaw = Math.atan2(anchor.x - carrier.x, anchor.z - carrier.z);
 
   const first = state.enemies.length;

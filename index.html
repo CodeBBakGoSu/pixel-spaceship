@@ -69,13 +69,16 @@
   <div id="rear-view-cue" class="rear-view-cue" role="status" hidden></div>
   <samp id="cockpit-delta" class="screen-reader" hidden></samp>
   <div id="view-tag" class="view-tag" hidden></div>
+  <div id="phase-banner" class="phase-banner" role="status" hidden></div>
   <section class="game-overlay" id="game-overlay" data-label="aria.menu" hidden>
     <div class="game-card">
       <div class="card-kicker" id="card-kicker"></div>
       <h1 id="card-title"></h1>
       <p id="card-copy"></p>
       <div id="rank-display" class="rank-display" hidden></div>
+      <div id="run-summary" class="run-summary" hidden></div>
       <div class="card-actions"><button type="button" id="primary-action"></button></div>
+      <button type="button" id="retreat-action" class="help-action" data-i18n="menu.retreat" hidden></button>
       <div class="card-hint" id="card-hint"></div>
       <div class="card-options" id="card-options" hidden>
         <button class="help-action" id="help-action" type="button"><b aria-hidden="true">?</b><span id="help-action-label"></span></button>
@@ -84,6 +87,7 @@
           <button type="button" lang="ko" data-lang="ko" data-i18n="language.ko" aria-pressed="false"></button>
         </div>
       </div>
+      <div id="hangar-panel" hidden></div>
     </div>
     <section class="game-card draft-card" id="draft-card" role="dialog" aria-modal="true" aria-labelledby="draft-heading" hidden>
       <div class="card-kicker" id="draft-detail"></div>
