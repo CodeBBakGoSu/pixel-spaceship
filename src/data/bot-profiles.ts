@@ -25,7 +25,7 @@ export const BOT_PROFILES = {
     altitudeUse: 0.58, pickupGreed: 0.65, draftPickQuality: 0.63, chestPick: 0.65, billsHandling: 0.56,
   },
   weak: {
-    reactionDelayTicks: 19, aimErrorRad: 0.43, dodgeQuality: 0.18, maneuverUse: 0.23,
+    reactionDelayTicks: 19, aimErrorRad: 0.46, dodgeQuality: 0.04, maneuverUse: 0.23,
     altitudeUse: 0.24, pickupGreed: 0.36, draftPickQuality: 0.17, chestPick: 0.35, billsHandling: 0.22,
   },
 } as const satisfies Record<BotProfileId, BotProfile>;

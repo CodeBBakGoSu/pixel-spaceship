@@ -55,3 +55,22 @@ The six full-view replays opened all four caches and evolved one or two weapons 
 - Heat now uses cumulative effects from the design. Heat 1 grants 15% armor, Heat 2 speeds hostile salvos, Heat 3 reduces attraction radius, Heat 4 adds a relay, and Heat 5 adds carrier escorts. The reward multiplier is 15% per tier.
 
 All six full-view seeds cleared on each cap in 592.40–599.68 s, with 708–765 kills and 26–27 level-ups. The Warden was active for 112.40–119.68 s. The RTX 4090 stress fixture held 60 FPS in all views at 1920×1080 and emulated 390×844, with p95 at or below 16.8 ms on both caps.
+
+## Balance pass
+
+The first 18-seed trial used seeds 1001–1018. Clear rates were 100% skilled, 94% average, and 22% weak, with weak median survival at 539 s. Three hull damage and 80% of the original regular-enemy fire interval still left the average and weak pilots above the survival targets. The final fire interval is **62%**, and hostile hits cost **3 hull**. The weak pilot uses **0.46 rad** aim error and **0.04 dodge quality**. It still steers, collects salvage, and uses flight abilities with the same input interface as the other pilots.
+
+The final comparison used **100 fresh-profile seeds per pilot per cap** at Heat 0, seeds 1–100. A clear includes a Warden defeat or a living 10:00 timeout. Actual run length and survival percentiles are both shown. The latter use the 600-second survival horizon for surviving runs.
+
+| Cap | Pilot | Clears | Warden defeats | Live timeouts | Survival p10 / median / p90 | Median run | Median end hull | Median kills | Median level-ups | Bills paid |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Desktop 80 | Skilled | 93% | 90% | 3% | 600 / 600 / 600 s | 592.7 s | 9 | 753.5 | 26 | 55.8% |
+| Desktop 80 | Average | 63% | 62% | 1% | 537.2 / 600 / 600 s | 590.8 s | 6 | 710.5 | 26 | 54.2% |
+| Desktop 80 | Weak | 6% | 1% | 5% | 97.9 / 273.2 / 549.0 s | 273.2 s | 0 | 208 | 12.5 | 45.4% |
+| Mobile 50 | Skilled | 93% | 90% | 3% | 600 / 600 / 600 s | 592.7 s | 9 | 753.5 | 26 | 55.8% |
+| Mobile 50 | Average | 63% | 62% | 1% | 537.2 / 600 / 600 s | 590.8 s | 6 | 710.5 | 26 | 54.2% |
+| Mobile 50 | Weak | 6% | 1% | 5% | 97.9 / 273.2 / 549.0 s | 273.2 s | 0 | 208 | 12.5 | 45.4% |
+
+The batches produced identical per-seed combat results across caps. The JSON and CSV reports under `sim-out/` include death-phase and hull distributions, gear reached, and evolution counts. The JSON also records each replay hash. To reproduce a batch, run `npm run sim -- --profile skilled --seeds 100 --from 1`, substituting the pilot and adding `--mobile` for that cap.
+
+The six full-view replays still cleared with 26–28 level-ups and 710–790 kills in 590.90–596.28 s, for Warden fights of 110.90–116.28 s. The final stress check held 60 FPS in all views with desktop p95 of 16.7 ms and emulated portrait p95 at or below 16.8 ms.
