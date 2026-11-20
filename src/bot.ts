@@ -3,6 +3,7 @@ import { BOT_DRAFT_VALUES, BOT_POLICY, BOT_PROFILES, type BotProfile, type BotPr
 import { DRAFT_RULES, EVOLUTIONS, WEAPONS, WEAPON_IDS } from './data/items.ts';
 import { isWeaponId, type DraftCard } from './progression.ts';
 import { BANDS, clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, MINE_RADIUS } from './stage-combat.ts';
+import { chestEvolutions } from './stage.ts';
 import { random, rngStream } from './stage-random.ts';
 import type { Band, Ground, Position, StageInput, StageState } from './stage-types.ts';
 
@@ -64,6 +65,8 @@ function perceive(state: StageState, profile: BotProfile, band: Band): StageStat
     enemyMines: state.enemyMines.filter(mine => withinThreatRange(mine, MINE_RADIUS)),
     effects: state.effects.filter(effect => effect.kind === 'flak' && withinThreatRange(effect, FLAK_RADIUS)),
     pickups: state.pickups.filter(pickup => onBand(pickup) && Math.hypot(pickup.x - p.x, pickup.z - p.z) <= pickupRange),
+    chests: { ...state.chests, drops: state.chests.drops.filter(drop =>
+      (profile.altitudeUse > 0.8 || onBand(drop)) && Math.hypot(drop.x - p.x, drop.z - p.z) <= pickupRange) },
   };
 }
 
@@ -99,6 +102,15 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
   let seeksAltitude = false;
   let held: StageInput = {};
   return (state, ground) => {
+    if (state.phase === 'chest') {
+      if (state.chestReveal) return { chestPick: 'continue' };
+      const candidates = chestEvolutions(state);
+      if (!candidates.length) return { chestPick: 'open' };
+      const weapon = random(rng) < profile.chestPick
+        ? candidates.reduce((best, candidate) => BOT_DRAFT_VALUES[candidate] > BOT_DRAFT_VALUES[best] ? candidate : best)
+        : candidates[Math.floor(random(rng) * candidates.length)];
+      return { chestPick: weapon };
+    }
     if (state.phase === 'draft') {
       const cards = state.run?.cards;
       if (!cards?.length) return autopilotInput(state, 'full', ground);

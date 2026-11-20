@@ -8,8 +8,10 @@ import {
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
+import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
-import { WEAPONS } from './data/items.ts';
+import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
+import { CHESTS, WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
 import { PICKUP_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
@@ -98,6 +100,12 @@ export function makeGnatBatch(): InstancedMesh {
   return mesh;
 }
 
+export function makeChestBatch(): InstancedMesh {
+  const mesh = instances(new BoxGeometry(), CHESTS.length * 3);
+  mesh.name = 'Carrier beacons and supply crates';
+  return mesh;
+}
+
 type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
@@ -106,7 +114,7 @@ const BOMB_VISUAL_LIMIT = 16;
 const WEAPON_LINK_LIMIT = 128;
 const WEAPON_RING_LIMIT = 16;
 const FLAK_COLUMN_LIMIT = 8;
-const ORBIT_DRONE_LIMIT = Math.max(...WEAPONS.drones.tuning.count);
+const ORBIT_DRONE_LIMIT = CLOSE_EVOLUTIONS.collector.count;
 const RANGED_SHOT_STYLE: Partial<Record<Shot['kind'], readonly [width: number, length: number, color: number]>> = {
   seeker: [1.8, 5.8, 0xffd18c],
   'flak-shell': [2.25, 3.2, 0xff965b],
@@ -191,6 +199,7 @@ export class FlightScene {
   private readonly weakPointBorder = new LineSegments(new EdgesGeometry(this.weakPoints.geometry),
     new LineBasicMaterial({ color: 0xffefac }));
   private readonly pickups = instances(new BoxGeometry(), PICKUP_LIMIT);
+  private readonly chestMarkers = makeChestBatch();
   private readonly pickupTrails = instances(new BoxGeometry(), PICKUP_LIMIT,
     new MeshBasicMaterial({ transparent: true, opacity: 0.58, depthWrite: false }));
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
@@ -225,7 +234,7 @@ export class FlightScene {
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
-    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
+    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
@@ -537,6 +546,10 @@ export class FlightScene {
   private drawWeaponEffects(state: StageState, flat: boolean, links: number): void {
     const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
     let rings = 0, columns = 0, drones = 0;
+    if (state.run?.evolutions.pods) {
+      const p = state.player, radius = CLOSE_EVOLUTIONS.aegis.radius;
+      this.write(this.weaponRings, rings++, p.x, p.z, plane ?? p.altitude, 0, radius, 1, radius, 0xb3eaff);
+    }
     for (const drone of state.orbitDrones) {
       if (drones === this.defenseDrones.instanceMatrix.count) break;
       this.write(this.defenseDrones, drones++, drone.x, drone.z, plane ?? drone.alt, drone.yaw, 1, 1, 1, 0xffffff);
@@ -569,13 +582,15 @@ export class FlightScene {
           this.write(this.weaponRings, rings++, from.x, from.z, plane ?? from.alt, 0, radius, 1, radius, tint);
         }
         if (!flat && fx.kind === 'flak-blast' && columns < FLAK_COLUMN_LIMIT) {
-          this.write(this.flakColumns, columns++, from.x, from.z, from.alt, 0,
-            radius, hitWindow(state, WEAPONS.flak.tuning.halfHeight), radius, tint);
+          const height = fx.halfHeight ?? hitWindow(state, WEAPONS.flak.tuning.halfHeight);
+          this.write(this.flakColumns, columns++, from.x, from.z, from.alt, 0, radius, height, radius, tint);
         }
       }
     }
     const wake = state.ionWake;
-    const width = WEAPONS.ion.tuning.width[(state.run?.weaponLevels.ion ?? 1) - 1];
+    const plasma = !!state.run?.evolutions.ion;
+    const width = WEAPONS.ion.tuning.width[(state.run?.weaponLevels.ion ?? 1) - 1]
+      * (plasma ? CLOSE_EVOLUTIONS.plasma.widthScale : 1);
     for (let i = 1; i < wake.length && links < WEAPON_LINK_LIMIT; i++) {
       const from = wake[i - 1], to = wake[i];
       const left = Math.min(from.until, to.until) - state.tick;
@@ -585,9 +600,9 @@ export class FlightScene {
       if (!flat && height > 1.5) {
         const dx = to.x - from.x, dz = to.z - from.z;
         this.write(this.weaponLinks, links++, (from.x + to.x) / 2, (from.z + to.z) / 2, (from.alt + to.alt) / 2,
-          Math.atan2(dx, dz), size, height + size, Math.hypot(dx, dz) + size * 0.4, 0x43c6b3);
+          Math.atan2(dx, dz), size, height + size, Math.hypot(dx, dz) + size * 0.4, plasma ? 0xba93ff : 0x43c6b3);
       } else {
-        this.connect(this.weaponLinks, links++, from, to, size, 0x66f5d9, plane);
+        this.connect(this.weaponLinks, links++, from, to, size, plasma ? 0xe4bdff : 0x66f5d9, plane);
       }
     }
     upload(this.defenseDrones, drones);
@@ -603,7 +618,7 @@ export class FlightScene {
     this.drawTrail(state, trail, flat, external);
     const fireTint = Math.floor(state.tick / 6) % 2 ? 0xff9564 : 0xffbf78;
 
-    let shadows = 0, drones = 0, gnats = 0, rings = 0, marked = 0, trails = 0;
+    let shadows = 0, drones = 0, gnats = 0, rings = 0, marked = 0, trails = 0, chestMarkers = 0;
     if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
@@ -619,9 +634,15 @@ export class FlightScene {
       const batch = this.airframeByKind.get(enemy.kind);
       const warning = (enemy.tell || enemy.maneuver?.phase === 'warning') && Math.floor(state.tick / 7) % 2;
       const paint = (enemy.burnUntil ?? 0) > state.tick ? fireTint : enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069
-        : batch ? 0xffffff : 0xffe5db;
+        : enemy.carrier ? 0xffe4aa : batch ? 0xffffff : 0xffe5db;
       const mesh = batch?.mesh ?? this.drones, index = batch ? batch.count++ : drones++;
       this.write(mesh, index, enemy.x, enemy.z, flat ? TOP_FLIGHT : enemy.alt, enemy.yaw, 1, 1, 1, paint, flat ? 0 : enemy.bank);
+      if (enemy.carrier) {
+        const alt = flat ? TOP_FLIGHT + 10 : enemy.alt + 13;
+        const gold = enemy.entry ? 0xe0be8a : 0xffe5a3;
+        this.write(this.chestMarkers, chestMarkers++, enemy.x - 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, Math.PI / 4);
+        this.write(this.chestMarkers, chestMarkers++, enemy.x + 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, -Math.PI / 4);
+      }
       if ((enemy.entry || enemy.flyby) && trails + 2 <= this.enemyTrails.instanceMatrix.count) {
         const fx = Math.sin(enemy.yaw), fz = Math.cos(enemy.yaw);
         const sideX = 3.2 * fz, sideZ = -3.2 * fx;
@@ -699,6 +720,16 @@ export class FlightScene {
     upload(this.pickups, salvage);
     upload(this.pickupTrails, magnetTrails);
 
+    for (const drop of state.chests.drops) {
+      const tint = chestDefinition(drop.id).kind === 'evolution' ? 0xffbd62 : 0x96e9d2;
+      const alt = flat ? TOP_FLIGHT + 8 : drop.alt;
+      const yaw = state.tick / 80;
+      this.write(this.chestMarkers, chestMarkers++, drop.x, drop.z, alt, yaw, 10, 6, 8, 0x334c58);
+      this.write(this.chestMarkers, chestMarkers++, drop.x, drop.z, alt + 3.1, yaw, 11, 2.4, 8.8, tint);
+      this.write(this.chestMarkers, chestMarkers++, drop.x, drop.z, alt + 1.25, yaw, 2.8, 4.1, 9, 0xfff0b1);
+    }
+    upload(this.chestMarkers, chestMarkers);
+
     let bullets = 0, weaponLinks = 0;
     const eye = view === 'cockpit' ? this.cockpit.position : null;
     for (const shot of state.shots) {
@@ -712,7 +743,8 @@ export class FlightScene {
       const style = RANGED_SHOT_STYLE[shot.kind];
       const width = style?.[0] ?? (hostile ? 2.4 : reversal ? (eye ? 2.6 : 3.4) : 1.15);
       const length = style?.[1] ?? (hostile ? 4.3 : reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2);
-      const tint = style?.[2] ?? (hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
+      const tint = shot.aurora ? reversal ? 0x89ffea : 0xbd96ff
+        : style?.[2] ?? (hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
       this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         width, width, length, tint, 0, pitch);
       if (shot.kind === 'seeker' && weaponLinks < WEAPON_LINK_LIMIT) {
@@ -737,7 +769,7 @@ export class FlightScene {
       if (bombs === BOMB_VISUAL_LIMIT) break;
       const yaw = Math.atan2(bomb.vx, bomb.vz), age = state.tick - bomb.born;
       this.write(this.bombs, bombs++, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt, yaw, 3.7, 3.7, 5.4,
-        bomb.weapon === 'bomb-bay' ? 0xfac186 : 0xff91a8, age * 0.07);
+        bomb.carpet ? 0xffed99 : bomb.weapon === 'bomb-bay' ? 0xfac186 : 0xff91a8, age * 0.07);
       if (age > 0 && sparks < 240) {
         this.write(this.sparks, sparks++, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt + 3.5, yaw, 1, 2, 1, 0xffb957);
       }

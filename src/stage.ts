@@ -9,10 +9,11 @@ import { random, rngStream } from './stage-random.ts';
 import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { HEAT_ARMOR_SCALES, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT, REGULAR_SALVAGE_MULTIPLIER,
   RUN_BEACON_LEAD_SECONDS, WEAPON_FX_LIMIT } from './data/run-balance.ts';
-import { BUFFS, BUFF_IDS, DRAFT_RULES, WEAPON_IDS } from './data/items.ts';
+import { BUFFS, BUFF_IDS, CHESTS, DRAFT_RULES, WEAPON_IDS } from './data/items.ts';
+import { advanceChestSpawns, collectChest, createChestState, dropCarrierChest, rollChestRewards } from './chests.ts';
 import { buffTuning } from './loadout.ts';
-import { applyRunPick, banishRunCard, createProgression, openRunDraft, rerollRunDraft, runXpCost,
-  skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
+import { applyRunPick, availableEvolutions, banishRunCard, createProgression, evolveWeapon, openRunDraft,
+  rerollRunDraft, rollBonusUpgrade, runXpCost, skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
@@ -22,7 +23,8 @@ import {
   MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
   openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { Band, Boss, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome,
+  StageInput, StageOptions, StageState } from './stage-types.ts';
 
 export { activeWeakPoint } from './stage-combat.ts';
 export const END_TICK = LEGACY_END_SECONDS * TICKS_PER_SECOND;
@@ -150,6 +152,10 @@ function finishDraft(state: StageState, id?: DraftId): void {
   if (id) state.picks.push(id);
   state.draft = [];
   state.graceUntil = state.tick + 18;
+  resumePlay(state);
+}
+
+function resumePlay(state: StageState): void {
   const pending = state.resultPending;
   const nextCost = requiredXp(state.level, !!state.run);
   if (nextCost !== null && state.xp >= nextCost) {
@@ -161,17 +167,51 @@ function finishDraft(state: StageState, id?: DraftId): void {
   }
 }
 
+export function chestEvolutions(state: StageState) {
+  return state.run && CHESTS.some(chest => chest.id === state.chests.offer && chest.kind === 'evolution')
+    ? availableEvolutions(state.run) : [];
+}
+
+export function grantBonusUpgrade(state: StageState, rng: { rng: number }): ChestReward | null {
+  if (!state.run) return null;
+  const card = rollBonusUpgrade(state.run, rng);
+  applyGearEffects(state, card);
+  return { kind: 'upgrade', id: card.id, ...(card.maxLevel && card.nextLevel > card.currentLevel ? { level: card.nextLevel } : {}) };
+}
+
+function resolveChest(state: StageState, choice: NonNullable<StageInput['chestPick']>): void {
+  const { offer } = state.chests;
+  if (!state.run || !offer) return;
+  if (state.chestReveal) {
+    if (choice === 'continue') {
+      state.chests.opened++;
+      state.chests.offer = null;
+      state.chestReveal = null;
+      state.graceUntil = state.tick + 18;
+      resumePlay(state);
+    }
+    return;
+  }
+  if (choice === 'continue') return;
+  const candidates = chestEvolutions(state);
+  if (candidates.length ? choice === 'open' || !candidates.includes(choice) : choice !== 'open') return;
+  const evolved = choice === 'open' ? null : evolveWeapon(state.run, choice);
+  const reward: ChestReward[] = evolved ? [{ kind: 'evolution', id: evolved }] : [];
+  const upgrades = rollChestRewards(state, offer, !!evolved);
+  for (let i = 0; i < upgrades; i++) {
+    const upgrade = grantBonusUpgrade(state, state.streams.chest);
+    if (upgrade) reward.push(upgrade);
+  }
+  state.chestReveal = reward;
+}
+
 function selectDraft(state: StageState, id: DraftId): void {
   if (!state.draft.includes(id)) return;
   const run = state.run;
   if (run) {
     const card = run.cards.find(card => card.id === id);
     if (!card || !applyRunPick(run, card.id)) return;
-    if (card.id === 'repair') state.hull = Math.min(state.maxHull, state.hull + DRAFT_RULES.repairHull);
-    if (card.variant === 'risky') state.hull -= DRAFT_RULES.riskHull;
-    adjustBuffStores(state, card);
-    state.twinRank = (run.weaponLevels.twin ?? 1) >= 3 ? 3 : run.weaponLevels.twin === 2 ? 2 : 1;
-    state.podRank = (run.weaponLevels.pods ?? 0) >= 2 ? 2 : 1;
+    applyGearEffects(state, card);
   } else {
     if (id === 'twin-2') state.twinRank = 2;
     if (id === 'twin-3') state.twinRank = 3;
@@ -180,6 +220,15 @@ function selectDraft(state: StageState, id: DraftId): void {
     if (id === 'pods-damage') state.podDamage = 2;
   }
   finishDraft(state, id);
+}
+
+function applyGearEffects(state: StageState, card: DraftCard): void {
+  const run = state.run!;
+  if (card.id === 'repair') state.hull = Math.min(state.maxHull, state.hull + DRAFT_RULES.repairHull);
+  if (card.variant === 'risky') state.hull -= DRAFT_RULES.riskHull;
+  adjustBuffStores(state, card);
+  state.twinRank = (run.weaponLevels.twin ?? 1) >= 3 ? 3 : run.weaponLevels.twin === 2 ? 2 : 1;
+  state.podRank = (run.weaponLevels.pods ?? 0) >= 2 ? 2 : 1;
 }
 
 function adjustBuffStores(state: StageState, card: DraftCard): void {
@@ -309,6 +358,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
     run: options.mode === 'survivors'
       ? createProgression(options.seed, { rank: options.aceRank, weapons: WEAPON_IDS, buffs: BUFF_IDS }) : null,
+    chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
     aceRank: options.aceRank ?? 0,
     heat: Number.isFinite(options.heat) ? clamp(Math.floor(options.heat!), 0, HEAT_ARMOR_SCALES.length - 1) : 0,
@@ -457,7 +507,9 @@ function advanceSalvage(state: StageState, ground: Ground): void {
   const p = state.player;
   for (const enemy of state.enemies) {
     if (!enemy.shotDown) continue;
-    const xp = ENEMY_KINDS[enemy.kind].xp * (state.run && enemy.kind !== 'gnat' ? REGULAR_SALVAGE_MULTIPLIER : 1);
+    const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
+    const xp = chest ? chest.carrierXp : ENEMY_KINDS[enemy.kind].xp * (state.run && enemy.kind !== 'gnat' ? REGULAR_SALVAGE_MULTIPLIER : 1);
+    if (chest) dropCarrierChest(state, enemy, ground);
     state.kills++;
     state.score += xp * 100;
     state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
@@ -472,13 +524,13 @@ function advanceSalvage(state: StageState, ground: Ground): void {
   const beacon = buffTuning(state, 'salvage-beacon');
   state.pickups = state.pickups.filter(pickup => {
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
-    if (!inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
+    if (!pickup.collected && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
       pickup.pulling = false;
       return true;
     }
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
-    if (range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1))) {
+    if (!pickup.collected && range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1))) {
       const speed = Math.min(155, horizontalSpeed + (pickup.reversal ? 75 : 45));
       const pull = Math.min(range, speed * STEP) / range;
       const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
@@ -488,7 +540,7 @@ function advanceSalvage(state: StageState, ground: Ground): void {
         pickup.z = z;
       }
     }
-    if (Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
+    if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
       const adjusted = pickup.xp * (beacon?.xpScale ?? 1) + state.xpRemainder;
       const whole = Math.floor(adjusted + 1e-9);
       state.xp += whole;
@@ -505,6 +557,10 @@ function advanceSalvage(state: StageState, ground: Ground): void {
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel): void {
+  if (state.phase === 'chest') {
+    if (input.chestPick) resolveChest(state, input.chestPick);
+    return;
+  }
   if (state.phase === 'draft') {
     const run = state.run;
     if (run && input.reroll && rerollRunDraft(run)) state.draft = run.cards.map(card => card.id);
@@ -567,6 +623,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
+    advanceChestSpawns(state, ground);
     advancePhaseSpawns(state, ground);
   } else {
     const wave = WAVES[state.nextWave];
@@ -597,7 +654,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.bodyGraceUntil = state.tick + BODY_GRACE_TICKS;
   }
   if (state.run) {
-    advanceSupportWeapons(state);
+    advanceSupportWeapons(state, ground);
     advanceAutoOrdnance(state, !!maneuverEnded && maneuver.kind === 'j-turn');
   }
   advanceShots(state, ground);
@@ -609,7 +666,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     for (const enemy of state.enemies) {
       if (enemy.hp && !enemy.entry && enemy.kind !== 'gnat' && inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < 7) {
         hurtPlayer(state);
-        enemy.hp = 0;
+        if (!enemy.carrier) enemy.hp = 0;
       }
     }
   }
@@ -618,6 +675,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   const outcome = defeated ? 'clear' : state.tick >= endTick(state) ? 'timeout' : null;
   const cost = requiredXp(state.level, !!state.run);
   if (!state.hull) finish(state, 'lost');
+  else if (state.run && collectChest(state)) {
+    state.phase = 'chest';
+    state.resultPending = outcome;
+    state.boosting = false;
+    state.boostRelease = true;
+  }
   else if (cost !== null && state.xp >= cost) openDraft(state, outcome);
   else if (outcome) finish(state, outcome);
 }

@@ -4,7 +4,7 @@ import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
-import { DRAFT_RULES } from './data/items.ts';
+import { CHESTS, DRAFT_RULES, EVOLUTIONS } from './data/items.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
@@ -14,10 +14,10 @@ import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, 
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
-import { activeWeakPoint, bossTick, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
+import { activeWeakPoint, bossTick, chestEvolutions, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
 import { bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { DraftId, Effect, LegacyDraftId, ManeuverKind, StageInput } from './stage-types.ts';
+import type { ChestReward, DraftId, Effect, LegacyDraftId, ManeuverKind, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -31,6 +31,8 @@ const guidePrimary = $<HTMLButtonElement>('#guide-primary');
 const guideSkip = $<HTMLButtonElement>('#guide-skip');
 const guideBody = $('.guide-body');
 const draftCard = $('#draft-card');
+const chestCard = $('#chest-card');
+const chestAction = $<HTMLButtonElement>('#chest-action');
 const draftButtons = [...draftCard.querySelectorAll<HTMLButtonElement>('[data-pick]')];
 const touchControls = $('#touch-controls');
 const touchPause = $<HTMLButtonElement>('#touch-pause');
@@ -89,10 +91,12 @@ let guide: 'launch' | 'help' | null = null;
 let guideOpener: HTMLElement | null = null;
 let menuKey = '';
 let renderedDraft: DraftId[] | null = null;
+let renderedChest: ChestReward[] | null = null;
 let banishing = false;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
 let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
 let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
+let pendingChest: StageInput['chestPick'];
 type ManeuverPress = { kind: ManeuverKind; turn: number };
 let pendingManeuver: ManeuverPress | undefined;
 let stickId: number | null = null;
@@ -453,11 +457,58 @@ function resetTouch(): void {
   for (const button of touchControls.querySelectorAll('.held')) button.classList.remove('held');
 }
 
+function updateChestMenu(): void {
+  const chest = CHESTS.find(chest => chest.id === state.chests.offer);
+  const evolving = chest?.kind === 'evolution';
+  const reward = state.chestReveal;
+  const choices = $('#chest-choices'), reels = $('#chest-reels');
+  const candidates = reward ? [] : chestEvolutions(state);
+  setText('#chest-kicker', t(evolving ? 'chest.evolution' : 'chest.supply'));
+  setText('#chest-heading', t(reward ? 'chest.rewards' : evolving ? 'chest.evolution' : 'chest.supply'));
+  setText('#chest-detail', reward ? '' : t(candidates.length ? 'chest.pick' : evolving ? 'chest.fallback' : 'chest.supplyCopy'));
+  $('#chest-kicker').hidden = !reward;
+  $('#chest-detail').hidden = !!reward;
+  choices.replaceChildren(...candidates.map(weapon => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = t(`item.${EVOLUTIONS[weapon].id}.title`);
+    button.addEventListener('click', () => { pendingChest = weapon; });
+    return button;
+  }));
+  reels.hidden = !reward;
+  reels.replaceChildren(...(reward ?? []).map((item, i) => {
+    const reel = document.createElement('li'), strip = document.createElement('div');
+    reel.className = item.kind === 'evolution' ? 'chest-reel evolution' : 'chest-reel';
+    strip.className = 'chest-reel-strip';
+    strip.style.setProperty('--reel-order', String(i));
+    for (const glyph of ['◇', '▣', '◆']) {
+      const face = document.createElement('span');
+      face.textContent = glyph;
+      face.setAttribute('aria-hidden', 'true');
+      strip.append(face);
+    }
+    const label = document.createElement('div');
+    label.className = 'chest-reel-label';
+    const title = document.createElement('strong'), level = document.createElement('small');
+    title.textContent = t(`item.${item.id}.title`);
+    level.textContent = item.kind === 'evolution' ? t('chest.evolved') : item.level ? t('chest.level', { level: item.level }) : '';
+    label.append(title, level);
+    strip.append(label);
+    reel.append(strip);
+    return reel;
+  }));
+  chestAction.hidden = candidates.length > 0;
+  chestAction.textContent = t(reward ? 'chest.continue' : 'chest.open');
+  (choices.querySelector('button') ?? chestAction).focus({ preventScroll: true });
+}
+
 function updateMenu(): void {
   const status = !scene ? 'webgl' : guide ? 'guide' : state.paused ? 'paused' : state.phase;
   touchControls.hidden = touchPause.hidden = !touch || status !== 'playing';
-  if (status === menuKey && (status !== 'draft' || state.draft === renderedDraft)) return;
+  if (status === menuKey && (status !== 'draft' || state.draft === renderedDraft)
+    && (status !== 'chest' || state.chestReveal === renderedChest)) return;
   renderedDraft = state.draft;
+  renderedChest = state.chestReveal;
   const oldStatus = menuKey;
   menuKey = status;
   const showing = status !== 'playing';
@@ -467,7 +518,8 @@ function updateMenu(): void {
   root.classList.toggle('guide-open', status === 'guide');
   guideCard.hidden = status !== 'guide';
   draftCard.hidden = !drafting;
-  gameCard.hidden = !showing || drafting || status === 'guide';
+  chestCard.hidden = status !== 'chest';
+  gameCard.hidden = !showing || drafting || status === 'guide' || status === 'chest';
   if (showing) {
     resetTouch();
     pendingBomb = pendingFlare = false;
@@ -477,6 +529,8 @@ function updateMenu(): void {
   if (status === 'guide' && guide) {
     guideSkip.hidden = guide !== 'launch';
     setText('#guide-primary', t(guide === 'launch' ? 'guide.launch' : 'guide.back'));
+  } else if (status === 'chest') {
+    updateChestMenu();
   } else if (drafting) {
     banishing = false;
     setText('#draft-detail', t('draft.detail', { level: state.level + 1 }));
@@ -576,6 +630,7 @@ function choose(index: number): void {
 }
 
 primary.addEventListener('click', action);
+chestAction.addEventListener('click', () => { pendingChest = state.chestReveal ? 'continue' : 'open'; });
 guidePrimary.addEventListener('click', () => closeGuide(true));
 guideSkip.addEventListener('click', () => closeGuide(true));
 $('#help-action').addEventListener('click', () => openGuide('help'));
@@ -593,7 +648,8 @@ portrait.addEventListener('change', resize);
 root.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('gesturestart', event => event.preventDefault());
 root.addEventListener('touchmove', event => {
-  if (event.target instanceof Node && (guideBody.contains(event.target) || gameCard.contains(event.target) || draftCard.contains(event.target))) return;
+  if (event.target instanceof Node && (guideBody.contains(event.target) || gameCard.contains(event.target)
+    || draftCard.contains(event.target) || chestCard.contains(event.target))) return;
   event.preventDefault();
 }, { passive: false });
 
@@ -765,7 +821,7 @@ function advance(): void {
   if (!scene || guide) return;
   const before = state.tick, yaw = state.player.yaw;
   const wasFlying = maneuverAllowsControl(state.maneuver);
-  const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft;
+  const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
     ...control,
@@ -776,11 +832,13 @@ function advance(): void {
     maneuver: pendingManeuver?.kind ?? control.maneuver,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
     toggleView: pendingViews > 0 || control.toggleView,
+    chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
   }, ground);
   pendingStart = pendingPause = pendingBomb = pendingFlare = false;
   if (pendingViews) pendingViews--;
   pendingDraft = {};
+  pendingChest = undefined;
   pendingManeuver = undefined;
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
@@ -793,11 +851,11 @@ function advance(): void {
       turn: !wasFlying || !maneuverAllowsControl(state.maneuver) || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
   }
-  if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft) {
+  if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft || state.chestReveal !== previousReveal) {
     dirty = true;
     // Open the modal synchronously, even when a slow frame processes several ticks.
     // It clears any pending flight action that arrived with the level-up.
-    if (state.phase === 'draft') updateMenu();
+    if (state.phase === 'draft' || state.phase === 'chest') updateMenu();
   }
 }
 

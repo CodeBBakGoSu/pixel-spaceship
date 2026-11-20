@@ -1,7 +1,8 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
-import type { DraftChoiceId, WeaponId } from './data/items.ts';
+import type { ChestId, DraftChoiceId, EvolutionId, WeaponId } from './data/items.ts';
+import type { ChestState } from './chests.ts';
 import type { RunProgression } from './progression.ts';
 import type { RangedShotFields } from './ranged-weapons.ts';
 
@@ -57,7 +58,10 @@ export type StageInput = {
   reroll?: boolean;
   banish?: DraftChoiceId;
   skip?: boolean;
+  chestPick?: WeaponId | 'open' | 'continue';
 };
+
+export type ChestReward = { kind: 'evolution'; id: EvolutionId } | { kind: 'upgrade'; id: DraftChoiceId; level?: number };
 
 export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
@@ -87,6 +91,7 @@ export type Enemy = Position & {
   offset: number;
   entry?: FlyIn;
   leaveAt?: number;
+  carrier?: ChestId;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
   tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
@@ -107,8 +112,9 @@ export type Enemy = Position & {
   burnDamage?: number;
   ionReadyAt?: number;
   droneReadyAt?: number;
+  aegisReadyAt?: number;
 };
-export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean };
+export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean };
 type ShotCommon = Position & {
   vx: number;
   vz: number;
@@ -117,22 +123,25 @@ type ShotCommon = Position & {
   volley: number;
   nearMiss: boolean;
   lockId: number | null;
+  aurora?: true;
+  pierce?: { remaining: number; hits: number[] };
 };
 export type Shot = ShotCommon & (
-  { kind: 'twin' | 'pods' | 'hostile'; pierce?: { remaining: number; hits: number[] }; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
+  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
   { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never } |
   { kind: 'drone-bolt'; weapon: 'drones'; reversal?: never; reversalTick?: never } |
   (RangedShotFields & { reversal?: never; reversalTick?: never })
 );
 export type RearBomb = Position & { born: number; vx: number; vz: number; weapon?: 'bomb-bay';
-  radius?: number; damage?: number; ceiling?: number };
+  radius?: number; damage?: number; ceiling?: number; carpet?: true };
 export type Flare = Position & { born: number; vx: number; vz: number; vy: number; weapon?: 'phoenix';
-  lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number };
+  lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number; phoenix?: true; sourceBand?: Band };
 export type WeaponFx = {
   kind: 'rail-charge' | 'rail-beam' | 'arc-link' | 'flak-blast' | 'seeker-blast' | 'arc-blast';
   from: Position;
   to?: Position;
   radius?: number;
+  halfHeight?: number;
   until: number;
 };
 export type RearGlimpse = { kind: 'bomb' | 'flare'; since: number; until: number; target?: Position };
@@ -158,6 +167,7 @@ export type WeakPoint = Position & {
   burnDamage?: number;
   ionReadyAt?: number;
   droneReadyAt?: number;
+  aegisReadyAt?: number;
 };
 export type Boss = {
   x: number;
@@ -174,13 +184,15 @@ export type Boss = {
 };
 export type Lock = { id: number; progress: number; ready: boolean };
 export type StageState = {
-  phase: 'title' | 'playing' | 'draft' | Outcome;
+  phase: 'title' | 'playing' | 'draft' | 'chest' | Outcome;
   paused: boolean;
   resultPending: Outcome | null;
   seed: number;
   rng: number;
   streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }>;
   run: RunProgression | null;
+  chests: ChestState;
+  chestReveal: ChestReward[] | null;
   swarmCap: number;
   aceRank: number;
   heat: number;

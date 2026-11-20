@@ -1,4 +1,4 @@
-import { BUFFS, DRAFT_RULES, WEAPON_DAMAGE_LEVEL, WEAPON_IDS, type BuffId, type WeaponId } from './data/items.ts';
+import { BUFFS, DRAFT_RULES, FAMILIES, WEAPON_DAMAGE_LEVEL, WEAPON_IDS, WEAPONS, type BuffId, type WeaponId } from './data/items.ts';
 import { ECHO_RATE_BONUS } from './data/run-balance.ts';
 import { HIT_WINDOW } from './stage-combat.ts';
 import { random } from './stage-random.ts';
@@ -14,7 +14,19 @@ export function weaponDamage(state: StageState, weapon: WeaponId, base: number):
   if (!state.run) return base;
   const level = state.run.weaponLevels[weapon] ?? 1;
   const upgraded = level >= WEAPON_DAMAGE_LEVEL.level ? WEAPON_DAMAGE_LEVEL.multiplier : 1;
-  return base * upgraded * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade);
+  return base * upgraded * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade)
+    * (familyBonus(state, weapon)?.damageScale ?? 1);
+}
+
+type FamilyBonus = { count: number; damageScale: number; pierce?: number; radiusScale?: number; cooldownScale?: number };
+
+export function familyBonus(state: StageState, weapon: WeaponId): FamilyBonus | undefined {
+  const levels = state.run?.weaponLevels;
+  if (!levels?.[weapon]) return;
+  const family = WEAPONS[weapon].family, tiers = FAMILIES[family];
+  let count = 0;
+  for (const id of WEAPON_IDS) if (levels[id] && WEAPONS[id].family === family) count++;
+  for (let i = tiers.length - 1; i >= 0; i--) if (count >= tiers[i].count) return tiers[i];
 }
 
 export function criticalDamage(state: StageState, damage: number): number {
@@ -36,7 +48,7 @@ function echoInterval(state: StageState, ticks: number): number {
 }
 
 export function weaponCooldown(state: StageState, weapon: WeaponId, base: number): number {
-  const ticks = base * (buffTuning(state, 'capacitor')?.cooldownScale ?? 1);
+  const ticks = base * (buffTuning(state, 'capacitor')?.cooldownScale ?? 1) * (familyBonus(state, weapon)?.cooldownScale ?? 1);
   return Math.max(1, Math.round(weapon === 'twin' ? ticks : echoInterval(state, ticks)));
 }
 

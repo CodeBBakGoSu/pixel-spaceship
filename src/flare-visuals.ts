@@ -84,15 +84,23 @@ export class FlareVisuals {
     const age = tick - born;
     const heat = Math.max(0, 1 - age / (flare.lifeTicks ?? FLARE_LIFE_TICKS));
     const phoenix = flare.weapon === 'phoenix';
+    const firebird = flare.phoenix;
     const yaw = Math.atan2(vx, vz), phase = born * 0.17 + yaw * 3;
     const size = (3 + 1.3 * heat) * (1 + 0.09 * Math.sin(tick * 0.7 + phase));
-    const tint = heat > 0.2 ? (phoenix ? 0xffe1a0 : 0xfff3b2) : (phoenix ? 0xff985c : 0xffba5e);
+    const tint = firebird ? 0xffefc8 : heat > 0.2 ? (phoenix ? 0xffe1a0 : 0xfff3b2) : (phoenix ? 0xff985c : 0xffba5e);
     this.voxel(this.fire, x, z, topAltitude ?? alt, size, tint, yaw);
     const tail = 2.7 / Math.max(1, Math.hypot(vx, vz, vy));
     this.voxel(this.fire, x - vx * tail, z - vz * tail, topAltitude === undefined ? alt - vy * tail : topAltitude - 0.7,
-      size * 0.96, phoenix ? 0xf75945 : 0xff8738, yaw, 1.23);
+      size * 0.96, firebird ? 0xff704e : phoenix ? 0xf75945 : 0xff8738, yaw, 1.23);
 
     const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
+    if (firebird) {
+      const flap = 0.75 + 0.25 * Math.sin(tick * 0.24);
+      for (const side of [-1, 1]) {
+        this.voxel(this.fire, x + rightX * side * size * flap, z + rightZ * side * size * flap, topAltitude ?? alt,
+          size * 0.72, 0xffa44e, yaw - side * 0.78, 1.7);
+      }
+    }
     const firstDelay = SAMPLE_TICKS + age % SAMPLE_TICKS;
     for (let i = 0; i < SMOKE_SAMPLES; i++) {
       const delay = firstDelay + i * SAMPLE_TICKS;
@@ -101,7 +109,7 @@ export class FlareVisuals {
       const seconds = delay * STEP;
       const drift = Math.sin(phase + emission * 2.37) * seconds * 6.5;
       // Retrace the flare's discrete gravity steps before letting the smoke rise.
-      const priorVY = vy + FLARE_GRAVITY * STEP * (delay - 1) / 2;
+      const priorVY = firebird ? vy : vy + FLARE_GRAVITY * STEP * (delay - 1) / 2;
       const y = topAltitude === undefined ? alt - priorVY * seconds + seconds * 5 : topAltitude - 3;
       const px = x - vx * seconds + rightX * drift, pz = z - vz * seconds + rightZ * drift;
       const puff = (2.15 + seconds * 7.2) * (0.7 + heat * 0.3);

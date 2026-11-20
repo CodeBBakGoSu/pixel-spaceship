@@ -10,9 +10,9 @@ export const RADAR_RANGE = 210;
 const REAR_WARNING_SECONDS = 0.8;
 const BODY_RADIUS = 7;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
-export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage'; range: number; ahead: number; former?: true };
+export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage' | 'chest'; range: number; ahead: number; former?: true };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null; former?: true };
-type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' };
+type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' | 'chest' };
 const MAP_LANDMARKS = Object.entries(LANDMARKS);
 export type RearDanger = Position & { seconds: number } & ({ kind: 'shot' } | { kind: 'contact'; enemyId: number });
 export type RadarReadout = {
@@ -67,6 +67,11 @@ export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, nor
     const x = center + (beacon.x - arena.x) * scale, y = middle - (beacon.z - arena.z) * scale;
     c.strokeStyle = '#ffd783';
     c.strokeRect(Math.round(x) - 4.5, Math.round(y) - 4.5, 9, 9);
+  }
+  c.strokeStyle = '#ffe6a9';
+  for (const drop of state.chests.drops) {
+    const x = center + (drop.x - arena.x) * scale, y = middle - (drop.z - arena.z) * scale;
+    c.strokeRect(Math.round(x) - 2.5, Math.round(y) - 2.5, 5, 5);
   }
   const x = center + (player.x - arena.x) * scale, y = middle - (player.z - arena.z) * scale;
   c.save();
@@ -154,13 +159,18 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     const range = Math.hypot(dx, dz), ahead = dx * sin + dz * cos;
     const track: Track = { x: item.x, z: item.z, alt: item.alt, id: item.id, kind, range, ahead };
     if (former) track.former = true;
-    if (!top && kind !== 'salvage') hostiles.push(track);
+    const hostile = kind !== 'salvage' && kind !== 'chest';
+    if (!top && hostile) hostiles.push(track);
+    if (kind === 'chest' && (range > RADAR_RANGE || (!top && ahead < 0))) {
+      rimTick(kind, dx, dz);
+      return;
+    }
     if (range > RADAR_RANGE) {
       if (kind === 'salvage') rimTick(kind, dx, dz);
       else if (kind !== 'warden' && kind !== 'pod' && kind !== 'core') rimTick('enemy', dx, dz);
       return;
     }
-    if (!top && dx * fx + dz * fz < 0 && kind !== 'salvage' && kind !== 'turret' && kind !== 'gnat') {
+    if (!top && dx * fx + dz * fz < 0 && hostile && kind !== 'turret' && kind !== 'gnat') {
       rearCount++;
       rearBandMatch ||= inBand(item.alt, p.altitude);
       rearHigher ||= item.alt - p.altitude > HIT_WINDOW;
@@ -177,6 +187,7 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     else scan(active, active.kind);
   }
   for (const pickup of state.pickups) scan(pickup, 'salvage');
+  state.chests.drops.forEach((drop, index) => scan({ ...drop, id: -2 - index }, 'chest'));
   const beacon = beaconTrack(state);
   if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('warden', beacon.x - p.x, beacon.z - p.z);
   const nearest = (tracks: Track[]): Track | null =>
@@ -185,10 +196,10 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   const charging = !top && state.enemies.find(enemy => enemy.tell?.kind === 'snipe');
   const priority = top ? null : forward.find(track => track.id === (state.lock?.id ?? active?.id)) ??
     (charging ? forward.find(track => track.id === charging.id) : undefined) ??
-    nearest(forward.filter(track => track.kind !== 'salvage'));
+    nearest(forward.filter(track => track.kind !== 'salvage' && track.kind !== 'chest'));
   const salvage = top ? null : nearest(forward.filter(track => track.kind === 'salvage'));
   for (const { track, across } of visible) {
-    const marked = top || track.id === priority?.id || track.id === salvage?.id;
+    const marked = top || track.kind === 'chest' || track.id === priority?.id || track.id === salvage?.id;
     const blip: Blip = {
       x: across / RADAR_RANGE,
       y: -track.ahead / RADAR_RANGE,
@@ -274,8 +285,8 @@ export class RadarDisplay {
     }
     for (const { kind, angle } of readout.rim) {
       const dx = Math.sin(angle), dy = -Math.cos(angle);
-      c.strokeStyle = kind === 'warden' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
-      const offset = kind === 'salvage' ? -5 : kind === 'warden' ? 2 : 0;
+      c.strokeStyle = kind === 'chest' ? '#ffe6a9' : kind === 'warden' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
+      const offset = kind === 'chest' ? 5 : kind === 'salvage' ? -5 : kind === 'warden' ? 2 : 0;
       c.beginPath();
       c.moveTo(x + dx * (radius - 3 + offset), y + dy * (radius - 3 + offset));
       c.lineTo(x + dx * (radius + offset), y + dy * (radius + offset));
@@ -306,13 +317,17 @@ export class RadarDisplay {
   private drawBlip(c: CanvasRenderingContext2D, x: number, y: number, contact: Blip): void {
     const { kind, mark } = contact;
     const salvage = kind === 'salvage';
+    const chest = kind === 'chest';
     const base = salvage ? '#7cece0' : kind === 'pod' || kind === 'core' || kind === 'warden' ? '#ffd783' : '#ff9683';
     if (contact.former) {
       c.strokeStyle = '#91fff1';
       c.strokeRect(x - 4.5, y - 4.5, 9, 9);
     }
     c.fillStyle = base;
-    if (salvage) {
+    if (chest) {
+      c.strokeStyle = '#ffe6a9';
+      c.strokeRect(x - 2.5, y - 2.5, 5, 5);
+    } else if (salvage) {
       c.fillRect(x, y - 2, 1, 5);
       c.fillRect(x - 1, y - 1, 3, 3);
       c.fillRect(x - 2, y, 5, 1);
@@ -332,7 +347,7 @@ export class RadarDisplay {
     } else {
       const triangle = mark === '△' || mark === '▽';
       const direction = mark === '^' || mark === '△' ? 1 : -1;
-      const cx = x + (!triangle || salvage ? 5 : 0), cy = y - (!triangle ? 3 : 0);
+      const cx = x + (!triangle || salvage || chest ? 5 : 0), cy = y - (!triangle ? 3 : 0);
       c.moveTo(cx - 2.5, cy + direction * 2.5);
       c.lineTo(cx, cy - direction * 2.5);
       c.lineTo(cx + 2.5, cy + direction * 2.5);

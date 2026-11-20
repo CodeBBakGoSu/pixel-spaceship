@@ -39,3 +39,9 @@ These nine runs per cap check determinism and survival ordering by skill. Final 
 ### Rendering
 
 With four weapons equipped, mounts add at most 288 triangles and three orbit drones add 108. On an RTX 4090, a headless Chromium production-build stress fixture ran 300 frame intervals per view at 1920×1080 and emulated 390×844. It replenished the full Gnat cap, 24 regular enemies, 150 orbs, roughly 174 projectiles, and 16 mines with the Warden present. TOP, CHASE, and COCKPIT held 60 FPS at both sizes. Desktop p95 was 16.8 ms and portrait p95 was 16.7 ms.
+
+## Stage 3
+
+The four carrier arrivals use the authored times and an isolated placement stream. They award 30 salvage XP and leave their cache in their altitude band. Supply caches roll 1, 3, or 5 upgrades. Evolution caches offer one eligible recipe with 1–2 bonus upgrades or three upgrades when the build has no completed pair. Each reward uses the chest stream and favors upgrading owned gear. Family bonuses count equipped weapons, including evolved forms, and apply the highest eligible tier.
+
+The six full-view replays opened all four caches and evolved one or two weapons on both caps. They cleared in 494.45–507.62 s, with 618–691 kills and 24–25 level-ups. The same RTX 4090 stress fixture with four evolved weapons held 60 FPS in all three views. Desktop p95 stayed at or below 16.8 ms and emulated portrait at 16.7 ms. The chest batch adds at most 144 triangles and the fourth Collector drone costs 36.

@@ -306,7 +306,7 @@ export function trimEscorts(state: StageState): void {
   if (state.run) {
     const regular = state.enemies.filter(enemy => enemy.kind !== 'gnat');
     if (regular.length <= limit) return;
-    regular.sort((a, b) => range(a) - range(b) || a.id - b.id);
+    regular.sort((a, b) => Number(!!b.carrier) - Number(!!a.carrier) || range(a) - range(b) || a.id - b.id);
     const survivors = new Set(regular.slice(0, limit));
     state.enemies = state.enemies.filter(enemy => enemy.kind === 'gnat' || survivors.has(enemy));
     return;

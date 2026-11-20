@@ -1,8 +1,10 @@
-import type { Boss, Effect, Enemy, Flare, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
+import type { Band, Boss, Effect, Enemy, Flare, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
   WeakPoint } from './stage-types.ts';
+import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
-import { advanceEchoDeadlines, buffTuning, criticalDamage, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
+import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
+import { nearestBand } from './maneuvers.ts';
 import { advanceRangedShot } from './ranged-weapons.ts';
 
 export const TICKS_PER_SECOND = 60;
@@ -139,21 +141,25 @@ function fireFriendly(
   const forwardX = Math.sin(p.yaw), forwardZ = Math.cos(p.yaw);
   const lead = target ? Math.hypot(target.x - p.x, target.z - p.z) / BOLT_SPEED : 0;
   const volley = ++state.nextVolley;
+  const upgraded = lockId === null && kind === 'twin' && state.run?.weaponLevels.twin === WEAPONS.twin.tuning.pierceAt;
+  const pierce = Number(upgraded) + (familyBonus(state, kind)?.pierce ?? 0);
+  const aurora = kind === 'twin' && !!state.run?.evolutions.twin;
   let room = projectileRoom(state, kind);
   for (const side of offsets) {
     if (room-- <= 0) break;
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
-    const yaw = target
+    const aim = target
       ? Math.atan2(target.x + (target.vx ?? 0) * lead - x, target.z + (target.vz ?? 0) * lead - z)
       : p.yaw;
+    const yaw = aim + (aurora ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
       damage: weaponDamage(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
       life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId,
-      ...(kind === 'twin' && !lockId && state.run?.weaponLevels.twin === WEAPONS.twin.tuning.pierceAt
-        ? { pierce: { remaining: 2, hits: [] } } : {}),
+      ...(pierce ? { pierce: { remaining: pierce + 1, hits: [] } } : {}),
+      ...(aurora ? { aurora: true } : {}),
     });
   }
 }
@@ -166,6 +172,8 @@ function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const volley = ++state.nextVolley;
+  const aurora = !!state.run?.evolutions.twin;
+  const pierce = familyBonus(state, 'twin')?.pierce ?? 0;
   targets.sort((a, b) => a.range - b.range);
   for (let i = 0; i < Math.min(room, REVERSAL_SPREAD.length); i++) {
     const { enemy, range } = targets[i % targets.length];
@@ -179,7 +187,8 @@ function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal
       x, z, alt: p.altitude, kind: 'twin',
       vx: Math.sin(yaw) * REVERSAL_SPEED, vz: Math.cos(yaw) * REVERSAL_SPEED,
       damage: weaponDamage(state, 'twin', state.twinDamage), life: 0.44, volley, nearMiss: false, lockId: null,
-      reversal: { remaining: REVERSAL_HITS, hits: [] }, reversalTick: pass.startTick,
+      reversal: { remaining: REVERSAL_HITS + pierce, hits: [] }, reversalTick: pass.startTick,
+      ...(aurora ? { aurora: true } : {}),
     });
   }
   pass.nextShotAt = state.tick + weaponCooldown(state, 'twin', REVERSAL_CADENCE);
@@ -194,7 +203,7 @@ export function openReversal(state: StageState, pursuers: readonly number[]): vo
   advanceEchoDeadlines(state);
 }
 
-function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
+function fireStrafe(state: StageState, target: Enemy, targetBand: Band, aurora: boolean): void {
   const p = state.player;
   const x = p.x + Math.sin(p.yaw) * TWIN_MUZZLE;
   const z = p.z + Math.cos(p.yaw) * TWIN_MUZZLE;
@@ -209,13 +218,20 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
   if (closing <= 0) return;
   const lead = distanceSquared / closing;
   const vy = dy / lead;
+  if (!vy) return;
+  const window = hitWindow(state, STRAFE_BAND_WINDOW);
+  const life = vy < 0 ? (p.altitude - BANDS[targetBand] + window) / -vy : (BANDS[targetBand] + window - p.altitude) / vy;
+  if (life <= 0) return;
+  const pierce = familyBonus(state, 'twin')?.pierce ?? 0;
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,
     vx: dx / lead + target.vx, vz: dz / lead + target.vz, vy,
-    damage: weaponDamage(state, 'twin', 1), life: (p.altitude - BANDS[targetBand] + hitWindow(state, STRAFE_BAND_WINDOW)) / -vy,
+    damage: weaponDamage(state, 'twin', 1), life,
     volley: ++state.nextVolley, nearMiss: false, lockId: null,
+    ...(pierce ? { pierce: { remaining: pierce + 1, hits: [] } } : {}),
+    ...(aurora ? { aurora: true } : {}),
   });
-  state.strafeAt = state.tick + weaponCooldown(state, 'twin', STRAFE_CADENCE);
+  state.strafeAt = state.tick + weaponCooldown(state, 'twin', aurora ? CLOSE_EVOLUTIONS.aurora.adjacentCadence : STRAFE_CADENCE);
 }
 
 export function acquireAndFire(state: StageState): void {
@@ -223,7 +239,8 @@ export function acquireAndFire(state: StageState): void {
   const twinLevel = state.run?.weaponLevels.twin;
   const podLevel = state.run?.weaponLevels.pods;
   const hasTwin = !state.run || !!twinLevel;
-  const hasPods = !state.run || !!podLevel;
+  const aurora = !!state.run?.evolutions.twin;
+  const hasPods = !state.run || (!!podLevel && !state.run.evolutions.pods);
   const weaponWindow = hitWindow(state);
   const weak = activeWeakPoint(state);
   const weakRange = weak ? Math.hypot(weak.x - p.x, weak.z - p.z) : Infinity;
@@ -252,9 +269,14 @@ export function acquireAndFire(state: StageState): void {
   const overdrive = reversal && state.tick < reversal.until ? reversal : null;
   const reversalReady = overdrive && state.tick >= overdrive.nextShotAt;
   const overdriveTargets: RankedTarget[] = [];
-  const lowerBand = !hasTwin || state.tick < state.strafeAt ? null
+  const eligibleBand = nearestBand(p.altitude);
+  const strafeReady = hasTwin && state.tick >= state.strafeAt;
+  const lowerBand = !strafeReady ? null : aurora
+    ? (eligibleBand > 0 ? eligibleBand - 1 as Band : null)
     : inBand(p.altitude, BANDS[2]) ? 1 : inBand(p.altitude, BANDS[1]) ? 0 : null;
-  const strafeTargets: RankedTarget[] = [];
+  const upperBand = strafeReady && aurora && eligibleBand < 2 ? eligibleBand + 1 as Band : null;
+  const lowerTargets: RankedTarget[] = [], upperTargets: RankedTarget[] = [];
+  const strafeWindow = hitWindow(state, STRAFE_BAND_WINDOW);
   for (const enemy of state.enemies) {
     if (!enemy.hp) continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
@@ -283,8 +305,9 @@ export function acquireAndFire(state: StageState): void {
         rearRange = range;
       }
     }
-    if (lowerBand !== null && range >= STRAFE_MIN_RANGE && range <= STRAFE_RANGE && angle <= STRAFE_CONE
-      && inBand(enemy.alt, BANDS[lowerBand], hitWindow(state, STRAFE_BAND_WINDOW))) strafeTargets.push({ enemy, range });
+    if (range < STRAFE_MIN_RANGE || range > STRAFE_RANGE || angle > STRAFE_CONE) continue;
+    if (lowerBand !== null && inBand(enemy.alt, BANDS[lowerBand], strafeWindow)) lowerTargets.push({ enemy, range });
+    if (upperBand !== null && inBand(enemy.alt, BANDS[upperBand], strafeWindow)) upperTargets.push({ enemy, range });
   }
 
   if (!twin && wrong) {
@@ -310,13 +333,15 @@ export function acquireAndFire(state: StageState): void {
     const cadence = podLevel ? WEAPONS.pods.tuning.cooldownTicks[podLevel - 1] : state.podRank === 1 ? 43 : 25;
     state.podsAt = state.tick + weaponCooldown(state, 'pods', cadence);
   }
-  if (lowerBand !== null) {
-    strafeTargets.sort((a, b) => a.range - b.range);
-    const room = projectileRoom(state, 'twin');
-    for (let i = 0; i < Math.min(2, strafeTargets.length, room); i++) {
-      fireStrafe(state, strafeTargets[i].enemy, lowerBand);
-    }
-  }
+  fireStrafes(state, lowerTargets, lowerBand, aurora);
+  fireStrafes(state, upperTargets, upperBand, aurora);
+}
+
+function fireStrafes(state: StageState, targets: RankedTarget[], band: Band | null, aurora: boolean): void {
+  if (band === null || !targets.length) return;
+  targets.sort((a, b) => a.range - b.range);
+  const room = projectileRoom(state, 'twin');
+  for (let i = 0; i < Math.min(2, targets.length, room); i++) fireStrafe(state, targets[i].enemy, band, aurora);
 }
 
 function showRearLaunch(state: StageState, kind: RearGlimpse['kind']): void {
@@ -357,7 +382,8 @@ function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
 }
 
 function blast(state: StageState, bomb: RearBomb): void {
-  const radius = (bomb.radius ?? BOMB_BLAST_RADIUS) * (buffTuning(state, 'ordnance-rack')?.radiusScale ?? 1);
+  const familyScale = bomb.weapon ? familyBonus(state, bomb.weapon)?.radiusScale ?? 1 : 1;
+  const radius = (bomb.radius ?? BOMB_BLAST_RADIUS) * (buffTuning(state, 'ordnance-rack')?.radiusScale ?? 1) * familyScale;
   const damage = bomb.damage ?? 4;
   const clearRadius = Math.max(BOMB_CLEAR_RADIUS, radius);
   const belowLaunchBand = (target: Position): boolean => target.alt <= (bomb.ceiling ?? Infinity);
@@ -390,12 +416,15 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
   const vy = clamp(state.climbRate * 0.2 - 7, -12, -6);
   const tuning = WEAPONS.phoenix.tuning;
   const bonus = phoenixLevel ? tuning.lifeBonusTicks[phoenixLevel - 1] : 0;
+  const firebird = phoenixLevel && state.run?.evolutions.phoenix;
+  const evolution = CLOSE_EVOLUTIONS.phoenix;
   const ordnance = phoenixLevel ? {
     weapon: 'phoenix' as const,
-    lifeTicks: FLARE_LIFE_TICKS + bonus,
-    burnTicks: FLARE_BURN_TICKS + bonus,
+    lifeTicks: firebird ? evolution.lifeTicks : FLARE_LIFE_TICKS + bonus,
+    burnTicks: Math.round((FLARE_BURN_TICKS + bonus) * (firebird ? evolution.burnScale : 1)),
     damage: weaponDamage(state, 'phoenix', 1),
-    spread: phoenixLevel >= tuning.spreadAt ? tuning.burnRadius : undefined,
+    spread: phoenixLevel >= tuning.spreadAt ? tuning.burnRadius * (familyBonus(state, 'phoenix')?.radiusScale ?? 1) : undefined,
+    ...(firebird ? { phoenix: true as const, sourceBand: nearestBand(p.altitude) } : {}),
   } : {};
   for (const side of fan) {
     state.flares.push({
@@ -454,6 +483,39 @@ function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): bo
   return true;
 }
 
+function steerFirebird(state: StageState, flare: Flare, point: WeakPoint | null): boolean {
+  const tuning = CLOSE_EVOLUTIONS.phoenix;
+  const sourceBand = flare.sourceBand ?? nearestBand(flare.alt);
+  let aim: Enemy | WeakPoint | null = null;
+  let best: number = tuning.range ** 2;
+  const targetDistance = (candidate: Enemy | WeakPoint): number => {
+    const band = nearestBand(candidate.alt);
+    return candidate.hp && band <= sourceBand && band + 1 >= sourceBand
+      ? (candidate.x - flare.x) ** 2 + (candidate.z - flare.z) ** 2 : Infinity;
+  };
+  if (point && targetDistance(point) < best) {
+    aim = point;
+    best = targetDistance(point);
+  }
+  for (const enemy of state.enemies) {
+    if (enemy.entry) continue;
+    const distance = targetDistance(enemy);
+    if (distance < best) {
+      best = distance;
+      aim = enemy;
+    }
+  }
+  if (!aim) return false;
+  const lead = Math.min(0.65, Math.sqrt(best) / tuning.speed);
+  const dx = aim.x + aim.vx * lead - flare.x, dz = aim.z + aim.vz * lead - flare.z;
+  const heading = Math.atan2(flare.vx, flare.vz);
+  const yaw = heading + clamp(angleTo(heading, dx, dz), -tuning.turnRate * STEP, tuning.turnRate * STEP);
+  flare.vx = Math.sin(yaw) * tuning.speed;
+  flare.vz = Math.cos(yaw) * tuning.speed;
+  flare.vy = clamp((aim.alt - flare.alt) * 6, -tuning.verticalSpeed, tuning.verticalSpeed);
+  return true;
+}
+
 export function advanceFlares(state: StageState, ground: Ground): void {
   if (state.flareReloadAt !== null && state.tick >= state.flareReloadAt) {
     const capacity = flareCapacity(state);
@@ -474,7 +536,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
   const pointWindow = point ? hitWindow(state, point.window) : HIT_WINDOW;
   for (const flare of state.flares) {
     if (state.tick - flare.born >= (flare.lifeTicks ?? FLARE_LIFE_TICKS)) continue;
-    flare.vy -= FLARE_GRAVITY * STEP;
+    if (!flare.phoenix || !steerFirebird(state, flare, point)) flare.vy -= FLARE_GRAVITY * STEP;
     const dx = flare.vx * STEP, dz = flare.vz * STEP, dy = flare.vy * STEP;
     const terrain = groundImpact(flare, dx, dz, ground, dy);
 
@@ -482,13 +544,13 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     let first = terrain;
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry) continue;
-      const time = descendingImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS, window);
+      const time = altitudeImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS, window);
       if (time < first) {
         first = time;
         hit = enemy;
       }
     }
-    const pointTime = point?.hp ? descendingImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, pointWindow) : Infinity;
+    const pointTime = point?.hp ? altitudeImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, pointWindow) : Infinity;
     if (boss && point && pointTime < first) {
       hurtWeakPoint(state, boss, flare.damage ?? 1);
       ignite(state, point, WARDEN_BURN_INTERVAL, flare);
@@ -557,18 +619,27 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
   }
   const bay = run.weaponLevels['bomb-bay'] ?? 0;
   if (!bay) return;
+  const carpet = !!run.evolutions['bomb-bay'];
+  if (carpet) state.nextBayDrop = null;
   const followUp = state.nextBayDrop !== null && state.tick >= state.nextBayDrop;
   if (!followUp && state.tick < (state.weaponFireAt['bomb-bay'] ?? 0)) return;
   const tuning = WEAPONS['bomb-bay'].tuning;
-  const { x, z, altitude: alt } = state.player;
-  state.rearBombs.push({ x, z, alt, vx: 0, vz: 0, born: state.tick, weapon: 'bomb-bay',
-    radius: tuning.radius[bay - 1], damage: weaponDamage(state, 'bomb-bay', tuning.damage),
-    ceiling: alt - (BANDS[1] - BANDS[0]) / 2 });
+  const { count, spacing } = CLOSE_EVOLUTIONS.carpet;
+  if (carpet && state.rearBombs.filter(bomb => bomb.weapon === 'bomb-bay').length > count) return;
+  const { x, z, altitude: alt, yaw } = state.player;
+  const bombs = carpet ? count : 1;
+  const dx = carpet ? Math.sin(yaw) * spacing : 0, dz = carpet ? Math.cos(yaw) * spacing : 0;
+  const damage = weaponDamage(state, 'bomb-bay', tuning.damage);
+  for (let i = 0; i < bombs; i++) {
+    state.rearBombs.push({ x: x - dx * i, z: z - dz * i, alt, vx: 0, vz: 0, born: state.tick, weapon: 'bomb-bay',
+      radius: tuning.radius[bay - 1], damage, ceiling: alt - (BANDS[1] - BANDS[0]) / 2,
+      ...(carpet ? { carpet: true } : {}) });
+  }
   if (followUp) {
     state.nextBayDrop = null;
   } else {
     state.weaponFireAt['bomb-bay'] = state.tick + weaponCooldown(state, 'bomb-bay', tuning.cooldownTicks[bay - 1]);
-    if (tuning.volley[bay - 1] > 1) state.nextBayDrop = state.tick + tuning.followUpTicks;
+    if (!carpet && tuning.volley[bay - 1] > 1) state.nextBayDrop = state.tick + tuning.followUpTicks;
   }
 }
 
@@ -585,10 +656,12 @@ export function impactTime(origin: Point, dx: number, dz: number, target: Point,
   return time <= to - from ? from + time : Infinity;
 }
 
-function descendingImpactTime(origin: Position, dx: number, dz: number, dy: number, target: Position, radius: number, window = HIT_WINDOW): number {
+function altitudeImpactTime(origin: Position, dx: number, dz: number, dy: number, target: Position, radius: number, window = HIT_WINDOW): number {
   const height = origin.alt - target.alt;
-  const from = Math.max(0, (height - window) / -dy);
-  const to = Math.min(1, (height + window) / -dy);
+  if (!dy) return Math.abs(height) <= window ? impactTime(origin, dx, dz, target, radius) : Infinity;
+  const elevation = dy < 0 ? height : -height;
+  const from = Math.max(0, (elevation - window) / Math.abs(dy));
+  const to = Math.min(1, (elevation + window) / Math.abs(dy));
   // Use only the part of the segment that passes through the contact's altitude window.
   return from <= to ? impactTime(origin, dx, dz, target, radius, from, to) : Infinity;
 }
@@ -608,44 +681,68 @@ export function groundImpact(origin: Position, dx: number, dz: number, ground: G
 
 function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }>, ground: Ground): void {
   const bandAltitude = BANDS[shot.targetBand];
-  const bandWindow = hitWindow(state, STRAFE_BAND_WINDOW), floor = bandAltitude - bandWindow;
-  const travel = Math.min(STEP, (shot.alt - floor) / -shot.vy);
+  const bandWindow = hitWindow(state, STRAFE_BAND_WINDOW);
+  const boundary = bandAltitude + Math.sign(shot.vy) * bandWindow;
+  const travel = shot.vy ? Math.min(STEP, (boundary - shot.alt) / shot.vy) : 0;
   if (travel <= 0) {
     shot.life = 0;
     return;
   }
   const dx = shot.vx * travel, dz = shot.vz * travel, dy = shot.vy * travel;
-  let first = groundImpact(shot, dx, dz, ground, dy);
-  let hit: Enemy | null = null;
-  for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, bandWindow)) continue;
-    const time = descendingImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, hitWindow(state));
-    if (time < first) {
-      first = time;
-      hit = enemy;
+  const obstacle = groundImpact(shot, dx, dz, ground, dy);
+  const window = hitWindow(state);
+  if (shot.pierce) {
+    advancePiercingShot(state, shot, shot.pierce, dx, dz, obstacle, window, dy, bandWindow);
+  } else {
+    let first = obstacle;
+    let hit: Enemy | null = null;
+    for (const enemy of state.enemies) {
+      if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, bandWindow)) continue;
+      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+      if (time < first) {
+        first = time;
+        hit = enemy;
+      }
+    }
+    if (hit) {
+      hurtEnemy(state, hit, shot.damage);
+      shot.life = 0;
     }
   }
-  if (hit) hurtEnemy(state, hit, shot.damage);
   shot.x += dx;
   shot.z += dz;
   shot.alt += dy;
-  shot.life = first < Infinity || shot.alt <= floor || travel < STEP ? 0 : shot.life - STEP;
+  const crossed = shot.vy < 0 ? shot.alt <= boundary : shot.alt >= boundary;
+  shot.life = shot.life <= 0 || obstacle < Infinity || crossed || travel < STEP ? 0 : shot.life - STEP;
 }
 
-function advanceOverdrive(
+function advancePiercingShot(
   state: StageState, shot: Shot, bolt: NonNullable<Shot['reversal']>, dx: number, dz: number, terrain: number, window: number,
+  dy = 0, strafeWindow = STRAFE_BAND_WINDOW,
 ): boolean {
   const pass = state.reversal?.startTick === shot.reversalTick ? state.reversal : null;
+  const boss = shot.lockId === null ? null : state.boss;
+  const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
+  const altitude = shot.kind === 'strafe' ? BANDS[shot.targetBand] : shot.alt;
+  const bandWindow = shot.kind === 'strafe' ? strafeWindow : window;
   let hit = false;
   while (bolt.remaining > 0) {
     let target: Enemy | null = null, first = terrain;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt, window)) continue;
-      const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
+      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(altitude, enemy.alt, bandWindow)) continue;
+      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
       if (time < first) {
         target = enemy;
         first = time;
       }
+    }
+    if (boss && point?.hp && point.id === shot.lockId && !bolt.hits.includes(point.id)
+      && altitudeImpactTime(shot, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, hitWindow(state, point.window)) < first) {
+      bolt.hits.push(point.id);
+      bolt.remaining--;
+      hurtWeakPoint(state, boss, shot.damage);
+      hit = true;
+      continue;
     }
     if (!target) break;
     hit = true;
@@ -668,6 +765,19 @@ function advanceOverdrive(
   return hit;
 }
 
+function aegisInterceptTime(shot: Position, dx: number, dz: number, player: Position, window: number): number {
+  if (!inBand(shot.alt, player.alt, window)) return Infinity;
+  const { radius, halfWidth } = CLOSE_EVOLUTIONS.aegis;
+  const distance = Math.hypot(shot.x - player.x, shot.z - player.z);
+  const inner = radius - halfWidth;
+  if (distance >= inner) return impactTime(shot, dx, dz, player, radius + halfWidth);
+  // A shot launched inside the halo still has to cross the rim to be absorbed.
+  const end = { x: shot.x + dx, z: shot.z + dz };
+  if (Math.hypot(end.x - player.x, end.z - player.z) < inner) return Infinity;
+  const back = impactTime(end, -dx, -dz, player, inner);
+  return back < Infinity ? 1 - back : Infinity;
+}
+
 export function advanceShots(state: StageState, ground: Ground): void {
   const p = state.player;
   const player = { x: p.x, z: p.z, alt: p.altitude };
@@ -675,6 +785,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
   const resolved = new Set<number>();
   const misses = new Map<number, Effect>();
   const weaponWindow = hitWindow(state);
+  const aegis = !!state.run?.evolutions.pods;
   const count = state.shots.length;
   for (let i = 0; i < count; i++) {
     const shot = state.shots[i];
@@ -690,16 +801,19 @@ export function advanceShots(state: StageState, ground: Ground): void {
     const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
       const playerHit = inBand(shot.alt, player.alt) ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
-      if (state.orbitDrones.some(drone => inBand(shot.alt, drone.alt, weaponWindow)
+      const interception = aegis ? aegisInterceptTime(shot, dx, dz, player, weaponWindow) : Infinity;
+      if (interception < Math.min(terrain, playerHit)) {
+        state.effects.push({ kind: 'hit', x: shot.x + dx * interception, z: shot.z + dz * interception, alt: shot.alt, life: 0.16 });
+        shot.life = 0;
+      } else if (state.orbitDrones.some(drone => inBand(shot.alt, drone.alt, weaponWindow)
         && impactTime(shot, dx, dz, drone, WEAPONS.drones.tuning.hitRadius) < Math.min(terrain, playerHit))) {
         shot.life = 0;
       } else if (playerHit < terrain) {
         hurtPlayer(state);
         shot.life = 0;
       }
-    } else if (shot.reversal || ('pierce' in shot && shot.pierce)) {
-      if (advanceOverdrive(state, shot, (shot.reversal ?? ('pierce' in shot ? shot.pierce : undefined))!,
-        dx, dz, terrain, weaponWindow)) resolved.add(shot.volley);
+    } else if (shot.reversal || shot.pierce) {
+      if (advancePiercingShot(state, shot, (shot.reversal ?? shot.pierce)!, dx, dz, terrain, weaponWindow)) resolved.add(shot.volley);
     } else {
       let enemyHit: Enemy | null = null;
       let bossHit = false;

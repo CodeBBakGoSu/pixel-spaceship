@@ -1,9 +1,10 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
 import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
+import { EVOLUTIONS } from './data/items.ts';
 import { LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
-import { beaconTick, createStage, stepStage } from './stage.ts';
+import { beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
@@ -33,6 +34,12 @@ function routeFor(state: StageState, mode: PilotMode): Route {
     return { x: weak.x + target.x - boss.x, z: weak.z + target.z - boss.z, alt: weak.alt + target.alt - boss.alt, kind: 'weak' };
   }
   if (weak) return { ...weak, kind: 'weak' };
+  if (mode === 'full' && state.run) {
+    const chest = nearest(state.chests.drops, p.x, p.z);
+    if (chest) return { ...chest, kind: 'pickup' };
+    const carrier = nearest(state.enemies.filter(enemy => enemy.carrier && !enemy.entry && enemy.hp > 0), p.x, p.z);
+    if (carrier) return { ...carrier, kind: 'enemy' };
+  }
   const pass = state.reversal;
   if (mode === 'full' && pass && state.tick < pass.until) {
     const former = nearest(state.enemies.filter(enemy => enemy.hp && inBand(enemy.alt, p.altitude) && pass.pursuers.includes(enemy.id)
@@ -141,10 +148,16 @@ function hasRearFlareTarget(state: StageState): boolean {
 }
 
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
+  if (state.phase === 'chest') {
+    return { chestPick: state.chestReveal ? 'continue' : chestEvolutions(state)[0] ?? 'open' };
+  }
   if (state.phase === 'draft') {
     if (!state.run) return { pick: state.draft[0] };
     const safe = state.run.cards.filter(card => card.variant !== 'risky' || state.hull > REPLAY_RISK_HULL);
-    const preferred = REPLAY_DRAFT_PRIORITY.find(id => safe.some(card => card.id === id)
+    const evolutionGoals = safe.filter(card => card.id === 'twin'
+      || card.id === EVOLUTIONS.twin.buff && !state.run!.buffLevels[EVOLUTIONS.twin.buff]);
+    const preferred = state.hull > REPLAY_RISK_HULL && !state.run.evolutions.twin && evolutionGoals[0]?.id
+      || REPLAY_DRAFT_PRIORITY.find(id => safe.some(card => card.id === id)
       && (id !== 'repair' || state.hull <= state.maxHull - 2));
     return { pick: preferred ?? safe.find(card => card.id !== 'repair' && card.id !== 'credits')?.id
       ?? safe[0]?.id ?? state.draft[0] };
@@ -197,7 +210,7 @@ export function seekStage(options: StageOptions, ground: Ground): StageState {
   // A replay must be able to reach any active tick. Once the core is the last
   // objective, fly a holding pattern so an early clear cannot truncate the seek.
   const replay = (flight: StageState, conservative: boolean): StageState => {
-    while (flight.tick < target && (flight.phase === 'playing' || flight.phase === 'draft')) {
+    while (flight.tick < target && (flight.phase === 'playing' || flight.phase === 'draft' || flight.phase === 'chest')) {
       const holding = conservative || flight.boss?.weakPoints[flight.boss.index]?.kind === 'core';
       stepStage(flight, flight.phase === 'playing' && holding ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
     }

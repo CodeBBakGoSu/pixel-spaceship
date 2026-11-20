@@ -145,6 +145,7 @@ export const CHESTS = [
     rewards: [{ count: 1, weight: 40 }, { count: 3, weight: 45 }, { count: 5, weight: 15 }] },
   { id: 'second-evolution', second: 400, carrierXp: 30, kind: 'evolution', bonus: [1, 2], fallback: 3, escort: true },
 ] as const satisfies readonly ChestDefinition[];
+export type ChestId = typeof CHESTS[number]['id'];
 
 export type BillDefinition = { id: string; second: number; duration: number; demand: BillDemand; reward: BillReward };
 type BillDemand =

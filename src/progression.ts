@@ -1,6 +1,6 @@
 import {
   BUFFS, BUFF_IDS, DRAFT_RULES, EVOLUTIONS, OVERFLOW_IDS, STARTER_SHIP, WEAPON_IDS,
-  type BuffId, type DraftChoiceId, type GearId, type WeaponId,
+  type BuffId, type DraftChoiceId, type EvolutionId, type GearId, type WeaponId,
 } from './data/items.ts';
 import { random, rngStream } from './stage-random.ts';
 
@@ -25,6 +25,7 @@ export type ProgressionOptions = {
 export type RunProgression = {
   weaponLevels: Partial<Record<WeaponId, number>>;
   buffLevels: Partial<Record<BuffId, number>>;
+  evolutions: Partial<Record<WeaponId, EvolutionId>>;
   weaponSlots: number;
   buffSlots: number;
   weapons: readonly WeaponId[];
@@ -51,7 +52,7 @@ function draftCharges(value: number | undefined, fallback: number, cap: number):
 
 export function createProgression(seed: number, options: ProgressionOptions = {}): RunProgression {
   return {
-    weaponLevels: { [STARTER_SHIP.weapon]: 1 }, buffLevels: {},
+    weaponLevels: { [STARTER_SHIP.weapon]: 1 }, buffLevels: {}, evolutions: {},
     weaponSlots: DRAFT_RULES.baseSlots,
     buffSlots: (options.rank ?? 0) >= DRAFT_RULES.buffUnlockRank ? DRAFT_RULES.maxSlots : DRAFT_RULES.baseSlots,
     weapons: [...new Set<WeaponId>(options.weapons ?? ['twin', 'pods'])], buffs: [...new Set(options.buffs ?? [])],
@@ -114,17 +115,20 @@ function overflowCard(run: RunProgression, id: typeof OVERFLOW_IDS[number]): Dra
   return { id, currentLevel, maxLevel, nextLevel: Math.min(currentLevel + 1, maxLevel), variant: 'normal', pairHint: false };
 }
 
-function deal(run: RunProgression, keep: DraftCard[] = []): DraftCard[] {
-  const remaining = DRAFT_RULES.cardCount - keep.length;
-  const held = keep.map(card => card.id);
+function eligibleGear(run: RunProgression, held: DraftChoiceId[] = []) {
   const canAddWeapon = Object.keys(run.weaponLevels).length < run.weaponSlots;
   const canAddBuff = Object.keys(run.buffLevels).length < run.buffSlots;
   const eligible = (id: GearId, canAdd: boolean): boolean => {
     const level = gearLevel(run, id);
     return !held.includes(id) && !run.banished.includes(id) && level < maximumLevel(id) && (level > 0 || canAdd);
   };
-  const weapons = run.weapons.filter(id => eligible(id, canAddWeapon));
-  const buffs = run.buffs.filter(id => eligible(id, canAddBuff));
+  return { weapons: run.weapons.filter(id => eligible(id, canAddWeapon)), buffs: run.buffs.filter(id => eligible(id, canAddBuff)) };
+}
+
+function deal(run: RunProgression, keep: DraftCard[] = []): DraftCard[] {
+  const remaining = DRAFT_RULES.cardCount - keep.length;
+  const held = keep.map(card => card.id);
+  const { weapons, buffs } = eligibleGear(run, held);
   const cards = [...keep];
   if (remaining > 0 && run.draftsResolved === 0 && weapons.length && !held.some(isWeaponId)) {
     cards.push(gearCard(run, pickRandom(run, weapons)));
@@ -153,9 +157,8 @@ function closeDraft(run: RunProgression): void {
   run.draftsResolved++;
 }
 
-export function applyRunPick(run: RunProgression, id: DraftChoiceId): DraftCard | null {
-  const card = run.cards.find(choice => choice.id === id);
-  if (!card) return null;
+function applyCard(run: RunProgression, card: DraftCard): void {
+  const { id } = card;
   if (isWeaponId(id)) run.weaponLevels[id] = card.nextLevel;
   if (isBuffId(id)) run.buffLevels[id] = card.nextLevel;
   if (id === 'credits') run.credits += DRAFT_RULES.creditReward;
@@ -163,7 +166,40 @@ export function applyRunPick(run: RunProgression, id: DraftChoiceId): DraftCard 
     if (run.damageUpgrades < DRAFT_RULES.maxDamageUpgrades) run.damageUpgrades = card.nextLevel;
     else run.credits += DRAFT_RULES.cappedDamageCredit;
   }
+}
+
+export function applyRunPick(run: RunProgression, id: DraftChoiceId): DraftCard | null {
+  const card = run.cards.find(choice => choice.id === id);
+  if (!card) return null;
+  applyCard(run, card);
   closeDraft(run);
+  return card;
+}
+
+export function availableEvolutions(run: RunProgression): WeaponId[] {
+  return WEAPON_IDS.filter(id => !run.evolutions[id] && run.weaponLevels[id] === DRAFT_RULES.maxWeaponLevel
+    && (run.buffLevels[EVOLUTIONS[id].buff] ?? 0) >= 1);
+}
+
+export function evolveWeapon(run: RunProgression, weapon: WeaponId): EvolutionId | null {
+  if (!availableEvolutions(run).includes(weapon)) return null;
+  return run.evolutions[weapon] = EVOLUTIONS[weapon].id;
+}
+
+export function rollBonusUpgrade(run: RunProgression, rng: { rng: number }): DraftCard {
+  const { weapons, buffs } = eligibleGear(run);
+  const legal: GearId[] = [...weapons, ...buffs];
+  const owned = legal.filter(id => gearLevel(run, id) > 0);
+  const pool = owned.length ? owned : legal;
+  let card: DraftCard;
+  if (pool.length) {
+    const id = pool[Math.floor(random(rng) * pool.length)];
+    const currentLevel = gearLevel(run, id);
+    card = { id, currentLevel, nextLevel: currentLevel + 1, maxLevel: maximumLevel(id), variant: 'normal', pairHint: false };
+  } else {
+    card = overflowCard(run, OVERFLOW_IDS[Math.floor(random(rng) * OVERFLOW_IDS.length)]);
+  }
+  applyCard(run, card);
   return card;
 }
 

@@ -99,6 +99,14 @@
         <button type="button" id="draft-skip" data-i18n="draft.skip"></button>
       </div>
     </section>
+    <section class="game-card chest-card" id="chest-card" role="dialog" aria-modal="true" aria-labelledby="chest-heading" hidden>
+      <div class="card-kicker" id="chest-kicker"></div>
+      <h2 id="chest-heading"></h2>
+      <p id="chest-detail"></p>
+      <div class="chest-choices" id="chest-choices"></div>
+      <ul class="chest-reels" id="chest-reels" aria-live="polite" hidden></ul>
+      <div class="card-actions"><button type="button" id="chest-action"></button></div>
+    </section>
     <section class="guide-card" id="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-heading" hidden>
       <header class="guide-heading"><h2 id="guide-heading" data-i18n="guide.title"></h2></header>
       <div class="guide-body" tabindex="0">

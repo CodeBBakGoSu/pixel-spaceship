@@ -45,7 +45,7 @@ function runSortie(args, profile, seed, ground) {
   const stage = createStage({ ...parseStageOptions('?autoplay=1&mode=survivors'), seed, mobile: args.mobile, heat: args.heat }, ground);
   const pilot = createBot(profile, seed);
   let inputs = 0;
-  while (stage.phase === 'playing' || stage.phase === 'draft') {
+  while (stage.phase === 'playing' || stage.phase === 'draft' || stage.phase === 'chest') {
     if (++inputs > RUN_END_TICK * 2) throw new Error(`Replay did not finish for ${profile}, seed ${seed}`);
     stepStage(stage, pilot(stage, ground), ground);
   }
@@ -59,7 +59,8 @@ function runSortie(args, profile, seed, ground) {
     hull: stage.hull, maxHull: stage.maxHull, hitsTaken: stage.hitsTaken, kills: stage.kills, levelUps: stage.level - 1,
     weapons: Object.fromEntries(WEAPON_IDS.filter(id => stage.run.weaponLevels[id]).map(id => [id, stage.run.weaponLevels[id]])),
     buffs: Object.fromEntries(BUFF_IDS.filter(id => stage.run.buffLevels[id]).map(id => [id, stage.run.buffLevels[id]])),
-    evolutions: [], billsOffered: 0, billsPaid: 0,
+    evolutions: WEAPON_IDS.flatMap(id => stage.run.evolutions[id] ? [stage.run.evolutions[id]] : []),
+    chests: stage.chests.opened, billsOffered: 0, billsPaid: 0,
     stateHash: createHash('sha256').update(JSON.stringify(stage)).digest('hex'),
   };
 }
@@ -91,6 +92,8 @@ function summarize(profile, runs) {
   const billsOffered = runs.reduce((sum, run) => sum + run.billsOffered, 0);
   const billsPaid = runs.reduce((sum, run) => sum + run.billsPaid, 0);
   const weapons = {};
+  const evolutions = {};
+  for (const run of runs) for (const id of run.evolutions) evolutions[id] = (evolutions[id] ?? 0) + 1;
   for (const id of WEAPON_IDS) {
     let equippedRuns = 0, maxLevel = 0;
     for (const run of runs) {
@@ -108,7 +111,8 @@ function summarize(profile, runs) {
     deathPhases: breakdown(runs, 'deathPhase', PHASES.map(phase => phase.id)),
     endHull: breakdown(runs, 'hull', []), medianEndHull: distribution(runs, 'hull').median,
     medianKills: distribution(runs, 'kills').median, medianLevelUps: distribution(runs, 'levelUps').median,
-    weapons, evolutions: {}, billsPaidPct: billsOffered ? 100 * billsPaid / billsOffered : null,
+    weapons, evolutions, medianChests: distribution(runs, 'chests').median,
+    billsPaidPct: billsOffered ? 100 * billsPaid / billsOffered : null,
   };
 }
 

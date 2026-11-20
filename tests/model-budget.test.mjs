@@ -60,6 +60,15 @@ test('a full Gnat swarm adds one instanced batch and at most 1,280 triangles', (
   assert.ok(triangles > 0 && triangles * 80 <= 1280, `swarm: ${triangles * 80}`);
 });
 
+test('carrier beacons and crates share a single small world instance batch', () => {
+  const batch = flightScene.makeChestBatch();
+  assert.ok(batch.isInstancedMesh);
+  assert.equal(batch.count, 0);
+  assert.equal(batch.instanceMatrix.count, 12);
+  assert.equal(batch.geometry.index.count / 3 * batch.instanceMatrix.count, 144);
+  assert.equal(batch.layers.mask, 1, 'the rear camera can see the crate batch');
+});
+
 test('each weapon mounts one distinct mesh to the existing ship and the four heaviest fit the budget', () => {
   const ship = new Object3D();
   const mounts = new WeaponMounts(ship);
@@ -83,6 +92,6 @@ test('each weapon mounts one distinct mesh to the existing ship and the four hea
   assert.equal(ship.children.filter(mesh => mesh.visible).length, 0);
 
   const fourMounts = costs.sort((a, b) => b - a).slice(0, 4).reduce((total, triangles) => total + triangles, 0);
-  const drones = orbitDroneGeometry().index.count / 3 * 3;
-  assert.ok(fourMounts + drones <= 430, `mounts ${fourMounts} + drones ${drones}`);
+  const drones = orbitDroneGeometry().index.count / 3 * 4;
+  assert.ok(fourMounts + drones <= 432, `mounts ${fourMounts} + drones ${drones}`);
 });
