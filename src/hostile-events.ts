@@ -7,4 +7,6 @@ export type CombatEvents = {
   impact?(shot: Shot, x: number, z: number, alt: number): void;
   graze?(shot: Shot, x: number, z: number, alt: number): void;
   hit?(damage: number, fromX: number, fromZ: number, fromAlt: number): void;
+  roll?(side: -1 | 1, barrel: boolean): void;
+  parry?(shot: Shot, x: number, z: number, alt: number): void;
 };

@@ -8,6 +8,7 @@ import type { BillState } from './bills.ts';
 import type { Profile, RunMetrics, hangarLoadout } from './meta.ts';
 import type { RunProgression } from './progression.ts';
 import type { RangedShotFields } from './ranged-weapons.ts';
+import type { RollKind } from './data/roll.ts';
 
 export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
   | LandmarkId | NewEnemyKind;
@@ -37,6 +38,13 @@ export type Maneuver = {
   exitAltitude: number;
   side: -1 | 1;
 };
+export type Roll = {
+  kind: RollKind;
+  side: -1 | 1;
+  /** Zero on the activation tick. */
+  elapsed: number;
+  altitude: number;
+};
 export type ManeuverTrail = {
   kind: ManeuverKind;
   startTick: number;
@@ -53,6 +61,8 @@ export type StageInput = {
   climb?: number;
   maneuver?: ManeuverKind;
   maneuverTurn?: number;
+  roll?: boolean;
+  rollTurn?: number;
   boost?: boolean;
   bomb?: boolean;
   flare?: boolean;
@@ -235,7 +245,10 @@ export type StageState = {
   viewTag: number;
   arena: { x: number; z: number; radius: number };
   boundaryWarning: boolean;
-  player: { x: number; z: number; altitude: number; yaw: number; bank: number; vx?: number; vz?: number };
+  player: {
+    x: number; z: number; altitude: number; yaw: number; bank: number;
+    bankDrive?: number; bankDrop?: number; lastTurn?: -1 | 1; vx?: number; vz?: number;
+  };
   speed: number;
   climbRate: number;
   hull: number;
@@ -260,6 +273,8 @@ export type StageState = {
   maneuver: Maneuver | null;
   maneuverTrail: ManeuverTrail | null;
   maneuverReadyAt: number;
+  roll?: Roll | null;
+  rollReadyAt?: number;
   bodyGraceUntil: number;
   reversal: {
     startTick: number;

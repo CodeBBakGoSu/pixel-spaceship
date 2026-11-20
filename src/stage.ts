@@ -1,4 +1,6 @@
-import { advanceBank, boostAirspeed, BOOST_TURN_RATE, CRUISE_SPEED, TURN_RATE } from './flight.ts';
+import { advanceBank, advanceBankDrive, advanceBankDrop, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
+import { advanceRoll, rollAltitude, rollLateralStep } from './roll.ts';
+import { ROLL_TURN_DEADZONE } from './data/roll.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
@@ -474,7 +476,7 @@ function reverseHeading(state: StageState, entryYaw: number): void {
 }
 
 function fly(state: StageState, input: StageInput, ground: Ground, grace: boolean, controlled: boolean): void {
-  const p = state.player, a = state.arena, maneuver = state.maneuver;
+  const p = state.player, a = state.arena, maneuver = state.maneuver, roll = state.roll;
   if (!input.boost) state.boostRelease = false;
   const boostHeld = controlled && !grace && !!input.boost && !state.boostRelease;
   const priorBoost = state.boosting;
@@ -487,6 +489,7 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     const motion = advanceManeuver(maneuver);
     state.speed = motion.speed;
     p.bank = 0;
+    if (p.bankDrive) p.bankDrive = 0;
     const fx = Math.sin(maneuver.yaw), fz = Math.cos(maneuver.yaw);
     p.x += fx * motion.distance + fz * motion.slide;
     p.z += fz * motion.distance - fx * motion.slide;
@@ -498,15 +501,27 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     }
   } else {
     if (maneuver) maneuver.elapsed++;
-    const turn = clamp(input.turn ?? 0, -1, 1);
-    p.bank = advanceBank(p.bank, turn, STEP);
-    const yaw = p.yaw + turn * (state.boosting ? BOOST_TURN_RATE : TURN_RATE) * agility * STEP;
-    p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
+    const turn = roll ? 0 : clamp(input.turn ?? 0, -1, 1);
+    const drive = advanceBankDrive(p.bankDrive ?? 0, turn, STEP);
+    if (drive || p.bankDrive !== undefined) p.bankDrive = drive;
+    p.bank = advanceBank(p.bank, turn, STEP, drive);
+    if (!roll) {
+      const yaw = p.yaw + bankYawRate(p.bank, turn, state.boosting) * agility * STEP;
+      p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
+    }
     const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
     state.speed = thrust * (1 - Math.abs(turn) * 0.25);
-    p.x += Math.sin(p.yaw) * state.speed * STEP;
-    p.z += Math.cos(p.yaw) * state.speed * STEP;
-    altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * agility * STEP;
+    const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+    p.x += fx * state.speed * STEP;
+    p.z += fz * state.speed * STEP;
+    if (roll) {
+      const lateral = rollLateralStep(roll);
+      p.x += fz * lateral;
+      p.z -= fx * lateral;
+      altitude = rollAltitude(roll);
+    } else {
+      altitude = p.altitude + (p.bankDrop ?? 0) + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * agility * STEP;
+    }
   }
   const dx = p.x - a.x, dz = p.z - a.z;
   const distance = Math.hypot(dx, dz);
@@ -518,7 +533,17 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     p.z = a.z + dz * bound / distance;
   }
   const prior = p.altitude;
-  p.altitude = clamp(altitude, Math.max(MIN_ALTITUDE, ground(p.x, p.z) + 22), MAX_ALTITUDE);
+  const floor = Math.max(MIN_ALTITUDE, ground(p.x, p.z) + 22);
+  const hold = clamp(altitude, floor, MAX_ALTITUDE);
+  if (controlled && !roll) {
+    const drop = advanceBankDrop(p.bankDrop ?? 0, p.bank, STEP);
+    p.altitude = clamp(hold - drop, floor, MAX_ALTITUDE);
+    // Retain only the drop the terrain clamp allowed, so leveling cannot climb above the hold altitude.
+    if (drop || p.bankDrop !== undefined) p.bankDrop = hold - p.altitude;
+  } else {
+    p.altitude = hold;
+    if (p.bankDrop) p.bankDrop = 0;
+  }
   state.climbRate = (p.altitude - prior) / STEP;
 }
 
@@ -632,6 +657,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.phase !== 'playing') {
     if (input.start) {
       const launch = input.launch;
+      delete state.roll;
+      delete state.rollReadyAt;
       Object.assign(state, createStage({ ...parseStageOptions(''), seed: launch?.seed ?? state.seed,
         view: state.initialView, time: 0, mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile,
         profile: launch?.profile ?? state.profile, daily: launch?.daily ?? state.daily, heat: launch?.heat ?? state.heat,
@@ -674,7 +701,10 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
   if (state.weaponFx.length) state.weaponFx = state.weaponFx.filter(effect => state.tick < effect.until);
-  if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? input.turn ?? 0);
+  const turn = input.turn ?? 0;
+  advanceRoll(state, input.roll ? input.rollTurn ?? turn : undefined, events);
+  if (Math.abs(turn) >= ROLL_TURN_DEADZONE) state.player.lastTurn = turn < 0 ? -1 : 1;
+  if (!input.roll && input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? turn);
   const maneuver = state.maneuver;
   const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);

@@ -93,3 +93,22 @@ Heat 0, seeds 1–100 per profile and cap. The baseline is Stage 5 (`51a42c4`). 
 Every seed kept its terminal outcome and remaining hull. The average pilot's median kills rose from 710.5 to 711.5 on both caps. The bots stayed in their target ranges with the existing damage, fire intervals, and skill profiles.
 
 The renderer uses two instanced projectile batches per camera pass. A bolt costs two triangles for its head and up to eight for its trail. The shared burst pool holds 120 quads. At 64 hostile bolts the ceiling is 880 triangles, with 48 nearest drop lines. The 192-shot legacy ceiling is 2,160 triangles. Chromium on an RTX 4090 held 60 FPS over 300 frames per view at 1920×1080 and emulated 390×844 with the Warden, 24 regulars, full Gnat caps, 192 projectiles, and 16 mines. Frame p95 was 16.7–16.8 ms.
+
+## Stage 7a
+
+- Hold Shift and press Space to roll, including while boost is held. Space followed by Shift within 80 ms also rolls. Space alone selects the existing reversal. On touch, tap ROLL with the stick held for a barrel to that side or with the stick neutral for an aileron roll in the last turn direction.
+- Roll parries a same-band bolt on ticks 0–23, including every Warden bolt shape. A parry consumes the bolt and leaves one XP. The barrel also lets bolts pass on ticks 24–26. Terrain clearance, mines, and contact damage retain their existing rules. The cooldown is 78 ticks from activation.
+- A sustained full turn reaches 1.5 rad of bank. A 180° turn takes 92 ticks at cruise and 81 boosted, compared with 97 and 82 at `ee94755`. A bank above 60° can lower altitude by up to 5.5 m. The plane recovers that offset on roll-out, within the existing band and terrain limits.
+- The flight model intentionally changes hashes for steered replays. Both Legacy and Survivors cleared all six full-view seeds on each swarm cap, and replaying the recorded inputs reproduced each terminal hash. Legacy cleared in 122.47–131.83 s and Survivors in 589.55–596.48 s. The straight no-turn, no-roll trace retains its baseline hash.
+
+The first roll-enabled 100-seed desktop batch cleared 96% skilled, 92% average, and 9% weak. The weak median was 209.4 s. The final average pilot uses 0.09 roll use and 0.37 dodge quality. The weak pilot uses 0.06 roll use, 0.08 dodge quality, and 0.43 rad aim error. Roll windows and authored hostile damage stayed fixed.
+
+Heat 0, seeds 1–100 per profile. Desktop (80 Gnats) and mobile (50) gave the same combat results. Peak live Gnats fell from 42 to 41, below both caps.
+
+| Profile | Clears before → after | Warden defeats before → after | Median survival before → after | Median end hull before → after |
+|---|---:|---:|---:|---:|
+| Skilled | 93% → 96% | 90% → 95% | 600.0 → 600.0 s | 9 → 10.5 |
+| Average | 63% → 65% | 62% → 64% | 600.0 → 600.0 s | 6 → 5.5 |
+| Weak | 6% → 5% | 1% → 2% | 273.2 → 276.4 s | 0 → 0 |
+
+Chromium with ANGLE Vulkan on an RTX 4090 ran 300 frame intervals per view at 1920×1080 and emulated 390×844. The stress fixture held the Warden, 24 regular enemies, the full 80/50 Gnat cap, 192 projectiles, and 16 mines. Each view held 60 FPS. Desktop p95 was 16.8 ms TOP and 16.7 ms CHASE and COCKPIT. Emulated portrait was 16.8 ms across all views.

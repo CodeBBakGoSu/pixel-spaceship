@@ -1,0 +1,16 @@
+export const FLIGHT_MODEL = {
+  tapBank: 0.65,
+  maxBank: 1.5,
+  fullBankHoldSeconds: 1.2,
+  bankDriveReleaseRate: 2.5,
+  rollInRate: 2.05,
+  rollOutRate: 1.65,
+  rollInResponse: 8,
+  rollOutResponse: 5,
+  fullStickYawFloor: 0.66,
+  peakYawGain: 1.3,
+  steepBank: Math.PI / 3,
+  maxBankDrop: 5.5,
+  bankSinkRate: 10,
+  bankRecoveryRate: 12,
+} as const;

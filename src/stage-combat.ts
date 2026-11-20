@@ -2,12 +2,14 @@ import type { Band, Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Posit
   WeakPoint } from './stage-types.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape, type HostileSourceKind } from './data/hostile-fire.ts';
+import { ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, SURVIVOR_PLAYER_DAMAGE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
 import { advanceRangedShot } from './ranged-weapons.ts';
+import { rollBoltImmune, rollParryActive } from './roll.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -77,8 +79,8 @@ export const angleTo = (yaw: number, dx: number, dz: number): number => {
 export const inBand = (first: number, second: number, window = HIT_WINDOW): boolean =>
   Math.abs(first - second) <= window;
 
-export function hostileCanHit(altitude: number, state: Pick<StageState, 'player' | 'invulnerability' | 'hull'>): boolean {
-  return state.hull > 0 && state.invulnerability <= 0 && inBand(altitude, state.player.altitude);
+export function hostileCanHit(altitude: number, state: Pick<StageState, 'player' | 'invulnerability' | 'hull' | 'roll'>): boolean {
+  return state.hull > 0 && state.invulnerability <= 0 && !rollBoltImmune(state.roll) && inBand(altitude, state.player.altitude);
 }
 
 function weakPointExposed(boss: Boss, tick: number): boolean {
@@ -844,6 +846,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
   const misses = new Map<number, Effect>();
   const weaponWindow = hitWindow(state);
   const aegis = !!state.run?.evolutions.pods;
+  const parryActive = rollParryActive(state.roll);
   const count = state.shots.length;
   for (let i = 0; i < count; i++) {
     const shot = state.shots[i];
@@ -858,8 +861,9 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
     const dx = shot.vx * STEP, dz = shot.vz * STEP;
     const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
-      const dangerous = hostileCanHit(shot.alt, state);
-      const playerHit = dangerous ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
+      const parry = parryActive && state.hull > 0 && inBand(shot.alt, player.alt);
+      const dangerous = !parry && hostileCanHit(shot.alt, state);
+      const playerHit = parry || dangerous ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
       const interception = aegis ? aegisInterceptTime(shot, dx, dz, player, weaponWindow) : Infinity;
       const first = Math.min(terrain, playerHit);
       let stopped = terrain;
@@ -878,10 +882,17 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
           shot.life = 0;
           stopped = droneHit;
         } else if (playerHit < terrain) {
-          // Use a point back along the trajectory even when the previous pose is already inside the hit radius.
-          const travel = 12;
-          const source = events?.hit ? { x: shot.x - dx * travel, z: shot.z - dz * travel, alt: shot.alt } : undefined;
-          hurtPlayer(state, source, events);
+          if (parry) {
+            const x = shot.x + dx * playerHit, z = shot.z + dz * playerHit;
+            // Keep the nearby reward at the front of the salvage pool so it is collected even at the pickup cap.
+            state.pickups.unshift({ id: ++state.nextId, x, z, alt: shot.alt, xp: ROLL_PARRY_XP, born: state.tick });
+            events?.parry?.(shot, x, z, shot.alt);
+          } else {
+            // Use a point back along the trajectory even when the previous pose is already inside the hit radius.
+            const travel = 12;
+            const source = events?.hit ? { x: shot.x - dx * travel, z: shot.z - dz * travel, alt: shot.alt } : undefined;
+            hurtPlayer(state, source, events);
+          }
           shot.life = 0;
           stopped = playerHit;
         } else if (dangerous && events?.graze) {

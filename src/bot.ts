@@ -1,8 +1,10 @@
 import { autopilotInput } from './autoplay.ts';
 import { BOT_DRAFT_VALUES, BOT_POLICY, BOT_PROFILES, type BotProfile, type BotProfileId } from './data/bot-profiles.ts';
 import { DRAFT_RULES, EVOLUTIONS, WEAPONS, WEAPON_IDS } from './data/items.ts';
+import { ROLL_PARRY_TICKS } from './data/roll.ts';
 import { isWeaponId, type DraftCard } from './progression.ts';
-import { BANDS, clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, MINE_RADIUS } from './stage-combat.ts';
+import { canRoll } from './roll.ts';
+import { BANDS, clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, impactTime, inBand, MINE_RADIUS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { chestEvolutions } from './stage.ts';
 import { random, rngStream } from './stage-random.ts';
 import type { Band, Ground, Position, StageInput, StageState } from './stage-types.ts';
@@ -92,10 +94,29 @@ function cardValue(card: DraftCard, state: StageState): number {
   return score;
 }
 
+function rollDirection(state: StageState, profile: BotProfile, rng: { rng: number }): number | undefined {
+  if (state.invulnerability > 0 || !canRoll(state)) return;
+  const p = state.player, parry = ROLL_PARRY_TICKS / TICKS_PER_SECOND;
+  const horizon = parry + BOT_POLICY.rollAnticipation * profile.rollDodgeQuality;
+  const radius = HOSTILE_HIT_RADIUS + BOT_POLICY.rollPredictionMargin * profile.rollDodgeQuality;
+  let earliest = Infinity, lateral = 0;
+  for (const shot of state.shots) {
+    if (shot.kind !== 'hostile' || !inBand(shot.alt, p.altitude)) continue;
+    const hit = impactTime(shot, shot.vx - (p.vx ?? 0), shot.vz - (p.vz ?? 0), p, radius, 0, Math.min(shot.life, horizon));
+    if (hit >= earliest) continue;
+    earliest = hit;
+    lateral = (shot.x - p.x) * Math.cos(p.yaw) - (shot.z - p.z) * Math.sin(p.yaw);
+  }
+  if (earliest === Infinity || random(rng) >= profile.rollUse) return;
+  if (earliest <= parry && random(rng) < profile.parryTiming) return 0;
+  return (random(rng) < profile.rollDodgeQuality ? -1 : 1) * (lateral < 0 ? -1 : 1);
+}
+
 /** A pilot's observations and reaction timing stay outside the flight state and are seeded independently. */
 export function createBot(profileId: BotProfileId, seed: number): (state: StageState, ground?: Ground) => StageInput {
   const profile = BOT_PROFILES[profileId];
   const rng = rngStream(seed, `bot:${profileId}`);
+  const rollRng = rngStream(seed, `bot:${profileId}:roll`);
   let nextDecision = 0;
   let nextScout = 0;
   let preferredBand: Band = 1;
@@ -144,6 +165,8 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
       climb: state.boss && !seeksAltitude ? 0 : base.climb,
       boost: base.boost && useManeuvers,
     };
+    const rollTurn = rollDirection(state, profile, rollRng);
+    if (rollTurn !== undefined) return { ...held, toggleView: base.toggleView, roll: true, rollTurn };
     return { ...held, toggleView: base.toggleView, maneuver: useManeuvers ? base.maneuver : undefined,
       bomb: useManeuvers && base.bomb, flare: useManeuvers && base.flare };
   };

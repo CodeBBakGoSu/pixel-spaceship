@@ -247,6 +247,7 @@
 .experience.phone-layout .touch-button{right:auto;bottom:auto}.experience.phone-layout .loop{left:var(--loop-x);top:var(--loop-y);width:var(--loop-w);height:var(--loop-h)}
 .experience.phone-layout .boost{left:var(--boost-x);top:var(--boost-y);width:var(--boost-w);height:var(--boost-h)}.experience.phone-layout .bomb{left:var(--bomb-x);top:var(--bomb-y);width:var(--bomb-w);height:var(--bomb-h)}.experience.phone-layout .view{left:var(--view-x);top:var(--view-y);width:var(--view-w);height:var(--view-h)}
 .experience.phone-layout .flare{left:var(--flare-x);top:var(--flare-y);width:var(--flare-w);height:var(--flare-h);border:2px solid #e99b62;color:#ffd0a1}
+.experience.phone-layout .roll{left:var(--roll-x);top:var(--roll-y);width:var(--roll-w);height:var(--roll-h);border:2px solid #8ddcce;color:#baeee4}
 .experience.phone-layout .game-overlay{padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 8px)}
 .experience.phone-layout .game-card{width:min(420px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain}.experience.phone-layout .card-actions button{min-width:44px;min-height:44px}
 .experience.phone-layout.menu-open #control-backdrop{display:none}

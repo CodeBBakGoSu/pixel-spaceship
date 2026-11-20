@@ -1,4 +1,5 @@
 import './style.css';
+import './numeric-hud.css';
 import { autopilotInput, seekStage } from './autoplay.ts';
 import { updateBillDisplay } from './bill-display.ts';
 import type { Segment } from './camera.ts';
@@ -6,11 +7,14 @@ import { CHECKPOINT_KEY, decodeCheckpoint, encodeCheckpoint } from './checkpoint
 import { createChestDisplay } from './chest-display.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
-import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
+import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { CombatAudio } from './combat-audio.ts';
-import { phaseAt } from './data/phases.ts';
+import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
+import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
+import { FlightChord, type SpaceAction } from './flight-chord.ts';
+import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
 import { createGearIcon } from './gear-icons.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { createHangarDisplay } from './hangar-display.ts';
@@ -24,11 +28,12 @@ import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
+import { clockText, NumericHud } from './numeric-hud.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
-import { activeWeakPoint, bossTick, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
-import { bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP,
+import { activeWeakPoint, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
+import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -57,6 +62,7 @@ const audioVolume = $<HTMLInputElement>('#audio-volume');
 const touchLoop = $<HTMLButtonElement>('#touch-loop');
 const touchBomb = $<HTMLButtonElement>('#touch-bomb');
 const touchFlare = $<HTMLButtonElement>('#touch-flare');
+const touchRoll = $<HTMLButtonElement>('#touch-roll');
 const stick = $('#stick'), knob = $('#stick-knob');
 const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-lang]')];
 const safeProbe = $('#safe-area-probe');
@@ -67,11 +73,7 @@ const rearViewCue = $('#rear-view-cue');
 const flightMessage = $('#flight-message');
 const maneuverCue = $('#maneuver-cue');
 const reversalCue = $('#reversal-cue');
-const hullBar = $('#hull-bars');
-const hullWarning = $('#hull-warning');
-const hullSegments = [...hullBar.children];
-let paintedHull = -1;
-let paintedMaxHull = -1;
+const numericHud = new NumericHud(root);
 const mirrorThreat = new RearMirrorThreat();
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
@@ -86,7 +88,8 @@ const ground = (x: number, z: number) => world.height(x, z);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
 const demoBullets = query.get('fixture') === 'bullets';
-if (demoBullets) {
+const flightFixture = isFlightFixture(query.get('fixture'));
+if (demoBullets || flightFixture) {
   query.set('mode', 'survivors');
   query.set('t', '0');
 }
@@ -134,6 +137,7 @@ try {
 }
 
 const keys = new Set<string>();
+const flightChord = new FlightChord();
 const steeringKeys = new Set(['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 let touch = false, phone: PhoneLayout | null = null, cockpit: CockpitLayout | null = null;
 let hud: HudLayout, layoutView: Segment | null = null;
@@ -151,6 +155,8 @@ let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
 let pendingChest: StageInput['chestPick'];
 type ManeuverPress = { kind: ManeuverKind; turn: number };
 let pendingManeuver: ManeuverPress | undefined;
+let requestedSpace: ManeuverPress | undefined;
+let pendingRoll: number | undefined;
 let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
@@ -163,6 +169,7 @@ const reversalFlash = $('#reversal-flash');
 let hitstopUntil = -Infinity;
 const HIT_FREEZE_MS = 60;
 let visualFreezeUntil = -Infinity, frameNow = 0, cueTime = 0, primingBullets = false;
+let parryNoticeUntil = 0;
 const projectedShip = { x: 0, y: 0, depth: 0 };
 const feedbackTarget = { x: 0, z: 0, alt: 0 };
 let feedbackAnchor: { x: number; y: number } | null = null;
@@ -185,12 +192,20 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
     audio.play('hit');
     if (state.view === 'cockpit') audio.play('warning');
   },
+  roll() { audio.play('roll'); },
+  parry(shot, x, z, alt) {
+    visualFreezeUntil = frameNow + HIT_FREEZE_MS;
+    parryNoticeUntil = state.tick + 44;
+    scene?.hostileGraze(shot, x, z, alt, state.tick);
+    audio.play('parry');
+  },
 } : undefined;
 let helpTimer = 0, lastHelp = '';
 let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
 let rearDanger: RearDanger | null = null;
 const textNodes = new Map<string, HTMLElement>();
+const sortieTiming = { boss: clockText(RUN_BOSS_SECONDS), limit: clockText(RUN_END_SECONDS) };
 
 function setText(selector: string, copy: string): void {
   let node = textNodes.get(selector);
@@ -239,6 +254,7 @@ function resumeCheckpoint(): void {
   // Preserve purchases made in the hangar. The sortie keeps the saved in-flight upgrade effects.
   Object.assign(state, checkpoint, { profile });
   feedback.reset();
+  parryNoticeUntil = 0;
   carry = 0;
   menuKey = '';
   layoutFlight();
@@ -266,6 +282,7 @@ function applyLanguage(): void {
     if (el.dataset.label) el.setAttribute('aria-label', t(el.dataset.label as MessageKey));
     if (el.dataset.tooltip) el.title = t(el.dataset.tooltip as MessageKey);
   });
+  setText('#guide-boss-copy', state.run ? `${t('guide.sortieTiming', sortieTiming)} ${t('guide.bossHint')}` : t('guide.bossHint'));
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
   refreshAudioControl();
   menuKey = lastHelp = lastFlightKey = '';
@@ -298,7 +315,7 @@ function layoutFlight(): void {
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
-    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'boost', 'bomb', 'flare', 'view'] as const) setRect(key, phone[key]);
+    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'roll', 'boost', 'bomb', 'flare', 'view'] as const) setRect(key, phone[key]);
   }
   if (state.run) layoutSortieHud();
   cockpit = state.view === 'cockpit' ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, safe, hud.objective) : null;
@@ -341,7 +358,7 @@ function layoutSortieHud(): void {
   } else if (phone) {
     const y = hud.objective.y + hud.objective.height + 6;
     slots = { x: left + (state.view === 'cockpit' ? 58 : 179), y, width: 211, height: 72 };
-    const x = left + hud.objective.width + 8;
+    const x = hud.objective.x + hud.objective.width + 8;
     bill = { x, y: hud.hud.y, width: phone.playfield.width - (x - left), height: 92 };
   } else {
     const mapReserve = Math.min(78, hud.radar.width) + 5;
@@ -398,10 +415,6 @@ function objectiveText(): string {
   return (point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds })) + navigation;
 }
 
-function clockText(seconds: number): string {
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
 function drawPortrait(warden: boolean): void {
   const c = $<HTMLCanvasElement>('#portrait').getContext('2d')!;
   const rect = (color: string, x: number, y: number, w: number, h: number) => {
@@ -453,58 +466,14 @@ function updateHud(readout: RadarReadout): void {
   }
   evolutionToast.hidden = !evolutionNotice || evolutionNotice.until <= state.tick || state.phase !== 'playing' || state.paused;
   if (evolutionNotice && !evolutionToast.hidden) setText('#evolution-name', t(`item.${evolutionNotice.item.id}.title`));
-  if (paintedMaxHull !== state.maxHull) {
-    while (hullSegments.length > state.maxHull) hullSegments.pop()?.remove();
-    while (hullSegments.length < state.maxHull) {
-      const segment = document.createElement('i');
-      hullSegments.push(segment);
-      hullBar.append(segment);
-    }
-    hullBar.style.setProperty('--hull-slots', String(state.maxHull));
-    paintedMaxHull = state.maxHull;
-    paintedHull = -1;
-  }
-  if (state.hull !== paintedHull) {
-    hullSegments.forEach((segment, index) => segment.classList.toggle('filled', index < state.hull));
-    paintedHull = state.hull;
-  }
-  setText('#hull-value', `${state.hull}/${state.maxHull}`);
-  hullWarning.hidden = state.hull > state.maxHull / 4;
-  hullBar.classList.toggle('critical', !hullWarning.hidden);
-  $('#boost-bar').style.width = `${state.boost * 100}%`;
-  const maxBombs = bombCapacity(state), maxFlares = flareCapacity(state);
-  setText('#bombs', '◆'.repeat(state.bombs) + '◇'.repeat(Math.max(0, maxBombs - state.bombs)));
-  const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / bombReloadTicks(state);
-  $('#bomb-reload-bar').style.width = `${Math.round(clamp(refill, 0, 1) * 100)}%`;
-  touchBomb.setAttribute('aria-disabled', String(!state.bombs || !maneuverAllowsControl(state.maneuver)
-    || state.tick <= state.graceUntil || state.tick < state.bombReadyAt));
-  touchBomb.setAttribute('aria-label', `${t('control.bomb')} · ${state.bombs}/${maxBombs}`);
   const flareReady = canDropFlare(state);
-  setText('#flare-stock', t('cockpit.flares', { count: state.flareCharges, max: maxFlares }));
-  $('#flare-stock').dataset.ready = String(flareReady);
-  touchFlare.setAttribute('aria-disabled', String(!flareReady));
-  touchFlare.setAttribute('aria-label', `${t('control.flare')} · ${state.flareCharges}/${maxFlares}`);
   const ready = canManeuver(state, 'immelmann');
-  const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
-  const loopKey: MessageKey = state.maneuver ? `maneuver.${state.maneuver.kind}` : loopSeconds ? 'hud.loopCooldown' : 'hud.loopReady';
   const keyboard = keyboardAxes();
   const selected = touch ? chooseManeuver(stickX, stickY) : chooseManeuver(keyboard.turn, keyboard.climb);
   const lowBoost = ready && selected === 'j-turn' && state.boost < MANEUVERS['j-turn'].boost;
-  setText('#loop-status', t(lowBoost ? 'hud.jTurnLow' : loopKey, { seconds: loopSeconds }));
-  const loopStatus = $('#loop-status');
-  loopStatus.dataset.ready = String(ready && !lowBoost);
-  const charge = reversalCharge(state);
-  loopStatus.style.setProperty('--loop-charge', `${Math.round(clamp(charge, 0, 1) * 100)}%`);
-  touchLoop.setAttribute('aria-disabled', String(!ready || lowBoost));
+  numericHud.update(state, t, ready && !lowBoost);
   updateRearDangerCue(readout, ready && !lowBoost, flareReady);
-  setText('#view-label', t(`view.${state.view}`));
-  const cost = requiredXp(state.level, !!state.run);
-  const xp = Math.min(cost ?? 0, state.xp);
-  const stats = { level: state.level, xp, cost: cost ?? 0 };
-  setText('#xp-label', t(cost === null ? 'hud.xpMax' : 'hud.xp', stats));
-  $('#xp-label').style.setProperty('--xp-fill', `${cost === null ? 100 : 100 * xp / cost}%`);
   const time = Math.max(0, Math.ceil((endTick(state) - state.tick) / TICKS_PER_SECOND));
-  setText('#segment-timer', clockText(time));
   if (state.run) {
     const eta = Math.ceil((bossTick(state) - state.tick) / TICKS_PER_SECOND);
     setText('#sortie-phase', t(`phase.${phaseAt(state.tick / TICKS_PER_SECOND).id}`));
@@ -514,8 +483,6 @@ function updateHud(readout: RadarReadout): void {
   setText('#score', String(state.score).padStart(6, '0'));
   setText('#salvage', `◆ ${state.salvage}`);
   setText('#objective', objectiveText());
-  setText('#alt-number', String(Math.round(state.player.altitude)));
-  $('#alt-marker').style.top = `${(MAX_ALTITUDE - state.player.altitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
   const boss = state.boss;
   const hp = boss?.weakPoints.reduce((sum, point) => sum + point.hp, 0) ?? 0;
   $('#boss-hud').hidden = !hp;
@@ -532,6 +499,17 @@ function updateHud(readout: RadarReadout): void {
 }
 
 function updateManeuverCue(): void {
+  const rolling = state.phase === 'playing' && !state.paused && state.roll;
+  const parry = state.phase === 'playing' && !state.paused && state.tick < parryNoticeUntil;
+  if (parry || rolling) {
+    reversalCue.hidden = true;
+    maneuverCue.hidden = false;
+    maneuverCue.dataset.kind = parry ? 'parry' : 'roll';
+    maneuverCue.dataset.docked = 'false';
+    setText('#maneuver-name', parry ? t('hud.parry') : rolling ? t(`roll.${rolling.kind}`) : '');
+    setText('#maneuver-detail', parry ? t('hud.parryXp', { xp: ROLL_PARRY_XP }) : '');
+    return;
+  }
   const reversal = state.reversal;
   reversalCue.hidden = state.phase !== 'playing' || state.paused || !reversal || !reversal.kills || state.tick >= reversal.shownUntil;
   flightMessage.dataset.reversal = String(!reversalCue.hidden);
@@ -675,6 +653,8 @@ function updateMenu(): void {
     resetTouch();
     pendingBomb = pendingFlare = false;
     pendingManeuver = undefined;
+    pendingRoll = undefined;
+    flushSpaceInput();
     pendingViews = 0;
   }
   if (status === 'guide' && guide) {
@@ -706,7 +686,7 @@ function updateMenu(): void {
       setText('#card-kicker', t(`menu.${status}.kicker`));
       setText('#card-title', t(`menu.${status}.title`));
       setText('#card-copy', t(interrupted ? 'checkpoint.interrupted' :
-        status === 'title' && state.run ? 'menu.survivors.copy' : `menu.${status}.copy`));
+        status === 'title' && state.run ? 'menu.survivors.copy' : `menu.${status}.copy`, sortieTiming));
       setText('#primary-action', t(`menu.${status}.action`));
       setText('#card-hint', t(`menu.${status}.hint`));
       setText('#help-action-label', t(status === 'title' ? 'guide.title' : 'menu.help'));
@@ -811,6 +791,18 @@ root.addEventListener('touchmove', event => {
   event.preventDefault();
 }, { passive: false });
 
+function resolveSpaceAction(action: SpaceAction | undefined, turn: number): void {
+  if (!action) return;
+  if (action === 'roll') pendingRoll = turn;
+  else if (requestedSpace) pendingManeuver = requestedSpace;
+  requestedSpace = undefined;
+}
+
+function flushSpaceInput(): void {
+  flightChord.reset();
+  requestedSpace = undefined;
+}
+
 window.addEventListener('keydown', event => {
   const { code } = event;
   if (code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -865,7 +857,10 @@ window.addEventListener('keydown', event => {
     const kind = maneuverForKey(code, turn, climb);
     if (kind) {
       event.preventDefault();
-      pendingManeuver = { kind, turn };
+      requestedSpace = { kind, turn };
+      resolveSpaceAction(flightChord.pressSpace(event.timeStamp, event.shiftKey), turn);
+    } else if (code === 'ShiftLeft' || code === 'ShiftRight') {
+      resolveSpaceAction(flightChord.pressShift(event.timeStamp), turn);
     }
   }
   if (code === 'KeyR' && state.rank) pendingStart = true;
@@ -875,6 +870,8 @@ function interruptFlight(): void {
   keys.clear();
   pendingBomb = pendingFlare = false;
   pendingManeuver = undefined;
+  pendingRoll = undefined;
+  flushSpaceInput();
   resetTouch();
   resumeAt = 0;
   if (!persistent || !scene || guide || state.phase !== 'playing' || state.paused) return;
@@ -996,6 +993,7 @@ function bindPress(button: HTMLButtonElement, press: () => void): void {
 bindPress(touchPause, () => { pendingPause = true; });
 bindPress(touchBomb, () => { pendingBomb = true; });
 bindPress(touchFlare, () => { pendingFlare = true; });
+bindPress(touchRoll, () => { pendingRoll = stickX; });
 bindPress($<HTMLButtonElement>('#touch-view'), () => { pendingViews++; });
 
 function keyboardAxes() {
@@ -1018,13 +1016,14 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
-  if (bulletFixture && !bulletFixture.stress) return;
+  if (flightFixture || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
   const launching = pendingStart;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
+  resolveSpaceAction(flightChord.flush(frameNow), 0);
   stepStage(state, {
     ...control,
     start: pendingStart,
@@ -1033,8 +1032,10 @@ function advance(): void {
     pause: pendingPause,
     bomb: pendingBomb || control.bomb,
     flare: pendingFlare || control.flare,
-    maneuver: pendingManeuver?.kind ?? control.maneuver,
+    maneuver: pendingRoll === undefined ? pendingManeuver?.kind ?? control.maneuver : undefined,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
+    roll: pendingRoll !== undefined || control.roll,
+    rollTurn: pendingRoll ?? control.rollTurn,
     toggleView: pendingViews > 0 || control.toggleView,
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
@@ -1046,6 +1047,7 @@ function advance(): void {
   pendingDraft = {};
   pendingChest = undefined;
   pendingManeuver = undefined;
+  pendingRoll = undefined;
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
@@ -1055,6 +1057,7 @@ function advance(): void {
     if (checkpointData) writeCheckpointData(null);
     evolutionNotice = null;
     feedback.reset();
+    parryNoticeUntil = 0;
     visualFreezeUntil = -Infinity;
   }
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
@@ -1230,6 +1233,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
     pursuers: [...state.maneuverTrail.pursuers] },
   cameraYaw: maneuverViewYaw(state),
   maneuverReadyAt: state.maneuverReadyAt, bodyGraceUntil: state.bodyGraceUntil,
+  roll: state.roll && { ...state.roll }, rollReadyAt: state.rollReadyAt,
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
@@ -1301,6 +1305,13 @@ async function start(): Promise<void> {
   resize();
   applyLanguage();
   previousTime = performance.now();
+  if (flightFixture) {
+    frameNow = previousTime;
+    primeFlightFixture(state, query, ground, combatEvents);
+    motion.speed = state.speed;
+    motion.climb = state.climbRate;
+    cueTime = frameNow;
+  }
   if (bulletFixture) {
     frameNow = previousTime;
     primingBullets = true;

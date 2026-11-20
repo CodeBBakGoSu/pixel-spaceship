@@ -14,6 +14,7 @@ import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
+import { ROLLS } from './data/roll.ts';
 import { PICKUP_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
@@ -27,9 +28,10 @@ import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverA
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
+import { rollAltitude, rollAttitude } from './roll.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT,
-  TICKS_PER_SECOND } from './stage-combat.ts';
-import type { ManeuverTrail, Position, Shot, StageState } from './stage-types.ts';
+  STEP, TICKS_PER_SECOND } from './stage-combat.ts';
+import type { ManeuverTrail, Position, Roll, Shot, StageState } from './stage-types.ts';
 import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
@@ -187,6 +189,10 @@ export class FlightScene {
     color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
   }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
+  private readonly rollSample: Roll = { kind: 'aileron', side: 1, altitude: 110, elapsed: 0 };
+  private readonly rollFrom: Position = { x: 0, z: 0, alt: 0 };
+  private readonly rollTo: Position = { x: 0, z: 0, alt: 0 };
+  private readonly rollPose = { pitch: 0, roll: 0, cockpitPitch: 0, cameraPitch: 0, cameraBank: 0, inverted: false };
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
   private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
@@ -432,6 +438,11 @@ export class FlightScene {
 
   private drawTrail(state: StageState, trail: ManeuverTrail | null, flat: boolean, external: boolean): void {
     this.ghost.visible = false;
+    const roll = state.roll;
+    if (roll) {
+      this.drawRollTrail(state, roll, flat);
+      return;
+    }
     if (!trail) {
       upload(this.ribbon, 0);
       return;
@@ -460,6 +471,36 @@ export class FlightScene {
     this.ghost.position.set(origin.x, flat ? TOP_FLIGHT + 1.5 : origin.alt, -origin.z);
     this.ghost.rotation.y = -trail.yaw;
     this.ghost.scale.setScalar(flat ? 1 : 0.9);
+  }
+
+  private drawRollTrail(state: StageState, roll: Roll, flat: boolean): void {
+    const { player: p } = state, { lateral } = ROLLS[roll.kind];
+    const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw), wingSpan = flat ? 9.6 : 8.7;
+    const phase = Math.abs(rollAttitude(roll)) / (2 * Math.PI);
+    const bobOffset = p.altitude - rollAltitude(roll);
+    const sample = this.rollSample;
+    sample.kind = roll.kind;
+    sample.side = roll.side;
+    sample.altitude = roll.altitude;
+    this.trailMaterial.opacity = 0.82;
+    let segments = 0;
+    for (let wing = -1; wing <= 1; wing += 2) {
+      for (let age = 0; age <= roll.elapsed + 1; age++) {
+        sample.elapsed = age - 1;
+        const angle = rollAttitude(sample), progress = Math.abs(angle) / (2 * Math.PI);
+        const offset = roll.side * lateral * (progress - phase) + wingSpan * wing * Math.cos(angle);
+        const aft = (roll.elapsed + 1 - age) * state.speed * STEP + 3.5;
+        this.rollTo.x = p.x - fx * aft + fz * offset;
+        this.rollTo.z = p.z - fz * aft - fx * offset;
+        this.rollTo.alt = rollAltitude(sample) + bobOffset + wingSpan * wing * Math.sin(angle);
+        if (age) this.connect(this.ribbon, segments++, this.rollFrom, this.rollTo, flat ? 1.6 : 1.05,
+          age < roll.elapsed * 0.46 ? 0x76b7d7 : 0xadfff2, flat ? TOP_FLIGHT + 1 : undefined);
+        this.rollFrom.x = this.rollTo.x;
+        this.rollFrom.z = this.rollTo.z;
+        this.rollFrom.alt = this.rollTo.alt;
+      }
+    }
+    upload(this.ribbon, segments);
   }
 
   private writePursuitRing(index: number, x: number, z: number, alt: number): void {
@@ -848,7 +889,14 @@ export class FlightScene {
     this.boostLens += (target - this.boostLens) * (1 - Math.exp(-ticks / (target ? 4.5 : 8)));
     const ignition = state.boostTicks;
     const shake = !reduceMotion && ignition > 0 && ignition <= 8 ? Math.sin(ignition * 1.8) * (9 - ignition) * 0.028 : 0;
-    const attitude = state.maneuver ? maneuverAttitude(state.maneuver, state.player.bank) : null;
+    let attitude = state.maneuver ? maneuverAttitude(state.maneuver, state.player.bank) : null;
+    if (state.roll) {
+      const pose = this.rollPose;
+      pose.roll = rollAttitude(state.roll);
+      pose.cameraBank = reduceMotion ? 0 : pose.roll;
+      pose.inverted = Math.cos(pose.roll) < 0;
+      attitude = pose;
+    }
     const ladder = this.updateCamera(state, attitude, shake);
     this.flightView.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
       state.speed, ticks, reduceMotion);

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#101829" />
-  <meta name="description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
+  <meta name="description" content="케스트럴 해역에서 펼쳐지는 10분 픽셀 비행 임무. 8:00에 워든이 출현합니다." />
   <title>아스터 윙 | 케스트럴 해역</title>
   <link rel="canonical" href="https://codebbakgosu.github.io/pixel-spaceship/" />
   <link rel="icon" type="image/png" href="%BASE_URL%favicon.png" />
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ASTER WING" />
   <meta property="og:title" content="아스터 윙 | 케스트럴 해역" />
-  <meta property="og:description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
+  <meta property="og:description" content="케스트럴 해역에서 펼쳐지는 10분 픽셀 비행 임무. 8:00에 워든이 출현합니다." />
   <meta property="og:url" content="https://codebbakgosu.github.io/pixel-spaceship/" />
   <meta property="og:image" content="https://codebbakgosu.github.io/pixel-spaceship/og.png" />
   <meta property="og:image:width" content="1200" />
@@ -22,7 +22,7 @@
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="아스터 윙 | 케스트럴 해역" />
-  <meta name="twitter:description" content="케스트럴 해역에서 펼쳐지는 3분 픽셀 비행 임무." />
+  <meta name="twitter:description" content="케스트럴 해역에서 펼쳐지는 10분 픽셀 비행 임무. 8:00에 워든이 출현합니다." />
   <meta name="twitter:image" content="https://codebbakgosu.github.io/pixel-spaceship/og.png" />
 </head>
 <body>
@@ -35,20 +35,50 @@
   <div id="safe-area-probe" aria-hidden="true"></div>
   <div id="control-backdrop" aria-hidden="true"></div>
   <header class="hud" data-label="aria.hud">
-    <div class="status">
-      <div class="hull-status"><span data-i18n="hud.hull"></span><span id="hull-bars" class="hull-bars" aria-hidden="true">
-        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-      </span><b id="hull-value"></b><strong id="hull-warning" data-i18n="cockpit.lowHull" hidden></strong></div>
-      <div><span data-i18n="hud.boost"></span><i class="track"><i id="boost-bar"></i></i><output id="loop-status" class="loop-status"></output></div>
-      <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b><i class="bomb-reload" aria-hidden="true"><i id="bomb-reload-bar"></i></i><span id="flare-stock" class="flare-stock"></span></div>
-      <div class="status-view"><strong id="view-label"></strong><span id="xp-label"></span><time id="segment-timer"></time></div>
+    <div class="numeric-hud">
+      <div class="hud-readout hud-hull">
+        <span class="hud-caption"><strong id="hull-warning" data-i18n="hud.hpLow" hidden></strong><span data-i18n="hud.hp"></span></span>
+        <b id="hull-value"></b><span id="hull-bars" class="hud-meter hull-bars" aria-hidden="true"><i id="hull-fill"></i></span>
+      </div>
+      <div class="hud-readout hud-boost">
+        <span class="hud-caption" data-i18n="hud.boostLabel"></span><b id="boost-value"></b>
+        <span class="hud-meter" aria-hidden="true"><i id="boost-bar"></i></span>
+      </div>
+      <div class="hud-readout">
+        <span class="hud-caption" data-i18n="hud.speed"></span><b id="speed-value"></b>
+      </div>
+      <div class="hud-readout">
+        <span class="hud-caption" data-i18n="hud.altitude"></span>
+        <span class="hud-altitude"><b id="alt-number"></b><small id="alt-band"></small></span>
+      </div>
+      <div class="hud-readout hud-bombs">
+        <span class="hud-caption" data-i18n="hud.bombLabel" data-tooltip="hud.bombStock"></span><b id="bombs"></b>
+        <span class="hud-meter" aria-hidden="true"><i id="bomb-reload-bar"></i></span>
+      </div>
+      <div class="hud-readout">
+        <span class="hud-caption" data-i18n="hud.flareLabel"></span><b id="flare-stock"></b>
+      </div>
+      <div class="hud-readout hud-xp">
+        <span id="xp-label" class="hud-caption"></span><b id="xp-value"></b>
+        <span class="hud-meter" aria-hidden="true"><i id="xp-bar"></i></span>
+      </div>
+      <div class="hud-view">
+        <span id="view-label"></span><span id="hull-shield" data-i18n="hud.shield" hidden></span>
+      </div>
+      <div class="hud-clock">
+        <strong id="segment-timer"></strong><span id="hud-phase"></span>
+        <div class="hud-keys">
+          <span id="loop-status" class="hud-key" role="img"><kbd data-i18n="hud.keySpace"></kbd></span>
+          <span id="roll-status" class="hud-key" role="img"><kbd data-i18n="hud.keyRoll"></kbd></span>
+        </div>
+      </div>
     </div>
     <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small>
       <span id="bill-count" class="bill-count" data-label="menu.summary.bills" data-tooltip="menu.summary.bills" hidden><b></b></span>
     </div>
   </header>
   <aside id="sortie-strip" class="sortie-strip" data-label="stageHud.label" hidden>
-    <div class="sortie-clock"><strong id="sortie-phase"></strong><time id="warden-countdown"></time></div>
+    <div class="sortie-clock"><strong id="sortie-phase" hidden></strong><time id="warden-countdown"></time></div>
     <div id="loadout-hud" class="loadout-hud" hidden></div>
   </aside>
   <button class="touch-pause" id="touch-pause" type="button" data-label="control.pause" hidden>Ⅱ</button>
@@ -64,7 +94,7 @@
   <canvas id="nav-radar" data-label="aria.radar"></canvas>
   <canvas id="arena-map" data-label="aria.arenaMap" hidden></canvas>
   <div class="alt-ruler" data-label="hud.altitude">
-    <span data-i18n="hud.altitude"></span><strong id="alt-number"></strong>
+    <span data-i18n="hud.altitude"></span>
     <div class="alt-scale" aria-hidden="true"><i></i><small>145</small><small>110</small><small>75</small><b id="alt-marker">◂</b></div>
   </div>
   <div id="flight-message" class="flight-message" hidden></div>
@@ -144,6 +174,7 @@
           <dl class="guide-list">
             <dt data-i18n="guide.move"></dt><dd data-i18n="guide.keysMove"></dd>
             <dt data-i18n="control.loop"></dt><dd data-i18n="guide.keysLoop"></dd>
+            <dt data-i18n="control.roll"></dt><dd data-i18n="guide.keysRoll"></dd>
             <dt data-i18n="control.boost"></dt><dd data-i18n="guide.keysBoost"></dd>
             <dt data-i18n="control.bomb"></dt><dd>X / K</dd>
             <dt data-i18n="control.flare"></dt><dd>C</dd>
@@ -158,6 +189,7 @@
           <dl class="guide-list">
             <dt data-i18n="guide.stick"></dt><dd data-i18n="guide.touchMove"></dd>
             <dt data-i18n="control.loop"></dt><dd data-i18n="guide.touchLoop"></dd>
+            <dt data-i18n="control.roll"></dt><dd data-i18n="guide.touchRoll"></dd>
             <dt data-i18n="control.boost"></dt><dd data-i18n="guide.touchBoost"></dd>
             <dt data-i18n="control.bomb"></dt><dd data-i18n="guide.touchBomb"></dd>
             <dt data-i18n="control.flareShort"></dt><dd data-i18n="guide.touchFlare"></dd>
@@ -174,7 +206,7 @@
             <dt class="guide-salvage">◆</dt><dd data-i18n="guide.salvageHint"></dd>
             <dt data-i18n="hud.altitude"></dt><dd data-i18n="guide.altitudeHint"></dd>
             <dt data-i18n="aria.radar"></dt><dd data-i18n="guide.radarHint"></dd>
-            <dt data-i18n="guide.boss"></dt><dd data-i18n="guide.bossHint"></dd>
+            <dt data-i18n="guide.boss"></dt><dd id="guide-boss-copy"></dd>
           </dl>
           <p class="guide-markers">
             <span><b>△ ^</b> <span data-i18n="guide.climb"></span></span>
@@ -196,6 +228,7 @@
     <button class="touch-button bomb" id="touch-bomb" type="button" data-i18n="control.bomb"></button>
     <button class="touch-button flare" id="touch-flare" type="button" data-i18n="control.flareShort" data-label="control.flare"></button>
     <button class="touch-button view" id="touch-view" type="button" data-i18n="control.view"></button>
+    <button class="touch-button roll" id="touch-roll" type="button" data-i18n="control.roll"></button>
   </div>
   <div class="help" id="help" aria-live="polite"></div>
 </main>

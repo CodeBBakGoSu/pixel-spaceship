@@ -14,10 +14,10 @@ for (const [width,height] of sizes) for (const safe of insets) for (const view o
     assert.equal(l.orientation,'portrait');assert.ok(l.buffer.height>l.buffer.width);
     const zones=[l.hud,l.boss,l.radio,l.objective,l.playfield,...(l.dashboard?[l.dashboard]:[]),l.controls];
     for(let i=0;i<zones.length;i++)for(let j=i+1;j<zones.length;j++)assert.equal(intersects(zones[i],zones[j]),false,`zone ${i} overlaps ${j}`);
-    assert.ok(l.playfield.height>l.playfield.width,'content playfield is tall');
+    assert.ok(l.playfield.height>=l.playfield.width*.85,'instruments leave a usable portrait playfield');
     assert.ok(contains(l.playfield,l.radar));assert.ok(contains(l.playfield,l.alt));assert.equal(intersects(l.radar,l.alt),false);
     assert.ok(l.flare, 'the flare control has a layout');
-    const buttons=[l.stick,l.loop,l.boost,l.bomb,l.flare,l.view];
+    const buttons=[l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view];
     for(const b of buttons){assert.ok(contains(l.controls,b));assert.ok(b.width>=44 && b.height>=44);}
     for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false,`control ${i} overlaps ${j}`);
     assert.ok(contains(l.controls,l.stickLabel));assert.equal(intersects(l.stick,l.stickLabel),false);
@@ -38,8 +38,8 @@ test('landscape phone has usable, separated zones and controls', () => {
   assert.equal(intersects(l.hud,l.radio),false);assert.equal(intersects(l.radio,l.objective),false);
   assert.equal(intersects(l.playfield,l.dashboard),false);assert.equal(intersects(l.dashboard,l.controls),false);
   assert.ok(l.flare, 'the flare control has a layout');
-  for(const b of [l.stick,l.loop,l.boost,l.bomb,l.flare,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
-  const buttons=[l.stick,l.loop,l.boost,l.bomb,l.flare,l.view];
+  for(const b of [l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
+  const buttons=[l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view];
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 

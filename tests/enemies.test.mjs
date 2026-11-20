@@ -261,11 +261,13 @@ test('a far turret transfers only to a vacant landmark ahead and keeps its HP', 
 
 test('seeded sorties keep fly-in and combat turns within 3.2 radians per second', () => {
   const kinds = new Set();
+  const duration = 105 * 60;
   for (const seed of [1, 11, 53]) {
     const state = createStage(parseStageOptions('?autoplay=1&seed=' + seed), ground);
     state.twinAt = state.podsAt = Infinity;
     state.graceUntil = Infinity;
-    for (let tick = 0; tick < 105 * 60; tick++) {
+    state.invulnerability = Infinity;
+    for (let tick = 0; tick < duration; tick++) {
       const before = new Map(state.enemies.map(enemy => [enemy.id, enemy.yaw]));
       stepStage(state, { turn: Math.sin(tick / 137) * 0.6 }, ground);
       for (const enemy of state.enemies) {
@@ -279,6 +281,7 @@ test('seeded sorties keep fly-in and combat turns within 3.2 radians per second'
         assert.ok(Math.abs(turn) <= 3.2 / 60 + 1e-9, `${enemy.kind} turned ${turn} rad at tick ${tick} (seed ${seed})`);
       }
     }
+    assert.equal(state.tick, duration);
   }
   assert.equal(kinds.size, 10, `only checked ${[...kinds]}`);
 });

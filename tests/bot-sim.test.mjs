@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createBot } from '../src/bot.ts';
 import { BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { fireHostile } from '../src/stage-combat.ts';
 import { parseSimArgs, runBatch, serializeSummaryCsv } from '../tools/sim.mjs';
 
 test('a bot returns controls without mutating stage state or consuming a game RNG stream', () => {
@@ -54,4 +55,25 @@ test('sim arguments preserve heat and cap inputs and reject misspelled flags and
     ['--unknown'], ['--from', '4294967295', '--seeds', '2'], ['--seeds'], ['--mobile', '--mobile']]) {
     assert.throws(() => parseSimArgs(args));
   }
+});
+
+test('skilled pilots parry same-band approaches more often than average and weak pilots', () => {
+  const attempts = profile => {
+    let rolls = 0, parries = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const stage = createStage(parseStageOptions(`?mode=survivors&autoplay=1&seed=${seed}`));
+      stage.tick = 1;
+      const { x, z, altitude } = stage.player;
+      fireHostile(stage, { x, z: z + 14, alt: altitude }, 90);
+      const input = createBot(profile, seed)(stage);
+      if (input.roll) rolls++;
+      if (input.roll && input.rollTurn === 0) parries++;
+      stage.shots[0].alt += 35;
+      assert.ok(!createBot(profile, seed)(stage).roll, 'an off-band pass does not warrant a roll');
+    }
+    return { rolls, parries };
+  };
+  const skilled = attempts('skilled'), average = attempts('average'), weak = attempts('weak');
+  assert.ok(skilled.rolls > average.rolls && average.rolls >= weak.rolls);
+  assert.ok(skilled.parries > average.parries && skilled.parries > weak.parries);
 });

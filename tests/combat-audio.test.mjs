@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CombatAudio } from '../src/combat-audio.ts';
 
 const gesture = { isTrusted: true };
-const sounds = ['hit', 'graze', 'warning', 'muzzle'];
+const sounds = ['hit', 'graze', 'warning', 'muzzle', 'roll', 'parry'];
 
 function browserAudio(t) {
   const storage = new Map();

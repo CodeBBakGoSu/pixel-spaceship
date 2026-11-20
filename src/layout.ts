@@ -13,7 +13,7 @@ export type CockpitLayout = {
 export type PhoneLayout = HudLayout & {
   orientation: 'portrait' | 'landscape'; buffer: { width: number; height: number };
   playfield: Rect; dashboard: Rect | null; controls: Rect;
-  pause: Rect; stick: Rect; stickLabel: Rect; loop: Rect; boost: Rect; bomb: Rect; flare: Rect; view: Rect;
+  pause: Rect; stick: Rect; stickLabel: Rect; loop: Rect; roll: Rect; boost: Rect; bomb: Rect; flare: Rect; view: Rect;
   shipY: number; cockpit: CockpitLayout | null;
 };
 export type GuideLayout = { card: Rect; heading: Rect; body: Rect; actions: Rect; columns: 1 | 2 };
@@ -25,7 +25,7 @@ export function desktopLayout(width: number, height: number, safe: Insets): HudL
   const margin = compact ? 9 : 18;
   const left = safe.left + margin, right = width - safe.right - margin;
   const usableWidth = right - left;
-  const hud = rect(left, safe.top + (compact ? 9 : 14), usableWidth, compact ? 56 : 64);
+  const hud = rect(left, safe.top + (compact ? 9 : 14), usableWidth, 80);
   const boss = rect(left, hud.y + hud.height + 3, Math.min(460, usableWidth * 0.65), 12);
   const radioY = boss.y + boss.height + 6;
   const radarSize = compact ? 62 : 88;
@@ -103,12 +103,12 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
 export function phoneLayout(width: number, height: number, safe: Insets, view: Segment, sortieHud = false): PhoneLayout {
   const portrait = height >= width, left = safe.left + 8, right = width - safe.right - 8, top = safe.top + 4;
   const usableWidth = right - left, hudWidth = portrait ? usableWidth : Math.min(340, Math.max(270, usableWidth * 0.4));
-  const hud = rect(left, top, hudWidth, 56), boss = rect(left, top + 58, hudWidth, 8);
+  const hud = rect(left, top, hudWidth, 80), boss = rect(left, top + 82, hudWidth, 8);
   const billWidth = sortieHud ? Math.min(228, Math.round(usableWidth * 0.28)) + 8 : 0;
-  const radio = portrait ? rect(left, top + 70, usableWidth, 58)
+  const radio = portrait ? rect(left, top + 92, usableWidth, 54)
     : rect(left + hudWidth + 8, top, Math.max(0, usableWidth - hudWidth - 8 - billWidth), 62);
-  const objectiveY = portrait ? radio.y + radio.height + (sortieHud ? 136 : 4) : top + 70;
-  const objective = rect(left, objectiveY, portrait ? usableWidth : usableWidth - billWidth, 22);
+  const objectiveY = portrait ? radio.y + radio.height + (sortieHud ? 136 : 4) : top + 68;
+  const objective = rect(portrait ? left : radio.x, objectiveY, radio.width, 22);
   const controlHeight = portrait ? clamp(Math.round(height * 0.19), 146, 170) : clamp(Math.round(height * 0.35), 134, 140);
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
   const bufferWidth = portrait ? 336 : clamp(Math.round(288 * width / height), 256, 768);
@@ -131,7 +131,8 @@ export function phoneLayout(width: number, height: number, safe: Insets, view: S
   const bomb = rect(boost.x - 8 - 48, controls.y + 8, 48, 48);
   const flare = rect(bomb.x - 8 - bomb.width, bomb.y, bomb.width, bomb.height);
   const viewButton = rect(loop.x - 8 - 52, controls.y + controls.height - 8 - 52, 52, 52);
+  const roll = rect(viewButton.x - 56, viewButton.y, 48, 48);
   return { orientation: portrait ? 'portrait' : 'landscape', buffer, hud, boss, radio, objective, playfield, dashboard, controls,
-    radar, alt, pause, stick, stickLabel, loop, boost, bomb, flare, view: viewButton,
+    radar, alt, pause, stick, stickLabel, loop, roll, boost, bomb, flare, view: viewButton,
     shipY: Math.round(playfield.y + playfield.height * (portrait ? 0.72 : 0.52)), cockpit };
 }

@@ -50,7 +50,7 @@ export function exitAltitude(altitude: number, kind: ManeuverKind): number {
 
 export function canManeuver(state: StageState, kind: ManeuverKind): boolean {
   const spec = MANEUVERS[kind];
-  return !!spec && state.phase === 'playing' && !state.paused && !state.maneuver
+  return !!spec && state.phase === 'playing' && !state.paused && !state.maneuver && !state.roll
     && state.tick > state.graceUntil && state.tick >= state.maneuverReadyAt
     && state.boost >= spec.boost;
 }

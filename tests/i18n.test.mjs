@@ -22,6 +22,15 @@ test('translations format draft and weak-point countdowns in both languages', ()
   assert.equal(ko('objective.bandSignal', { part: ko('boss.low'), seconds: 3 }), '3초 후 저고도 포드 노출');
 });
 
+test('the title and briefing give the Warden arrival and sortie deadline in both languages', () => {
+  for (const language of ['en', 'ko']) {
+    const t = createTranslator(language);
+    for (const key of ['menu.survivors.copy', 'guide.sortieTiming']) {
+      assert.match(t(key, { boss: '08:00', limit: '10:00' }), /08:00.*10:00/);
+    }
+  }
+});
+
 test('guidance separates maneuver selectors from the flare key and touch control', () => {
   for (const t of [createTranslator('en'), createTranslator('ko')]) {
     assert.match(t('guide.keysLoop'), /Space.*J/);

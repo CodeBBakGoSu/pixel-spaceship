@@ -7,10 +7,13 @@ import { markerRadius, type CockpitMarker } from './cockpit-markers.ts';
 import {
   CockpitLabelAtlas, CockpitLineRaster, cockpitPixel, cockpitSurface, drawCockpitLabel, type CockpitLabel,
 } from './cockpit-pixels';
+import { HUD_ALTITUDE_BAND_KEYS } from './data/hud.ts';
 import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
-import { MANEUVERS, maneuverAttitude, maneuverViewYaw } from './maneuvers.ts';
+import { MANEUVERS, maneuverAttitude, maneuverViewYaw, nearestBand } from './maneuvers.ts';
+import { hudBoostTone, hudHullTone, hudPhaseKey, hudTimer, shieldActive } from './numeric-hud.ts';
+import { endTick, requiredXp } from './stage.ts';
 import { bombCapacity, flareCapacity, TICKS_PER_SECOND } from './stage-combat.ts';
-import type { StageState } from './stage-types.ts';
+import type { Band, StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
 
@@ -167,6 +170,7 @@ class GlassLabels {
   readonly pitch: { left: CockpitLabel; right: CockpitLabel }[];
   readonly inverted: CockpitLabel;
   readonly rear: CockpitLabel;
+  readonly bands: CockpitLabel[];
 
   constructor(font: string, private readonly t: Translate) {
     const atlas = this.atlas = new CockpitLabelAtlas(font);
@@ -180,6 +184,7 @@ class GlassLabels {
     });
     this.inverted = atlas.add(t('cockpit.inverted'), amber, 'center');
     this.rear = atlas.add(t('cockpit.rearShort'), '#c6d8ce');
+    this.bands = HUD_ALTITUDE_BAND_KEYS.map(key => atlas.add(t(key), '#bdedcf', 'center'));
     for (let n = 0; n <= 220; n++) this.number(n);
     for (let n = 10; n <= 24; n++) this.load(n);
   }
@@ -274,7 +279,8 @@ function drawTapePlate(c: Context, r: Rect, label: string, altitude: boolean): v
   outline(c, green, box);
 }
 
-function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact: boolean, labels: GlassLabels, target?: number): void {
+function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact: boolean, labels: GlassLabels,
+  target?: number, band?: Band): void {
   const shortAltitude = altitude && r.height < 57 && target !== undefined;
   const pivot = Math.round(r.y + r.height * (shortAltitude ? 0.29 : 0.5)), scale = compact ? 1.3 : 2.0;
   const axis = altitude ? r.x + 5 : right(r) - 6;
@@ -299,7 +305,12 @@ function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact
       pixelLine(c, amber, r.x + 4, y, r.x, y + 3);
     }
   }
-  drawCockpitLabel(c, labels.number(Math.round(value)), r.x + r.width / 2, pivot);
+  const number = labels.number(Math.round(value)), center = r.x + r.width / 2;
+  const bandLabel = band === undefined ? null : labels.bands[band];
+  if (bandLabel) {
+    drawCockpitLabel(c, number, center - (bandLabel.advance + 3) / 2, pivot);
+    drawCockpitLabel(c, bandLabel, center + (number.advance + 3) / 2, pivot);
+  } else drawCockpitLabel(c, number, center, pivot);
   if (target !== undefined && r.height >= 20) {
     const y = shortAltitude ? r.y + Math.round(r.height * 0.76) : bottom(r) - 9;
     fill(c, '#173735', r.x + 2, y - 7, r.width - 4, 14);
@@ -525,14 +536,17 @@ function plate(r: Rect, paint: (c: Context) => void): HTMLCanvasElement {
 
 type WarningCell = { rect: Rect; variants: HTMLCanvasElement[]; painted: number };
 
+function warningCellBounds(r: Rect, index: number): Rect {
+  const x = r.x + Math.round(r.width * index / 4);
+  return { x, y: r.y, width: r.x + Math.round(r.width * (index + 1) / 4) - x - 2, height: r.height };
+}
+
 function warningCells(layout: CockpitLayout, t: Translate, font: string): WarningCell[] {
   const r = layout.warnings, { compact, panelScale } = layout;
   const names = [t(compact ? 'cockpit.cautionShort' : 'cockpit.masterCaution'),
-    t('cockpit.altLow'), t('control.boost'), t('control.loop')];
+    t('cockpit.altLow'), t('control.boost')];
   return names.map((label, i) => {
-    const x = r.x + Math.round(r.width * i / names.length);
-    const width = r.x + Math.round(r.width * (i + 1) / names.length) - x - 2;
-    const area = { x, y: r.y, width, height: r.height };
+    const area = warningCellBounds(r, i), { x, width } = area;
     const variant = (caption: string, active: boolean, useAmber: boolean, bright: boolean) => plate(area, c => {
       const color = useAmber ? amber : green;
       fill(c, bright ? (useAmber ? '#593820' : '#25443a') : '#111923', x, r.y, width, r.height);
@@ -544,13 +558,6 @@ function warningCells(layout: CockpitLayout, t: Translate, font: string): Warnin
     const variants = [variant(label, false, true, false), variant(label, true, true, false), variant(label, true, true, true)];
     if (i === 1) variants.push(variant(t('cockpit.pullUp'), true, true, false), variant(t('cockpit.pullUp'), true, true, true));
     if (i === 2) variants.push(variant(label, true, false, false), variant(label, true, false, true));
-    if (i === 3) {
-      variants.push(variant(t('hud.loopReadyShort'), true, false, true));
-      const maxSeconds = MANEUVERS['j-turn'].cooldown / TICKS_PER_SECOND;
-      for (let seconds = 1; seconds <= maxSeconds; seconds++) {
-        variants.push(variant(t('hud.loopCooldown', { seconds }), true, true, false));
-      }
-    }
     return { rect: area, variants, painted: -1 };
   });
 }
@@ -575,18 +582,18 @@ function weaponReadouts(state: StageState, t: Translate): WeaponReadout {
   const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
   const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
   return { gun: t('hud.weapon', { level: gunLevel }), pods: t('hud.pods', { level: podLevel }),
-    bombs: t('cockpit.bombs', { count: state.bombs, max: bombCapacity(state) }),
-    flares: t('cockpit.flares', { count: state.flareCharges, max: flareCapacity(state) }) };
+    bombs: `${t('hud.bombLabel')} ${state.bombs}`,
+    flares: `${t('hud.flareLabel')} ${state.flareCharges}/${flareCapacity(state)}` };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string,
   font: string, scale: number): void {
-  const left = r.x + (compact ? 6 : 12 * scale), y = r.y + (r.height < 40 ? 8 : 11 * scale);
-  text(c, title, left, y);
+  const left = r.x + (compact ? 6 : 12 * scale), short = r.height < 40;
+  if (!compact) text(c, title, left, r.y + 11 * scale);
   const labels = [weapons.gun, weapons.pods, weapons.bombs, weapons.flares];
-  const columns = r.height < 40 ? 4 : 2;
+  const columns = short ? 4 : 2;
   const cell = (r.width - (left - r.x) * 2) / columns;
-  const row = compact ? 13 : 23 * scale, firstRow = r.y + (r.height < 40 ? 20 : compact ? 26 : 43 * scale);
+  const row = compact ? 13 : 23 * scale, firstRow = r.y + (short ? 8 : compact ? 23 : 39 * scale);
   for (const [i, label] of labels.entries()) {
     const x = left + i % columns * cell + cell / 2;
     fittedText(c, label, x, firstRow + Math.floor(i / columns) * row, i === 3 ? amber : green, cell - 2, font,
@@ -599,19 +606,38 @@ function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number,
   }
 }
 
-type GaugeRow = { centers: [number, number, number]; y: number; radius: number; width: number };
+function drawProgress(c: Context, r: Rect, state: StageState, compact: boolean, font: string, scale: number, t: Translate): void {
+  const cost = requiredXp(state.level, !!state.run);
+  const xp = cost === null ? t('hud.xpFull') : `${Math.min(state.xp, cost)}/${cost}`;
+  const level = `${t('hud.level', { level: state.level })}  ${xp}`;
+  const clock = `${hudTimer(state)}  ${t(hudPhaseKey(state))}`;
+  const center = r.x + r.width / 2, short = r.height < 40;
+  const size = compact ? 9 : Math.round(12 * scale);
+  if (short) {
+    fittedText(c, `${level}  ·  ${clock}`, center, bottom(r) - 7, '#d7e7c2', r.width - 10, font, size);
+  } else {
+    const levelX = compact ? center : r.x + r.width * 0.72;
+    fittedText(c, level, levelX, r.y + (compact ? 8 : 11 * scale), '#d7e7c2', r.width / (compact ? 1 : 2) - 10, font, size);
+    fittedText(c, clock, center, bottom(r) - (compact ? 9 : 11 * scale), '#f3d49a', r.width - 10, font, size);
+  }
+}
+
+type GaugeRow = { centers: [number, number, number]; y: number; radius: number; width: number;
+  readoutY: number; stacked: boolean };
 function gaugeRow(r: Rect, compact: boolean, scale: number): GaugeRow {
   const width = (r.width - 6) / 3;
-  const radius = Math.max(4, Math.floor(Math.min(width / 2 - 3, r.height * 0.28, compact ? 13 : 26 * scale)));
+  const short = r.height < 40, stacked = !short && width < 55;
+  const radius = Math.max(4, Math.floor(Math.min(width / 2 - 3, r.height * 0.25, compact ? 13 : 26 * scale)));
   return {
     centers: [0, 1, 2].map(i => Math.round(r.x + 3 + width * (i + 0.5))) as [number, number, number],
-    y: r.y + r.height * 0.43, radius, width,
+    y: r.y + r.height * (short ? 0.33 : stacked ? 0.36 : 0.43), radius, width, stacked,
+    readoutY: bottom(r) - (compact ? 6 : 17 * scale),
   };
 }
 
-function drawGaugeFaces(c: Context, row: GaugeRow, showLabels: boolean, compact: boolean, t: Translate, font: string, scale: number): void {
-  const labels = [t('hud.speed'), t('hud.boost'), t('hud.reverseShort')];
-  const { centers, y, radius, width } = row;
+function drawGaugeFaces(c: Context, row: GaugeRow, compact: boolean, t: Translate, font: string, scale: number): void {
+  const labels = [t('hud.speed'), t('hud.boostLabel'), t('hud.reverseShort')];
+  const { centers, y, radius, width, readoutY, stacked } = row;
   for (const [i, x] of centers.entries()) {
     c.fillStyle = '#080f1a'; c.strokeStyle = '#647580'; c.lineWidth = 2;
     c.beginPath(); c.arc(x, y, radius, 0, Math.PI * 2); c.fill(); c.stroke();
@@ -619,7 +645,7 @@ function drawGaugeFaces(c: Context, row: GaugeRow, showLabels: boolean, compact:
       const angle = Math.PI * (0.75 + tick * 0.375);
       fill(c, tick === 4 ? '#cb8a5c' : '#98aea9', x + Math.cos(angle) * (radius - 3), y + Math.sin(angle) * (radius - 3), compact ? 1 : 2, compact ? 1 : 2);
     }
-    if (showLabels) fittedText(c, labels[i], x, y + radius + (compact ? 9 : 13 * scale), '#c6d5c8', width - 1, font,
+    if (stacked || i === 2) fittedText(c, labels[i], x, stacked && i !== 2 ? readoutY - 11 : readoutY, '#c6d5c8', width - 1, font,
       compact ? 9 : Math.round(12 * scale));
   }
 }
@@ -636,6 +662,7 @@ function placeLayer(c: Context, r: Rect): void {
   c.canvas.style.left = r.x + 'px';
   c.canvas.style.top = r.y + 'px';
   c.setTransform(1, 0, 0, 1, -r.x, -r.y);
+  c.textBaseline = 'middle';
   c.imageSmoothingEnabled = false;
 }
 
@@ -650,6 +677,7 @@ function blitPlate(c: Context, r: Rect, face: HTMLCanvasElement): void {
 
 export class CockpitDisplay {
   private readonly host: HTMLElement;
+  private readonly reducedMotion: MediaQueryList;
   private readonly hud = cockpitSurface(1, 1).context;
   private readonly panels = cockpitSurface(1, 1).context;
   private readonly warnings: CockpitWarnings = { terrain: null, boost: null };
@@ -660,8 +688,12 @@ export class CockpitDisplay {
   private labels!: GlassLabels;
   private ladder: CockpitLineRaster | null = null;
   private readonly radar = new RadarDisplay();
-  private gauges!: { face: HTMLCanvasElement; row: GaugeRow };
+  private gauges!: {
+    face: HTMLCanvasElement; row: GaugeRow; atlas: CockpitLabelAtlas;
+    speedPrefix: string; boostPrefix: string; speed: Map<number, CockpitLabel>; boost: Map<number, CockpitLabel>;
+  };
   private caution: WarningCell[] = [];
+  private health!: Rect;
   private readonly stores = new Map<number, HTMLCanvasElement>();
   private readonly weapons = new Map<number, HTMLCanvasElement>();
 
@@ -670,13 +702,23 @@ export class CockpitDisplay {
   private lastWeapon = -1;
   private lastStores = -1;
   private lastSpeed = -1;
+  private lastDigitalSpeed = -1;
   private lastBoost = -1;
   private lastReversalCharge = -1;
   private lastGaugeFlicker = -1;
   private lastG = -1;
+  private lastHull = -1;
+  private lastMaxHull = -1;
+  private lastShield = false;
+  private lastHullDim = false;
+  private lastLevel = -1;
+  private lastXp = -1;
+  private lastSecond = -1;
+  private lastDuration = -1;
 
   constructor(private readonly frame: HTMLCanvasElement, private readonly font: string) {
     this.host = frame.parentElement!;
+    this.reducedMotion = frame.ownerDocument.defaultView!.matchMedia('(prefers-reduced-motion: reduce)');
     for (const canvas of [this.hud.canvas, this.panels.canvas]) {
       canvas.className = 'cockpit-instruments';
       this.host.append(canvas);
@@ -717,14 +759,20 @@ export class CockpitDisplay {
     const row = gaugeRow(layout.gauges, compact, panelScale);
     this.radar.resize(layout.radar.width, layout.radar.height, this.font, t('hud.radar'), compact ? undefined : Math.round(10 * panelScale));
     this.gauges = {
-      row, face: plate(layout.gauges, c => drawGaugeFaces(c, row, layout.gauges.height >= 40, compact, t, this.font, panelScale)),
+      row, face: plate(layout.gauges, c => drawGaugeFaces(c, row, compact, t, this.font, panelScale)),
+      atlas: new CockpitLabelAtlas(`${compact ? 9 : Math.round(12 * panelScale)}px ${this.font}`),
+      speedPrefix: row.stacked ? '' : `${t('hud.speed')} `,
+      boostPrefix: row.stacked ? '' : `${t('hud.boostLabel')} `,
+      speed: new Map(), boost: new Map(),
     };
     this.caution = warningCells(layout, t, this.font);
+    this.health = warningCellBounds(layout.warnings, 3);
     this.weapons.clear();
     this.stores.clear();
     this.lastMfd = null;
     this.lastFlicker = this.lastWeapon = this.lastStores = -1;
-    this.lastSpeed = this.lastBoost = this.lastReversalCharge = this.lastGaugeFlicker = this.lastG = -1;
+    this.lastSpeed = this.lastDigitalSpeed = this.lastBoost = this.lastReversalCharge = this.lastGaugeFlicker = this.lastG = -1;
+    this.lastHull = this.lastMaxHull = this.lastLevel = this.lastXp = this.lastSecond = this.lastDuration = -1;
   }
 
   private cacheWeapons(layout: CockpitLayout, key: number, state: StageState, t: Translate): void {
@@ -747,7 +795,7 @@ export class CockpitDisplay {
     const layout = this.layout;
     if (!layout) return;
     if (language !== this.language) this.resize(layout, this.frame.width, this.frame.height, language, t);
-    const elapsed = state.tick / 60;
+    const elapsed = state.tick / TICKS_PER_SECOND;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.warnings);
     this.drawGlass(layout, aim, marks, state, motion, markers, markerObstructions, trackAltitude);
     if (mirror) clearZone(this.hud, mirror);
@@ -757,8 +805,7 @@ export class CockpitDisplay {
     updateWarning(this.panels, this.caution[0], (warnings.terrain || warnings.boost === 'low') ? 1 + amberPulse : 0);
     updateWarning(this.panels, this.caution[1], warnings.terrain ? (warnings.terrain === 'pullUp' ? 3 : 1) + amberPulse : 0);
     updateWarning(this.panels, this.caution[2], warnings.boost === 'active' ? 3 + boostPulse : warnings.boost === 'low' ? 1 + amberPulse : 0);
-    const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
-    updateWarning(this.panels, this.caution[3], state.maneuver ? 2 : state.tick <= state.graceUntil ? 0 : 3 + loopSeconds);
+    this.drawHull(state, elapsed, t, layout.compact, layout.panelScale);
 
     const flicker = impact > 0.45 && Math.floor(impact * 12) % 2 === 0 ? 0.6 : 1;
     const refresh = cockpitMfdDue(this.lastMfd, elapsed);
@@ -782,7 +829,7 @@ export class CockpitDisplay {
     clearZone(c, speed);
     drawTape(c, speed, motion.speed, false, compact, this.labels);
     clearZone(c, altitude);
-    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude);
+    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude, nearestBand(state.player.altitude));
 
     const g = Math.round((1 + 0.47 * Math.abs(motion.turn) + 0.013 * Math.abs(motion.climb)) * 10), y = bottom(speed) + 4;
     if (g !== this.lastG && aiming.height > 35 && y + 15 <= bottom(layout.glass)) {
@@ -821,10 +868,17 @@ export class CockpitDisplay {
     const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
     const weapon = ((((state.bombs * 7 + state.flareCharges) * 7 + bombCapacity(state)) * 7
       + flareCapacity(state)) * 6 + podLevel) * 6 + gunLevel;
-    if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
+    const second = Math.floor(state.tick / TICKS_PER_SECOND), duration = endTick(state);
+    if (weapon !== this.lastWeapon || flicker !== this.lastFlicker || state.level !== this.lastLevel
+      || state.xp !== this.lastXp || second !== this.lastSecond || duration !== this.lastDuration) {
       if (!this.weapons.has(weapon)) this.cacheWeapons(layout, weapon, state, t);
       blitPlate(c, weapons, this.weapons.get(weapon)!);
+      drawProgress(c, weapons, state, layout.compact, this.font, layout.panelScale, t);
       this.lastWeapon = weapon;
+      this.lastLevel = state.level;
+      this.lastXp = state.xp;
+      this.lastSecond = second;
+      this.lastDuration = duration;
     }
     if (stores && weapon !== this.lastStores) {
       blitPlate(this.hud, stores, this.stores.get(weapon)!);
@@ -834,20 +888,53 @@ export class CockpitDisplay {
     c.globalAlpha = 1;
   }
 
+  private drawHull(state: StageState, elapsed: number, t: Translate, compact: boolean, scale: number): void {
+    const tone = hudHullTone(state.hull), shield = shieldActive(state);
+    const dim = tone === 'critical' && !this.reducedMotion.matches && Math.floor(elapsed * 3) % 2 === 1;
+    if (state.hull === this.lastHull && state.maxHull === this.lastMaxHull && shield === this.lastShield && dim === this.lastHullDim) return;
+    this.lastHull = state.hull;
+    this.lastMaxHull = state.maxHull;
+    this.lastShield = shield;
+    this.lastHullDim = dim;
+
+    const c = this.panels, r = this.health;
+    const color = tone === 'normal' ? '#edf5f0' : dim ? '#b66567' : '#ff9d93';
+    const label = `${t('hud.hp')} ${state.hull}/${state.maxHull}${shield ? `  ${t('hud.shield')}` : ''}`;
+    fill(c, tone === 'normal' ? '#14232a' : '#312126', r.x, r.y, r.width, r.height);
+    outline(c, shield ? '#6cb5b2' : tone === 'normal' ? '#496163' : '#af625f', r);
+    fittedText(c, label, r.x + r.width / 2, r.y + r.height / 2, color, r.width - 8, this.font, compact ? 9 : Math.round(12 * scale));
+  }
+
   private drawGauges(layout: CockpitLayout, state: StageState, motion: CockpitMotion, flicker: number): void {
     // A steady instrument retains its pixels. Clamp away drift past the ends of the dial.
     const speed = clamp(motion.speed / 100, 0, 1), boost = state.boost, charge = reversalCharge(state);
-    if (Math.abs(speed - this.lastSpeed) < 1e-6 && boost === this.lastBoost && charge === this.lastReversalCharge && flicker === this.lastGaugeFlicker) return;
+    const digitalSpeed = Math.round(state.speed);
+    if (Math.abs(speed - this.lastSpeed) < 1e-6 && digitalSpeed === this.lastDigitalSpeed && boost === this.lastBoost
+      && charge === this.lastReversalCharge && flicker === this.lastGaugeFlicker) return;
     this.lastSpeed = speed;
+    this.lastDigitalSpeed = digitalSpeed;
     this.lastBoost = boost;
     this.lastReversalCharge = charge;
     this.lastGaugeFlicker = flicker;
-    const c = this.panels, { centers, y, radius } = this.gauges.row;
+    const c = this.panels, gauges = this.gauges, { centers, y, radius, readoutY } = gauges.row;
     c.globalAlpha = flicker;
     blitPlate(c, layout.gauges, this.gauges.face);
     drawNeedle(c, centers[0], y, radius, speed, layout.compact, layout.panelScale);
     drawNeedle(c, centers[1], y, radius, boost, layout.compact, layout.panelScale);
     drawNeedle(c, centers[2], y, radius, charge, layout.compact, layout.panelScale);
+    let speedLabel = gauges.speed.get(digitalSpeed);
+    if (!speedLabel) {
+      speedLabel = gauges.atlas.add(`${gauges.speedPrefix}${digitalSpeed}`, '#edf5f0', 'center');
+      gauges.speed.set(digitalSpeed, speedLabel);
+    }
+    const percent = Math.round(boost * 100), low = hudBoostTone(boost) === 'low', boostKey = percent * 2 + Number(low);
+    let boostLabel = gauges.boost.get(boostKey);
+    if (!boostLabel) {
+      boostLabel = gauges.atlas.add(`${gauges.boostPrefix}${percent}%`, low ? amber : '#edf5f0', 'center');
+      gauges.boost.set(boostKey, boostLabel);
+    }
+    drawCockpitLabel(c, speedLabel, centers[0], readoutY);
+    drawCockpitLabel(c, boostLabel, centers[1], readoutY);
     c.globalAlpha = 1;
   }
 }

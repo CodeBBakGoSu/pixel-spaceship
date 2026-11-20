@@ -1,9 +1,10 @@
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
+const CUE_HEADROOM = 0.85;
 const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
 
-const COOLDOWN_SECONDS = { hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09 };
+const COOLDOWN_SECONDS = { hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12 };
 export type CombatSound = keyof typeof COOLDOWN_SECONDS;
 
 interface AudioOutput {
@@ -30,7 +31,7 @@ function synthesize(
 ): AudioBuffer {
   const buffer = context.createBuffer(1, Math.round(seconds * SAMPLE_RATE), SAMPLE_RATE);
   const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = sample(i / SAMPLE_RATE, i / (data.length - 1));
+  for (let i = 0; i < data.length; i++) data[i] = CUE_HEADROOM * sample(i / SAMPLE_RATE, i / (data.length - 1));
   return buffer;
 }
 
@@ -63,6 +64,16 @@ function synthesizeCues(context: AudioContext): AudioOutput['buffers'] {
       const phase = TAU * elapsed * (1600 - 500 * progress);
       return 0.05 * Math.sin(phase) * attackDecay(elapsed, progress, 0.0015);
     }),
+    roll: synthesize(context, 0.195, (elapsed, progress) => {
+      noiseSeed = (Math.imul(noiseSeed, 1664525) + 1013904223) >>> 0;
+      const noise = noiseSeed / 0x80000000 - 1;
+      lowPass += (0.13 + Math.sin(progress * Math.PI) * 0.34) * (noise - lowPass);
+      return 0.135 * lowPass * attackDecay(elapsed, progress, 0.043);
+    }),
+    parry: synthesize(context, 0.115, (elapsed, progress) => {
+      const tone = Math.sin(TAU * 760 * elapsed) + 0.51 * Math.sin(TAU * 1340 * elapsed);
+      return 0.073 * tone * attackDecay(elapsed, progress, 0.002);
+    }),
   };
 }
 
@@ -70,7 +81,7 @@ export class CombatAudio {
   private output: AudioOutput | undefined;
   private isMuted = storedMute();
   private level = DEFAULT_VOLUME;
-  private readonly nextPlayAt: Record<CombatSound, number> = { hit: 0, graze: 0, warning: 0, muzzle: 0 };
+  private readonly nextPlayAt: Record<CombatSound, number> = { hit: 0, graze: 0, warning: 0, muzzle: 0, roll: 0, parry: 0 };
 
   get muted(): boolean { return this.isMuted; }
   get volume(): number { return this.level; }

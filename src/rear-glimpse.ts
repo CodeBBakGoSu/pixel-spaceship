@@ -36,8 +36,8 @@ export function layoutRearMirror(cockpit: CockpitLayout, phone: PhoneLayout | nu
   let restCap = compact ? 216 : 288;
   if (portrait) {
     // Use the row below the heading and leave the center of the aiming area open.
-    const rowTop = bottom(heading) + 4;
-    const rowBottom = Math.floor(aiming.y + aiming.height * 0.48) - 28;
+    const rowTop = bottom(heading) + 2;
+    const rowBottom = Math.floor(aiming.y + aiming.height * 0.48) - 24;
     const rowWidth = Math.min(aiming.width, (rowBottom - rowTop) * REAR_VIEW_ASPECT);
     if (rowWidth > available) {
       left = aiming.x;
