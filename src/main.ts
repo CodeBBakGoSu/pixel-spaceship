@@ -28,7 +28,7 @@ import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
-import { clockText, NumericHud } from './numeric-hud.ts';
+import { clockText, hudHullTone, NumericHud } from './numeric-hud.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
@@ -89,10 +89,10 @@ const font = getComputedStyle(document.documentElement).getPropertyValue('--game
 const navRadar = new RadarDisplay();
 const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay'), font);
 const cockpitMarkers = new CockpitMarkers();
-const audio = new CombatAudio();
 const feedback = new HostileFeedback(root);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
+const audio = new CombatAudio(query.get('audioDebug') === '1');
 const effectsEnabled = query.get('fx') !== '0';
 const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
@@ -227,13 +227,20 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   },
   // --- S7e lane ---
   tell(kind, x, z) {
+    if (kind === 'ace-down') audio.play('explosion');
     if ((x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) audio.play(`tell:${kind}`);
   },
+  destroyed(kind, elite) {
+    audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
+  },
+  aceArrival() { audio.play('ace_alert'); },
 } : undefined;
 let helpTimer = 0, lastHelp = '';
 let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
 let rearDanger: RearDanger | null = null;
+let lastAudioCautions = 0;
+const audioCockpitWarnings: ReturnType<typeof cockpitWarnings> = { terrain: null, boost: null };
 const textNodes = new Map<string, HTMLElement>();
 const sortieTiming = { boss: clockText(RUN_BOSS_SECONDS), limit: clockText(RUN_END_SECONDS) };
 
@@ -942,6 +949,10 @@ window.addEventListener('keydown', event => {
   if (code === 'KeyR' && state.rank) pendingStart = true;
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
+function syncAudioPause(): void {
+  audio.setSuspended(touch && (document.hidden || interrupted));
+}
+
 function interruptFlight(): void {
   keys.clear();
   pendingBomb = pendingFlare = false;
@@ -952,6 +963,7 @@ function interruptFlight(): void {
   resumeAt = 0;
   if (!persistent || !scene || guide || state.phase !== 'playing' || state.paused) return;
   interrupted = true;
+  syncAudioPause();
   pendingPause = false;
   carry = 0;
   stepStage(state, { pause: true }, ground);
@@ -976,6 +988,7 @@ function updateAutoResume(now: number): boolean {
   resumeAt = 0;
   keys.clear();
   stepStage(state, { pause: true }, ground);
+  syncAudioPause();
   dirty = true;
   return true;
 }
@@ -988,6 +1001,7 @@ document.addEventListener('visibilitychange', () => {
   } else {
     dirty = true;
   }
+  syncAudioPause();
 });
 
 function steerMouse(event: PointerEvent): void {
@@ -1259,11 +1273,10 @@ function render(now: number): void {
   const redrawFlight = now >= visualFreezeUntil || dirty || lastRenderTick < 0;
   const yaw = maneuverViewYaw(state);
   const readout = buildRadar(state, yaw);
-  if (effectsEnabled && readout.rearDanger && !rearDanger) audio.play('warning');
   rearDanger = readout.rearDanger;
   const ladder = redrawFlight ? scene?.draw(state, !!rearDanger || !!readout.rearPursuit, readout.rearPursuit ?? undefined) : undefined;
-  if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass,
-    effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused);
+  const audioActive = effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
+  if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass, audioActive);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -1274,6 +1287,18 @@ function render(now: number): void {
   const p = state.player;
   const lookahead = Math.max(27, state.speed * 0.68);
   const clearance = p.altitude - Math.max(ground(p.x, p.z), ground(p.x + Math.sin(p.yaw) * lookahead, p.z + Math.cos(p.yaw) * lookahead));
+  let cautions = 0;
+  if (audioActive) {
+    if (rearDanger) cautions |= 1;
+    if (hudHullTone(state.hull) !== 'normal') cautions |= 2;
+    if (cockpit) {
+      const warnings = cockpitWarnings(state, clearance, motion.climb, audioCockpitWarnings);
+      if (warnings.terrain === 'pullUp') cautions |= 4;
+      if (warnings.boost === 'low') cautions |= 8;
+    }
+    if (cautions & ~lastAudioCautions) audio.play('warning');
+  }
+  lastAudioCautions = cautions;
   describeFlight(readout, clearance);
   const deltaIndicator = $('#cockpit-delta');
   const instrumentTrack = cockpit && maneuverAllowsControl(state.maneuver) ? readout.priority : null;

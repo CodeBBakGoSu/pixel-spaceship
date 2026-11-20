@@ -13,6 +13,11 @@ export const FLIGHT_AUDIO = {
   engine: { idleHz: 50, speedHz: 94, idleGain: 0.027, speedGain: 0.080, cutoffHz: 445, noiseMix: 0.16 },
   afterburner: { gain: 0.13, cutoffHz: 210, boostHz: 700 },
   wind: { gain: 0.077, cutoffHz: 1_520 },
+  samples: {
+    engine: { minRate: 0.85, maxRate: 1.25, idleGain: 0.34, velocityGain: 0.60 },
+    afterburner: { gain: 0.76, fadeSeconds: 0.12 },
+    wind: { gain: 0.76, cockpitScale: 1.28, topScale: 0.44, cutoffHz: 12_000, topCutoffHz: 1_100 },
+  },
   rush: {
     bankStart: 0.24, bankFull: 1.5, bankGain: 0.021,
     diveStart: 7, diveFull: 54, diveGain: 0.025, diveHz: 1_580,

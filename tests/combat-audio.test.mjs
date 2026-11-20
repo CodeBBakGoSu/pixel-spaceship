@@ -7,7 +7,7 @@ import { mapFlightAudio } from '../src/flight-audio.ts';
 const gesture = { isTrusted: true };
 const sounds = ['hit', 'graze', 'warning', 'muzzle', 'roll', 'parry'];
 const levelFlight = Object.freeze({
-  phase: 'playing', paused: false, tick: 80, speed: 52, climbRate: 0,
+  phase: 'playing', paused: false, tick: 80, speed: 52, climbRate: 0, view: 'chase', boosting: false,
   player: Object.freeze({ x: 0, z: 0, altitude: 110, yaw: 0, bank: 0, vx: 0, vz: 52 }),
   enemies: Object.freeze([]),
 });
@@ -59,6 +59,11 @@ function browserAudio(t) {
         return Promise.resolve();
       }
 
+      suspend() {
+        this.state = 'suspended';
+        return Promise.resolve();
+      }
+
       node(kind, fields) {
         const node = {
           kind, outputs: [], inputs: [], ...fields,
@@ -66,6 +71,7 @@ function browserAudio(t) {
             this.outputs.push(target);
             target.inputs?.push(this);
           },
+          disconnect() { this.outputs.length = 0; },
         };
         this.nodes.push(node);
         return node;
@@ -96,7 +102,7 @@ function browserAudio(t) {
       createBuffer(channels, length, sampleRate) {
         assert.equal(channels, 1);
         const samples = new Float32Array(length);
-        const buffer = { duration: length / sampleRate, getChannelData: () => samples };
+        const buffer = { length, sampleRate, duration: length / sampleRate, getChannelData: () => samples };
         this.buffers.push(buffer);
         return buffer;
       }
@@ -104,8 +110,9 @@ function browserAudio(t) {
       createBufferSource() {
         const context = this;
         return this.node('buffer-source', {
-          buffer: null, loop: false,
-          start() { context.started.push(this.buffer); },
+          buffer: null, loop: false, playbackRate: audioParam(1), detune: audioParam(0),
+          start(now, offset) { this.offset = offset; context.started.push(this.buffer); },
+          stop() { this.stopped = true; },
         });
       }
     },
@@ -113,6 +120,184 @@ function browserAudio(t) {
   t.after(() => { delete globalThis.window; });
   return { instances, userActivation };
 }
+
+function sampleBrowser(t, { missing = [], corrupt = [], gapless = false } = {}) {
+  const { instances, userActivation } = browserAudio(t);
+  const shotKeys = ['hit', 'explosion', 'graze', 'parry', 'roll', 'warning', 'ace_alert'];
+  const loopKeys = ['engine_loop', 'afterburner_loop', 'wind_loop'];
+  const keys = [...loopKeys, ...shotKeys];
+  const manifest = Object.fromEntries(keys.map(key => [key, {
+    samples: loopKeys.includes(key) ? 4410 : 22050, sampleRate: 44100, loop: loopKeys.includes(key),
+  }]));
+  const requests = [];
+  const decoded = {};
+  t.mock.method(globalThis, 'fetch', async url => {
+    const name = String(url).split('/').at(-1);
+    requests.push(name);
+    if (name === 'manifest.json') return { ok: true, json: async () => manifest };
+    const key = name.replace(/\.mp3$/, '');
+    assert.ok(keys.includes(key), name);
+    return { ok: !missing.includes(key), arrayBuffer: async () => Uint8Array.of(keys.indexOf(key)).buffer };
+  });
+  window.AudioContext.prototype.decodeAudioData = async bytes => {
+    const key = keys[new Uint8Array(bytes)[0]];
+    if (corrupt.includes(key)) throw new Error('corrupt MP3');
+    // Simulate decoding at 48 kHz with 240 leading and 480 trailing frames on each loop.
+    const pcm = new Float32Array(loopKeys.includes(key) ? gapless ? 4800 : 5520 : 24000);
+    pcm.fill(0.1, 240, gapless ? pcm.length : pcm.length - 480);
+    return decoded[key] = { length: pcm.length, sampleRate: 48000, duration: pcm.length / 48000, getChannelData: () => pcm };
+  };
+  userActivation.hasBeenActive = true;
+  return { instances, requests, decoded };
+}
+
+async function finishDecoding() {
+  await new Promise(resolve => setImmediate(resolve));
+}
+
+const voicesFor = (context, buffer) => context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === buffer);
+
+test('approved sounds load once after activation and use the mixer, with a synth fallback per missing sample', async t => {
+  const { instances, requests, decoded } = sampleBrowser(t, { missing: ['hit'], corrupt: ['parry'] });
+  const warning = t.mock.method(console, 'warn', () => {});
+  const audio = new CombatAudio();
+  audio.unlock({ isTrusted: false });
+  assert.deepEqual(requests, []);
+  audio.unlock(gesture);
+  audio.unlock(gesture);
+  await finishDecoding();
+  assert.equal(requests.length, 11);
+  assert.equal(new Set(requests).size, 11);
+  assert.equal(warning.mock.callCount(), 1);
+  const [context] = instances;
+  audio.play('hit');
+  audio.play('parry');
+  assert.equal(context.started.length, 2);
+  assert.ok(context.started.every(buffer => context.buffers.includes(buffer)));
+  audio.play('warning');
+  const [source] = voicesFor(context, decoded.warning);
+  assert.ok(source);
+  assert.equal(source.outputs[0].outputs[0], context.master);
+  assert.equal(context.master.outputs[0].outputs[0].kind, 'wave-shaper');
+});
+
+test('graze retriggers after 80 ms and warning waits at least 1.5 seconds', async t => {
+  const { instances, decoded } = sampleBrowser(t);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  audio.play('graze');
+  audio.play('warning');
+  context.currentTime = 0.079;
+  audio.play('graze');
+  assert.equal(voicesFor(context, decoded.graze).length, 1);
+  context.currentTime = 0.080;
+  audio.play('graze');
+  assert.equal(voicesFor(context, decoded.graze).length, 2);
+  context.currentTime = 1.499;
+  audio.play('warning');
+  assert.equal(voicesFor(context, decoded.warning).length, 1);
+  context.currentTime = 1.5;
+  audio.play('tell:missile');
+  audio.play('warning');
+  assert.equal(voicesFor(context, decoded.warning).length, 2);
+  assert.equal(context.started.length, 4);
+});
+
+test('explosions cap at four and an elite blast can replace a quieter Gnat voice', async t => {
+  const { instances, decoded } = sampleBrowser(t);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  for (let i = 0; i < 8; i++) audio.play('explosion', 0.25);
+  const explosions = () => voicesFor(context, decoded.explosion);
+  assert.equal(explosions().length, 4);
+  const [fodder] = explosions();
+  audio.play('explosion', 1);
+  const loud = explosions().at(-1);
+  assert.equal(explosions().filter(voice => !voice.stopped).length, 4);
+  assert.ok(fodder.stopped);
+  assert.ok(loud.outputs[0].gain.value > fodder.outputs[0].gain.value);
+  assert.ok(explosions().every(voice => Math.abs(voice.detune.value) <= 80));
+  assert.ok(new Set(explosions().map(voice => voice.detune.value)).size > 1);
+  loud.onended();
+  audio.play('explosion', 1);
+  assert.equal(explosions().length, 6);
+});
+
+test('sample beds crop encoder padding and respond to boost, airspeed, and view', async t => {
+  const { instances, decoded } = sampleBrowser(t);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  const cruise = { ...levelFlight, speed: 104 };
+  audio.updateFlight(cruise, 0, 60, 0, true);
+  const [engine] = voicesFor(context, decoded.engine_loop);
+  const [afterburner] = voicesFor(context, decoded.afterburner_loop);
+  const [wind] = voicesFor(context, decoded.wind_loop);
+  for (const source of [engine, afterburner, wind]) {
+    assert.equal(source.loop, true);
+    assert.equal(source.loopStart, 0.005);
+    assert.ok(Math.abs(source.loopEnd - 0.105) < 1e-9);
+    assert.equal(source.offset, 0.005);
+  }
+  const engineGain = engine.outputs[0].gain;
+  const boostGain = afterburner.outputs[0].gain;
+  const windFilter = wind.outputs[0];
+  const windGain = windFilter.outputs[0].gain;
+  const cruiseEngine = engineGain.value;
+  const cruiseWind = windGain.value;
+  assert.equal(engine.playbackRate.value, 0.85);
+  assert.equal(boostGain.value, 0);
+  audio.updateFlight({ ...cruise, view: 'cockpit' }, 0, 60, 0, true);
+  assert.ok(windGain.value > cruiseWind);
+  audio.updateFlight({ ...cruise, view: 'overhead' }, 0, 60, 0, true);
+  assert.ok(windGain.value < cruiseWind);
+  assert.equal(windFilter.type, 'lowpass');
+  const topCutoff = windFilter.frequency.value;
+  audio.updateFlight({ ...cruise, speed: 202, boosting: true }, 1, 60, 0, true);
+  assert.equal(engine.playbackRate.value, 1.25);
+  assert.ok(engineGain.value > cruiseEngine);
+  assert.ok(windGain.value > cruiseWind * 3);
+  assert.ok(windFilter.frequency.value > topCutoff);
+  assert.ok(boostGain.value > 0);
+  assert.ok(Math.abs(boostGain.targets.at(-1).timeConstant * 3 - 0.12) < 1e-9);
+  audio.updateFlight(cruise, 0, 60, 0, true);
+  assert.equal(boostGain.value, 0);
+});
+
+test('loops that decode to the full gapless length keep their complete source audio', async t => {
+  const { instances, decoded } = sampleBrowser(t, { gapless: true });
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  audio.updateFlight(levelFlight, 0, 60, 0, true);
+  const [engine] = voicesFor(context, decoded.engine_loop);
+  assert.equal(engine.offset, 0);
+  assert.equal(engine.loopStart, 0);
+  assert.equal(engine.loopEnd, 0.1);
+});
+
+test('app suspension blocks new voices and gestures until the app resumes audio', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  audio.setSuspended(true);
+  audio.unlock(gesture);
+  audio.play('hit');
+  assert.equal(context.state, 'suspended');
+  assert.equal(context.started.length, 0);
+  audio.setSuspended(false);
+  audio.play('hit');
+  assert.equal(context.state, 'running');
+  assert.equal(context.started.length, 1);
+});
 
 test('combat audio works as a no-op without a browser', () => {
   const audio = new CombatAudio();
@@ -184,7 +369,7 @@ test('bursts play at most one voice per cue and reuse its audio buffer', t => {
   assert.equal(context.started.length, sounds.length);
 
   const firstBuffers = context.started.slice();
-  context.currentTime = 1;
+  context.currentTime = 1.5;
   for (const sound of sounds) audio.play(sound);
   assert.equal(context.started.length, sounds.length * 2);
   for (let i = 0; i < sounds.length; i++) {

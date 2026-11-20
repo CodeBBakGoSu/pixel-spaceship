@@ -564,7 +564,7 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
   state.salvageBands[band] += pickup.xp;
 }
 
-function advanceSalvage(state: StageState, ground: Ground): void {
+function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents): void {
   const p = state.player;
   for (const enemy of state.enemies) {
     if (!enemy.shotDown) continue;
@@ -579,6 +579,7 @@ function advanceSalvage(state: StageState, ground: Ground): void {
       alt: enemy.kind === 'turret' ? skimAltitude(ground(enemy.x, enemy.z)) : enemy.alt,
       ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
+    events?.destroyed?.(enemy.kind, !!enemy.carrier);
   }
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
@@ -755,6 +756,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.tick === bossTick(state) && !state.boss) {
     state.boss = deployAce(state, ground);
     trimEscorts(state);
+    if (state.run) events?.aceArrival?.();
   }
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
@@ -815,7 +817,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       }
     }
   }
-  advanceSalvage(state, ground);
+  advanceSalvage(state, ground, events);
   if (state.run && state.hull) applyBillReward(state);
   // --- S7e lane ---
   const defeated = state.hull > 0 && state.boss?.hp === 0;

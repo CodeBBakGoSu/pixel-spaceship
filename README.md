@@ -52,3 +52,7 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 - Use `?seed=1`, `?view=overhead|chase|cockpit`, `?touch=1`, and `?autoplay=1` for replay checks. `?t=SECONDS` seeks to an absolute sortie time and returns control to the player unless autoplay is active.
 
 `window.__game` exposes a read-only snapshot with tick, altitude, enemy contacts, mine count, draft choices, Ace health and phase, and lock progress.
+
+## Credits
+
+- Sound effects generated with ElevenLabs Sound Effects (`eleven_text_to_sound_v3`) on 2026-11-21. [Audio processing and licensing details](docs/AUDIO_CREDITS.md).

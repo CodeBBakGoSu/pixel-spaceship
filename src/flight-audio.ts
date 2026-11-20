@@ -1,9 +1,11 @@
 import { FLIGHT_AUDIO } from './data/flight-audio.ts';
-import { BOOST_IGNITION_SPEED } from './flight.ts';
+import { BOOST_IGNITION_SPEED, CRUISE_SPEED } from './flight.ts';
+import type { SfxLoop, SfxSamples } from './sfx-samples.ts';
 import { STEP } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 
-export type FlightAudioState = Pick<StageState, 'tick' | 'phase' | 'paused' | 'player' | 'speed' | 'climbRate' | 'enemies'>;
+export type FlightAudioState = Pick<StageState, 'tick' | 'phase' | 'paused' | 'player' | 'speed' | 'climbRate' | 'enemies'
+  | 'boosting' | 'view'>;
 export type FlightSound = keyof typeof FLIGHT_AUDIO.cues;
 
 type FlightAudioParams = {
@@ -86,11 +88,21 @@ function layer(context: AudioContext, source: AudioNode, destination: AudioNode,
   return { filter, gain: gain.gain };
 }
 
+type LoopVoice = {
+  source: AudioBufferSourceNode;
+  volume: AudioParam;
+  filter?: BiquadFilterNode;
+  level: number;
+  rate: number;
+  cutoff?: number;
+};
+
 /** Produces presentation audio from the current flight pose. The flight clock remains independent. */
 export class FlightAudio {
   readonly bus: GainNode;
   private readonly context: AudioContext;
   private readonly cue: (sound: FlightSound) => void;
+  private readonly samples: SfxSamples;
   private readonly rotor: OscillatorNode;
   private readonly engine: ReturnType<typeof layer>;
   private readonly afterburner: ReturnType<typeof layer>;
@@ -98,13 +110,17 @@ export class FlightAudio {
   private readonly rush: ReturnType<typeof layer>;
   private readonly requested = mapFlightAudio(0, 0, 0, 0, Infinity);
   private readonly current = { ...this.requested };
+  private engineLoop?: LoopVoice;
+  private afterburnerLoop?: LoopVoice;
+  private windLoop?: LoopVoice;
   private lastTick: number | undefined;
   private cloudPass = 0;
   private active = false;
 
-  constructor(context: AudioContext, master: GainNode, cue: (sound: FlightSound) => void) {
+  constructor(context: AudioContext, master: GainNode, cue: (sound: FlightSound) => void, samples: SfxSamples) {
     this.context = context;
     this.cue = cue;
+    this.samples = samples;
     this.bus = context.createGain();
     this.bus.gain.value = 0;
     this.bus.connect(master);
@@ -142,6 +158,7 @@ export class FlightAudio {
     if (!active) return;
 
     mapFlightAudio(state.speed, boost, state.player.bank, state.climbRate, clearance, this.requested);
+    this.updateSampleBeds(state, now);
     const { minFrequencyChange: hz, minGainChange: gain } = FLIGHT_AUDIO;
     this.glide(this.rotor.frequency, 'engineHz', hz, now);
     this.glide(this.engine.gain, 'engineGain', gain, now);
@@ -154,6 +171,69 @@ export class FlightAudio {
     if (previousTick === undefined || state.tick < previousTick) return;
     if (cloudChanged) this.cue('cloud');
     if (hasCloseFlyby(state, state.tick - previousTick)) this.cue('flyby');
+  }
+
+  private createSampleLoop(name: SfxLoop, now: number, cutoff?: number): LoopVoice | undefined {
+    const sample = this.samples[name];
+    if (!sample?.loop) return;
+    const source = this.context.createBufferSource();
+    source.buffer = sample.buffer;
+    source.loop = true;
+    source.loopStart = sample.loop.start;
+    source.loopEnd = sample.loop.end;
+    let volume: AudioParam, filter: BiquadFilterNode | undefined;
+    if (cutoff !== undefined) {
+      const signal = layer(this.context, source, this.bus, 'lowpass', cutoff, 0);
+      ({ gain: volume, filter } = signal);
+    } else {
+      const gain = this.context.createGain();
+      volume = gain.gain;
+      volume.value = 0;
+      source.connect(gain);
+      gain.connect(this.bus);
+    }
+    source.start(now, source.loopStart);
+    return { source, volume, filter, level: 0, rate: 1, cutoff };
+  }
+
+  private updateSampleBeds(state: FlightAudioState, now: number): void {
+    const { engine, afterburner, wind } = FLIGHT_AUDIO.samples;
+    const velocity = unit(state.speed / BOOST_IGNITION_SPEED);
+    const engineLoop = this.engineLoop ??= this.createSampleLoop('engine_loop', now);
+    if (engineLoop) {
+      const speed = unit((state.speed - CRUISE_SPEED) / (BOOST_IGNITION_SPEED - CRUISE_SPEED));
+      const rate = engine.minRate + (engine.maxRate - engine.minRate) * speed;
+      if (Math.abs(rate - engineLoop.rate) >= 0.001) {
+        engineLoop.rate = rate;
+        engineLoop.source.playbackRate.setTargetAtTime(rate, now, FLIGHT_AUDIO.glideSeconds);
+      }
+      this.loopGain(engineLoop, engine.idleGain + engine.velocityGain * velocity, now);
+      this.requested.engineGain = 0;
+    }
+    const afterburnerLoop = this.afterburnerLoop ??= this.createSampleLoop('afterburner_loop', now);
+    if (afterburnerLoop) {
+      // An exponential glide reaches about 95% of the new level in three time constants.
+      this.loopGain(afterburnerLoop, state.boosting ? afterburner.gain : 0, now, afterburner.fadeSeconds / 3);
+      this.requested.afterburnerGain = 0;
+    }
+    const cutoff = state.view === 'overhead' ? wind.topCutoffHz : wind.cutoffHz;
+    const windLoop = this.windLoop ??= this.createSampleLoop('wind_loop', now, cutoff);
+    if (windLoop?.filter) {
+      const scale = state.view === 'cockpit' ? wind.cockpitScale : state.view === 'overhead' ? wind.topScale : 1;
+      this.loopGain(windLoop, wind.gain * velocity ** 2 * scale, now);
+      if (cutoff !== windLoop.cutoff) {
+        windLoop.cutoff = cutoff;
+        windLoop.filter.frequency.setTargetAtTime(cutoff, now, FLIGHT_AUDIO.glideSeconds);
+      }
+      this.requested.windGain = 0;
+    }
+  }
+
+  private loopGain(voice: LoopVoice, level: number, now: number, glide: number = FLIGHT_AUDIO.glideSeconds): void {
+    const change = Math.abs(level - voice.level);
+    if (change === 0 || (change < FLIGHT_AUDIO.minGainChange && level !== 0)) return;
+    voice.level = level;
+    voice.volume.setTargetAtTime(level, now, glide);
   }
 
   private glide(param: AudioParam, key: keyof FlightAudioParams, threshold: number, now: number): void {

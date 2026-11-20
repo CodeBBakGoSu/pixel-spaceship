@@ -1,0 +1,82 @@
+{
+ "engine_loop": {
+  "source_take": "engine_loop_1",
+  "loop": true,
+  "samples": 253575,
+  "sampleRate": 44100,
+  "durationSec": 5.75,
+  "bytes": 58297
+ },
+ "afterburner_loop": {
+  "source_take": "afterburner_loop_2",
+  "loop": true,
+  "samples": 165375,
+  "sampleRate": 44100,
+  "durationSec": 3.75,
+  "bytes": 38183
+ },
+ "wind_loop": {
+  "source_take": "wind_loop_1",
+  "loop": true,
+  "samples": 196245,
+  "sampleRate": 44100,
+  "durationSec": 4.45,
+  "bytes": 45236
+ },
+ "hit": {
+  "source_take": "hit_1",
+  "loop": false,
+  "samples": 28953,
+  "sampleRate": 44100,
+  "durationSec": 0.65653,
+  "bytes": 5894
+ },
+ "explosion": {
+  "source_take": "explosion_1",
+  "loop": false,
+  "samples": 74472,
+  "sampleRate": 44100,
+  "durationSec": 1.68871,
+  "bytes": 14044
+ },
+ "graze": {
+  "source_take": "graze_1",
+  "loop": false,
+  "samples": 12533,
+  "sampleRate": 44100,
+  "durationSec": 0.2842,
+  "bytes": 2759
+ },
+ "parry": {
+  "source_take": "parry_2",
+  "loop": false,
+  "samples": 19957,
+  "sampleRate": 44100,
+  "durationSec": 0.45254,
+  "bytes": 4222
+ },
+ "roll": {
+  "source_take": "roll_2",
+  "loop": false,
+  "samples": 30777,
+  "sampleRate": 44100,
+  "durationSec": 0.69789,
+  "bytes": 6103
+ },
+ "warning": {
+  "source_take": "warning_1",
+  "loop": false,
+  "samples": 39929,
+  "sampleRate": 44100,
+  "durationSec": 0.90542,
+  "bytes": 7775
+ },
+ "ace_alert": {
+  "source_take": "ace_alert_1",
+  "loop": false,
+  "samples": 88309,
+  "sampleRate": 44100,
+  "durationSec": 2.00247,
+  "bytes": 16552
+ }
+}

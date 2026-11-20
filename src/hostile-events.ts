@@ -1,4 +1,5 @@
 import type { HostileShape } from './data/hostile-fire.ts';
+import type { EnemyKind } from './enemy-kinds.ts';
 import type { Shot } from './stage-types.ts';
 
 // --- S7e lane ---
@@ -14,4 +15,6 @@ export type CombatEvents = {
   roll?(side: -1 | 1, barrel: boolean): void;
   parry?(shot: Shot, x: number, z: number, alt: number): void;
   tell?(kind: CombatTell, x: number, z: number, alt: number): void;
+  destroyed?(kind: EnemyKind, elite: boolean): void;
+  aceArrival?(): void;
 };

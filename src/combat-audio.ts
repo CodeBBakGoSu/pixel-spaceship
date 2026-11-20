@@ -1,23 +1,28 @@
 import { FLIGHT_AUDIO } from './data/flight-audio.ts';
 import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
 import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
+import { loadSfx, SFX_CUE_GAIN, type SfxCue, type SfxSamples } from './sfx-samples.ts';
 
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
 const CUE_HEADROOM = 0.85;
 const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
+const EXPLOSION_VOICES = 4;
 
 const COOLDOWN_SECONDS = {
-  hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12,
+  hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
   flyby: FLIGHT_AUDIO.cues.flyby.cooldown, cloud: FLIGHT_AUDIO.cues.cloud.cooldown,
 };
-export type CombatSound = keyof typeof COOLDOWN_SECONDS | RosterSound;
+type SynthSound = Exclude<keyof typeof COOLDOWN_SECONDS, 'ace_alert'> | RosterSound;
+export type CombatSound = SynthSound | 'ace_alert' | 'explosion';
+type ExplosionVoice = { source: AudioBufferSourceNode; strength: number };
 
 interface AudioOutput {
   context: AudioContext;
   master: GainNode;
-  buffers: Record<CombatSound, AudioBuffer>;
+  buffers: Record<SynthSound, AudioBuffer>;
+  samples: SfxSamples;
   flight?: FlightAudio;
 }
 
@@ -116,9 +121,17 @@ function mixLimiterCurve(knee: number) {
 
 export class CombatAudio {
   private output: AudioOutput | undefined;
+  private suspended = false;
   private isMuted = storedMute();
   private level = DEFAULT_VOLUME;
   private readonly nextPlayAt: Partial<Record<CombatSound, number>> = {};
+  private readonly explosions: ExplosionVoice[] = [];
+  private readonly debugSamples: boolean;
+  private detuneSeed = 0x3aa1197b;
+
+  constructor(debugSamples = false) {
+    this.debugSamples = debugSamples;
+  }
 
   get muted(): boolean { return this.isMuted; }
   get volume(): number { return this.level; }
@@ -141,7 +154,7 @@ export class CombatAudio {
 
   // Call synchronously from a user gesture so browsers can allow playback.
   unlock(event: Event): void {
-    if (!event.isTrusted || typeof window === 'undefined') return;
+    if (!event.isTrusted || typeof window === 'undefined' || this.suspended) return;
     if (window.navigator?.userActivation?.hasBeenActive === false) return;
     let context = this.output?.context;
     if (!context) {
@@ -159,7 +172,13 @@ export class CombatAudio {
         master.connect(headroom);
         headroom.connect(limiter);
         limiter.connect(context.destination);
-        this.output = { context, master, buffers: synthesizeCues(context) };
+        const samples: SfxSamples = {};
+        this.output = { context, master, buffers: synthesizeCues(context), samples };
+        if (typeof context.decodeAudioData === 'function') {
+          void loadSfx(context, samples).then(() => {
+            if (this.debugSamples) console.info('[audio] Decoded SFX', Object.keys(samples).sort().join(', '));
+          });
+        }
       } catch {
         void context?.close().catch(() => {});
         return;
@@ -170,31 +189,74 @@ export class CombatAudio {
     }
   }
 
-  play(sound: CombatSound): void {
-    if (this.isMuted || this.level === 0 || !this.output) return;
-    const { context, master, buffers } = this.output;
+  setSuspended(suspended: boolean): void {
+    if (suspended === this.suspended) return;
+    this.suspended = suspended;
+    const context = this.output?.context;
+    if (!context || context.state === 'closed') return;
+    // Submit both requests, even if a quick visibility reversal races the state change.
+    void (suspended ? context.suspend() : context.resume()).catch(() => {});
+  }
+
+  play(sound: CombatSound, strength = 1): void {
+    if (this.isMuted || this.level === 0 || this.suspended || !this.output) return;
+    const { context, master, buffers, samples } = this.output;
     if (context.state !== 'running') return;
     const now = context.currentTime;
-    if (now < (this.nextPlayAt[sound] ?? 0)) return;
+    const sampleCue = sound === 'tell:missile' ? 'warning' : sound as SfxCue;
+    const decoded = samples[sampleCue];
+    const voice = decoded && sound === 'tell:missile' ? 'warning' : sound;
+    if (now < (this.nextPlayAt[voice] ?? 0)) return;
     const destination = sound === 'flyby' || sound === 'cloud' ? this.output.flight?.bus : master;
     if (!destination) return;
 
-    const buffer = buffers[sound];
+    if (sound === 'explosion' && this.explosions.length === EXPLOSION_VOICES) {
+      let quietest = 0;
+      for (let i = 1; i < this.explosions.length; i++) {
+        if (this.explosions[i].strength < this.explosions[quietest].strength) quietest = i;
+      }
+      if (strength <= this.explosions[quietest].strength) return;
+      const [replaced] = this.explosions.splice(quietest, 1);
+      replaced.source.stop(now);
+    }
+
+    const fallback = sound === 'explosion' ? buffers.hit : sound === 'ace_alert' ? buffers.warning : buffers[sound];
+    const buffer = decoded?.buffer ?? fallback;
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(destination);
+    const gain = decoded || sound === 'explosion' ? context.createGain() : undefined;
+    if (gain) {
+      gain.gain.value = (decoded ? SFX_CUE_GAIN[sampleCue] : 1) * strength;
+      source.connect(gain);
+      gain.connect(destination);
+    } else source.connect(destination);
+
+    if (sound === 'explosion') {
+      // This generator belongs exclusively to the audio mixer.
+      this.detuneSeed = (Math.imul(this.detuneSeed, 1664525) + 1013904223) >>> 0;
+      source.detune.value = (this.detuneSeed / 0x1_0000_0000 - 0.5) * 160;
+      this.explosions.push({ source, strength });
+    }
+    source.onended = () => {
+      if (sound === 'explosion') {
+        const index = this.explosions.findIndex(voice => voice.source === source);
+        if (index >= 0) this.explosions.splice(index, 1);
+      }
+      source.disconnect();
+      gain?.disconnect();
+    };
     source.start(now);
-    // Each cue gets one voice, so frequent muzzle ticks cannot crowd out the hit or warning.
-    const cooldown = COOLDOWN_SECONDS[sound as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
-    this.nextPlayAt[sound] = now + Math.max(cooldown, buffer.duration);
+    if (sound === 'explosion') return;
+    const cooldown = COOLDOWN_SECONDS[voice as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
+    this.nextPlayAt[voice] = now + (voice === 'graze' || voice === 'hit' ? cooldown : Math.max(cooldown, buffer.duration));
   }
 
   updateFlight(state: FlightAudioState, boostAmount: number, clearance: number, cloudPass: number, active: boolean): void {
     const output = this.output;
     if (!output) return;
-    const audible = active && state.phase === 'playing' && !state.paused && !this.isMuted && this.level > 0
+    const audible = active && state.phase === 'playing' && !state.paused && !this.isMuted && this.level > 0 && !this.suspended
       && output.context.state === 'running';
-    if (audible && !output.flight) output.flight = new FlightAudio(output.context, output.master, this.play.bind(this));
+    if (audible && !output.flight) output.flight = new FlightAudio(output.context, output.master, this.play.bind(this), output.samples);
     output.flight?.update(state, boostAmount, clearance, cloudPass, audible);
   }
 
