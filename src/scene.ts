@@ -1,11 +1,10 @@
 import {
-  BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
+  BoxGeometry, CircleGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, DynamicDrawUsage, Fog, Group,
   InstancedBufferAttribute, InstancedMesh, Object3D,
   EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RepeatWrapping, RingGeometry, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
-  type Camera,
+  type BufferGeometry, type Camera,
 } from 'three';
-import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
@@ -14,10 +13,14 @@ import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
+// --- S7f lane ---
+import { DEFAULT_QUALITY, RENDER_QUALITY, type RenderQuality } from './data/render-quality.ts';
+import { renderBuffer } from './layout.ts';
+import { PickupVisuals } from './pickup-visuals.ts';
+import { AdaptiveQuality } from './render-quality.ts';
 import { ROLLS } from './data/roll.ts';
-import { PICKUP_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
-import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
+import { EngineExhaust } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
 import { FlightAtmosphere } from './flight-atmosphere.ts';
 import { HostileVisuals } from './hostile-visuals.ts';
@@ -25,7 +28,7 @@ import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
 import { hitWindow } from './loadout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
-import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
+import { enemyAirframe, gnatGeometry, playerAirframe, wardenAirframe } from './models.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
 import { rollAltitude, rollAttitude } from './roll.ts';
@@ -80,27 +83,17 @@ function upload(mesh: InstancedMesh, count: number): void {
   if (mesh.instanceColor) uploadAttribute(mesh.instanceColor, count);
 }
 
-export function makeGnatBatch(): InstancedMesh {
-  // The eight perimeter points and two ridges give the flight group a shaded silhouette in one draw.
-  const outline = [
-    [0, 0, -4.4], [-1.08, 0, -1.9], [-4.3, 0, 1.7], [-1.18, 0, 1.2],
-    [0, 0, 3.5], [1.18, 0, 1.2], [4.3, 0, 1.7], [1.08, 0, -1.9],
-  ];
-  const top = outline.length, bottom = top + 1;
-  const positions = [...outline.flat(), 0, 1.25, 0, 0, -0.95, 0];
-  const swatches = [0xf3e8de, 0x9c9aae, 0x706b7d, 0xaa9fa7, 0xe3d2c6,
-    0xaa9fa7, 0x706b7d, 0x9c9aae, 0xffffff, 0x636a82];
-  const colors = swatches.flatMap(swatch => new Color(swatch).toArray());
-  const indices: number[] = [];
-  for (let index = 0; index < top; index++) {
-    const next = (index + 1) % top;
-    indices.push(top, index, next, bottom, next, index);
-  }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-  geometry.setIndex(indices);
-  const mesh = instances(geometry, SWARM_CAPS.desktop, new MeshBasicMaterial({ vertexColors: true }));
+// --- S7f lane ---
+function bakeAirframe({ faces, palette, size }: ReturnType<typeof playerAirframe>): BufferGeometry {
+  return bakeVoxels(faces, palette, size);
+}
+
+function airframeLod(mesh: Mesh, bakeDetailed: () => BufferGeometry) {
+  return { mesh, bakeDetailed, coarse: mesh.geometry, detailed: undefined as BufferGeometry | undefined };
+}
+
+export function makeGnatBatch(detailed = false): InstancedMesh {
+  const mesh = instances(gnatGeometry(detailed), SWARM_CAPS.desktop, new MeshBasicMaterial({ vertexColors: true }));
   mesh.name = 'Gnat swarm';
   return mesh;
 }
@@ -127,7 +120,6 @@ const RANGED_SHOT_STYLE: Partial<Record<Shot['kind'], readonly [width: number, l
   'drone-bolt': [1.18, 5.2, 0x7ad3ff],
 };
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
-const DESKTOP_DOWNSCALE = 2;
 const REAR_VIEW_FAR = 640;
 const COCKPIT_TRACER_CLEARANCE = 17;
 const MAIN_CAMERA_LAYER = 1;
@@ -141,6 +133,9 @@ type Framing = {
 
 export class FlightScene {
   private readonly renderer: WebGLRenderer;
+  // --- S7f lane ---
+  private readonly quality: AdaptiveQuality;
+  private readonly comparisonScale: number | undefined;
   private readonly world: World;
   private readonly scene = new Scene();
   private readonly fog = new Fog(0x9cbfcc, 245, 875);
@@ -177,7 +172,7 @@ export class FlightScene {
   private camera: Camera = this.top;
   private framing: Framing = { width: 0, height: 0, phone: null, cockpit: null };
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
-  private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial.clone());
+  private readonly ship = new Mesh(bakeAirframe(playerAirframe(false)), this.voxelMaterial.clone());
   private readonly weaponMounts = new WeaponMounts(this.ship);
   private readonly bodyShimmer = new Mesh(new TorusGeometry(1, 0.032, 4, 24),
     new MeshBasicMaterial({ color: 0xabf4ff, transparent: true, depthWrite: false }));
@@ -195,23 +190,28 @@ export class FlightScene {
   private readonly rollPose = { pitch: 0, roll: 0, cockpitPitch: 0, cameraPitch: 0, cameraBank: 0, inverted: false };
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
-  private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
+  // --- S7f lane ---
+  private readonly drones = instances(bakeAirframe(enemyAirframe('patrol')), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
   private readonly gnats = makeGnatBatch();
-  private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS] as const).map(kind => {
-    const { faces, palette, size } = kind === 'interceptor'
-      ? { faces: droneFaces(kind), palette: dronePalette, size: 0.84 * 1.18 }
-      : enemyAirframe(kind);
-    return { kind, mesh: instances(bakeVoxels(faces, palette, size), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0 };
-  });
+  private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS] as const).map(kind => ({
+    kind, mesh: instances(bakeAirframe(enemyAirframe(kind)), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0,
+  }));
   private readonly airframeByKind = new Map<EnemyKind, (typeof this.airframes)[number]>(this.airframes.map(batch => [batch.kind, batch]));
-  private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial.clone());
+  private readonly warden = new Mesh(bakeAirframe(wardenAirframe(false)), this.voxelMaterial.clone());
+  private readonly airframeLods = [
+    airframeLod(this.ship, () => bakeAirframe(playerAirframe(true))),
+    airframeLod(this.drones, () => bakeAirframe(enemyAirframe('patrol', true))),
+    airframeLod(this.gnats, () => gnatGeometry(true)),
+    ...this.airframes.map(({ kind, mesh }) => airframeLod(mesh, () => bakeAirframe(enemyAirframe(kind, true)))),
+    airframeLod(this.warden, () => bakeAirframe(wardenAirframe(true))),
+  ];
+  private detailedAirframes = false;
   private readonly weakPoints = instances(new BoxGeometry(), 10);
   private readonly weakPointBorder = new LineSegments(new EdgesGeometry(this.weakPoints.geometry),
     new LineBasicMaterial({ color: 0xffefac }));
-  private readonly pickups = instances(new BoxGeometry(), PICKUP_LIMIT);
+  // --- S7f lane ---
+  private readonly pickupVisuals = new PickupVisuals();
   private readonly chestMarkers = makeChestBatch();
-  private readonly pickupTrails = instances(new BoxGeometry(), PICKUP_LIMIT,
-    new MeshBasicMaterial({ transparent: true, opacity: 0.58, depthWrite: false }));
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
@@ -236,8 +236,12 @@ export class FlightScene {
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
   private readonly hostileVisuals = new HostileVisuals(this.ground);
 
-  constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena']) {
+  // --- S7f lane ---
+  constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena'],
+    quality: RenderQuality = DEFAULT_QUALITY, comparisonScale?: number) {
     this.world = world;
+    this.quality = new AdaptiveQuality(quality);
+    this.comparisonScale = comparisonScale;
     this.atmosphere = new FlightAtmosphere(arena);
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1);
@@ -245,9 +249,9 @@ export class FlightScene {
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
-    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.chestMarkers, this.bullets, this.sparks,
+    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
+      this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.weakPointBorder,
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -307,6 +311,10 @@ export class FlightScene {
 
   resize(framing: Framing & { hud: HudLayout }): void {
     const { width, height, phone, cockpit, hud } = framing;
+    // --- S7f lane ---
+    if (width !== this.framing.width || height !== this.framing.height || !!phone !== !!this.framing.phone) {
+      this.quality.resetSamples();
+    }
     this.framing = framing;
     this.rearSlot = layoutRearInset(hud, height, phone);
     this.mirrorSlot = cockpit && layoutRearMirror(cockpit, phone);
@@ -315,14 +323,47 @@ export class FlightScene {
     this.rearTarget.setSize(mirror?.width ?? REAR_INSET_WIDTH, mirror?.height ?? REAR_INSET_HEIGHT);
     this.rearRect = null;
     this.rearTick = -Infinity;
-    const buffer = phone?.buffer ?? { width: Math.ceil(width / DESKTOP_DOWNSCALE), height: Math.ceil(height / DESKTOP_DOWNSCALE) };
-    const w = Math.max(1, buffer.width), h = Math.max(1, buffer.height);
-    if (this.target.width === w && this.target.height === h) return;
-    this.target.setSize(w, h);
-    // Keep the back buffer the same size as the target. The canvas presents it
-    // with CSS nearest-neighbor scaling, including on high-DPR phones.
-    this.renderer.setSize(w, h, false);
+    this.resizeWorldBuffer();
   }
+
+  // --- S7f lane ---
+  private setAirframeDetail(detailed: boolean): void {
+    if (this.detailedAirframes === detailed) return;
+    this.detailedAirframes = detailed;
+    for (const lod of this.airframeLods) {
+      if (detailed) lod.detailed ??= lod.bakeDetailed();
+      lod.mesh.geometry = detailed ? lod.detailed! : lod.coarse;
+    }
+    this.ghost.geometry = this.ship.geometry;
+  }
+
+  private resizeWorldBuffer(): void {
+    const { width, height, phone } = this.framing;
+    if (width === 0 || height === 0) return;
+    const buffer = renderBuffer(width, height, phone, this.quality.tier, this.comparisonScale);
+    this.setAirframeDetail(RENDER_QUALITY[this.quality.tier].detailedModels);
+    if (this.target.width !== buffer.width || this.target.height !== buffer.height) {
+      this.target.setSize(buffer.width, buffer.height);
+      this.renderer.setSize(buffer.width, buffer.height, false);
+    }
+    const { style } = this.renderer.domElement;
+    style.width = buffer.cssScale === null ? '' : `${buffer.width * buffer.cssScale}px`;
+    style.height = buffer.cssScale === null ? '' : `${buffer.height * buffer.cssScale}px`;
+    this.rearTick = -Infinity;
+  }
+
+  setRenderQuality(tier: RenderQuality): void {
+    this.quality.select(tier);
+    this.resizeWorldBuffer();
+  }
+
+  observeRenderFrame(milliseconds: number | null): boolean {
+    if (!this.quality.observe(milliseconds)) return false;
+    this.resizeWorldBuffer();
+    return true;
+  }
+
+  get renderQuality(): RenderQuality { return this.quality.tier; }
 
   get rearView(): Readonly<Rect> | null {
     return this.rearRect;
@@ -766,25 +807,8 @@ export class FlightScene {
     upload(this.weakPoints, weakPoints);
     upload(this.shadows, shadows);
 
-    let salvage = 0, magnetTrails = 0;
-    for (const pickup of state.pickups) {
-      if (salvage === PICKUP_LIMIT) break;
-      const { pulling, reversal } = pickup;
-      const pulse = pulling && !this.reducedMotion.matches ? 0.4 * Math.sin(state.tick * 0.36 + salvage) : 0;
-      const size = 3 + Math.min(pickup.xp, 5) * 0.8 + pulse;
-      const alt = flat ? TOP_FLIGHT + 5 : pickup.alt;
-      const tint = pulling ? reversal ? 0xd6fffc : 0xfff1b4 : pickup.xp >= 2 ? 0xffe49c : 0x8efbe8;
-      this.write(this.pickups, salvage++, pickup.x, pickup.z, alt, state.tick / 37, size, size, size, tint, Math.PI / 4);
-      if (pulling) {
-        const yaw = Math.atan2(p.x - pickup.x, p.z - pickup.z);
-        const trailLength = reversal ? 9 : 6;
-        const offset = (size + trailLength) / 2;
-        this.write(this.pickupTrails, magnetTrails++, pickup.x - Math.sin(yaw) * offset,
-          pickup.z - Math.cos(yaw) * offset, alt, yaw, size * 0.3, size * 0.3, trailLength, tint);
-      }
-    }
-    upload(this.pickups, salvage);
-    upload(this.pickupTrails, magnetTrails);
+    // --- S7f lane ---
+    this.pickupVisuals.update(state, flat ? TOP_FLIGHT + 5 : undefined, this.reducedMotion.matches);
 
     for (const drop of state.chests.drops) {
       const tint = chestDefinition(drop.id).kind === 'evolution' ? 0xffbd62 : 0x96e9d2;

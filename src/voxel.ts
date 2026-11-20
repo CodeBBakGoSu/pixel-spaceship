@@ -4,6 +4,36 @@ export type VoxelModel = { width: number; length: number; height: number; pivot:
 export type Face = { x: number; y: number; z: number; side: number; material: number };
 export const directions = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
+export const AIRFRAME_VOXEL_SUBDIVISIONS = 2;
+type VoxelSample = (x: number, y: number, z: number) => number;
+type VoxelDetail = (x: number, y: number, z: number, material: number, sample: VoxelSample) => number;
+
+/** Double the grid density. Bake at half the old size to keep the hull and hardpoints aligned. */
+export function refineVoxelModel(model: VoxelModel, detail?: VoxelDetail): VoxelModel {
+  const scale = AIRFRAME_VOXEL_SUBDIVISIONS;
+  const width = model.width * scale, length = model.length * scale, height = model.height * scale;
+  const center = (scale - 1) / 2;
+  const [px, py, pz] = model.pivot;
+  const pivot: VoxelModel['pivot'] = [px * scale + center, py * scale + center, pz * scale + center];
+  const data = new Uint8Array(width * length * height);
+
+  // The callback and sampler use the original model-local units (across, nose to tail, up).
+  // Index 0 is air. Keep the base livery IDs and append 8-bit sRGB swatches for related detail tones.
+  const sample: VoxelSample = (x, y, z) => {
+    const sx = Math.round(x + px), sy = Math.round(y + py), sz = Math.round(z + pz);
+    if (sx < 0 || sx >= model.width || sy < 0 || sy >= model.length || sz < 0 || sz >= model.height) return 0;
+    return model.data[(sz * model.length + sy) * model.width + sx];
+  };
+  for (let z = 0; z < height; z++) for (let y = 0; y < length; y++) for (let x = 0; x < width; x++) {
+    const index = (Math.floor(z / scale) * model.length + Math.floor(y / scale)) * model.width + Math.floor(x / scale);
+    const material = model.data[index];
+    data[(z * length + y) * width + x] = detail
+      ? detail((x - pivot[0]) / scale, (y - pivot[1]) / scale, (z - pivot[2]) / scale, material, sample)
+      : material;
+  }
+  return { width, length, height, pivot, data };
+}
+
 export function buildFaces(model: VoxelModel): Face[] {
   const { width: w, length: l, height: h, data, pivot } = model;
   const get = (x: number, y: number, z: number) => x < 0 || x >= w || y < 0 || y >= l || z < 0 || z >= h ? 0 : data[(z * l + y) * w + x];

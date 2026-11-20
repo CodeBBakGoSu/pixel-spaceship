@@ -3,17 +3,16 @@ import {
   LinearFilter, MeshBasicMaterial, Object3D, OrthographicCamera, PerspectiveCamera, PlaneGeometry, Quaternion,
   SRGBColorSpace, Vector3, type BufferAttribute, type Camera,
 } from 'three';
-import { SHIP_VOXEL_SUBDIVISIONS } from '../proto/shared/models.ts';
 import { CRUISE_SPEED, trailEnd } from './maneuvers.ts';
+import { SHIP_HULL_UNIT } from './models.ts';
 import { clamp } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 
-const HULL_UNIT = 0.62;
-export const SHIP_VOXEL_SIZE = HULL_UNIT / SHIP_VOXEL_SUBDIVISIONS;
+export { SHIP_BASE_VOXEL_SIZE as SHIP_VOXEL_SIZE } from './models.ts';
 // The outer faces of the housings, measured in the hull's design grid.
-const NOZZLE_X = 5.5 * HULL_UNIT;
-const NOZZLE_Y = -HULL_UNIT;
-const NOZZLE_Z = 18.5 * HULL_UNIT - 0.04;
+const NOZZLE_X = 5.5 * SHIP_HULL_UNIT;
+const NOZZLE_Y = -SHIP_HULL_UNIT;
+const NOZZLE_Z = 18.5 * SHIP_HULL_UNIT - 0.04;
 const GLOW_LOCATIONS = [0.2, 0.6];
 
 function ribbonTextures(): [DataTexture, DataTexture] {
