@@ -6,9 +6,11 @@ import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
+import { HostileVisuals } from '../src/hostile-visuals.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
 import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
+import { SHOT_LIMIT, STEP } from '../src/stage-combat.ts';
 import { orbitDroneGeometry, WeaponMounts } from '../src/weapon-render.ts';
 
 const triangleCount = (faces, palette) => bakeVoxels(faces, palette, 1).index.count / 3;
@@ -67,6 +69,75 @@ test('carrier beacons and crates share a single small world instance batch', () 
   assert.equal(batch.instanceMatrix.count, 12);
   assert.equal(batch.geometry.index.count / 3 * batch.instanceMatrix.count, 144);
   assert.equal(batch.layers.mask, 1, 'the rear camera can see the crate batch');
+});
+
+test('hostile heads, four trail samples and full spark bursts fit two instanced world batches', () => {
+  const visuals = new HostileVisuals(() => 35);
+  const state = {
+    tick: 0, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
+    shots: Array.from({ length: SHOT_LIMIT }, (_, i) => ({
+      kind: 'hostile', x: SHOT_LIMIT - i, z: 12, alt: 110, vx: 0, vz: 180, life: 2,
+    })),
+  };
+  for (; state.tick < 11; state.tick++) {
+    visuals.update(state);
+    for (const shot of state.shots) shot.z += shot.vz * STEP;
+  }
+  for (const shot of state.shots) visuals.impact(shot, shot.x, shot.z, shot.alt, state.tick - 4);
+  visuals.update(state);
+
+  const [drops, glyphs] = visuals.group.children;
+  assert.equal(visuals.group.children.length, 2);
+  assert.ok(glyphs.geometry.isInstancedBufferGeometry);
+  assert.ok(drops.isLineSegments && drops.geometry.isInstancedBufferGeometry);
+  assert.equal(drops.layers.mask, 1, 'the rear camera sees the height cues');
+  assert.equal(glyphs.layers.mask, 1, 'the rear camera sees the same glyphs');
+  assert.equal(drops.geometry.instanceCount, 48);
+  const x = drops.geometry.getAttribute('dropCenter');
+  for (let i = 0; i < drops.geometry.instanceCount; i++) assert.equal(x.getX(i), i + 1, 'nearest first');
+
+  // Legacy shot caps can exceed the survivor cap of 64. Each glyph is two triangles.
+  const quadCount = glyphs.geometry.instanceCount;
+  assert.equal(quadCount, SHOT_LIMIT * (1 + 4) + 24 * 5);
+  assert.equal(quadCount * glyphs.geometry.index.count / 3, 2160);
+});
+
+test('hostile glyphs retain their emitted shapes across altitude and shield changes', () => {
+  const visuals = new HostileVisuals(() => 35);
+  const state = {
+    tick: 20, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
+    shots: [118, 119, 101].map((alt, i) => ({
+      kind: 'hostile', x: i * 10, z: 30, alt, vx: 0, vz: -78, life: 2,
+    })),
+  };
+  for (const [index, shape] of ['orb', 'needle', 'diamond'].entries()) {
+    const shot = state.shots[index];
+    visuals.muzzle(shot, shape, shot.x, shot.z + 4, shot.alt, state.tick - 3);
+  }
+  const [drops, glyphs] = visuals.group.children;
+  const styles = glyphs.geometry.getAttribute('glyphStyle');
+  const heads = () => {
+    const result = [];
+    for (let i = 0; i < glyphs.geometry.instanceCount; i++) {
+      if (styles.getY(i) <= 3 && styles.getW(i) === 1) result.push([styles.getX(i), styles.getY(i)]);
+    }
+    return result;
+  };
+  visuals.update(state);
+  assert.deepEqual(heads(), [[0, 0], [1, 1], [2, 2]]);
+  assert.ok(glyphs.geometry.instanceCount > 3, 'the same batch contains trails and muzzle flashes');
+  state.player.altitude = 111;
+  assert.equal(visuals.update(state), true, 'crossing the band boundary refreshes the rear feed');
+  assert.deepEqual(heads(), [[0, 0], [1, 0], [2, 2]]);
+  state.invulnerability = 0.25;
+  assert.equal(visuals.update(state), true);
+  assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
+
+  visuals.setView(400, 158);
+  assert.equal(drops.visible, false);
+  visuals.setView(56);
+  assert.equal(drops.visible, true);
+  assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
 });
 
 test('each weapon mounts one distinct mesh to the existing ship and the four heaviest fit the budget', () => {

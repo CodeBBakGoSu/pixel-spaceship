@@ -1,0 +1,24 @@
+.hostile-hit-edge,
+.hostile-feedback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hostile-hit-edge {
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 49%, #c5253821 66%, #fa333b8c 91%, #fa333bb0 110%);
+  box-shadow: inset 0 0 0 2px #ff686a70, inset 0 0 24px #e73249a0;
+}
+
+.experience.phone-layout .hostile-hit-edge {
+  top: var(--playfield-y);
+  bottom: auto;
+  height: var(--playfield-h);
+}
+
+.hostile-feedback[hidden] {
+  display: none;
+}

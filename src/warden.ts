@@ -1,5 +1,6 @@
 import { WARDEN_PACING } from './data/warden.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import type { CombatEvents } from './hostile-events.ts';
 import { BANDS, fireHostile, TICKS_PER_SECOND } from './stage-combat.ts';
 import { random, rngStream } from './stage-random.ts';
 import type { Boss, StageState } from './stage-types.ts';
@@ -50,10 +51,10 @@ export function positionPacedWeakPoints(boss: Boss, heat: number, tick: number):
   }
 }
 
-export function firePacedWarden(state: StageState, boss: Boss): void {
+export function firePacedWarden(state: StageState, boss: Boss, events?: CombatEvents): void {
   const point = boss.weakPoints[boss.index];
   if (boss.entry || !point?.hp || state.tick < boss.shotAt) return;
   const { spread, speed, periodTicks } = wardenParts(state.heat)[boss.index].salvo;
-  for (const bearing of spread) fireHostile(state, point, speed, bearing);
+  for (const bearing of spread) fireHostile(state, point, speed, bearing, events);
   boss.shotAt = state.tick + Math.round(periodTicks * HEAT_TIERS[state.heat].shotIntervalScale);
 }

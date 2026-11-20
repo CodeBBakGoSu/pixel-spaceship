@@ -3,6 +3,7 @@ import { HEAT_TIERS } from './data/meta.ts';
 import { REGULAR_FIRE_INTERVAL_SCALE } from './data/run-balance.ts';
 import { GNAT } from './data/phases.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
+import type { CombatEvents } from './hostile-events.ts';
 import { nearestBand } from './maneuvers.ts';
 import { keepInsideArena } from './reach.ts';
 import { angleTo, BANDS, clamp, fireHostile, FLAK_LIFE, inBand, MINE_LIMIT, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
@@ -234,19 +235,19 @@ function pursuitBoost(state: StageState, enemy: Enemy): number {
   return 1;
 }
 
-function moveSkimmer(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number): void {
+function moveSkimmer(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number, events?: CombatEvents): void {
   const { speed, boltSpeed } = ENEMY_KINDS.skimmer;
   const direction = enemy.id % 2 ? 1 : -1;
   enemy.closeRange = rangeMode(enemy.closeRange, range, 60, 6);
   steer(state, enemy, ground, angle + direction * (enemy.closeRange ? 1.25 : 0.34), speed);
   if (state.tick >= enemy.shotAt && range <= 176) {
-    fireHostile(state, enemy, boltSpeed, -0.14);
-    fireHostile(state, enemy, boltSpeed, 0.14);
+    fireHostile(state, enemy, boltSpeed, -0.14, events);
+    fireHostile(state, enemy, boltSpeed, 0.14, events);
     enemy.shotAt = state.tick + shotInterval(state, 240);
   }
 }
 
-function moveSpotter(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number): void {
+function moveSpotter(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number, events?: CombatEvents): void {
   const { speed, boltSpeed } = ENEMY_KINDS.spotter;
   enemy.closeRange = rangeMode(enemy.closeRange, range, 105, 8);
   enemy.longRange = rangeMode(enemy.longRange, -range, -165, 8);
@@ -254,7 +255,7 @@ function moveSpotter(state: StageState, enemy: Enemy, ground: Ground, angle: num
   steer(state, enemy, ground, angle + bias * (enemy.id % 2 ? 1 : -1), speed);
   if (enemy.tell) {
     if (state.tick < enemy.tell.until) return;
-    fireHostile(state, enemy, boltSpeed);
+    fireHostile(state, enemy, boltSpeed, 0, events);
     delete enemy.tell;
     enemy.shotAt = state.tick + shotInterval(state, 150);
   } else if (state.tick >= enemy.shotAt && range <= 195) {
@@ -262,7 +263,7 @@ function moveSpotter(state: StageState, enemy: Enemy, ground: Ground, angle: num
   }
 }
 
-function moveTail(state: StageState, enemy: Enemy, ground: Ground, kind: 'hound' | 'harrier', fx: number, fz: number, dx: number, dz: number): void {
+function moveTail(state: StageState, enemy: Enemy, ground: Ground, kind: 'hound' | 'harrier', fx: number, fz: number, dx: number, dz: number, events?: CombatEvents): void {
   const { speed, boltSpeed } = ENEMY_KINDS[kind], harrier = kind === 'harrier';
   const aft = dx * fx + dz * fz;
   const slot = harrier ? 62 : 29;
@@ -272,24 +273,24 @@ function moveTail(state: StageState, enemy: Enemy, ground: Ground, kind: 'hound'
   steer(state, enemy, ground, Math.atan2(vx, vz), Math.min(speed, Math.hypot(vx, vz)) * pursuitBoost(state, enemy));
   if (state.tick >= enemy.shotAt && aft >= slot - 11 && aft <= slot + 26
     && Math.abs(dx * fz - dz * fx) < (harrier ? 33 : 23) && enemy.maneuver?.phase !== 'diving') {
-    fireHostile(state, enemy, boltSpeed);
+    fireHostile(state, enemy, boltSpeed, 0, events);
     enemy.shotAt = state.tick + shotInterval(state, harrier ? 240 : 180);
   }
 }
 
-function moveFlanker(state: StageState, enemy: Enemy, ground: Ground, fx: number, fz: number, dx: number, dz: number): void {
+function moveFlanker(state: StageState, enemy: Enemy, ground: Ground, fx: number, fz: number, dx: number, dz: number, events?: CombatEvents): void {
   const { speed, boltSpeed } = ENEMY_KINDS.flanker;
   const side = enemy.id % 2 ? 1 : -1;
   const vx = fx * state.speed + (dx + fz * 40 * side) * 1.25;
   const vz = fz * state.speed + (dz - fx * 40 * side) * 1.25;
   steer(state, enemy, ground, Math.atan2(vx, vz), Math.min(speed, Math.hypot(vx, vz)));
   if (state.tick >= enemy.shotAt && Math.hypot(dx, dz) < 106) {
-    fireHostile(state, enemy, boltSpeed);
+    fireHostile(state, enemy, boltSpeed, 0, events);
     enemy.shotAt = state.tick + shotInterval(state, 240);
   }
 }
 
-function moveDiver(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number): void {
+function moveDiver(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number, events?: CombatEvents): void {
   const { speed, boltSpeed } = ENEMY_KINDS.diver;
   enemy.closeRange = rangeMode(enemy.closeRange, range, 75, 6);
   steer(state, enemy, ground, angle + (enemy.closeRange ? 1.45 : 0.24) * (enemy.id % 2 ? 1 : -1), speed);
@@ -302,7 +303,7 @@ function moveDiver(state: StageState, enemy: Enemy, ground: Ground, angle: numbe
   const arrived = moveBetweenBands(state, enemy, ground, plunge ? 55 : 30);
   const altitude = state.player.altitude;
   if (plunge && enemy.alt < oldAltitude && !enemy.fanFired && range <= 180 && inBand(enemy.alt, altitude, 4)) {
-    for (const spread of [-0.26, 0, 0.26]) fireHostile(state, enemy, boltSpeed, spread);
+    for (const spread of [-0.26, 0, 0.26]) fireHostile(state, enemy, boltSpeed, spread, events);
     enemy.fanFired = true;
   }
   if (arrived) enemy.maneuverAt = state.tick + (enemy.band === 0 ? 105 : 390);
@@ -377,7 +378,7 @@ function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
   enemy.z = z;
 }
 
-export function advanceEnemies(state: StageState, ground: Ground): void {
+export function advanceEnemies(state: StageState, ground: Ground, events?: CombatEvents): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const enemy of state.enemies) {
     if (!enemy.hp) continue;
@@ -412,7 +413,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
       const pass = enemy.flyby;
       if (pass?.phase === 'cross' && state.tick >= enemy.shotAt
         && pass.side * (dz * Math.sin(pass.yaw) - dx * Math.cos(pass.yaw)) <= 0) {
-        fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed);
+        fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed, 0, events);
         enemy.shotAt = state.tick + shotInterval(state, 255);
       }
       continue;
@@ -424,15 +425,15 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
       const remaining = Math.hypot(tx, tz);
       steer(state, enemy, ground, remaining > 0.001 ? Math.atan2(tx, tz) : enemy.yaw, Math.min(course.speed, remaining / STEP));
     } else if (enemy.kind === 'skimmer') {
-      moveSkimmer(state, enemy, ground, angle, range);
+      moveSkimmer(state, enemy, ground, angle, range, events);
     } else if (enemy.kind === 'spotter') {
-      moveSpotter(state, enemy, ground, angle, range);
+      moveSpotter(state, enemy, ground, angle, range, events);
     } else if (enemy.kind === 'hound' || enemy.kind === 'harrier') {
-      moveTail(state, enemy, ground, enemy.kind, fx, fz, dx, dz);
+      moveTail(state, enemy, ground, enemy.kind, fx, fz, dx, dz, events);
     } else if (enemy.kind === 'flanker') {
-      moveFlanker(state, enemy, ground, fx, fz, dx, dz);
+      moveFlanker(state, enemy, ground, fx, fz, dx, dz, events);
     } else if (enemy.kind === 'diver') {
-      moveDiver(state, enemy, ground, angle, range);
+      moveDiver(state, enemy, ground, angle, range, events);
     } else if (enemy.kind === 'bomber') {
       moveBomber(state, enemy, ground, angle, range);
     } else if (range > 0.001 && !stayWithBomber(state, enemy, ground)) {
@@ -448,7 +449,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
     advancePosition(state, enemy, ground);
     if ((enemy.kind === 'patrol' || enemy.kind === 'interceptor') && range < 185
       && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
-      fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed);
+      fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed, 0, events);
       enemy.shotAt = state.tick + shotInterval(state, 255 + Math.floor(random(state.run ? state.streams.combat : state) * 105));
     }
   }

@@ -55,6 +55,43 @@
 .scorebox .bill-count:not([hidden]) { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
 .scorebox .bill-count[hidden] { display: none; }
 
+.audio-toggle:not([hidden]) {
+  position: absolute;
+  z-index: 4;
+  left: calc(var(--hud-x) + 290px);
+  top: var(--hud-y);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #577782;
+  background: #101d2bdc;
+  color: #cce7e3;
+  cursor: pointer;
+}
+.audio-toggle[aria-pressed="true"] { color: #f6b59a; border-color: #996b5e; }
+.phone-layout .audio-toggle:not([hidden]) {
+  left: calc(var(--stick-x) + var(--stick-w) + 9px);
+  top: calc(var(--controls-y) + 9px);
+  width: 44px;
+  height: 44px;
+  touch-action: manipulation;
+}
+.speaker-icon { display: block; position: relative; width: 18px; height: 16px; }
+.speaker-icon::before, .speaker-icon::after { position: absolute; content: ""; background: currentColor; }
+.speaker-icon::before {
+  inset: 1px 6px 1px 1px;
+  clip-path: polygon(0 29%, 35% 29%, 84% 0, 100% 0, 100% 100%, 84% 100%, 35% 71%, 0 71%);
+}
+.speaker-icon::after { width: 2px; height: 6px; left: 13px; top: 5px; box-shadow: 3px -2px currentColor, 3px 2px currentColor; }
+.audio-toggle[aria-pressed="true"] .speaker-icon::after {
+  width: 3px; height: 18px; left: 9px; top: -1px; transform: rotate(36deg); box-shadow: -1px 0 #101d2b;
+}
+.audio-volume { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #c4deea; }
+.audio-volume input { width: 82px; accent-color: #f5c06f; cursor: pointer; }
+.phone-layout .audio-volume input { min-height: 44px; }
+
 .sortie-strip {
   position: absolute;
   left: var(--sortie-strip-x);

@@ -7,12 +7,16 @@ import { createChestDisplay } from './chest-display.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
+import { CombatAudio } from './combat-audio.ts';
 import { phaseAt } from './data/phases.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createGearIcon } from './gear-icons.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { createHangarDisplay } from './hangar-display.ts';
+import type { CombatEvents } from './hostile-events.ts';
+import { HostileFeedback } from './hostile-feedback.ts';
+import { createHostileFixture } from './hostile-fixture.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
@@ -48,6 +52,8 @@ const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
 const touchPause = $<HTMLButtonElement>('#touch-pause');
+const audioToggle = $<HTMLButtonElement>('#audio-toggle');
+const audioVolume = $<HTMLInputElement>('#audio-volume');
 const touchLoop = $<HTMLButtonElement>('#touch-loop');
 const touchBomb = $<HTMLButtonElement>('#touch-bomb');
 const touchFlare = $<HTMLButtonElement>('#touch-flare');
@@ -73,10 +79,17 @@ const font = getComputedStyle(document.documentElement).getPropertyValue('--game
 const navRadar = new RadarDisplay();
 const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay'), font);
 const cockpitMarkers = new CockpitMarkers();
+const audio = new CombatAudio();
+const feedback = new HostileFeedback(root);
 const world = new World();
 const ground = (x: number, z: number) => world.height(x, z);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
+const demoBullets = query.get('fixture') === 'bullets';
+if (demoBullets) {
+  query.set('mode', 'survivors');
+  query.set('t', '0');
+}
 if (!query.has('mode') && !query.has('fixture')) query.set('mode', 'survivors');
 const options = parseStageOptions(query.toString());
 options.mobile = options.touch || coarse.matches;
@@ -85,6 +98,7 @@ const persistent = options.mode === 'survivors' && !options.autoplay && !options
 let profile = persistent ? readPilot() : normalizeProfile(null);
 options.profile = profile;
 const state = seekStage(options, ground);
+const bulletFixture = demoBullets ? createHostileFixture(state, query, ground) : null;
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
@@ -147,6 +161,31 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const cockpitLayer = $('#cockpit-display');
 const reversalFlash = $('#reversal-flash');
 let hitstopUntil = -Infinity;
+const HIT_FREEZE_MS = 60;
+let visualFreezeUntil = -Infinity, frameNow = 0, cueTime = 0, primingBullets = false;
+const projectedShip = { x: 0, y: 0, depth: 0 };
+const feedbackTarget = { x: 0, z: 0, alt: 0 };
+let feedbackAnchor: { x: number; y: number } | null = null;
+const effectsEnabled = query.get('fx') !== '0';
+const combatEvents: CombatEvents | undefined = effectsEnabled ? {
+  muzzle(shot, shape, x, z, alt) {
+    const age = primingBullets ? query.has('shape') ? 3 : 10 : 0;
+    scene?.hostileMuzzle(shot, shape, x, z, alt, state.tick - age);
+    if (!primingBullets && (x - state.player.x) ** 2 + (z - state.player.z) ** 2 < 180 ** 2) audio.play('muzzle');
+  },
+  impact(shot, x, z, alt) { scene?.hostileImpact(shot, x, z, alt, state.tick - (primingBullets ? 4 : 0)); },
+  graze(shot, x, z, alt) {
+    scene?.hostileGraze(shot, x, z, alt, state.tick - (primingBullets ? 3 : 0));
+    feedback.graze(state, frameNow);
+    audio.play('graze');
+  },
+  hit(damage, x, z, alt) {
+    if (!primingBullets) visualFreezeUntil = frameNow + HIT_FREEZE_MS;
+    feedback.hit(state, damage, x, z, alt, frameNow);
+    audio.play('hit');
+    if (state.view === 'cockpit') audio.play('warning');
+  },
+} : undefined;
 let helpTimer = 0, lastHelp = '';
 let motion: CockpitMotion = { speed: 0, climb: 0, turn: 0 };
 let cockpitDelta: string | null = null;
@@ -199,6 +238,7 @@ function resumeCheckpoint(): void {
   if (!checkpoint || !writeCheckpointData(null)) return;
   // Preserve purchases made in the hangar. The sortie keeps the saved in-flight upgrade effects.
   Object.assign(state, checkpoint, { profile });
+  feedback.reset();
   carry = 0;
   menuKey = '';
   layoutFlight();
@@ -227,6 +267,7 @@ function applyLanguage(): void {
     if (el.dataset.tooltip) el.title = t(el.dataset.tooltip as MessageKey);
   });
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
+  refreshAudioControl();
   menuKey = lastHelp = lastFlightKey = '';
   layoutFlight();
   updateMenu();
@@ -267,6 +308,7 @@ function layoutFlight(): void {
     root.style.setProperty('--maneuver-center-y', `${Math.round(cockpit.aiming.y + cockpit.aiming.height * 0.42)}px`);
   }
   cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t);
+  feedback.resize(innerWidth, innerHeight, phone, cockpit);
   radar.width = Math.max(1, hud.radar.width);
   radar.height = Math.max(1, hud.radar.height);
   navRadar.resize(radar.width, radar.height, font, t('hud.nav'));
@@ -601,6 +643,7 @@ function resetTouch(): void {
 function updateMenu(): void {
   const status = !scene ? 'webgl' : guide ? 'guide' : state.paused ? 'paused' : state.phase;
   touchControls.hidden = touchPause.hidden = !touch || status !== 'playing';
+  audioToggle.hidden = status !== 'playing';
   if (status === menuKey && (status !== 'draft' || state.draft === renderedDraft)
     && (status !== 'chest' || state.chestReveal === renderedChest)) return;
   renderedDraft = state.draft;
@@ -717,6 +760,21 @@ function choose(index: number): void {
 }
 
 primary.addEventListener('click', action);
+function refreshAudioControl(): void {
+  audioToggle.setAttribute('aria-pressed', String(audio.muted));
+  audioToggle.setAttribute('aria-label', t('audio.sound'));
+  audioToggle.title = t(audio.muted ? 'audio.unmute' : 'audio.mute');
+}
+function toggleAudio(): void {
+  audio.setMuted(!audio.muted);
+  refreshAudioControl();
+}
+audioToggle.addEventListener('click', toggleAudio);
+audioVolume.value = String(Math.round(audio.volume * 100));
+audioVolume.addEventListener('input', () => audio.setVolume(audioVolume.valueAsNumber / 100));
+for (const type of ['pointerdown', 'pointerup', 'click', 'keydown'] as const) {
+  window.addEventListener(type, event => audio.unlock(event), { capture: true });
+}
 $('#checkpoint-resume').addEventListener('click', resumeCheckpoint);
 $('#retreat-action').addEventListener('click', () => { pendingRetreat = true; });
 guidePrimary.addEventListener('click', () => closeGuide(true));
@@ -755,6 +813,11 @@ root.addEventListener('touchmove', event => {
 
 window.addEventListener('keydown', event => {
   const { code } = event;
+  if (code === 'KeyM' && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    toggleAudio();
+    return;
+  }
   if (interrupted) {
     if (code === 'Enter' || code === 'Space' || code.startsWith('Arrow')) event.preventDefault();
     return;
@@ -955,6 +1018,7 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
+  if (bulletFixture && !bulletFixture.stress) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
@@ -974,7 +1038,8 @@ function advance(): void {
     toggleView: pendingViews > 0 || control.toggleView,
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
-  }, ground);
+  }, ground, undefined, combatEvents);
+  if (bulletFixture?.stress) bulletFixture.fillStress(combatEvents);
   pendingStart = pendingPause = pendingBomb = pendingFlare = false;
   pendingRetreat = false;
   if (pendingViews) pendingViews--;
@@ -989,6 +1054,8 @@ function advance(): void {
   if (launching && state.phase === 'playing' && previousPhase !== 'playing') {
     if (checkpointData) writeCheckpointData(null);
     evolutionNotice = null;
+    feedback.reset();
+    visualFreezeUntil = -Infinity;
   }
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
@@ -1086,12 +1153,15 @@ function updateRearViewCue(): void {
   rearViewCue.style.maxWidth = `${rect.width - 8}px`;
 }
 
-function render(): void {
+function render(now: number): void {
   if (layoutView !== state.view) layoutFlight();
+  // The impact holds the scene and projected canopy instruments. The flight clock keeps ticking.
+  const redrawFlight = now >= visualFreezeUntil || dirty || lastRenderTick < 0;
   const yaw = maneuverViewYaw(state);
   const readout = buildRadar(state, yaw);
+  if (effectsEnabled && readout.rearDanger && !rearDanger) audio.play('warning');
   rearDanger = readout.rearDanger;
-  const ladder = scene?.draw(state, !!rearDanger) ?? [];
+  const ladder = redrawFlight ? scene?.draw(state, !!rearDanger) : undefined;
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -1111,19 +1181,30 @@ function render(): void {
     setText('#cockpit-delta', cockpitDelta);
     deltaIndicator.setAttribute('aria-label', `${t('hud.altitude')} ${cockpitDelta}`);
   }
-  if (cockpit && scene) {
+  if (cockpit && scene && redrawFlight) {
     const settling = Math.cos(yaw - p.yaw) < 0.999;
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
       (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
     const mirror = scene.cockpitMirror;
     const markers = cockpitMarkers.update(state, cockpit, scene, mirror, rearDanger);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
-    cockpitDisplay.draw(state, aim, ladder,
+    feedbackAnchor = aim;
+    cockpitDisplay.draw(state, aim, ladder ?? [],
       motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, mirror, instrumentTrack?.alt, language, t);
-  } else if (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick) {
+  } else if (!cockpit && (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick)) {
     navRadar.draw(radarContext, 0, 0, readout, yaw, state.tick);
     if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font, yaw);
     lastRadarTick = state.tick;
+  }
+  if (!cockpit) {
+    feedbackAnchor = null;
+    if (scene && feedback.needsAnchor(state, cueTime || now)) {
+      feedbackTarget.x = p.x;
+      feedbackTarget.z = p.z;
+      feedbackTarget.alt = state.view === 'overhead' ? 155 : p.altitude;
+      scene.projectContact(feedbackTarget, projectedShip);
+      if (projectedShip.depth > 0.05) feedbackAnchor = projectedShip;
+    }
   }
   dirty = false;
 }
@@ -1153,6 +1234,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
   kills: state.kills, fodderCount: state.enemies.filter(enemy => enemy.kind === 'gnat').length,
+  hostileCount: state.shots.filter(shot => shot.kind === 'hostile').length, invulnerability: state.invulnerability,
   heat: state.heat, daily: state.daily, maxHull: state.maxHull, billsPaid: state.bills.paid,
   weaponLevels: state.run?.weaponLevels, buffLevels: state.run?.buffLevels, swarmCap: state.swarmCap,
   tracers: state.shots.filter(shot => shot.reversal || shot.kind === 'strafe').map(shot => ({
@@ -1183,6 +1265,7 @@ function showReversalImpact(): void {
 }
 
 function animate(now: number): void {
+  frameNow = now;
   const elapsed = Math.max(0, (now - previousTime) / 1000);
   previousTime = now;
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
@@ -1201,10 +1284,11 @@ function animate(now: number): void {
     }
   }
   if (dirty || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
-    render();
+    render(now);
     lastRenderTick = state.tick;
     lastRenderPhase = state.phase;
   }
+  if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   requestAnimationFrame(animate);
 }
 
@@ -1217,6 +1301,13 @@ async function start(): Promise<void> {
   resize();
   applyLanguage();
   previousTime = performance.now();
+  if (bulletFixture) {
+    frameNow = previousTime;
+    primingBullets = true;
+    bulletFixture.prime(combatEvents);
+    primingBullets = false;
+    if (!bulletFixture.stress) cueTime = frameNow;
+  }
   requestAnimationFrame(animate);
 }
 

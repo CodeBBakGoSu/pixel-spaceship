@@ -11,6 +11,7 @@ import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
+import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
 import { PICKUP_LIMIT } from './data/run-balance.ts';
@@ -18,6 +19,7 @@ import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
 import { FlightAtmosphere } from './flight-atmosphere.ts';
+import { HostileVisuals } from './hostile-visuals.ts';
 import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
 import { hitWindow } from './loadout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
@@ -25,7 +27,8 @@ import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverA
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
-import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
+import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT,
+  TICKS_PER_SECOND } from './stage-combat.ts';
 import type { ManeuverTrail, Position, Shot, StageState } from './stage-types.ts';
 import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
@@ -126,6 +129,7 @@ const DESKTOP_DOWNSCALE = 2;
 const REAR_VIEW_FAR = 640;
 const COCKPIT_TRACER_CLEARANCE = 17;
 const MAIN_CAMERA_LAYER = 1;
+const shieldFlash = (tick: number): boolean => Math.floor(tick * 16 / TICKS_PER_SECOND) % 2 === 0;
 type Framing = {
   width: number;
   height: number;
@@ -224,6 +228,7 @@ export class FlightScene {
   private readonly vector = new Vector3();
   private readonly up = new Vector3(0, 1, 0);
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
+  private readonly hostileVisuals = new HostileVisuals(this.ground);
 
   constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena']) {
     this.world = world;
@@ -236,7 +241,7 @@ export class FlightScene {
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
     this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
+      this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -325,6 +330,18 @@ export class FlightScene {
     return this.framing.cockpit ? this.rearRect : null;
   }
 
+  hostileMuzzle(shot: Shot, shape: HostileShape, x: number, z: number, alt: number, tick: number): void {
+    this.hostileVisuals.muzzle(shot, shape, x, z, alt, tick);
+  }
+
+  hostileImpact(shot: Shot, x: number, z: number, alt: number, tick: number): void {
+    this.hostileVisuals.impact(shot, x, z, alt, tick);
+  }
+
+  hostileGraze(shot: Shot, x: number, z: number, alt: number, tick: number): void {
+    this.hostileVisuals.graze(shot, x, z, alt, tick);
+  }
+
   private placeRearView({ x, y, width: w, height: h }: Rect, crop = 1): void {
     const { width, height } = this.framing;
     this.rearInset.position.set((x + w / 2) * 2 / width - 1, 1 - (y + h / 2) * 2 / height, 0);
@@ -337,7 +354,7 @@ export class FlightScene {
     this.rearTarget.texture.repeat.x = -crop;
   }
 
-  private drawRearView(state: StageState, rearDanger: boolean): void {
+  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean): void {
     const { tick, view } = state;
     const glimpse = state.phase === 'playing' ? state.rearGlimpse : null;
     const reveal = glimpseWipe(tick, glimpse, this.reducedMotion.matches);
@@ -359,7 +376,9 @@ export class FlightScene {
     this.placeRearView(this.rearRect, crop);
     this.rearInset.visible = true;
     const bezel = this.rearBezel.material.color;
+    const lining = this.rearLining.material.color;
     bezel.setHex(0x637b83);
+    lining.setHex(0x0c1720);
     if (glimpse && reveal > 0) {
       const flash = this.reducedMotion.matches ? 1 : Math.max(0, 1 - (tick - glimpse.since) / 16);
       const activeColor = this.color.setHex(glimpse.kind === 'bomb' ? 0xf490af : 0xffb363);
@@ -369,8 +388,13 @@ export class FlightScene {
       const pulse = this.reducedMotion.matches || Math.floor(tick / 8) % 2 ? 1 : 0.55;
       bezel.lerp(this.color.setHex(0xff6256), pulse);
     }
+    if (view === 'cockpit' && state.invulnerability > 0) {
+      const pulse = this.reducedMotion.matches || shieldFlash(tick);
+      bezel.lerp(this.color.setHex(0x8afff4), pulse ? 1 : 0.38);
+      lining.setHex(pulse ? 0x357f8c : 0x182e3a);
+    }
 
-    if (tick >= this.rearTick && tick - this.rearTick < 2) return;
+    if (!hostileColorsChanged && tick >= this.rearTick && tick - this.rearTick < 2) return;
     this.rearTick = tick;
     frameRearCamera(this.rearCamera, state.player, reveal > 0, reveal > 0 ? glimpse?.target : undefined);
     // TOP uses a flattened altitude plane. Rebuild world instances only on rear-feed updates.
@@ -378,6 +402,7 @@ export class FlightScene {
     else if (view === 'chase') this.flareVisuals.update(state);
     const forwardFogFar = this.fog.far;
     this.fog.far = REAR_VIEW_FAR;
+    this.hostileVisuals.setView(this.rearTarget.height);
     this.renderer.setRenderTarget(this.rearTarget);
     this.renderer.render(this.scene, this.rearCamera);
     this.fog.far = forwardFogFar;
@@ -525,7 +550,7 @@ export class FlightScene {
   private updatePlayer(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): void {
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
-    this.ship.visible = external && !(state.invulnerability > 0 && Math.floor(state.tick / 5) % 2);
+    this.ship.visible = external && (state.invulnerability <= 0 || shieldFlash(state.tick));
     this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
     const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
@@ -733,7 +758,7 @@ export class FlightScene {
     let bullets = 0, weaponLinks = 0;
     const eye = view === 'cockpit' ? this.cockpit.position : null;
     for (const shot of state.shots) {
-      const hostile = shot.kind === 'hostile';
+      if (shot.kind === 'hostile') continue;
       const yaw = Math.atan2(shot.vx, shot.vz);
       const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
       // Keep the closest ends of the boosted tracers out of the pilot's eyeline.
@@ -741,10 +766,10 @@ export class FlightScene {
       const vy = 'vy' in shot ? shot.vy : 0;
       const pitch = flat ? 0 : Math.atan2(vy, Math.hypot(shot.vx, shot.vz));
       const style = RANGED_SHOT_STYLE[shot.kind];
-      const width = style?.[0] ?? (hostile ? 2.4 : reversal ? (eye ? 2.6 : 3.4) : 1.15);
-      const length = style?.[1] ?? (hostile ? 4.3 : reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2);
+      const width = style?.[0] ?? (reversal ? (eye ? 2.6 : 3.4) : 1.15);
+      const length = style?.[1] ?? (reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2);
       const tint = shot.aurora ? reversal ? 0x89ffea : 0xbd96ff
-        : style?.[2] ?? (hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
+        : style?.[2] ?? (reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
       this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         width, width, length, tint, 0, pitch);
       if (shot.kind === 'seeker' && weaponLinks < WEAPON_LINK_LIMIT) {
@@ -829,9 +854,11 @@ export class FlightScene {
       state.speed, ticks, reduceMotion);
     this.updatePlayer(state, attitude);
     this.updateWorld(state, state.view);
+    const hostileColorsChanged = this.hostileVisuals.update(state);
+    this.hostileVisuals.setView(this.target.height, state.view === 'overhead' ? TOP_FLIGHT + 6 : undefined);
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
-    this.drawRearView(state, rearDanger);
+    this.drawRearView(state, rearDanger, hostileColorsChanged);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
     return ladder;

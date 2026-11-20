@@ -74,3 +74,22 @@ The final comparison used **100 fresh-profile seeds per pilot per cap** at Heat 
 The batches produced identical per-seed combat results across caps. The JSON and CSV reports under `sim-out/` include death-phase and hull distributions, gear reached, and evolution counts. The JSON also records each replay hash. To reproduce a batch, run `npm run sim -- --profile skilled --seeds 100 --from 1`, substituting the pilot and adding `--mobile` for that cap.
 
 The six full-view replays still cleared with 26–28 level-ups and 710–790 kills in 590.90–596.28 s, for Warden fights of 110.90–116.28 s. The final stress check held 60 FPS in all views with desktop p95 of 16.7 ms and emulated portrait p95 at or below 16.8 ms.
+
+## Stage 6
+
+The existing post-hit damage cooldown is now defined as 60 simulation ticks. It blocks hull damage from hostile bolts, mines, flak, and enemy contact. Bolts continue through the protected ship and can still hit the Aegis, drones, or terrain. Mines and enemy contact keep their existing removal rules. Terrain still limits flight altitude. Graze, muzzle, impact, and damage-direction events use no gameplay RNG and sit outside the replay state.
+
+Heat 0, seeds 1–100 per profile and cap. The baseline is Stage 5 (`51a42c4`). A clear includes a Warden defeat or a living 10:00 timeout. The survival median uses the common 600-second horizon for surviving sorties.
+
+| Cap | Profile | Clear before → after | Median survival before → after | Median end hull before → after |
+|---|---|---:|---:|---:|
+| Desktop 80 | Skilled | 93% → 93% | 600.0 → 600.0 s | 9 → 9 |
+| Desktop 80 | Average | 63% → 63% | 600.0 → 600.0 s | 6 → 6 |
+| Desktop 80 | Weak | 6% → 6% | 273.2 → 273.2 s | 0 → 0 |
+| Mobile 50 | Skilled | 93% → 93% | 600.0 → 600.0 s | 9 → 9 |
+| Mobile 50 | Average | 63% → 63% | 600.0 → 600.0 s | 6 → 6 |
+| Mobile 50 | Weak | 6% → 6% | 273.2 → 273.2 s | 0 → 0 |
+
+Every seed kept its terminal outcome and remaining hull. The average pilot's median kills rose from 710.5 to 711.5 on both caps. The bots stayed in their target ranges with the existing damage, fire intervals, and skill profiles.
+
+The renderer uses two instanced projectile batches per camera pass. A bolt costs two triangles for its head and up to eight for its trail. The shared burst pool holds 120 quads. At 64 hostile bolts the ceiling is 880 triangles, with 48 nearest drop lines. The 192-shot legacy ceiling is 2,160 triangles. Chromium on an RTX 4090 held 60 FPS over 300 frames per view at 1920×1080 and emulated 390×844 with the Warden, 24 regulars, full Gnat caps, 192 projectiles, and 16 mines. Frame p95 was 16.7–16.8 ms.

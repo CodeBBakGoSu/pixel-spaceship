@@ -1,8 +1,10 @@
 import type { Band, Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
   WeakPoint } from './stage-types.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
+import { HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape, type HostileSourceKind } from './data/hostile-fire.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, SURVIVOR_PLAYER_DAMAGE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
+import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
 import { advanceRangedShot } from './ranged-weapons.ts';
@@ -45,7 +47,7 @@ const BOMB_PROXIMITY = 16;
 const BOMB_CLEAR_RADIUS = 40;
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-export const HOSTILE_HIT_RADIUS = 5.5;
+export { HOSTILE_HIT_RADIUS } from './data/hostile-fire.ts';
 const TWIN_CONE = Math.PI / 6;
 const TWIN_RANGE = 175;
 const TWIN_MUZZLE = 6;
@@ -65,6 +67,7 @@ const STRAFE_CONE = 38 * Math.PI / 180;
 const STRAFE_MIN_RANGE = 28;
 const STRAFE_RANGE = 135;
 const STRAFE_BAND_WINDOW = 12;
+const grazedShots = new WeakSet<Shot>();
 
 export const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 export const angleTo = (yaw: number, dx: number, dz: number): number => {
@@ -73,6 +76,10 @@ export const angleTo = (yaw: number, dx: number, dz: number): number => {
 };
 export const inBand = (first: number, second: number, window = HIT_WINDOW): boolean =>
   Math.abs(first - second) <= window;
+
+export function hostileCanHit(altitude: number, state: Pick<StageState, 'player' | 'invulnerability' | 'hull'>): boolean {
+  return state.hull > 0 && state.invulnerability <= 0 && inBand(altitude, state.player.altitude);
+}
 
 function weakPointExposed(boss: Boss, tick: number): boolean {
   return !boss.entry && tick >= boss.exposeTick;
@@ -85,18 +92,20 @@ export function activeWeakPoint(state: StageState): (WeakPoint & { exposed: bool
   return point && point.hp > 0 ? { ...point, exposed: weakPointExposed(boss, state.tick) } : null;
 }
 
-export function hurtPlayer(state: StageState): void {
+export function hurtPlayer(state: StageState, source?: Position, events?: CombatEvents): void {
   if (state.invulnerability > 0 || !state.hull) return;
   const p = state.player;
-  state.hull = Math.max(0, state.hull - (state.run ? SURVIVOR_PLAYER_DAMAGE : 2));
+  const damage = Math.min(state.hull, state.run ? SURVIVOR_PLAYER_DAMAGE : 2);
+  state.hull -= damage;
   if (!state.hull && state.run && state.hangar.ejector && !state.ejectorUsed) {
     state.ejectorUsed = true;
     state.hull = Math.ceil(state.maxHull / 2);
   }
   state.hitsTaken++;
   state.lastHitTick = state.tick;
-  state.invulnerability = 1;
+  state.invulnerability = HOSTILE_IFRAME_TICKS * STEP;
   state.effects.push({ kind: 'hit', x: p.x, z: p.z, alt: p.altitude, life: 0.36 });
+  events?.hit?.(damage, source?.x ?? p.x, source?.z ?? p.z, source?.alt ?? p.altitude);
 }
 
 export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credit?: KillCredit): void {
@@ -142,15 +151,18 @@ export function projectileRoom(state: StageState, kind: WeaponId | 'hostile'): n
     Math.max(0, Math.min(PLAYER_SHOT_LIMIT - (state.shots.length - hostile), WEAPON_PROJECTILE_LIMITS[kind] - weapon));
 }
 
-export function fireHostile(state: StageState, source: Position, speed: number, spread = 0): void {
+export function fireHostile(state: StageState, source: Position & { kind?: HostileSourceKind },
+  speed: number, spread = 0, events?: CombatEvents): void {
   if (!projectileRoom(state, 'hostile')) return;
   const p = state.player;
   const yaw = Math.atan2(p.x - source.x, p.z - source.z) + spread;
-  state.shots.push({
+  const shot: Shot = {
     x: source.x, z: source.z, alt: source.alt, kind: 'hostile',
     vx: Math.sin(yaw) * speed, vz: Math.cos(yaw) * speed,
     damage: 2, life: 3.75, volley: 0, nearMiss: false, lockId: null,
-  });
+  };
+  state.shots.push(shot);
+  events?.muzzle?.(shot, hostileShape(source.kind), source.x, source.z, source.alt);
 }
 
 type Aim = Position & { vx?: number; vz?: number; id: number; window?: number };
@@ -597,20 +609,22 @@ export function advanceFlares(state: StageState, ground: Ground): void {
   state.flares.length = alive;
 }
 
-export function advanceEnemyHazards(state: StageState, ground: Ground): void {
+export function advanceEnemyHazards(state: StageState, ground: Ground, events?: CombatEvents): void {
   const p = state.player;
   let alive = 0;
   for (const mine of state.enemyMines) {
     mine.alt = Math.max(BANDS[0], mine.alt - 14 * STEP);
     if (state.tick - mine.born >= 6 * TICKS_PER_SECOND || mine.alt <= ground(mine.x, mine.z)) continue;
     if (inBand(mine.alt, p.altitude) && Math.hypot(mine.x - p.x, mine.z - p.z) <= MINE_RADIUS) {
-      hurtPlayer(state);
+      hurtPlayer(state, mine, events);
       state.effects.push({ kind: 'burst', x: mine.x, z: mine.z, alt: mine.alt, life: 0.52 });
     } else state.enemyMines[alive++] = mine;
   }
   state.enemyMines.length = alive;
   for (const puff of state.effects) {
-    if (puff.kind === 'flak' && inBand(puff.alt, p.altitude) && Math.hypot(puff.x - p.x, puff.z - p.z) <= FLAK_RADIUS) hurtPlayer(state);
+    if (puff.kind === 'flak' && inBand(puff.alt, p.altitude) && Math.hypot(puff.x - p.x, puff.z - p.z) <= FLAK_RADIUS) {
+      hurtPlayer(state, puff, events);
+    }
   }
 }
 
@@ -808,7 +822,21 @@ function aegisInterceptTime(shot: Position, dx: number, dz: number, player: Posi
   return back < Infinity ? 1 - back : Infinity;
 }
 
-export function advanceShots(state: StageState, ground: Ground): void {
+function reportGraze(shot: Shot, player: Position, dx: number, dz: number, terrain: number,
+  graze: NonNullable<CombatEvents['graze']>): void {
+  if (grazedShots.has(shot)) return;
+  const rangeSq = dx * dx + dz * dz;
+  if (!rangeSq) return;
+  const x = shot.x - player.x, z = shot.z - player.z;
+  const closest = Math.max(0, -(x * dx + z * dz) / rangeSq);
+  // Wait for the closest point rather than firing when a head-on bullet enters the outer radius.
+  if (closest > 1 || closest >= terrain
+    || (x + dx * closest) ** 2 + (z + dz * closest) ** 2 > HOSTILE_GRAZE_RADIUS ** 2) return;
+  grazedShots.add(shot);
+  graze(shot, shot.x + dx * closest, shot.z + dz * closest, shot.alt);
+}
+
+export function advanceShots(state: StageState, ground: Ground, events?: CombatEvents): void {
   const p = state.player;
   const player = { x: p.x, z: p.z, alt: p.altitude };
   const reversal = state.reversal;
@@ -830,17 +858,39 @@ export function advanceShots(state: StageState, ground: Ground): void {
     const dx = shot.vx * STEP, dz = shot.vz * STEP;
     const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
-      const playerHit = inBand(shot.alt, player.alt) ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
+      const dangerous = hostileCanHit(shot.alt, state);
+      const playerHit = dangerous ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
       const interception = aegis ? aegisInterceptTime(shot, dx, dz, player, weaponWindow) : Infinity;
-      if (interception < Math.min(terrain, playerHit)) {
+      const first = Math.min(terrain, playerHit);
+      let stopped = terrain;
+      if (interception < first) {
         state.effects.push({ kind: 'hit', x: shot.x + dx * interception, z: shot.z + dz * interception, alt: shot.alt, life: 0.16 });
         shot.life = 0;
-      } else if (state.orbitDrones.some(drone => inBand(shot.alt, drone.alt, weaponWindow)
-        && impactTime(shot, dx, dz, drone, WEAPONS.drones.tuning.hitRadius) < Math.min(terrain, playerHit))) {
-        shot.life = 0;
-      } else if (playerHit < terrain) {
-        hurtPlayer(state);
-        shot.life = 0;
+        stopped = interception;
+      } else {
+        let droneHit = first;
+        for (const drone of state.orbitDrones) {
+          if (inBand(shot.alt, drone.alt, weaponWindow)) {
+            droneHit = Math.min(droneHit, impactTime(shot, dx, dz, drone, WEAPONS.drones.tuning.hitRadius));
+          }
+        }
+        if (droneHit < first) {
+          shot.life = 0;
+          stopped = droneHit;
+        } else if (playerHit < terrain) {
+          // Use a point back along the trajectory even when the previous pose is already inside the hit radius.
+          const travel = 12;
+          const source = events?.hit ? { x: shot.x - dx * travel, z: shot.z - dz * travel, alt: shot.alt } : undefined;
+          hurtPlayer(state, source, events);
+          shot.life = 0;
+          stopped = playerHit;
+        } else if (dangerous && events?.graze) {
+          reportGraze(shot, player, dx, dz, terrain, events.graze);
+        }
+      }
+      if (events?.impact && (stopped < Infinity || shot.life <= STEP)) {
+        const at = Math.min(1, stopped);
+        events.impact(shot, shot.x + dx * at, shot.z + dz * at, shot.alt);
       }
     } else if (shot.reversal || shot.pierce) {
       if (advancePiercingShot(state, shot, (shot.reversal ?? shot.pierce)!, dx, dz, terrain, weaponWindow)) resolved.add(shot.volley);

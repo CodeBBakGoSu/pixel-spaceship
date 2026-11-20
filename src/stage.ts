@@ -1,5 +1,6 @@
 import { advanceBank, boostAirspeed, BOOST_TURN_RATE, CRUISE_SPEED, TURN_RATE } from './flight.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
+import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
@@ -98,7 +99,7 @@ function positionWeakPoints(boss: Boss, tick: number): void {
   }
 }
 
-function updateBoss(state: StageState, ground: Ground): void {
+function updateBoss(state: StageState, ground: Ground, events?: CombatEvents): void {
   const boss = state.boss;
   if (!boss) return;
   if (boss.entry) {
@@ -109,13 +110,13 @@ function updateBoss(state: StageState, ground: Ground): void {
   }
   if (boss.paced) {
     positionPacedWeakPoints(boss, state.heat, state.tick);
-    firePacedWarden(state, boss);
+    firePacedWarden(state, boss, events);
     return;
   }
   positionWeakPoints(boss, state.tick);
   const point = boss.weakPoints[boss.index];
   if (!boss.entry && state.tick >= boss.shotAt && point?.hp) {
-    for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 68, spread);
+    for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 68, spread, events);
     boss.shotAt = state.tick + 255;
   }
 }
@@ -614,7 +615,8 @@ function applyBillReward(state: StageState): void {
 }
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
-export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel, observeSwarm?: SwarmObserver): void {
+export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
+  observeSwarm?: SwarmObserver, events?: CombatEvents): void {
   if (state.phase === 'chest') {
     if (input.chestPick) resolveChest(state, input.chestPick);
     return;
@@ -704,8 +706,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   relocateStragglers(state, ground);
-  advanceEnemies(state, ground);
-  updateBoss(state, ground);
+  advanceEnemies(state, ground, events);
+  updateBoss(state, ground, events);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
@@ -731,19 +733,19 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     advanceSupportWeapons(state, ground);
     advanceAutoOrdnance(state, !!maneuverEnded && maneuver.kind === 'j-turn');
   }
-  advanceShots(state, ground);
+  advanceShots(state, ground, events);
   if (state.run) {
     state.metrics.peakAceWipe = Math.max(state.metrics.peakAceWipe, state.reversal?.streak ?? 0);
     if (state.boss) state.metrics.weakPointHits = state.boss.weakPoints.reduce((sum, point) => sum + point.hits, 0);
   }
   if (state.weaponFx.length > WEAPON_FX_LIMIT) state.weaponFx.splice(0, state.weaponFx.length - WEAPON_FX_LIMIT);
-  advanceEnemyHazards(state, ground);
+  advanceEnemyHazards(state, ground, events);
 
   if (state.tick > state.bodyGraceUntil) {
     const p = state.player;
     for (const enemy of state.enemies) {
       if (enemy.hp && !enemy.entry && enemy.kind !== 'gnat' && inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < 7) {
-        hurtPlayer(state);
+        hurtPlayer(state, enemy, events);
         if (!enemy.carrier) enemy.hp = 0;
       }
     }
