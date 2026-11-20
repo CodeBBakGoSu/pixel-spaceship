@@ -1,4 +1,5 @@
 import { phaseAt, type RegularSpawn } from './data/phases.ts';
+import { HEAT_ARMOR_SCALES } from './data/run-balance.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { BASALT_STACKS, keepInsideArena, LANDMARKS } from './reach.ts';
@@ -135,6 +136,7 @@ function turretSite(state: StageState, escape: number, p: Pick<StageState['playe
 
 export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { rng: number } = state, hpScale = 1): void {
   const { player: p, enemies } = state;
+  const armor = hpScale * (state.run ? HEAT_ARMOR_SCALES[state.heat] : 1);
   // Lay out the same combat formation at the pilot's projected position on the original wave beat.
   const travel = state.speed * WAVE_FLY_IN_TICKS / TICKS_PER_SECOND;
   const projected = { ...p, x: p.x + Math.sin(p.yaw) * travel, z: p.z + Math.cos(p.yaw) * travel };
@@ -154,7 +156,7 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
       if (site) {
         const enemy = makeEnemy(state, site.x, site.z, site.band, kind);
         enemy.alt = ground(site.x, site.z) + 5;
-        enemy.hp = Math.round(enemy.hp * hpScale);
+        enemy.hp = Math.round(enemy.hp * armor);
         enemy.shotAt += WAVE_FLY_IN_TICKS;
         beginEnemyFlyIn(state, enemy, ground, projected, mirror * 0.32);
         enemies.push(enemy);
@@ -176,7 +178,7 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
     if (kind === 'bomber') addBomberEscort(state, enemy, ground);
     for (let i = first; i < enemies.length; i++) {
       const incoming = enemies[i];
-      incoming.hp = Math.round(incoming.hp * hpScale);
+      incoming.hp = Math.round(incoming.hp * armor);
       incoming.shotAt += WAVE_FLY_IN_TICKS;
       incoming.maneuverAt += WAVE_FLY_IN_TICKS;
       beginEnemyFlyIn(state, incoming, ground, projected, mirror * 0.32);

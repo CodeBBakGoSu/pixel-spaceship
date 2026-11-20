@@ -31,7 +31,8 @@ export const WEAPONS = {
   seeker: {
     family: 'ordnance', coverage: 'adjacent-homing',
     tuning: { cooldownTicks: [180, 180, 153, 153, 153], count: [3, 4, 4, 4, 4],
-      damage: 0.7, range: 165, speed: 86, verticalSpeed: 34, turnRate: 4.6, radius: [12, 12, 12, 12, 15.6] },
+      damage: 0.7, range: 165, speed: 86, verticalSpeed: 34, turnRate: 4.6, radius: [12, 12, 12, 12, 15.6],
+      lifeSeconds: 3.2, spread: 0.14 },
   },
   rail: {
     family: 'energy', coverage: 'same-band',
@@ -41,17 +42,19 @@ export const WEAPONS = {
   flak: {
     family: 'ballistic', coverage: 'vertical-blast',
     tuning: { cooldownTicks: [144, 144, 120, 120, 120], radius: [22, 25.3, 25.3, 25.3, 25.3],
-      range: 90, speed: 150, damage: 2, halfHeight: 18, fragmentsAt: 5, fragments: 6, fragmentDamage: 1 },
+      range: 90, speed: 150, damage: 2, halfHeight: 18, fragmentsAt: 5, fragments: 6,
+      fragmentDamage: 1, fragmentSpeed: 110, fragmentLifeSeconds: 0.33 },
   },
   ion: {
     family: 'energy', coverage: 'climb-curtain',
     tuning: { lifeTicks: [240, 300, 300, 300, 300], width: [5.5, 5.5, 7.15, 7.15, 7.15],
-      sampleTicks: 8, hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
+      sampleTicks: 8, trailOffset: 9, hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
   },
   drones: {
     family: 'energy', coverage: 'tilted-orbit',
     tuning: { count: [2, 3, 3, 3, 3], radius: [18, 18, 22.5, 22.5, 22.5],
-      tilt: 10, periodTicks: 145, damage: 1, hitRadius: 5, hitCooldownTicks: 24, fireAt: 5, fireCooldownTicks: 72 },
+      tilt: 10, periodTicks: 145, damage: 1, hitRadius: 5, hitCooldownTicks: 24, fireAt: 5, fireCooldownTicks: 72,
+      fireRange: 66, fireSpeed: 220, fireDamage: 1 },
   },
   phoenix: {
     family: 'ordnance', coverage: 'falling',
@@ -66,7 +69,7 @@ export const WEAPONS = {
   arc: {
     family: 'energy', coverage: 'adjacent-chain',
     tuning: { cooldownTicks: 132, damage: [1.8, 1.8, 2.16, 2.16, 2.16], range: 55, jumpRange: 42,
-      jumps: [2, 3, 3, 3, 5], adjacentScale: 0.6, explosionAt: 5, explosionRadius: 16 },
+      jumps: [2, 3, 3, 3, 5], adjacentScale: 0.6, explosionAt: 5, explosionRadius: 16, explosionScale: 0.6 },
   },
 } as const satisfies Record<WeaponId, WeaponDefinition>;
 

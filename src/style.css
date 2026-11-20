@@ -38,7 +38,7 @@
 }
 .status > div { display: flex; align-items: center; gap: 5px; min-height: 16px; }
 .status > div > span:first-child { width: 40px; color: #d8e0d5; }
-.hull-bars { display: grid; grid-template-columns: repeat(8, 9px); gap: 2px; margin-right: 2px; }
+.hull-bars { display: grid; width: 86px; grid-template-columns: repeat(var(--hull-slots, 8), minmax(0, 1fr)); gap: 2px; margin-right: 2px; }
 .hull-bars i { height: 6px; background: #263f41; box-shadow: 0 1px #10121d; }
 .hull-bars .filled { background: #78e89c; }
 .hull-bars.critical .filled { background: #ff9977; }
@@ -167,7 +167,7 @@
 .experience.phone-layout .hud { font-size: 11px; gap: 5px; }
 .experience.phone-layout .status > div { min-height: 14px; gap: 4px; }
 .experience.phone-layout .status > div > span:first-child { width: 30px; }
-.experience.phone-layout .hull-bars { grid-template-columns: repeat(8, 7px); }
+.experience.phone-layout .hull-bars { width: 70px; }
 .experience.phone-layout .track { width: 72px; }
 .experience.phone-layout :is(.status-view strong, .status-view span, .scorebox span, .scorebox small) { font-size: 11px; }
 .experience.phone-layout :is(#hull-value, .bombs, .scorebox strong) { font-size: 12px; }

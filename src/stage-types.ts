@@ -1,8 +1,9 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
-import type { DraftChoiceId } from './data/items.ts';
+import type { DraftChoiceId, WeaponId } from './data/items.ts';
 import type { RunProgression } from './progression.ts';
+import type { RangedShotFields } from './ranged-weapons.ts';
 
 export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
   | LandmarkId | NewEnemyKind;
@@ -16,6 +17,7 @@ export type StageOptions = {
   mode?: 'legacy' | 'survivors';
   mobile?: boolean;
   aceRank?: number;
+  heat?: number;
 };
 export type LegacyDraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
 export type DraftId = LegacyDraftId | DraftChoiceId;
@@ -102,9 +104,12 @@ export type Enemy = Position & {
   reversalKill?: boolean;
   burnUntil?: number;
   burnNextAt?: number;
+  burnDamage?: number;
+  ionReadyAt?: number;
+  droneReadyAt?: number;
 };
 export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean };
-export type Shot = Position & {
+type ShotCommon = Position & {
   vx: number;
   vz: number;
   life: number;
@@ -112,16 +117,29 @@ export type Shot = Position & {
   volley: number;
   nearMiss: boolean;
   lockId: number | null;
-} & (
+};
+export type Shot = ShotCommon & (
   { kind: 'twin' | 'pods' | 'hostile'; pierce?: { remaining: number; hits: number[] }; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
-  { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never }
+  { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never } |
+  { kind: 'drone-bolt'; weapon: 'drones'; reversal?: never; reversalTick?: never } |
+  (RangedShotFields & { reversal?: never; reversalTick?: never })
 );
-export type RearBomb = Position & { born: number; vx: number; vz: number };
-export type Flare = Position & { born: number; vx: number; vz: number; vy: number };
+export type RearBomb = Position & { born: number; vx: number; vz: number; weapon?: 'bomb-bay';
+  radius?: number; damage?: number; ceiling?: number };
+export type Flare = Position & { born: number; vx: number; vz: number; vy: number; weapon?: 'phoenix';
+  lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number };
+export type WeaponFx = {
+  kind: 'rail-charge' | 'rail-beam' | 'arc-link' | 'flak-blast' | 'seeker-blast' | 'arc-blast';
+  from: Position;
+  to?: Position;
+  radius?: number;
+  until: number;
+};
 export type RearGlimpse = { kind: 'bomb' | 'flare'; since: number; until: number; target?: Position };
 export type EnemyMine = Position & { born: number };
 export type Effect = Position & (
-  { kind: 'hit' | 'burst' | 'bomb-blast'; life: number } |
+  { kind: 'hit' | 'burst'; life: number } |
+  { kind: 'bomb-blast'; life: number; radius?: number } |
   { kind: 'flak'; life: number } |
   { kind: 'miss'; life: number; delta: number; vx: number; vz: number }
 );
@@ -137,6 +155,9 @@ export type WeakPoint = Position & {
   vz: number;
   burnUntil?: number;
   burnNextAt?: number;
+  burnDamage?: number;
+  ionReadyAt?: number;
+  droneReadyAt?: number;
 };
 export type Boss = {
   x: number;
@@ -162,6 +183,14 @@ export type StageState = {
   run: RunProgression | null;
   swarmCap: number;
   aceRank: number;
+  heat: number;
+  weaponFireAt: Partial<Record<WeaponId, number>>;
+  railChargeAt: number | null;
+  seekerEchoAt: number;
+  weaponFx: WeaponFx[];
+  ionWake: (Position & { until: number })[];
+  orbitDrones: (Position & { yaw: number })[];
+  nextBayDrop: number | null;
   nextId: number;
   nextVolley: number;
   tick: number;
@@ -210,6 +239,7 @@ export type StageState = {
     shownUntil: number;
   } | null;
   xp: number;
+  xpRemainder: number;
   level: number;
   kills: number;
   salvage: number;

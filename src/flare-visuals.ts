@@ -82,13 +82,15 @@ export class FlareVisuals {
   private drawFlare(flare: Flare, tick: number, topAltitude?: number): void {
     const { x, z, alt, born, vx, vz, vy } = flare;
     const age = tick - born;
-    const heat = Math.max(0, 1 - age / FLARE_LIFE_TICKS);
+    const heat = Math.max(0, 1 - age / (flare.lifeTicks ?? FLARE_LIFE_TICKS));
+    const phoenix = flare.weapon === 'phoenix';
     const yaw = Math.atan2(vx, vz), phase = born * 0.17 + yaw * 3;
     const size = (3 + 1.3 * heat) * (1 + 0.09 * Math.sin(tick * 0.7 + phase));
-    this.voxel(this.fire, x, z, topAltitude ?? alt, size, heat > 0.2 ? 0xfff3b2 : 0xffba5e, yaw);
+    const tint = heat > 0.2 ? (phoenix ? 0xffe1a0 : 0xfff3b2) : (phoenix ? 0xff985c : 0xffba5e);
+    this.voxel(this.fire, x, z, topAltitude ?? alt, size, tint, yaw);
     const tail = 2.7 / Math.max(1, Math.hypot(vx, vz, vy));
     this.voxel(this.fire, x - vx * tail, z - vz * tail, topAltitude === undefined ? alt - vy * tail : topAltitude - 0.7,
-      size * 0.96, 0xff8738, yaw, 1.23);
+      size * 0.96, phoenix ? 0xf75945 : 0xff8738, yaw, 1.23);
 
     const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
     const firstDelay = SAMPLE_TICKS + age % SAMPLE_TICKS;

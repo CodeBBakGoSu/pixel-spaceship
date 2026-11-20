@@ -1,14 +1,15 @@
 import {
-  BoxGeometry, BufferGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
+  BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
   InstancedBufferAttribute, InstancedMesh, Object3D,
   EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
-  RepeatWrapping, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
+  RepeatWrapping, RingGeometry, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
   type Camera,
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
+import { WEAPONS } from './data/items.ts';
 import { SWARM_CAPS } from './data/phases.ts';
 import { PICKUP_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
@@ -16,13 +17,15 @@ import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
 import { FlightAtmosphere } from './flight-atmosphere.ts';
 import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
+import { hitWindow } from './loadout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
-import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MAX_BOMBS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
-import type { ManeuverTrail, Position, StageState } from './stage-types.ts';
+import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
+import type { ManeuverTrail, Position, Shot, StageState } from './stage-types.ts';
+import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
 
 function makeTerrain(world: World): Mesh {
@@ -99,6 +102,17 @@ type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const FLAK_RING_LIMIT = 24;
+const BOMB_VISUAL_LIMIT = 16;
+const WEAPON_LINK_LIMIT = 128;
+const WEAPON_RING_LIMIT = 16;
+const FLAK_COLUMN_LIMIT = 8;
+const ORBIT_DRONE_LIMIT = Math.max(...WEAPONS.drones.tuning.count);
+const RANGED_SHOT_STYLE: Partial<Record<Shot['kind'], readonly [width: number, length: number, color: number]>> = {
+  seeker: [1.8, 5.8, 0xffd18c],
+  'flak-shell': [2.25, 3.2, 0xff965b],
+  'flak-shard': [1.3, 3.9, 0xffd768],
+  'drone-bolt': [1.18, 5.2, 0x7ad3ff],
+};
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
 const DESKTOP_DOWNSCALE = 2;
 const REAR_VIEW_FAR = 640;
@@ -150,6 +164,7 @@ export class FlightScene {
   private framing: Framing = { width: 0, height: 0, phone: null, cockpit: null };
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
   private readonly ship = new Mesh(bakeVoxels(shipFaces(), shipPalette, SHIP_VOXEL_SIZE), this.voxelMaterial.clone());
+  private readonly weaponMounts = new WeaponMounts(this.ship);
   private readonly bodyShimmer = new Mesh(new TorusGeometry(1, 0.032, 4, 24),
     new MeshBasicMaterial({ color: 0xabf4ff, transparent: true, depthWrite: false }));
   private readonly trailMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0.94, depthWrite: false });
@@ -182,11 +197,19 @@ export class FlightScene {
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-  private readonly bombs = instances(new BoxGeometry(), MAX_BOMBS);
+  private readonly bombs = instances(new BoxGeometry(), BOMB_VISUAL_LIMIT);
   private readonly mines = instances(new BoxGeometry(), MINE_LIMIT);
   private readonly flak = instances(new TorusGeometry(1, 0.025, 4, 28).rotateX(-Math.PI / 2), FLAK_RING_LIMIT);
-  private readonly blast = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), MAX_BOMBS,
+  private readonly blast = instances(new TorusGeometry(1, 0.03, 4, 48).rotateX(-Math.PI / 2), BOMB_VISUAL_LIMIT,
     new MeshBasicMaterial({ color: 0xffb957 }));
+  private readonly defenseDrones = instances(orbitDroneGeometry(), ORBIT_DRONE_LIMIT, this.voxelMaterial);
+  private readonly weaponLinks = instances(new BoxGeometry(), WEAPON_LINK_LIMIT,
+    new MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false }));
+  private readonly weaponRings = instances(new RingGeometry(0.91, 1, 20).rotateX(-Math.PI / 2), WEAPON_RING_LIMIT,
+    new MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
+  private readonly flakColumns = instances(new CylinderGeometry(1, 1, 2, 12, 1, true), FLAK_COLUMN_LIMIT,
+    new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
+  private readonly arcMiddle: Position = { x: 0, z: 0, alt: 0 };
   private readonly dummy = new Object3D();
   private readonly color = new Color();
   private readonly vector = new Vector3();
@@ -204,7 +227,8 @@ export class FlightScene {
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
     this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder);
+      this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
+      this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     this.atmosphere.group.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -498,6 +522,7 @@ export class FlightScene {
     const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
     this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, attitude?.roll ?? (flat ? 0 : -p.bank), 'YXZ');
     this.ship.material.color.setHex(flat && attitude?.inverted ? 0x9ed9ee : 0xffffff);
+    this.weaponMounts.update(state.run?.weaponLevels);
     this.bodyShimmer.visible = this.ship.visible && state.bodyGraceUntil > 0 && state.tick <= state.bodyGraceUntil;
     if (this.bodyShimmer.visible) {
       const pulse = (state.tick % 12) / 12;
@@ -507,6 +532,68 @@ export class FlightScene {
       this.bodyShimmer.material.opacity = 0.8 - pulse * 0.55;
     }
     this.exhaust.update(state, this.camera);
+  }
+
+  private drawWeaponEffects(state: StageState, flat: boolean, links: number): void {
+    const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
+    let rings = 0, columns = 0, drones = 0;
+    for (const drone of state.orbitDrones) {
+      if (drones === this.defenseDrones.instanceMatrix.count) break;
+      this.write(this.defenseDrones, drones++, drone.x, drone.z, plane ?? drone.alt, drone.yaw, 1, 1, 1, 0xffffff);
+    }
+    for (const fx of state.weaponFx) {
+      const left = fx.until - state.tick;
+      if (left <= 0) continue;
+      const { from, to } = fx;
+      if (to) {
+        if (links === WEAPON_LINK_LIMIT) continue;
+        const fade = Math.min(1, left / 9);
+        if (fx.kind === 'arc-link') {
+          if (links + 1 < WEAPON_LINK_LIMIT) {
+            const bend = Math.floor(fx.until / 3) % 2 ? 0.11 : -0.11;
+            this.arcMiddle.x = (from.x + to.x) / 2 + (to.z - from.z) * bend;
+            this.arcMiddle.z = (from.z + to.z) / 2 - (to.x - from.x) * bend;
+            this.arcMiddle.alt = (from.alt + to.alt) / 2 + 2;
+            this.connect(this.weaponLinks, links++, from, this.arcMiddle, 1.8 * fade, 0xffdf72, plane);
+            this.connect(this.weaponLinks, links++, this.arcMiddle, to, 1.8 * fade, 0xffed9a, plane);
+          } else this.connect(this.weaponLinks, links++, from, to, 1.8 * fade, 0xffed9a, plane);
+        } else {
+          const charge = fx.kind === 'rail-charge';
+          const width = charge ? 0.64 : Math.min(2.2, (fx.radius ?? 3) * 0.5) * (0.45 + fade * 0.55);
+          this.connect(this.weaponLinks, links++, from, to, width, charge ? 0x79baff : 0xbbfaff, plane);
+        }
+      } else if (fx.radius) {
+        const tint = fx.kind === 'flak-blast' ? 0xffa363 : fx.kind === 'arc-blast' ? 0xffdf72 : 0xffb69b;
+        const radius = fx.radius * (1 - 0.31 * Math.min(1, left / 20));
+        if (rings < WEAPON_RING_LIMIT) {
+          this.write(this.weaponRings, rings++, from.x, from.z, plane ?? from.alt, 0, radius, 1, radius, tint);
+        }
+        if (!flat && fx.kind === 'flak-blast' && columns < FLAK_COLUMN_LIMIT) {
+          this.write(this.flakColumns, columns++, from.x, from.z, from.alt, 0,
+            radius, hitWindow(state, WEAPONS.flak.tuning.halfHeight), radius, tint);
+        }
+      }
+    }
+    const wake = state.ionWake;
+    const width = WEAPONS.ion.tuning.width[(state.run?.weaponLevels.ion ?? 1) - 1];
+    for (let i = 1; i < wake.length && links < WEAPON_LINK_LIMIT; i++) {
+      const from = wake[i - 1], to = wake[i];
+      const left = Math.min(from.until, to.until) - state.tick;
+      if (left <= 0) continue;
+      const size = width * (0.12 + 0.24 * Math.min(1, left / 84));
+      const height = Math.abs(from.alt - to.alt);
+      if (!flat && height > 1.5) {
+        const dx = to.x - from.x, dz = to.z - from.z;
+        this.write(this.weaponLinks, links++, (from.x + to.x) / 2, (from.z + to.z) / 2, (from.alt + to.alt) / 2,
+          Math.atan2(dx, dz), size, height + size, Math.hypot(dx, dz) + size * 0.4, 0x43c6b3);
+      } else {
+        this.connect(this.weaponLinks, links++, from, to, size, 0x66f5d9, plane);
+      }
+    }
+    upload(this.defenseDrones, drones);
+    upload(this.weaponLinks, links);
+    upload(this.weaponRings, rings);
+    upload(this.flakColumns, columns);
   }
 
   private updateWorld(state: StageState, view: StageState['view'] | 'rear'): void {
@@ -612,7 +699,7 @@ export class FlightScene {
     upload(this.pickups, salvage);
     upload(this.pickupTrails, magnetTrails);
 
-    let bullets = 0;
+    let bullets = 0, weaponLinks = 0;
     const eye = view === 'cockpit' ? this.cockpit.position : null;
     for (const shot of state.shots) {
       const hostile = shot.kind === 'hostile';
@@ -620,14 +707,22 @@ export class FlightScene {
       const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
       // Keep the closest ends of the boosted tracers out of the pilot's eyeline.
       if (eye && reversal && (shot.x - eye.x) ** 2 + (shot.alt - eye.y) ** 2 + (shot.z + eye.z) ** 2 < COCKPIT_TRACER_CLEARANCE ** 2) continue;
-      const pitch = strafe && !flat ? Math.atan2(shot.vy, Math.hypot(shot.vx, shot.vz)) : 0;
-      const width = hostile ? 2.4 : reversal ? (eye ? 2.6 : 3.4) : 1.15;
-      const length = hostile ? 4.3 : reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2;
-      const tint = hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad;
+      const vy = 'vy' in shot ? shot.vy : 0;
+      const pitch = flat ? 0 : Math.atan2(vy, Math.hypot(shot.vx, shot.vz));
+      const style = RANGED_SHOT_STYLE[shot.kind];
+      const width = style?.[0] ?? (hostile ? 2.4 : reversal ? (eye ? 2.6 : 3.4) : 1.15);
+      const length = style?.[1] ?? (hostile ? 4.3 : reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2);
+      const tint = style?.[2] ?? (hostile ? 0xff7152 : reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
       this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         width, width, length, tint, 0, pitch);
+      if (shot.kind === 'seeker' && weaponLinks < WEAPON_LINK_LIMIT) {
+        const tail = 8 / Math.max(1, Math.hypot(shot.vx, shot.vz, vy));
+        this.write(this.weaponLinks, weaponLinks++, shot.x - shot.vx * tail, shot.z - shot.vz * tail,
+          flat ? TOP_FLIGHT + 2 : shot.alt - vy * tail, yaw, 1.25, 1.25, 11, 0xc5bcae, 0, pitch);
+      }
     }
     upload(this.bullets, bullets);
+    this.drawWeaponEffects(state, flat, weaponLinks);
 
     let mines = 0;
     for (const mine of state.enemyMines) {
@@ -637,14 +732,17 @@ export class FlightScene {
     upload(this.mines, mines);
 
     let sparks = 0, blasts = 0;
-    for (const [i, bomb] of state.rearBombs.entries()) {
+    let bombs = 0;
+    for (const bomb of state.rearBombs) {
+      if (bombs === BOMB_VISUAL_LIMIT) break;
       const yaw = Math.atan2(bomb.vx, bomb.vz), age = state.tick - bomb.born;
-      this.write(this.bombs, i, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt, yaw, 3.7, 3.7, 5.4, 0xff91a8, age * 0.07);
+      this.write(this.bombs, bombs++, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt, yaw, 3.7, 3.7, 5.4,
+        bomb.weapon === 'bomb-bay' ? 0xfac186 : 0xff91a8, age * 0.07);
       if (age > 0 && sparks < 240) {
         this.write(this.sparks, sparks++, bomb.x, bomb.z, flat ? TOP_FLIGHT + 4 : bomb.alt + 3.5, yaw, 1, 2, 1, 0xffb957);
       }
     }
-    upload(this.bombs, state.rearBombs.length);
+    upload(this.bombs, bombs);
     for (const effect of state.effects) {
       if (effect.kind === 'miss') {
         if (!flat && sparks < 240) {
@@ -653,8 +751,8 @@ export class FlightScene {
           this.write(this.sparks, sparks++, effect.x + effect.vx * travel, effect.z + effect.vz * travel, effect.alt,
             Math.atan2(effect.vx, effect.vz), scale + 0.35, scale + 0.2, 10 + scale * 6, effect.delta > 0 ? 0x8e93ad : 0xb48b79);
         }
-      } else if (effect.kind === 'bomb-blast' && blasts < MAX_BOMBS) {
-        const radius = 5 + (1 - effect.life / 0.8) * (BOMB_BLAST_RADIUS - 5);
+      } else if (effect.kind === 'bomb-blast' && blasts < BOMB_VISUAL_LIMIT) {
+        const radius = 5 + (1 - effect.life / 0.8) * ((effect.radius ?? BOMB_BLAST_RADIUS) - 5);
         this.write(this.blast, blasts++, effect.x, effect.z, flat ? TOP_FLIGHT + 6 : effect.alt, 0, radius, 1, radius);
       } else if (effect.kind === 'flak' && rings < FLAK_RING_LIMIT) {
         const radius = FLAK_RADIUS * (1.1 - 0.3 * effect.life / FLAK_LIFE);

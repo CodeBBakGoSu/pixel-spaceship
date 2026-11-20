@@ -15,7 +15,7 @@ import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, 
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
 import { activeWeakPoint, bossTick, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
-import { BOMB_RELOAD_TICKS, canDropFlare, clamp, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE, STEP,
+import { bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { DraftId, Effect, LegacyDraftId, ManeuverKind, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -51,6 +51,7 @@ const hullBar = $('#hull-bars');
 const hullWarning = $('#hull-warning');
 const hullSegments = [...hullBar.children];
 let paintedHull = -1;
+let paintedMaxHull = -1;
 const mirrorThreat = new RearMirrorThreat();
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
@@ -258,8 +259,9 @@ function drawPortrait(warden: boolean): void {
 
 function updateRadio(): void {
   const sec = state.tick / TICKS_PER_SECOND;
+  const wardenIn = (state.tick - bossTick(state)) / TICKS_PER_SECOND;
   const message = state.phase === 'title' ? null : sec < 5 ? 'dialogue.reachArrival' :
-    sec >= 22 && sec < 26 ? 'dialogue.stack' : sec >= 105 && sec < 108 ? 'dialogue.warden' : null;
+    sec >= 22 && sec < 26 ? 'dialogue.stack' : wardenIn >= 0 && wardenIn < 3 ? 'dialogue.warden' : null;
   $('#radio').hidden = !message;
   if (!message || lastFlightKey === message) return;
   lastFlightKey = message;
@@ -270,7 +272,18 @@ function updateRadio(): void {
 }
 
 function updateHud(readout: RadarReadout): void {
-  if (paintedHull !== state.hull) {
+  if (paintedMaxHull !== state.maxHull) {
+    while (hullSegments.length > state.maxHull) hullSegments.pop()?.remove();
+    while (hullSegments.length < state.maxHull) {
+      const segment = document.createElement('i');
+      hullSegments.push(segment);
+      hullBar.append(segment);
+    }
+    hullBar.style.setProperty('--hull-slots', String(state.maxHull));
+    paintedMaxHull = state.maxHull;
+    paintedHull = -1;
+  }
+  if (state.hull !== paintedHull) {
     hullSegments.forEach((segment, index) => segment.classList.toggle('filled', index < state.hull));
     paintedHull = state.hull;
   }
@@ -278,17 +291,18 @@ function updateHud(readout: RadarReadout): void {
   hullWarning.hidden = state.hull > state.maxHull / 4;
   hullBar.classList.toggle('critical', !hullWarning.hidden);
   $('#boost-bar').style.width = `${state.boost * 100}%`;
-  setText('#bombs', '◆'.repeat(state.bombs) + '◇'.repeat(MAX_BOMBS - state.bombs));
-  const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / BOMB_RELOAD_TICKS;
+  const maxBombs = bombCapacity(state), maxFlares = flareCapacity(state);
+  setText('#bombs', '◆'.repeat(state.bombs) + '◇'.repeat(Math.max(0, maxBombs - state.bombs)));
+  const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / bombReloadTicks(state);
   $('#bomb-reload-bar').style.width = `${Math.round(clamp(refill, 0, 1) * 100)}%`;
   touchBomb.setAttribute('aria-disabled', String(!state.bombs || !maneuverAllowsControl(state.maneuver)
     || state.tick <= state.graceUntil || state.tick < state.bombReadyAt));
-  touchBomb.setAttribute('aria-label', `${t('control.bomb')} · ${state.bombs}/${MAX_BOMBS}`);
+  touchBomb.setAttribute('aria-label', `${t('control.bomb')} · ${state.bombs}/${maxBombs}`);
   const flareReady = canDropFlare(state);
-  setText('#flare-stock', t('cockpit.flares', { count: state.flareCharges, max: MAX_FLARES }));
+  setText('#flare-stock', t('cockpit.flares', { count: state.flareCharges, max: maxFlares }));
   $('#flare-stock').dataset.ready = String(flareReady);
   touchFlare.setAttribute('aria-disabled', String(!flareReady));
-  touchFlare.setAttribute('aria-label', `${t('control.flare')} · ${state.flareCharges}/${MAX_FLARES}`);
+  touchFlare.setAttribute('aria-label', `${t('control.flare')} · ${state.flareCharges}/${maxFlares}`);
   const ready = canManeuver(state, 'immelmann');
   const loopSeconds = Math.max(0, Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND));
   const loopKey: MessageKey = state.maneuver ? `maneuver.${state.maneuver.kind}` : loopSeconds ? 'hud.loopCooldown' : 'hud.loopReady';

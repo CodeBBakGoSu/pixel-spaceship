@@ -1,4 +1,5 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
+import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
@@ -141,9 +142,12 @@ function hasRearFlareTarget(state: StageState): boolean {
 
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
   if (state.phase === 'draft') {
-    const wantsRepair = state.hull <= state.maxHull - 2 && state.draft.includes('repair');
-    const prefers = ['twin', 'pods', 'damage'].find(id => state.run?.cards.some(card => card.id === id && card.variant !== 'risky'));
-    return { pick: wantsRepair ? 'repair' : state.draft.find(id => id === prefers) ?? state.draft[0] };
+    if (!state.run) return { pick: state.draft[0] };
+    const safe = state.run.cards.filter(card => card.variant !== 'risky' || state.hull > REPLAY_RISK_HULL);
+    const preferred = REPLAY_DRAFT_PRIORITY.find(id => safe.some(card => card.id === id)
+      && (id !== 'repair' || state.hull <= state.maxHull - 2));
+    return { pick: preferred ?? safe.find(card => card.id !== 'repair' && card.id !== 'credits')?.id
+      ?? safe[0]?.id ?? state.draft[0] };
   }
   if (state.phase !== 'playing' || state.paused) return {};
   const flare = mode === 'full' && hasRearFlareTarget(state);

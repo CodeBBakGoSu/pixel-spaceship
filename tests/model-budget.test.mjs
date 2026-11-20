@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Object3D } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { WEAPON_IDS } from '../src/data/items.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
 import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
+import { orbitDroneGeometry, WeaponMounts } from '../src/weapon-render.ts';
 
 const triangleCount = (faces, palette) => bakeVoxels(faces, palette, 1).index.count / 3;
 
@@ -55,4 +58,31 @@ test('a full Gnat swarm adds one instanced batch and at most 1,280 triangles', (
   assert.equal(batch.layers.mask, 1, 'the world batch remains visible in the rear camera');
   const triangles = batch.geometry.index.count / 3;
   assert.ok(triangles > 0 && triangles * 80 <= 1280, `swarm: ${triangles * 80}`);
+});
+
+test('each weapon mounts one distinct mesh to the existing ship and the four heaviest fit the budget', () => {
+  const ship = new Object3D();
+  const mounts = new WeaponMounts(ship);
+  assert.equal(ship.children.length, WEAPON_IDS.length);
+  const costs = [], boxes = new Set();
+  for (const id of WEAPON_IDS) {
+    const levels = Object.freeze({ [id]: 1 });
+    mounts.update(levels);
+    const visible = ship.children.filter(mesh => mesh.visible);
+    assert.equal(visible.length, 1, id);
+    const [mesh] = visible;
+    assert.equal(mesh.name, `Weapon mount ${id}`);
+    const geometry = mesh.geometry;
+    const box = geometry.boundingBox;
+    assert.ok(box.min.x >= -11.8 && box.max.x <= 11.8 && box.min.z >= -14 && box.max.z <= 12, id);
+    boxes.add(JSON.stringify([box.min, box.max]));
+    costs.push(geometry.index.count / 3);
+  }
+  assert.equal(boxes.size, WEAPON_IDS.length, 'all ten equipped shapes have their own local envelope');
+  mounts.update(undefined);
+  assert.equal(ship.children.filter(mesh => mesh.visible).length, 0);
+
+  const fourMounts = costs.sort((a, b) => b - a).slice(0, 4).reduce((total, triangles) => total + triangles, 0);
+  const drones = orbitDroneGeometry().index.count / 3 * 3;
+  assert.ok(fourMounts + drones <= 430, `mounts ${fourMounts} + drones ${drones}`);
 });

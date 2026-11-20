@@ -1,6 +1,9 @@
-import type { Boss, Effect, Enemy, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState, WeakPoint } from './stage-types.ts';
+import type { Boss, Effect, Enemy, Flare, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
+  WeakPoint } from './stage-types.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
-import { DRAFT_RULES, WEAPON_DAMAGE_LEVEL, WEAPONS, type WeaponId } from './data/items.ts';
+import { WEAPONS, type WeaponId } from './data/items.ts';
+import { advanceEchoDeadlines, buffTuning, criticalDamage, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
+import { advanceRangedShot } from './ranged-weapons.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -89,16 +92,18 @@ export function hurtPlayer(state: StageState): void {
   state.effects.push({ kind: 'hit', x: p.x, z: p.z, alt: p.altitude, life: 0.36 });
 }
 
-function hurtEnemy(state: StageState, enemy: Enemy, damage: number): void {
-  enemy.hp = Math.max(0, enemy.hp - damage);
+export function hurtEnemy(state: StageState, enemy: Enemy, damage: number): void {
+  if (!enemy.hp || enemy.entry) return;
+  enemy.hp = Math.max(0, enemy.hp - criticalDamage(state, damage));
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
   state.effects.push({ kind: 'hit', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.16 });
 }
 
-function hurtWeakPoint(state: StageState, boss: Boss, damage: number): void {
+export function hurtWeakPoint(state: StageState, boss: Boss, damage: number): void {
   const point = boss.weakPoints[boss.index];
-  point.hp = Math.max(0, point.hp - damage);
+  if (!point.hp || !weakPointExposed(boss, state.tick)) return;
+  point.hp = Math.max(0, point.hp - criticalDamage(state, damage));
   point.hits++;
   state.effects.push({ kind: point.hp ? 'hit' : 'burst', x: point.x, z: point.z, alt: point.alt, life: point.hp ? 0.16 : 0.52 });
 }
@@ -108,18 +113,10 @@ export function projectileRoom(state: StageState, kind: WeaponId | 'hostile'): n
   let hostile = 0, weapon = 0;
   for (const shot of state.shots) {
     if (shot.kind === 'hostile') hostile++;
-    else if ((shot.kind === 'strafe' ? 'twin' : shot.kind) === kind) weapon++;
+    else if (('weapon' in shot ? shot.weapon : shot.kind === 'strafe' ? 'twin' : shot.kind) === kind) weapon++;
   }
   return kind === 'hostile' ? Math.max(0, HOSTILE_SHOT_LIMIT - hostile) :
     Math.max(0, Math.min(PLAYER_SHOT_LIMIT - (state.shots.length - hostile), WEAPON_PROJECTILE_LIMITS[kind] - weapon));
-}
-
-function damageFor(state: StageState, weapon: 'twin' | 'pods', base: number): number {
-  const run = state.run;
-  if (!run) return base;
-  const level = run.weaponLevels[weapon] ?? 1;
-  return base * (level >= WEAPON_DAMAGE_LEVEL.level ? WEAPON_DAMAGE_LEVEL.multiplier : 1)
-    * (1 + run.damageUpgrades * DRAFT_RULES.damagePerUpgrade);
 }
 
 export function fireHostile(state: StageState, source: Position, speed: number, spread = 0): void {
@@ -153,7 +150,7 @@ function fireFriendly(
       : p.yaw;
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
-      damage: damageFor(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
+      damage: weaponDamage(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
       life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId,
       ...(kind === 'twin' && !lockId && state.run?.weaponLevels.twin === WEAPONS.twin.tuning.pierceAt
         ? { pierce: { remaining: 2, hits: [] } } : {}),
@@ -181,18 +178,20 @@ function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal
     state.shots.push({
       x, z, alt: p.altitude, kind: 'twin',
       vx: Math.sin(yaw) * REVERSAL_SPEED, vz: Math.cos(yaw) * REVERSAL_SPEED,
-      damage: damageFor(state, 'twin', state.twinDamage), life: 0.44, volley, nearMiss: false, lockId: null,
+      damage: weaponDamage(state, 'twin', state.twinDamage), life: 0.44, volley, nearMiss: false, lockId: null,
       reversal: { remaining: REVERSAL_HITS, hits: [] }, reversalTick: pass.startTick,
     });
   }
-  pass.nextShotAt = state.tick + REVERSAL_CADENCE;
+  pass.nextShotAt = state.tick + weaponCooldown(state, 'twin', REVERSAL_CADENCE);
 }
 
 export function openReversal(state: StageState, pursuers: readonly number[]): void {
   state.reversal = {
-    startTick: state.tick, until: state.tick + REVERSAL_WINDOW, pursuers: [...pursuers],
+    startTick: state.tick, until: state.tick + REVERSAL_WINDOW + (buffTuning(state, 'overdrive-coil')?.bonusTicks ?? 0),
+    pursuers: [...pursuers],
     kills: 0, killTicks: [], streak: 0, nextShotAt: state.tick, shownUntil: state.tick,
   };
+  advanceEchoDeadlines(state);
 }
 
 function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
@@ -213,25 +212,29 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,
     vx: dx / lead + target.vx, vz: dz / lead + target.vz, vy,
-    damage: damageFor(state, 'twin', 1), life: (p.altitude - BANDS[targetBand] + STRAFE_BAND_WINDOW) / -vy,
+    damage: weaponDamage(state, 'twin', 1), life: (p.altitude - BANDS[targetBand] + hitWindow(state, STRAFE_BAND_WINDOW)) / -vy,
     volley: ++state.nextVolley, nearMiss: false, lockId: null,
   });
-  state.strafeAt = state.tick + STRAFE_CADENCE;
+  state.strafeAt = state.tick + weaponCooldown(state, 'twin', STRAFE_CADENCE);
 }
 
 export function acquireAndFire(state: StageState): void {
   const p = state.player;
   const twinLevel = state.run?.weaponLevels.twin;
   const podLevel = state.run?.weaponLevels.pods;
+  const hasTwin = !state.run || !!twinLevel;
   const hasPods = !state.run || !!podLevel;
+  const weaponWindow = hitWindow(state);
   const weak = activeWeakPoint(state);
   const weakRange = weak ? Math.hypot(weak.x - p.x, weak.z - p.z) : Infinity;
   const weakAngle = weak ? angleTo(p.yaw, weak.x - p.x, weak.z - p.z) : Infinity;
-  const aligned = weak?.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= Math.PI / 15 && inBand(p.altitude, weak.alt, weak.window);
+  const lockTicks = Math.round(LOCK_TICKS * (buffTuning(state, 'fire-control')?.lockScale ?? 1));
+  const weakWindow = weak ? hitWindow(state, weak.window) : HIT_WINDOW;
+  const aligned = weak?.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= Math.PI / 15 && inBand(p.altitude, weak.alt, weakWindow);
   if (weak && aligned) {
     const previous = state.lock?.id === weak.id ? state.lock.progress : 0;
-    const ticks = Math.min(LOCK_TICKS, Math.round(previous * LOCK_TICKS) + 1);
-    state.lock = { id: weak.id, progress: ticks / LOCK_TICKS, ready: ticks === LOCK_TICKS };
+    const ticks = Math.min(lockTicks, Math.round(previous * lockTicks) + 1);
+    state.lock = { id: weak.id, progress: ticks / lockTicks, ready: ticks === lockTicks };
   } else {
     state.lock = null;
   }
@@ -239,23 +242,24 @@ export function acquireAndFire(state: StageState): void {
   const locked = !!(state.lock?.ready && weak);
   let twin: Aim | null = locked ? weak : null;
   let wrong: Aim | null = weak && weak.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= TWIN_CONE
-    && !inBand(p.altitude, weak.alt, weak.window) ? weak : null;
-  let twinRange = TWIN_RANGE, wrongRange = wrong ? weakRange : TWIN_RANGE;
-  let left: Enemy | null = null, right: Enemy | null = null;
+    && !inBand(p.altitude, weak.alt, weakWindow) ? weak : null;
+  const forwardRange = state.run ? WEAPONS.twin.tuning.range : TWIN_RANGE;
+  let twinRange: number = forwardRange, wrongRange: number = wrong ? weakRange : forwardRange;
+  let left: Enemy | null = null, right: Enemy | null = null, rear: Enemy | null = null;
   let leftRange: number = podLevel ? WEAPONS.pods.tuning.range[podLevel - 1] : POD_RANGE;
-  let rightRange = leftRange;
+  let rightRange = leftRange, rearRange = leftRange;
   const reversal = state.reversal;
   const overdrive = reversal && state.tick < reversal.until ? reversal : null;
   const reversalReady = overdrive && state.tick >= overdrive.nextShotAt;
   const overdriveTargets: RankedTarget[] = [];
-  const lowerBand = state.tick < state.strafeAt ? null
+  const lowerBand = !hasTwin || state.tick < state.strafeAt ? null
     : inBand(p.altitude, BANDS[2]) ? 1 : inBand(p.altitude, BANDS[1]) ? 0 : null;
   const strafeTargets: RankedTarget[] = [];
   for (const enemy of state.enemies) {
     if (!enemy.hp) continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const bearing = angleTo(p.yaw, dx, dz), range = Math.hypot(dx, dz);
-    const sameBand = inBand(p.altitude, enemy.alt);
+    const sameBand = inBand(p.altitude, enemy.alt, weaponWindow);
     const angle = Math.abs(bearing);
     if (angle <= TWIN_CONE) {
       if (sameBand && !locked && range <= twinRange) {
@@ -265,7 +269,7 @@ export function acquireAndFire(state: StageState): void {
         wrong = enemy;
         wrongRange = range;
       }
-      if (sameBand && reversalReady && range <= TWIN_RANGE) overdriveTargets.push({ enemy, range });
+      if (hasTwin && sameBand && reversalReady && range <= forwardRange) overdriveTargets.push({ enemy, range });
     } else if (hasPods && sameBand && angle >= Math.PI * 0.2) {
       if (bearing < 0 && range < leftRange) {
         left = enemy;
@@ -274,9 +278,13 @@ export function acquireAndFire(state: StageState): void {
         right = enemy;
         rightRange = range;
       }
+      if (podLevel === WEAPONS.pods.tuning.rearBonusAt && angle >= Math.PI * 0.65 && range < rearRange) {
+        rear = enemy;
+        rearRange = range;
+      }
     }
     if (lowerBand !== null && range >= STRAFE_MIN_RANGE && range <= STRAFE_RANGE && angle <= STRAFE_CONE
-      && inBand(enemy.alt, BANDS[lowerBand], STRAFE_BAND_WINDOW)) strafeTargets.push({ enemy, range });
+      && inBand(enemy.alt, BANDS[lowerBand], hitWindow(state, STRAFE_BAND_WINDOW))) strafeTargets.push({ enemy, range });
   }
 
   if (!twin && wrong) {
@@ -287,19 +295,20 @@ export function acquireAndFire(state: StageState): void {
     state.altitudeHint = null;
   }
 
-  const primary = state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
+  const primary = hasTwin && state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
   if (primary) {
-    fireFriendly(state, 'twin', state.twinRank === 3 ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && weak ? weak.id : null);
+    const paired = twinLevel ? WEAPONS.twin.tuning.barrels[twinLevel - 1] === 4 : state.twinRank === 3;
+    fireFriendly(state, 'twin', paired ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && weak ? weak.id : null);
     const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks[twinLevel - 1] : state.twinRank === 1 ? 21 : 13;
-    state.twinAt = state.tick + cadence;
+    state.twinAt = state.tick + weaponCooldown(state, 'twin', cadence);
   }
   if (overdrive && reversalReady) fireOverdrive(state, overdrive, overdriveTargets);
-  if (state.tick >= state.podsAt && (left || right)) {
+  if (state.tick >= state.podsAt && (left || right || rear)) {
     if (left) fireFriendly(state, 'pods', [-6], left, null);
     if (right) fireFriendly(state, 'pods', [6], right, null);
-    if (podLevel === WEAPONS.pods.tuning.rearBonusAt) fireFriendly(state, 'pods', [0], left ?? right, null);
+    if (rear) fireFriendly(state, 'pods', [0], rear, null);
     const cadence = podLevel ? WEAPONS.pods.tuning.cooldownTicks[podLevel - 1] : state.podRank === 1 ? 43 : 25;
-    state.podsAt = state.tick + cadence;
+    state.podsAt = state.tick + weaponCooldown(state, 'pods', cadence);
   }
   if (lowerBand !== null) {
     strafeTargets.sort((a, b) => a.range - b.range);
@@ -324,6 +333,13 @@ function showRearImpact(state: StageState, kind: RearGlimpse['kind'], { x, z, al
   };
 }
 
+export const bombCapacity = (state: StageState): number => MAX_BOMBS + (buffTuning(state, 'ordnance-rack')?.stock ?? 0);
+export const flareCapacity = (state: StageState): number => MAX_FLARES + (buffTuning(state, 'flare-bay')?.stock ?? 0);
+export const bombReloadTicks = (state: StageState): number =>
+  Math.round(BOMB_RELOAD_TICKS * (buffTuning(state, 'ordnance-rack')?.reloadScale ?? 1));
+export const flareReloadTicks = (state: StageState): number =>
+  Math.round(FLARE_RELOAD_TICKS * (buffTuning(state, 'flare-bay')?.reloadScale ?? 1));
+
 export function dropRearBomb(state: StageState): void {
   if (!state.bombs || state.tick < state.bombReadyAt) return;
   const p = state.player;
@@ -332,7 +348,7 @@ export function dropRearBomb(state: StageState): void {
     vx: -fx * 8, vz: -fz * 8, born: state.tick });
   state.bombs--;
   state.bombReadyAt = state.tick + BOMB_DROP_TICKS;
-  state.bombReloadAt ??= state.tick + BOMB_RELOAD_TICKS;
+  state.bombReloadAt ??= state.tick + bombReloadTicks(state);
   showRearLaunch(state, 'bomb');
 }
 
@@ -341,16 +357,23 @@ function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
 }
 
 function blast(state: StageState, bomb: RearBomb): void {
-  state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8 });
+  const radius = (bomb.radius ?? BOMB_BLAST_RADIUS) * (buffTuning(state, 'ordnance-rack')?.radiusScale ?? 1);
+  const damage = bomb.damage ?? 4;
+  const clearRadius = Math.max(BOMB_CLEAR_RADIUS, radius);
+  const belowLaunchBand = (target: Position): boolean => target.alt <= (bomb.ceiling ?? Infinity);
+  state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8, radius });
   showRearImpact(state, 'bomb', bomb);
-  state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, BOMB_CLEAR_RADIUS));
-  state.enemyMines = state.enemyMines.filter(mine => !nearBomb(bomb, mine, BOMB_CLEAR_RADIUS));
+  state.shots = state.shots.filter(shot => shot.kind !== 'hostile' || !nearBomb(bomb, shot, clearRadius));
+  state.enemyMines = state.enemyMines.filter(mine => !nearBomb(bomb, mine, clearRadius));
+  const window = hitWindow(state);
   for (const enemy of state.enemies) {
-    if (enemy.hp && !enemy.entry && nearBomb(bomb, enemy, BOMB_BLAST_RADIUS) && inBand(enemy.alt, bomb.alt)) hurtEnemy(state, enemy, 4);
+    if (enemy.hp && !enemy.entry && belowLaunchBand(enemy) && nearBomb(bomb, enemy, radius)
+      && inBand(enemy.alt, bomb.alt, window)) hurtEnemy(state, enemy, damage);
   }
   const point = activeWeakPoint(state);
-  if (state.boss && point?.exposed && nearBomb(bomb, point, BOMB_BLAST_RADIUS) && inBand(point.alt, bomb.alt, point.window)) {
-    hurtWeakPoint(state, state.boss, 4);
+  if (state.boss && point?.exposed && belowLaunchBand(point) && nearBomb(bomb, point, radius)
+    && inBand(point.alt, bomb.alt, hitWindow(state, point.window))) {
+    hurtWeakPoint(state, state.boss, damage);
   }
 }
 
@@ -359,31 +382,58 @@ export function canDropFlare(state: StageState, tick = state.tick): boolean {
     && state.flareCharges > 0 && tick >= state.flareReadyAt;
 }
 
-export function dropFlares(state: StageState, vx: number, vz: number): void {
-  if (!canDropFlare(state)) return;
+function launchFlares(state: StageState, vx: number, vz: number, fan: readonly number[], phoenixLevel = 0): void {
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   // Keep boosted flares close enough to catch a tail while still inheriting launch momentum.
   const kick = Math.max(FLARE_KICK, (vx * fx + vz * fz) * 0.89);
   const vy = clamp(state.climbRate * 0.2 - 7, -12, -6);
-  for (const side of FLARE_FAN) {
+  const tuning = WEAPONS.phoenix.tuning;
+  const bonus = phoenixLevel ? tuning.lifeBonusTicks[phoenixLevel - 1] : 0;
+  const ordnance = phoenixLevel ? {
+    weapon: 'phoenix' as const,
+    lifeTicks: FLARE_LIFE_TICKS + bonus,
+    burnTicks: FLARE_BURN_TICKS + bonus,
+    damage: weaponDamage(state, 'phoenix', 1),
+    spread: phoenixLevel >= tuning.spreadAt ? tuning.burnRadius : undefined,
+  } : {};
+  for (const side of fan) {
     state.flares.push({
       x: p.x - fx * 8 + fz * side * 3.4, z: p.z - fz * 8 - fx * side * 3.4, alt: p.altitude - 1,
       vx: vx - fx * kick + fz * side * 10,
       vz: vz - fz * kick - fx * side * 10,
-      vy, born: state.tick,
+      vy, born: state.tick, ...ordnance,
     });
   }
+}
+
+export function dropFlares(state: StageState, vx: number, vz: number): void {
+  if (!canDropFlare(state)) return;
+  launchFlares(state, vx, vz, FLARE_FAN);
   state.flareCharges--;
   state.flareReadyAt = state.tick + FLARE_COOLDOWN_TICKS;
-  state.flareReloadAt ??= state.tick + FLARE_RELOAD_TICKS;
+  state.flareReloadAt ??= state.tick + flareReloadTicks(state);
   showRearLaunch(state, 'flare');
 }
 
-function ignite(state: StageState, target: Enemy | WeakPoint, interval: number): void {
+function setBurn(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare): void {
+  if (!target.hp) return;
   if (state.tick >= (target.burnUntil ?? 0)) target.burnNextAt = state.tick + interval;
-  target.burnUntil = state.tick + FLARE_BURN_TICKS;
+  const bonus = buffTuning(state, 'flare-bay')?.burnBonusTicks ?? 0;
+  const until = state.tick + (flare.burnTicks ?? FLARE_BURN_TICKS) + bonus;
+  target.burnUntil = Math.max(target.burnUntil ?? 0, until);
+  if (flare.damage !== undefined) target.burnDamage = Math.max(target.burnDamage ?? 1, flare.damage);
+}
 
+function ignite(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare): void {
+  setBurn(state, target, interval, flare);
+  if (flare.spread) {
+    const window = hitWindow(state);
+    for (const enemy of state.enemies) {
+      if (!enemy.hp || enemy.entry || enemy.id === target.id || !inBand(target.alt, enemy.alt, window)) continue;
+      if (Math.hypot(enemy.x - target.x, enemy.z - target.z) <= flare.spread) setBurn(state, enemy, FLARE_BURN_INTERVAL, flare);
+    }
+  }
   // Keep the camera on the first impact while the rest of the volley arrives.
   const prior = state.rearGlimpse;
   const recent = (state.flareHit?.until ?? 0) > state.tick + FLARE_CONFIRM_TICKS - 12;
@@ -396,6 +446,7 @@ function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): bo
   if (tick >= target.burnUntil) {
     delete target.burnUntil;
     delete target.burnNextAt;
+    delete target.burnDamage;
     return false;
   }
   if (tick < target.burnNextAt) return false;
@@ -405,21 +456,24 @@ function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): bo
 
 export function advanceFlares(state: StageState, ground: Ground): void {
   if (state.flareReloadAt !== null && state.tick >= state.flareReloadAt) {
-    state.flareCharges = Math.min(MAX_FLARES, state.flareCharges + 1);
-    state.flareReloadAt = state.flareCharges < MAX_FLARES ? state.tick + FLARE_RELOAD_TICKS : null;
+    const capacity = flareCapacity(state);
+    state.flareCharges = Math.min(capacity, state.flareCharges + 1);
+    state.flareReloadAt = state.flareCharges < capacity ? state.tick + flareReloadTicks(state) : null;
   }
   if (state.flareHit && state.tick >= state.flareHit.until) state.flareHit = null;
   // Burns already active on a returning craft keep aging during fly-in.
   for (const enemy of state.enemies) {
-    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL) && !enemy.entry) hurtEnemy(state, enemy, 1);
+    if (burnTick(enemy, state.tick, FLARE_BURN_INTERVAL) && !enemy.entry) hurtEnemy(state, enemy, enemy.burnDamage ?? 1);
   }
   const boss = state.boss;
   const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
-  if (boss && point && burnTick(point, state.tick, WARDEN_BURN_INTERVAL)) hurtWeakPoint(state, boss, 1);
+  if (boss && point && burnTick(point, state.tick, WARDEN_BURN_INTERVAL)) hurtWeakPoint(state, boss, point.burnDamage ?? 1);
 
   let alive = 0;
+  const window = hitWindow(state);
+  const pointWindow = point ? hitWindow(state, point.window) : HIT_WINDOW;
   for (const flare of state.flares) {
-    if (state.tick - flare.born >= FLARE_LIFE_TICKS) continue;
+    if (state.tick - flare.born >= (flare.lifeTicks ?? FLARE_LIFE_TICKS)) continue;
     flare.vy -= FLARE_GRAVITY * STEP;
     const dx = flare.vx * STEP, dz = flare.vz * STEP, dy = flare.vy * STEP;
     const terrain = groundImpact(flare, dx, dz, ground, dy);
@@ -428,19 +482,19 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     let first = terrain;
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry) continue;
-      const time = descendingImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS);
+      const time = descendingImpactTime(flare, dx, dz, dy, enemy, FLARE_HIT_RADIUS, window);
       if (time < first) {
         first = time;
         hit = enemy;
       }
     }
-    const pointTime = point?.hp ? descendingImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, point.window) : Infinity;
+    const pointTime = point?.hp ? descendingImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, pointWindow) : Infinity;
     if (boss && point && pointTime < first) {
-      hurtWeakPoint(state, boss, 1);
-      ignite(state, point, WARDEN_BURN_INTERVAL);
+      hurtWeakPoint(state, boss, flare.damage ?? 1);
+      ignite(state, point, WARDEN_BURN_INTERVAL, flare);
     } else if (hit) {
-      hurtEnemy(state, hit, 1);
-      ignite(state, hit, FLARE_BURN_INTERVAL);
+      hurtEnemy(state, hit, flare.damage ?? 1);
+      ignite(state, hit, FLARE_BURN_INTERVAL, flare);
     } else if (terrain === Infinity) {
       flare.x += dx;
       flare.z += dz;
@@ -470,8 +524,9 @@ export function advanceEnemyHazards(state: StageState, ground: Ground): void {
 
 export function advanceRearBombs(state: StageState, ground: Ground): void {
   if (state.bombReloadAt !== null && state.tick >= state.bombReloadAt) {
-    state.bombs = Math.min(MAX_BOMBS, state.bombs + 1);
-    state.bombReloadAt = state.bombs < MAX_BOMBS ? state.tick + BOMB_RELOAD_TICKS : null;
+    const capacity = bombCapacity(state);
+    state.bombs = Math.min(capacity, state.bombs + 1);
+    state.bombReloadAt = state.bombs < capacity ? state.tick + bombReloadTicks(state) : null;
   }
   if (!state.rearBombs.length) return;
   state.rearBombs = state.rearBombs.filter(bomb => {
@@ -483,12 +538,38 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     if (age > BOMB_HOLD_TICKS) bomb.alt = Math.max(impactHeight, bomb.alt - BOMB_FALL_SPEED * STEP);
     const point = activeWeakPoint(state);
     const close = (target: Position, window = HIT_WINDOW): boolean =>
-      inBand(target.alt, bomb.alt, window) && nearBomb(bomb, target, BOMB_PROXIMITY);
+      target.alt <= (bomb.ceiling ?? Infinity) && inBand(target.alt, bomb.alt, hitWindow(state, window))
+      && nearBomb(bomb, target, BOMB_PROXIMITY);
     if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && !enemy.entry && close(enemy))
       && !(point?.exposed && close(point, point.window))) return true;
     blast(state, bomb);
     return false;
   });
+}
+
+export function advanceAutoOrdnance(state: StageState, reversed: boolean): void {
+  const run = state.run;
+  if (!run) return;
+  const phoenix = run.weaponLevels.phoenix ?? 0;
+  if (phoenix && (reversed || state.tick >= (state.weaponFireAt.phoenix ?? 0))) {
+    launchFlares(state, state.player.vx ?? 0, state.player.vz ?? 0, [0], phoenix);
+    state.weaponFireAt.phoenix = state.tick + weaponCooldown(state, 'phoenix', WEAPONS.phoenix.tuning.cooldownTicks[phoenix - 1]);
+  }
+  const bay = run.weaponLevels['bomb-bay'] ?? 0;
+  if (!bay) return;
+  const followUp = state.nextBayDrop !== null && state.tick >= state.nextBayDrop;
+  if (!followUp && state.tick < (state.weaponFireAt['bomb-bay'] ?? 0)) return;
+  const tuning = WEAPONS['bomb-bay'].tuning;
+  const { x, z, altitude: alt } = state.player;
+  state.rearBombs.push({ x, z, alt, vx: 0, vz: 0, born: state.tick, weapon: 'bomb-bay',
+    radius: tuning.radius[bay - 1], damage: weaponDamage(state, 'bomb-bay', tuning.damage),
+    ceiling: alt - (BANDS[1] - BANDS[0]) / 2 });
+  if (followUp) {
+    state.nextBayDrop = null;
+  } else {
+    state.weaponFireAt['bomb-bay'] = state.tick + weaponCooldown(state, 'bomb-bay', tuning.cooldownTicks[bay - 1]);
+    if (tuning.volley[bay - 1] > 1) state.nextBayDrop = state.tick + tuning.followUpTicks;
+  }
 }
 
 // Check the thin per-tick segment so fast bolts cannot skip over small weak points.
@@ -512,7 +593,7 @@ function descendingImpactTime(origin: Position, dx: number, dz: number, dy: numb
   return from <= to ? impactTime(origin, dx, dz, target, radius, from, to) : Infinity;
 }
 
-function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
+export function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
   if (ground(origin.x, origin.z) >= origin.alt) return 0;
   let first = ground(origin.x + dx / 2, origin.z + dz / 2) >= origin.alt + dy / 2 ? 0.5 : 1;
   if (first === 1 && ground(origin.x + dx, origin.z + dz) < origin.alt + dy) return Infinity;
@@ -526,7 +607,8 @@ function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, 
 }
 
 function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }>, ground: Ground): void {
-  const bandAltitude = BANDS[shot.targetBand], floor = bandAltitude - STRAFE_BAND_WINDOW;
+  const bandAltitude = BANDS[shot.targetBand];
+  const bandWindow = hitWindow(state, STRAFE_BAND_WINDOW), floor = bandAltitude - bandWindow;
   const travel = Math.min(STEP, (shot.alt - floor) / -shot.vy);
   if (travel <= 0) {
     shot.life = 0;
@@ -536,8 +618,8 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
   let first = groundImpact(shot, dx, dz, ground, dy);
   let hit: Enemy | null = null;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, STRAFE_BAND_WINDOW)) continue;
-    const time = descendingImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS);
+    if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, bandWindow)) continue;
+    const time = descendingImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, hitWindow(state));
     if (time < first) {
       first = time;
       hit = enemy;
@@ -551,14 +633,14 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
 }
 
 function advanceOverdrive(
-  state: StageState, shot: Shot, bolt: NonNullable<Shot['reversal']>, dx: number, dz: number, terrain: number,
+  state: StageState, shot: Shot, bolt: NonNullable<Shot['reversal']>, dx: number, dz: number, terrain: number, window: number,
 ): boolean {
   const pass = state.reversal?.startTick === shot.reversalTick ? state.reversal : null;
   let hit = false;
   while (bolt.remaining > 0) {
     let target: Enemy | null = null, first = terrain;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt)) continue;
+      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(shot.alt, enemy.alt, window)) continue;
       const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
       if (time < first) {
         target = enemy;
@@ -592,20 +674,32 @@ export function advanceShots(state: StageState, ground: Ground): void {
   const reversal = state.reversal;
   const resolved = new Set<number>();
   const misses = new Map<number, Effect>();
-  for (const shot of state.shots) {
+  const weaponWindow = hitWindow(state);
+  const count = state.shots.length;
+  for (let i = 0; i < count; i++) {
+    const shot = state.shots[i];
     if (shot.kind === 'strafe') {
       advanceStrafe(state, shot, ground);
+      continue;
+    }
+    if (shot.kind === 'seeker' || shot.kind === 'flak-shell' || shot.kind === 'flak-shard') {
+      advanceRangedShot(state, shot, ground);
       continue;
     }
     const dx = shot.vx * STEP, dz = shot.vz * STEP;
     const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
-      if (inBand(shot.alt, player.alt) && impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) < terrain) {
+      const playerHit = inBand(shot.alt, player.alt) ? impactTime(shot, dx, dz, player, HOSTILE_HIT_RADIUS) : Infinity;
+      if (state.orbitDrones.some(drone => inBand(shot.alt, drone.alt, weaponWindow)
+        && impactTime(shot, dx, dz, drone, WEAPONS.drones.tuning.hitRadius) < Math.min(terrain, playerHit))) {
+        shot.life = 0;
+      } else if (playerHit < terrain) {
         hurtPlayer(state);
         shot.life = 0;
       }
-    } else if (shot.reversal || shot.pierce) {
-      if (advanceOverdrive(state, shot, (shot.reversal ?? shot.pierce)!, dx, dz, terrain)) resolved.add(shot.volley);
+    } else if (shot.reversal || ('pierce' in shot && shot.pierce)) {
+      if (advanceOverdrive(state, shot, (shot.reversal ?? ('pierce' in shot ? shot.pierce : undefined))!,
+        dx, dz, terrain, weaponWindow)) resolved.add(shot.volley);
     } else {
       let enemyHit: Enemy | null = null;
       let bossHit = false;
@@ -614,7 +708,7 @@ export function advanceShots(state: StageState, ground: Ground): void {
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const time = impactTime(shot, dx, dz, enemy, HIT_RADIUS);
-        if (inBand(shot.alt, enemy.alt)) {
+        if (inBand(shot.alt, enemy.alt, weaponWindow)) {
           if (time < first) {
             first = time;
             enemyHit = enemy;
@@ -628,10 +722,11 @@ export function advanceShots(state: StageState, ground: Ground): void {
       const point = boss?.weakPoints[boss.index];
       if (boss && point?.hp && weakPointExposed(boss, state.tick)) {
         const time = impactTime(shot, dx, dz, point, point.kind === 'core' ? 4.5 : 7);
-        if (time < first && shot.lockId === point.id && inBand(shot.alt, point.alt, point.window)) {
+        const sameBand = inBand(shot.alt, point.alt, hitWindow(state, point.window));
+        if (time < first && shot.lockId === point.id && sameBand) {
           first = time;
           bossHit = true;
-        } else if (time < miss && !inBand(shot.alt, point.alt, point.window)) {
+        } else if (time < miss && !sameBand) {
           miss = time;
           delta = point.alt - shot.alt;
         }

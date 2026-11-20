@@ -9,7 +9,7 @@ import {
 } from './cockpit-pixels';
 import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
 import { MANEUVERS, maneuverAttitude, maneuverViewYaw } from './maneuvers.ts';
-import { MAX_BOMBS, MAX_FLARES, TICKS_PER_SECOND } from './stage-combat.ts';
+import { bombCapacity, flareCapacity, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
@@ -575,8 +575,8 @@ function weaponReadouts(state: StageState, t: Translate): WeaponReadout {
   const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
   const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
   return { gun: t('hud.weapon', { level: gunLevel }), pods: t('hud.pods', { level: podLevel }),
-    bombs: t('cockpit.bombs', { count: state.bombs, max: MAX_BOMBS }),
-    flares: t('cockpit.flares', { count: state.flareCharges, max: MAX_FLARES }) };
+    bombs: t('cockpit.bombs', { count: state.bombs, max: bombCapacity(state) }),
+    flares: t('cockpit.flares', { count: state.flareCharges, max: flareCapacity(state) }) };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string,
@@ -733,7 +733,7 @@ export class CockpitDisplay {
     const font = (compact ? 10 : 12) + 'px ' + this.font, title = t('cockpit.weapons');
     this.weapons.set(key, plate(weapons, c => {
       c.font = `${compact ? 10 : Math.round(12 * panelScale)}px ${this.font}`;
-      drawWeapons(c, weapons, readouts, state.twinRank, compact, title, this.font, panelScale);
+      drawWeapons(c, weapons, readouts, state.run?.weaponLevels.twin ?? state.twinRank, compact, title, this.font, panelScale);
     }));
     if (stores && !this.stores.has(key)) this.stores.set(key, plate(stores, c => {
       c.font = font;
@@ -819,7 +819,8 @@ export class CockpitDisplay {
     c.globalAlpha = flicker;
     const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
     const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
-    const weapon = ((state.bombs * 7 + state.flareCharges) * 6 + podLevel) * 6 + gunLevel;
+    const weapon = ((((state.bombs * 7 + state.flareCharges) * 7 + bombCapacity(state)) * 7
+      + flareCapacity(state)) * 6 + podLevel) * 6 + gunLevel;
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
       if (!this.weapons.has(weapon)) this.cacheWeapons(layout, weapon, state, t);
       blitPlate(c, weapons, this.weapons.get(weapon)!);

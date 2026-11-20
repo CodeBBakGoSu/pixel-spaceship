@@ -7,15 +7,19 @@ import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { random, rngStream } from './stage-random.ts';
 import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
-import { LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT, REGULAR_SALVAGE_MULTIPLIER,
-  RUN_BEACON_LEAD_SECONDS } from './data/run-balance.ts';
-import { DRAFT_RULES } from './data/items.ts';
+import { HEAT_ARMOR_SCALES, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT, REGULAR_SALVAGE_MULTIPLIER,
+  RUN_BEACON_LEAD_SECONDS, WEAPON_FX_LIMIT } from './data/run-balance.ts';
+import { BUFFS, BUFF_IDS, DRAFT_RULES, WEAPON_IDS } from './data/items.ts';
+import { buffTuning } from './loadout.ts';
 import { applyRunPick, banishRunCard, createProgression, openRunDraft, rerollRunDraft, runXpCost,
-  skipRunDraft, updateRunSlots } from './progression.ts';
+  skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
+import { advanceRangedWeapons } from './ranged-weapons.ts';
+import { advanceSupportWeapons } from './support-weapons.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
-  acquireAndFire, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, clamp,
-  dropFlares, dropRearBomb, fireHostile, hurtPlayer, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
+  acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS,
+  bombCapacity, clamp, dropFlares, dropRearBomb, fireHostile, flareCapacity, HIT_WINDOW, hurtPlayer, inBand,
+  MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
   openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { Band, Boss, DraftId, Ground, Maneuver, ManeuverKind, Outcome, StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -165,6 +169,7 @@ function selectDraft(state: StageState, id: DraftId): void {
     if (!card || !applyRunPick(run, card.id)) return;
     if (card.id === 'repair') state.hull = Math.min(state.maxHull, state.hull + DRAFT_RULES.repairHull);
     if (card.variant === 'risky') state.hull -= DRAFT_RULES.riskHull;
+    adjustBuffStores(state, card);
     state.twinRank = (run.weaponLevels.twin ?? 1) >= 3 ? 3 : run.weaponLevels.twin === 2 ? 2 : 1;
     state.podRank = (run.weaponLevels.pods ?? 0) >= 2 ? 2 : 1;
   } else {
@@ -175,6 +180,30 @@ function selectDraft(state: StageState, id: DraftId): void {
     if (id === 'pods-damage') state.podDamage = 2;
   }
   finishDraft(state, id);
+}
+
+function adjustBuffStores(state: StageState, card: DraftCard): void {
+  const added = card.nextLevel - card.currentLevel;
+  if (card.id === 'hull-plating') {
+    const before = BUFFS['hull-plating'].levels[card.currentLevel - 1]?.maxHull ?? 0;
+    const after = BUFFS['hull-plating'].levels[card.nextLevel - 1].maxHull;
+    state.maxHull += after - before;
+    state.hull = Math.min(state.maxHull, state.hull + added);
+  } else if (card.id === 'flare-bay') {
+    state.flareCharges = Math.min(flareCapacity(state), state.flareCharges + added);
+    if (state.flareReloadAt !== null) {
+      const before = BUFFS['flare-bay'].levels[card.currentLevel - 1]?.reloadScale ?? 1;
+      const after = BUFFS['flare-bay'].levels[card.nextLevel - 1].reloadScale;
+      state.flareReloadAt = state.tick + Math.round((state.flareReloadAt - state.tick) * after / before);
+    }
+  } else if (card.id === 'ordnance-rack') {
+    state.bombs = Math.min(bombCapacity(state), state.bombs + added);
+    if (state.bombReloadAt !== null) {
+      const before = BUFFS['ordnance-rack'].levels[card.currentLevel - 1]?.reloadScale ?? 1;
+      const after = BUFFS['ordnance-rack'].levels[card.nextLevel - 1].reloadScale;
+      state.bombReloadAt = state.tick + Math.round((state.bombReloadAt - state.tick) * after / before);
+    }
+  }
 }
 
 const fixtureBands: Record<NewEnemyKind, Band> = {
@@ -278,9 +307,12 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    run: options.mode === 'survivors' ? createProgression(options.seed, { rank: options.aceRank }) : null,
+    run: options.mode === 'survivors'
+      ? createProgression(options.seed, { rank: options.aceRank, weapons: WEAPON_IDS, buffs: BUFF_IDS }) : null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
     aceRank: options.aceRank ?? 0,
+    heat: Number.isFinite(options.heat) ? clamp(Math.floor(options.heat!), 0, HEAT_ARMOR_SCALES.length - 1) : 0,
+    weaponFireAt: {}, railChargeAt: null, seekerEchoAt: -1, weaponFx: [], ionWake: [], orbitDrones: [], nextBayDrop: null,
     streams: { spawn: rngStream(options.seed, 'spawn'), chest: rngStream(options.seed, 'chest'),
       bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat') },
     view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
@@ -290,7 +322,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     boost: 1, boosting: false, boostTicks: 0, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
     flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
     maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
-    xp: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
+    xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
@@ -359,9 +391,10 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   if (!input.boost) state.boostRelease = false;
   const boostHeld = controlled && !grace && !!input.boost && !state.boostRelease;
   const priorBoost = state.boosting;
+  const agility = buffTuning(state, 'vector-thrusters')?.agilityScale ?? 1;
   state.boosting = boostHeld && state.boost > 0;
   state.boostTicks = state.boosting ? (priorBoost ? state.boostTicks + 1 : 1) : 0;
-  if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35) * STEP, 0, 1);
+  if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35 * agility) * STEP, 0, 1);
   let altitude: number;
   if (maneuver && !controlled) {
     const motion = advanceManeuver(maneuver);
@@ -380,13 +413,13 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     if (maneuver) maneuver.elapsed++;
     const turn = clamp(input.turn ?? 0, -1, 1);
     p.bank = advanceBank(p.bank, turn, STEP);
-    const yaw = p.yaw + turn * (state.boosting ? BOOST_TURN_RATE : TURN_RATE) * STEP;
+    const yaw = p.yaw + turn * (state.boosting ? BOOST_TURN_RATE : TURN_RATE) * agility * STEP;
     p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
     const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
     state.speed = thrust * (1 - Math.abs(turn) * 0.25);
     p.x += Math.sin(p.yaw) * state.speed * STEP;
     p.z += Math.cos(p.yaw) * state.speed * STEP;
-    altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * STEP;
+    altitude = p.altitude + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * agility * STEP;
   }
   const dx = p.x - a.x, dz = p.z - a.z;
   const distance = Math.hypot(dx, dz);
@@ -435,15 +468,17 @@ function advanceSalvage(state: StageState, ground: Ground): void {
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
   const horizontalSpeed = Math.hypot(p.vx ?? 0, p.vz ?? 0);
+  const magnet = buffTuning(state, 'magnet-core');
+  const beacon = buffTuning(state, 'salvage-beacon');
   state.pickups = state.pickups.filter(pickup => {
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
-    if (!inBand(p.altitude, pickup.alt)) {
+    if (!inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
       pickup.pulling = false;
       return true;
     }
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
-    if (range > 8 && (pickup.pulling || range <= 42)) {
+    if (range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1))) {
       const speed = Math.min(155, horizontalSpeed + (pickup.reversal ? 75 : 45));
       const pull = Math.min(range, speed * STEP) / range;
       const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
@@ -454,8 +489,12 @@ function advanceSalvage(state: StageState, ground: Ground): void {
       }
     }
     if (Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
-      state.xp += pickup.xp;
+      const adjusted = pickup.xp * (beacon?.xpScale ?? 1) + state.xpRemainder;
+      const whole = Math.floor(adjusted + 1e-9);
+      state.xp += whole;
+      state.xpRemainder = Math.max(0, adjusted - whole);
       state.salvage += pickup.xp;
+      if (state.run) state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
       const band = pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
       state.salvageBands[band] += pickup.xp;
       return false;
@@ -477,7 +516,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.phase !== 'playing') {
     if (input.start) {
       Object.assign(state, createStage({ ...parseStageOptions(''), seed: state.seed, view: state.initialView, time: 0,
-        mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile, aceRank: state.aceRank }, ground));
+        mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile, aceRank: state.aceRank,
+        heat: state.heat }, ground));
     }
     return;
   }
@@ -506,6 +546,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   state.invulnerability = Math.max(0, state.invulnerability - STEP);
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
+  if (state.weaponFx.length) state.weaponFx = state.weaponFx.filter(effect => state.tick < effect.until);
   if (input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? input.turn ?? 0);
   const maneuver = state.maneuver;
   const { x, z } = state.player;
@@ -543,9 +584,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (controlled) {
     if (input.bomb && !grace) dropRearBomb(state);
     acquireAndFire(state);
+    if (state.run) advanceRangedWeapons(state, ground);
   }
   if (input.flare) dropFlares(state, vx, vz);
-  if (maneuver && maneuver.elapsed === MANEUVERS[maneuver.kind].ticks) {
+  const maneuverEnded = maneuver && maneuver.elapsed === MANEUVERS[maneuver.kind].ticks;
+  if (maneuverEnded) {
     if (state.maneuverTrail) {
       state.maneuverTrail.actualExit = state.player.altitude;
       if (maneuver.kind === 'j-turn') openReversal(state, state.maneuverTrail.pursuers);
@@ -553,7 +596,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.maneuver = null;
     state.bodyGraceUntil = state.tick + BODY_GRACE_TICKS;
   }
+  if (state.run) {
+    advanceSupportWeapons(state);
+    advanceAutoOrdnance(state, !!maneuverEnded && maneuver.kind === 'j-turn');
+  }
   advanceShots(state, ground);
+  if (state.weaponFx.length > WEAPON_FX_LIMIT) state.weaponFx.splice(0, state.weaponFx.length - WEAPON_FX_LIMIT);
   advanceEnemyHazards(state, ground);
 
   if (state.tick > state.bodyGraceUntil) {
