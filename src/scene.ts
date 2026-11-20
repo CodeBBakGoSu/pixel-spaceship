@@ -17,7 +17,7 @@ import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverA
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
-  REAR_VIEW_ASPECT, REAR_VIEW_HEIGHT, REAR_VIEW_WIDTH } from './rear-glimpse.ts';
+  REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
 import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MAX_BOMBS, MINE_LIMIT, SHOT_LIMIT } from './stage-combat.ts';
 import type { ManeuverTrail, Position, StageState } from './stage-types.ts';
 import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
@@ -90,7 +90,7 @@ export class FlightScene {
   private readonly screen = new Scene();
   private readonly screenCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 2);
   private readonly target = new WebGLRenderTarget(1, 1, { magFilter: NearestFilter, minFilter: NearestFilter });
-  private readonly rearTarget = new WebGLRenderTarget(REAR_VIEW_WIDTH, REAR_VIEW_HEIGHT,
+  private readonly rearTarget = new WebGLRenderTarget(REAR_INSET_WIDTH, REAR_INSET_HEIGHT,
     { magFilter: NearestFilter, minFilter: NearestFilter });
   private readonly rearCamera = new PerspectiveCamera(52, REAR_VIEW_ASPECT, 0.8, REAR_VIEW_FAR);
   private readonly rearInset = new Group();
@@ -235,6 +235,9 @@ export class FlightScene {
     this.framing = framing;
     this.rearSlot = layoutRearInset(hud, height, phone);
     this.mirrorSlot = cockpit && layoutRearMirror(cockpit, phone);
+    // Allocate for the full cockpit reveal once per layout, then reuse it throughout the wipe.
+    const mirror = this.mirrorSlot?.focus;
+    this.rearTarget.setSize(mirror?.width ?? REAR_INSET_WIDTH, mirror?.height ?? REAR_INSET_HEIGHT);
     this.rearRect = null;
     this.rearTick = -Infinity;
     const buffer = phone?.buffer ?? { width: Math.ceil(width / DESKTOP_DOWNSCALE), height: Math.ceil(height / DESKTOP_DOWNSCALE) };
@@ -262,8 +265,10 @@ export class FlightScene {
     const { width, height } = this.framing;
     this.rearInset.position.set((x + w / 2) * 2 / width - 1, 1 - (y + h / 2) * 2 / height, 0);
     this.rearInset.scale.set(w * 2 / width, h * 2 / height, 1);
-    this.rearLining.scale.set(1 - 2 / w, 1 - 2 / h, 1);
-    this.rearGlass.scale.set(1 - 6 / w, 1 - 6 / h, 1);
+    const bezel = this.mirrorSlot ? Math.max(3, Math.round(w / 48)) : 3;
+    const rim = Math.round(bezel / 3);
+    this.rearLining.scale.set(1 - 2 * rim / w, 1 - 2 * rim / h, 1);
+    this.rearGlass.scale.set(1 - 2 * bezel / w, 1 - 2 * bezel / h, 1);
     // Reveal the mirror texture from the left without scaling the image during the wipe.
     this.rearTarget.texture.repeat.x = -crop;
   }

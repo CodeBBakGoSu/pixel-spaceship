@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
+import { cockpitLadderSpan } from '../src/camera.ts';
 import { RearMirrorThreat } from '../src/instruments.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
-import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror } from '../src/rear-glimpse.ts';
+import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror, REAR_VIEW_ASPECT } from '../src/rear-glimpse.ts';
 
 const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x
   && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -29,20 +30,43 @@ test('the rear inset clears the objective, instruments and phone controls', () =
   }
 });
 
-test('the cockpit mirror can expand without covering fixed instruments', () => {
+test('the larger cockpit mirror keeps the HUD and center ladder clear at rest and during a glimpse', () => {
   for (const [width, height, mobile] of [[1280, 720, false], [1920, 1080, false], [360, 780, true], [390, 844, true], [430, 932, true], [844, 390, true]]) {
-    const phone = mobile ? phoneLayout(width, height, safe, 'cockpit') : null;
-    const hud = phone ?? desktopLayout(width, height, safe);
-    const cockpit = cockpitLayout(width, height, safe, hud.objective, phone?.controls);
-    const { rest, focus } = layoutRearMirror(cockpit, phone);
-    assert.ok(rest.height >= 14);
-    assert.equal(focus.x + focus.width, rest.x + rest.width);
-    assert.equal(focus.y, rest.y);
-    assert.ok(focus.width >= rest.width);
-    if (width >= 1280) assert.deepEqual([rest.width, rest.height], [128, 56]);
-    if (mobile && height > width) assert.ok(rest.width >= 104 && rest.width <= 112 && focus.width > rest.width);
-    for (const region of [cockpit.heading, cockpit.altitude, cockpit.message, cockpit.dashboard]) {
-      assert.equal(intersects(focus, region), false);
+    for (const insets of [{ top: 0, right: 0, bottom: 0, left: 0 }, safe]) {
+      const phone = mobile ? phoneLayout(width, height, insets, 'cockpit') : null;
+      const hud = phone ?? desktopLayout(width, height, insets);
+      const cockpit = phone?.cockpit ?? cockpitLayout(width, height, insets, hud.objective);
+      const label = `${width}×${height}, top inset ${insets.top}`;
+      const mirror = layoutRearMirror(cockpit, phone);
+      assert.ok(mirror, label);
+      const { rest, focus } = mirror;
+      assert.ok(rest.height >= 14, label);
+      assert.equal(focus.x + focus.width, rest.x + rest.width, label);
+      assert.equal(focus.y, rest.y, label);
+      assert.ok(focus.width > rest.width && focus.height > rest.height, label);
+      if (width >= 1280) {
+        assert.ok(rest.width >= 256 && rest.width <= 320 && rest.height >= 112 && rest.height <= 140, label);
+      }
+      if (width === 1920) {
+        assert.ok(focus.x + focus.width <= 1745, `${label}: the mirror runs under the canopy strut`);
+      }
+      if (mobile && height > width) {
+        assert.ok(rest.width >= 165 && rest.height >= 72, label);
+        assert.ok(focus.width >= rest.width * 1.1, label);
+      }
+
+      const { aiming, glass } = cockpit;
+      const ladderHalfWidth = Math.ceil(cockpitLadderSpan(cockpit)) + 4;
+      const centerLadder = { x: aiming.x + aiming.width / 2 - ladderHalfWidth, width: 2 * ladderHalfWidth,
+        y: Math.floor(aiming.y + aiming.height * 0.48) - 24, height: 48 };
+      const protectedRegions = { hud: hud.hud, radio: hud.radio, objective: hud.objective, centerLadder,
+        heading: cockpit.heading, speed: cockpit.speed, altitude: cockpit.altitude,
+        stores: cockpit.stores, message: cockpit.message, dashboard: cockpit.dashboard, controls: phone?.controls, pause: phone?.pause };
+      for (const [name, region] of Object.entries(protectedRegions)) {
+        if (region) assert.equal(intersects(focus, region), false, `${label}: mirror covers ${name}`);
+      }
+      assert.ok(focus.x >= glass.x && focus.y >= glass.y, label);
+      assert.ok(focus.x + focus.width <= glass.x + glass.width && focus.y + focus.height <= glass.y + glass.height, label);
     }
   }
 });
@@ -69,7 +93,7 @@ test('reduced motion displays the rear image as soon as the glimpse starts', () 
 
 test('the rear camera shows a close flare and a lower pursuer at their own altitudes', () => {
   const player = { x: 20, z: 40, yaw: Math.PI / 2, altitude: 110, bank: 1 };
-  const camera = new PerspectiveCamera(52, 128 / 56, 0.8, 640);
+  const camera = new PerspectiveCamera(52, REAR_VIEW_ASPECT, 0.8, 640);
   frameRearCamera(camera, player, true);
   const flare = new Vector3(7, 107, -40).project(camera);
   const high = new Vector3(-30, 110, -40).project(camera);
@@ -80,7 +104,7 @@ test('the rear camera shows a close flare and a lower pursuer at their own altit
 });
 
 test('a delayed bomb blast stays in the rear feed after the pilot turns', () => {
-  const camera = new PerspectiveCamera(52, 128 / 56, 0.8, 640);
+  const camera = new PerspectiveCamera(52, REAR_VIEW_ASPECT, 0.8, 640);
   const player = { x: 20, z: 40, yaw: Math.PI, altitude: 150, bank: 0 };
   const blast = { x: -120, z: -60, alt: 40 };
   frameRearCamera(camera, player, true, blast);
