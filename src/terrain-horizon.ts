@@ -1,9 +1,8 @@
 import type { Vector3 } from 'three';
 import type { Ground } from './stage-types.ts';
-import { TERRAIN_HALF_WIDTH, TERRAIN_MAX_ALTITUDE, TERRAIN_MESH_STEP, TERRAIN_MIN_ALTITUDE } from './world.ts';
+import { TERRAIN_MAX_ALTITUDE, TERRAIN_MESH_STEP, TERRAIN_MIN_ALTITUDE } from './world.ts';
 
 const STEP = TERRAIN_MESH_STEP;
-const LIMIT = TERRAIN_HALF_WIDTH;
 const TOP = TERRAIN_MAX_ALTITUDE, BOTTOM = TERRAIN_MIN_ALTITUDE;
 
 export function terrainElevation(eye: Vector3, horizontal: Vector3, vertical: Vector3, normal: Vector3,
@@ -21,8 +20,8 @@ export function terrainElevation(eye: Vector3, horizontal: Vector3, vertical: Ve
   };
   const nearBottom = rowAt(near, BOTTOM), nearTop = rowAt(near, TOP);
   const farBottom = rowAt(far, BOTTOM), farTop = rowAt(far, TOP);
-  const firstRow = Math.max(-LIMIT, Math.floor(Math.min(nearBottom, nearTop, farBottom, farTop) / STEP) * STEP);
-  const lastRow = Math.min(LIMIT, Math.max(nearBottom, nearTop, farBottom, farTop));
+  const firstRow = Math.floor(Math.min(nearBottom, nearTop, farBottom, farTop) / STEP) * STEP;
+  const lastRow = Math.max(nearBottom, nearTop, farBottom, farTop);
   const acrossAt = (row: number, altitude: number) =>
     eyeAcross - (normalAlong * (row - eyeAlong) + normal.y * (altitude - eye.y)) / normalAcross;
 
@@ -67,12 +66,12 @@ export function terrainElevation(eye: Vector3, horizontal: Vector3, vertical: Ve
     }
   };
 
-  for (let row = firstRow; row <= lastRow && row < LIMIT; row += STEP) {
+  for (let row = firstRow; row <= lastRow; row += STEP) {
     const startBottom = acrossAt(row, BOTTOM), startTop = acrossAt(row, TOP);
     const endBottom = acrossAt(row + STEP, BOTTOM), endTop = acrossAt(row + STEP, TOP);
-    const first = Math.max(-LIMIT, Math.floor(Math.min(startBottom, startTop, endBottom, endTop) / STEP) * STEP);
-    const end = Math.min(LIMIT, Math.max(startBottom, startTop, endBottom, endTop));
-    for (let across = first; across <= end && across < LIMIT; across += STEP) {
+    const first = Math.floor(Math.min(startBottom, startTop, endBottom, endTop) / STEP) * STEP;
+    const end = Math.max(startBottom, startTop, endBottom, endTop);
+    for (let across = first; across <= end; across += STEP) {
       const x = alongZ ? across : row, z = alongZ ? row : across;
       for (let i = 0; i < 4; i++) {
         const vx = x + (i % 2) * STEP, vz = z + (i >= 2 ? STEP : 0);

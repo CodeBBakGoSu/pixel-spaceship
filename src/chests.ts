@@ -3,7 +3,6 @@ import { CHESTS, type ChestId } from './data/items.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { buffTuning } from './loadout.ts';
-import { keepInsideArena } from './reach.ts';
 import { enemyLimit } from './spawn-director.ts';
 import { BANDS, inBand, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import { addBomberEscort, beginEnemyFlyIn, makeEnemy } from './stage-enemies.ts';
@@ -15,7 +14,6 @@ export type ChestDrop = Position & { id: ChestId };
 export type ChestState = { next: number; drops: ChestDrop[]; offer: ChestId | null; opened: number; dropped: ChestId[] };
 
 const APPROACH_TURNS = [0, -0.6, 0.6, -1.25, 1.25, -2.1, 2.1, Math.PI];
-const CARRIER_PREFERRED_SEPARATION = 58;
 
 export function createChestState(): ChestState {
   return { next: 0, drops: [], offer: null, opened: 0, dropped: [] };
@@ -23,16 +21,13 @@ export function createChestState(): ChestState {
 
 export const chestDefinition = (id: ChestId): typeof CHESTS[number] => CHESTS.find(chest => chest.id === id)!;
 
-function carrierSite(state: StageState, ground: Ground, origin: Point, yaw: number, range: number, preferred: Band) {
+function carrierSite(ground: Ground, origin: Point, yaw: number, range: number, preferred: Band) {
   const bands = [preferred, 2, 1, 0] as const;
   for (const band of bands) {
     for (const bend of APPROACH_TURNS) {
       const x = origin.x + Math.sin(yaw + bend) * range;
       const z = origin.z + Math.cos(yaw + bend) * range;
-      const target = { x, z };
-      keepInsideArena(target, state.arena, 27);
-      if (Math.hypot(target.x - origin.x, target.z - origin.z) < CARRIER_PREFERRED_SEPARATION) continue;
-      if (ground(target.x, target.z) + 22 <= BANDS[band]) return { ...target, band };
+      if (ground(x, z) + 22 <= BANDS[band]) return { x, z, band };
     }
   }
   return null;
@@ -52,11 +47,10 @@ export function advanceChestSpawns(state: StageState, ground: Ground): void {
 
   const p = state.player, travel = state.speed * WAVE_FLY_IN_TICKS * STEP;
   const anchor = { x: p.x + Math.sin(p.yaw) * travel, z: p.z + Math.cos(p.yaw) * travel };
-  keepInsideArena(anchor, state.arena, 25);
   const tuning = CARRIER_TUNING[chest.id];
   const rng = rngStream(state.seed, `carrier:${chest.id}`);
   const yaw = p.yaw + (random(rng) - 0.5) * 0.66;
-  const position = carrierSite(state, ground, anchor, yaw, tuning.range, tuning.band);
+  const position = carrierSite(ground, anchor, yaw, tuning.range, tuning.band);
   if (!position) return;
 
   const carrier = makeEnemy(state, position.x, position.z, position.band, 'bomber');

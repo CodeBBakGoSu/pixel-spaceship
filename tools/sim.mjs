@@ -41,7 +41,9 @@ export function parseSimArgs(values) {
   return args;
 }
 
-function runSortie(args, profile, seed, ground) {
+function runSortie(args, profile, seed, world) {
+  world.seed = seed;
+  const ground = (x, z) => world.height(x, z);
   const stage = createStage({ ...parseStageOptions('?autoplay=1&mode=survivors'), seed, mobile: args.mobile, heat: args.heat }, ground);
   const pilot = createBot(profile, seed);
   let inputs = 0, peakLiveGnats = 0, gnatCapPressureBeats = 0;
@@ -127,12 +129,11 @@ function summarize(profile, runs) {
 
 export function runBatch(args) {
   const world = new World();
-  const ground = (x, z) => world.height(x, z);
   const profiles = args.profile === 'all' ? BOT_PROFILE_IDS : [args.profile];
   const runs = [];
   const summary = [];
   for (const profile of profiles) {
-    const profileRuns = Array.from({ length: args.seeds }, (_, index) => runSortie(args, profile, args.from + index, ground));
+    const profileRuns = Array.from({ length: args.seeds }, (_, index) => runSortie(args, profile, args.from + index, world));
     summary.push(summarize(profile, profileRuns));
     for (const run of profileRuns) runs.push(run);
   }

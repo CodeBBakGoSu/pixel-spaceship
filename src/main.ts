@@ -21,7 +21,7 @@ import { createHangarDisplay } from './hangar-display.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { HostileFeedback } from './hostile-feedback.ts';
 import { createHostileFixture } from './hostile-fixture.ts';
-import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
+import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark, worldSiteObjective,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
@@ -38,7 +38,7 @@ import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
-// --- S7f lane ---
+import { canCueAltitude } from './bands.ts';
 import { COMPARISON_DIVISOR } from './data/render-quality.ts';
 import { primeFidelityFixture } from './fidelity-fixture.ts';
 import { initialRenderQuality, parseRenderQuality, saveRenderQuality } from './render-quality.ts';
@@ -90,24 +90,24 @@ const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay
 const cockpitMarkers = new CockpitMarkers();
 const audio = new CombatAudio();
 const feedback = new HostileFeedback(root);
-const world = new World();
-const ground = (x: number, z: number) => world.height(x, z);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
 const effectsEnabled = query.get('fx') !== '0';
 const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
-// --- S7f lane ---
+const worldFixture = query.get('fixture') === 'world';
 const fidelityFixture = query.get('fixture') === 'fidelity';
 const comparisonScale = fidelityFixture && query.get('compare') === String(COMPARISON_DIVISOR) ? COMPARISON_DIVISOR : undefined;
 if (demoBullets || flightFixture || fidelityFixture) {
   query.set('mode', 'survivors');
   query.set('t', '0');
 }
-if (!query.has('mode') && !query.has('fixture')) query.set('mode', 'survivors');
+if (!query.has('mode') && (!query.has('fixture') || worldFixture)) query.set('mode', 'survivors');
 const options = parseStageOptions(query.toString());
-// --- S7e lane ---
 const freezeRoster = (options.fixture === 'ace' || options.fixture === 'roster') && query.get('live') !== '1';
+const staticWorldFixture = worldFixture && !options.autoplay && query.get('live') !== '1';
+const world = new World(options.seed);
+const ground = (x: number, z: number) => world.height(x, z);
 options.mobile = options.touch || coarse.matches;
 const PROFILE_KEY = 'aster-wing.pilot.v1';
 const persistent = options.mode === 'survivors' && !options.autoplay && !options.fixture && options.time === null;
@@ -276,6 +276,7 @@ function resumeCheckpoint(): void {
   const checkpoint = decodeCheckpoint(checkpointData);
   if (!checkpoint || !writeCheckpointData(null)) return;
   // Preserve purchases made in the hangar. The sortie keeps the saved in-flight upgrade effects.
+  world.seed = checkpoint.seed;
   Object.assign(state, checkpoint, { profile });
   feedback.reset();
   parryNoticeUntil = 0;
@@ -454,7 +455,8 @@ function objectiveText(): string {
   }
   if (isNewEnemyKind(fixture) && state.enemies.some(enemy => enemy.kind === fixture)) return t(`enemy.${fixture}`);
   if (isLandmarkId(fixture) && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND && !state.boss) return t(`landmark.${fixture}`);
-  const p = state.player, beacon = state.view !== 'overhead' ? beaconTrack(state) : null;
+  // --- S7d lane ---
+  const p = state.player, beacon = beaconTrack(state);
   const dx = beacon ? beacon.x - p.x : 0, dz = beacon ? beacon.z - p.z : 0;
   const range = Math.hypot(dx, dz);
   const bearing = (Math.round(Math.atan2(dx, dz) * 180 / Math.PI) + 360) % 360;
@@ -462,7 +464,9 @@ function objectiveText(): string {
   const ace = activeAce(state);
   if (!ace) {
     if (state.boss) return t('objective.aceDown');
-    if (beaconTrack(state)) return t('objective.beacon', { bearing: navigation });
+    if (beacon) return t('objective.beacon', { bearing: navigation });
+    const site = worldSiteObjective(state, t);
+    if (site) return site;
     if (!state.run && state.tick < 40 * TICKS_PER_SECOND) return t('objective.reach');
     return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
   }
@@ -650,7 +654,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   if (contact) {
     const delta = contact.alt - p.altitude;
     const mark = relativeMark(delta, false);
-    const point = mark !== '=' && scene?.project(contact);
+    const point = mark !== '=' && canCueAltitude(p, contact.alt) && scene?.project(contact);
     const field = phone?.playfield ?? { x: 15, y: hud.objective.y + hud.objective.height + 5, width: innerWidth - 30, height: innerHeight - hud.objective.y - 45 };
     const cueWidth = 90;
     if (point && point.x >= field.x + cueWidth / 2 && point.x + cueWidth / 2 <= field.x + field.width
@@ -1088,18 +1092,21 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
-  if (flightFixture || fidelityFixture || freezeRoster || (bulletFixture && !bulletFixture.stress)) return;
+  if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
   const launching = pendingStart;
+  // --- S7d lane ---
+  const launch = launching ? launchSettings() : undefined;
+  if (launch && state.phase !== 'playing' && state.phase !== 'draft' && state.phase !== 'chest') world.seed = launch.seed;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   resolveSpaceAction(flightChord.flush(frameNow), 0);
   stepStage(state, {
     ...control,
     start: pendingStart,
-    launch: pendingStart ? launchSettings() : undefined,
+    launch,
     retreat: pendingRetreat,
     pause: pendingPause,
     bomb: pendingBomb || control.bomb,
@@ -1207,7 +1214,8 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
     position = bearing + altitude;
     description += ` · ${t(`hud.rear${threat.side}`)} ${t(`hud.rear${threat.height}`)}`;
     const kind = (['j-turn', 'immelmann', 'split-s'] as const)
-      .find(kind => canManeuver(state, kind) && inBand(threat.alt, exitAltitude(state.player.altitude, kind)));
+      .find(kind => canManeuver(state, kind) && inBand(threat.alt,
+        exitAltitude(state.player.altitude, kind, ground(state.player.x, state.player.z), !!state.player.skim)));
     const seconds = Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND);
     if (kind) {
       const direction = kind === 'immelmann' ? '↑' : kind === 'split-s' ? '↓' : threat.lateral < 0 ? '←' : '→';
@@ -1280,7 +1288,7 @@ function render(now: number): void {
       motion, clearance, impact, readout, markers, cockpitMarkers.obstructions, mirror, instrumentTrack?.alt, language, t);
   } else if (!cockpit && (lastRadarTick === null || state.tick - lastRadarTick >= 3 || state.tick < lastRadarTick)) {
     navRadar.draw(radarContext, 0, 0, readout, yaw, state.tick);
-    if (!arenaMap.hidden) drawArenaMap(mapContext, state, t('cockpit.north'), font, yaw);
+    if (!arenaMap.hidden) drawArenaMap(mapContext, state, t, font, yaw);
     lastRadarTick = state.tick;
   }
   if (!cockpit) {
@@ -1374,14 +1382,13 @@ function animate(now: number): void {
       break;
     }
   }
-  // --- S7f lane ---
   const timingFlight = state.phase === 'playing' && !state.paused && !document.hidden && !guide
-    && !flightFixture && !fidelityFixture && !freezeRoster && (!bulletFixture || bulletFixture.stress);
+    && !flightFixture && !fidelityFixture && !freezeRoster && !staticWorldFixture && (!bulletFixture || bulletFixture.stress);
   if (scene?.observeRenderFrame(timingFlight ? elapsed * 1000 : null)) {
     refreshRenderQuality();
     dirty = true;
   }
-  if (dirty || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
+  if (dirty || scene?.terrainPending || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
     render(now);
     lastRenderTick = state.tick;
     lastRenderPhase = state.phase;

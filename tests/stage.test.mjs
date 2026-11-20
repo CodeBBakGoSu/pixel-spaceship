@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeAce, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput, seekStage } from '../src/autoplay.ts';
+import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
 import { ROSTER } from '../src/data/roster.ts';
 import { relativeMark } from '../src/instruments.ts';
 import { World } from '../src/world.ts';
@@ -434,6 +435,24 @@ test('the full pilot can pursue off-radar salvage and intercept the advance Ace 
   Object.assign(beacon.player, { x: -350, z: -100, yaw: 1.6 });
   assert.ok(autopilotInput(beacon, 'full', ground).turn > 0);
   assert.ok(autopilotInput(beacon, 'top', ground).turn < 0);
+  beacon.rally = { x: beacon.player.x, z: beacon.player.z + 220, alt: beacon.player.altitude };
+  assert.ok(autopilotInput(beacon, 'full', ground).turn < 0, 'follow the local intercept instead of Beacon Atoll');
+});
+
+test('the full pilot follows a skimming Ace and climbs out of its missile warning', () => {
+  const state = stage('?fixture=ace');
+  const floor = () => 35;
+  const altitude = skimAltitude(floor());
+  const ace = activeAce(state);
+  Object.assign(state.player, { x: 0, z: 0, altitude, yaw: 0 });
+  Object.assign(ace, { x: 0, z: 90, alt: altitude, band: SKIM_BAND, vx: 0, vz: 0 });
+  assert.equal(autopilotInput(state, 'full', floor).climb, -1, 'enter SKIM even at the target altitude');
+
+  state.player.skim = 'water';
+  assert.equal(autopilotInput(state, 'full', floor).climb, 0, 'stay in SKIM during the chase');
+  ace.tail = true;
+  ace.tell = { kind: 'missile', x: 0, z: 0, alt: altitude, since: state.tick, until: state.tick + 12 };
+  assert.ok(autopilotInput(state, 'full', floor).climb > 0, 'leave SKIM upward before the salvo');
 });
 
 test('seeded placement, hazards and combat stay identical across view choices', () => {

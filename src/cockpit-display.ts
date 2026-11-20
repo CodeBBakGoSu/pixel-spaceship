@@ -1,3 +1,4 @@
+import { playerBand, type FlightBand } from './bands.ts';
 import { cockpitLadderSpan, type Line, type PitchMark, type Point } from './camera.ts';
 import {
   cockpitCacheKey, cockpitHeadingDegrees, cockpitMfdDue, cockpitWarnings, headingTickLabel, reversalCharge,
@@ -9,11 +10,11 @@ import {
 } from './cockpit-pixels';
 import { HUD_ALTITUDE_BAND_KEYS } from './data/hud.ts';
 import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instruments.ts';
-import { MANEUVERS, maneuverAttitude, maneuverViewYaw, nearestBand } from './maneuvers.ts';
+import { MANEUVERS, maneuverAttitude, maneuverViewYaw } from './maneuvers.ts';
 import { hudBoostTone, hudHullTone, hudPhaseKey, hudTimer, shieldActive } from './numeric-hud.ts';
 import { endTick, requiredXp } from './stage.ts';
 import { bombCapacity, flareCapacity, TICKS_PER_SECOND } from './stage-combat.ts';
-import type { Band, StageState } from './stage-types.ts';
+import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
 
@@ -281,7 +282,7 @@ function drawTapePlate(c: Context, r: Rect, label: string, altitude: boolean): v
 }
 
 function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact: boolean, labels: GlassLabels,
-  target?: number, band?: Band): void {
+  target?: number, band?: FlightBand): void {
   const shortAltitude = altitude && r.height < 57 && target !== undefined;
   const pivot = Math.round(r.y + r.height * (shortAltitude ? 0.29 : 0.5)), scale = compact ? 1.3 : 2.0;
   const axis = altitude ? r.x + 5 : right(r) - 6;
@@ -309,8 +310,15 @@ function drawTape(c: Context, r: Rect, value: number, altitude: boolean, compact
   const number = labels.number(Math.round(value)), center = r.x + r.width / 2;
   const bandLabel = band === undefined ? null : labels.bands[band];
   if (bandLabel) {
+    const scale = Math.min(1, (r.width - 6) / (number.advance + bandLabel.advance + 3));
+    if (scale < 1) {
+      c.save();
+      c.translate(center * (1 - scale), 0);
+      c.scale(scale, 1);
+    }
     drawCockpitLabel(c, number, center - (bandLabel.advance + 3) / 2, pivot);
     drawCockpitLabel(c, bandLabel, center + (number.advance + 3) / 2, pivot);
+    if (scale < 1) c.restore();
   } else drawCockpitLabel(c, number, center, pivot);
   if (target !== undefined && r.height >= 20) {
     const y = shortAltitude ? r.y + Math.round(r.height * 0.76) : bottom(r) - 9;
@@ -830,7 +838,7 @@ export class CockpitDisplay {
     clearZone(c, speed);
     drawTape(c, speed, motion.speed, false, compact, this.labels);
     clearZone(c, altitude);
-    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude, nearestBand(state.player.altitude));
+    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude, playerBand(state.player));
 
     const g = Math.round((1 + 0.47 * Math.abs(motion.turn) + 0.013 * Math.abs(motion.climb)) * 10), y = bottom(speed) + 4;
     if (g !== this.lastG && aiming.height > 35 && y + 15 <= bottom(layout.glass)) {

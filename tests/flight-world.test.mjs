@@ -93,7 +93,7 @@ test('the same replay has equal terminal hashes with flight effects on and off',
   function replay(enabled) {
     const state = createStage(options, ground);
     const atmosphere = enabled ? new FlightAtmosphere(state.arena) : null;
-    const surface = enabled ? new FlightSurface(ground, world.texture) : null;
+    const surface = enabled ? new FlightSurface(ground) : null;
     const motion = enabled ? new FlightMotion() : null;
     const camera = new PerspectiveCamera(60, 1.6, 0.8, 1060), ship = new Object3D();
     const events = motion ? {

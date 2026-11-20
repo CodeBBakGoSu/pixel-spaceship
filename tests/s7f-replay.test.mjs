@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Terminal seed-1 hashes from the Red Kite roster, using the production terrain and full-view autopilot.
+// Terminal seed-1 hashes from the streamed Red Kite sortie, using the production terrain and full-view autopilot.
 const terminalHashes = {
-  legacy: '180fbe09a5ab8f95ee120bfec0fa027e43fc66fefec2003a9d0d5fb29ed5bde0',
-  survivors: '4f0449358bb47a93c2cebf13be7aead5c3f8b1f70d14004bc1a165e5649623a2',
+  legacy: '1c6f0360883e2f91ee038ae4d5e4c2d41c62825ca085994aa4abd19d4daa1bbf',
+  survivors: 'b5cb18ca6f36a33d90415e6f2232a6e0df7b01e710e234b1c670638c17d2884e',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

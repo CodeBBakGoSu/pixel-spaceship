@@ -1,4 +1,5 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
+import { skimAltitude, SKIM_BAND } from './bands.ts';
 import { ACE_PILOT, BOT_PROFILES, type BotProfile } from './data/bot-profiles.ts';
 import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
@@ -9,7 +10,7 @@ import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from '
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
-type Route = Position & { kind: 'ace' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby'] };
+type Route = Position & { kind: 'ace' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby']; skim?: true };
 type AceTactics = Pick<BotProfile, 'aceLead' | 'aceWarningTicks'>;
 
 function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
@@ -24,14 +25,14 @@ function nearest<T extends Position>(items: T[], x: number, z: number): T | null
   return best;
 }
 
-function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics): Route {
+function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimUse: boolean): Route {
   const p = state.player, ace = activeAce(state);
-  // --- S7e lane ---
-  if (ace?.entry) return { ...ace.entry.target, kind: 'ace' };
   if (ace) {
+    const skim = ace.band === SKIM_BAND ? true : undefined;
+    if (ace.entry) return { ...ace.entry.target, kind: 'ace', skim };
     const range = Math.hypot(ace.x - p.x, ace.z - p.z);
     const lead = mode === 'full' ? tactics.aceLead * ACE_PILOT.leadSeconds * Math.min(1, range / ACE_PILOT.pursuitRange) : 0;
-    return { x: ace.x + ace.vx * lead, z: ace.z + ace.vz * lead, alt: ace.alt, kind: 'ace' };
+    return { x: ace.x + ace.vx * lead, z: ace.z + ace.vz * lead, alt: ace.alt, kind: 'ace', skim };
   }
   if (mode === 'full' && state.run) {
     const chest = nearest(state.chests.drops, p.x, p.z);
@@ -49,12 +50,13 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics): Rout
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
     if (former) return { ...former, kind: 'enemy' };
   }
+  const rally = state.rally ?? LANDMARKS.atoll;
   if (mode === 'full' && !state.boss && state.tick >= beaconTick(state)
     && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
-    && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
-    return { ...LANDMARKS.atoll, kind: 'beacon' };
+    && Math.hypot(rally.x - p.x, rally.z - p.z) > 145) {
+    return { ...rally, kind: 'beacon' };
   }
-  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry), p.x, p.z);
+  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry && (skimUse || !enemy.skim)), p.x, p.z);
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
     const needsXp = mode === 'full' && (!!state.run || state.level < 3);
@@ -64,6 +66,9 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics): Rout
     }
   }
   if (enemy) return { ...enemy, kind: 'enemy' };
+  if (Math.hypot(p.x - state.arena.x, p.z - state.arena.z) > state.arena.radius) {
+    return { x: p.x, z: p.z, alt: BANDS[1], kind: 'home' };
+  }
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
 
@@ -150,17 +155,17 @@ function hasRearFlareTarget(state: StageState): boolean {
   });
 }
 
-// --- S7e lane ---
 function dodgeAceWarning(state: StageState, tactics: AceTactics): number | undefined {
   const ace = state.boss, p = state.player, tell = ace?.tell;
   if (!ace?.tail || !tell || tell.kind === 'roll' || tell.until - state.tick > tactics.aceWarningTicks
     || !inBand(p.altitude, tell.alt, ACE_PILOT.warningMargin)) return;
-  const safe = tell.alt + (p.altitude <= tell.alt ? -ACE_PILOT.warningClimb : ACE_PILOT.warningClimb);
+  const up = p.skim || p.altitude > tell.alt;
+  const safe = tell.alt + (up ? ACE_PILOT.warningClimb : -ACE_PILOT.warningClimb);
   return clamp((safe - p.altitude) / 2, -1, 1);
 }
 
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground,
-  tactics: AceTactics = BOT_PROFILES.skilled): StageInput {
+  tactics: AceTactics = BOT_PROFILES.skilled, skimUse = mode === 'full'): StageInput {
   if (state.phase === 'chest') {
     return { chestPick: state.chestReveal ? 'continue' : chestEvolutions(state)[0] ?? 'open' };
   }
@@ -178,12 +183,16 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   if (state.phase !== 'playing' || state.paused) return {};
   const flare = mode === 'full' && hasRearFlareTarget(state);
   if (!maneuverAllowsControl(state.maneuver)) return { flare };
-  const p = state.player, target = routeFor(state, mode, tactics);
+  const p = state.player, target = routeFor(state, mode, tactics, skimUse);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
   const delta = target.alt - p.altitude;
   const withinCoarse = Math.abs(delta) <= HIT_WINDOW;
-  const climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
+  const localSkim = skimAltitude(ground?.(p.x, p.z));
+  const approachSkim = skimUse && target.skim && range < 180;
+  let climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
+  if (approachSkim) climb = p.skim ? 0 : -1;
+  else if (p.skim && target.alt > localSkim) climb = Math.max(0.25, climb);
   const extending = target.kind === 'ace' && range < ACE_PILOT.extensionRange && Math.abs(angle) > ACE_PILOT.extensionAngle;
   const acceptingPass = mode === 'full' && !!target.flyby && !state.boundaryWarning && Math.abs(angle) > Math.PI / 6;
   const turn = extending || acceptingPass ? 0 : target.kind === 'home' && range < 34 ? 0.65 : clamp(angle * 2.35, -1, 1);
@@ -195,7 +204,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   }
   const dodge = state.invulnerability === 0
     ? dodgeClimb(state, mode, climb, ground) ?? (mode === 'full' ? dodgeAceWarning(state, tactics) : undefined) : undefined;
-  const maneuver = mode === 'full' && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
+  const maneuver = mode === 'full' && !approachSkim && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
   const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (!!state.run || state.level < 3 || target.kind === 'beacon')));

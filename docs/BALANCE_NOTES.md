@@ -152,3 +152,34 @@ Each cap ran 100 seeds per pilot at Heat 0. Both caps gave the same combat resul
 All 14 weak clears were live timeouts. Peak live Gnats grew from 41 to 49. Global tuning follows the World merge in Stage 7c.
 
 High quality stayed active throughout the RTX 4090 boost stress samples with the Ace and the full swarm caps. P95 in desktop TOP/CHASE/COCKPIT was 16.7/16.8/16.7 ms and portrait was 16.7/16.7/16.7 ms. Desktop COCKPIT averaged 59.8 FPS and the other five combinations averaged 60.0 FPS.
+
+## Stage 7d merge
+
+The 1,792 m reference radius covers 10.24 times the original arena area. Terrain, spawns, and local NAV use signed world coordinates. Red Kite checks the current rally at deployment and picks a local intercept if the pilot has left it. Deployment, flight, and checkpoint repair use the same altitude resolver and preserve the saved LOW, MID, HIGH, and SKIM IDs. Older checkpoints migrate skimmers, turrets, and pending flak to the terrain-relative band.
+
+The terrain, relative spawns, and Ace interception change the replay hashes. All six Legacy and six Survivors seeds cleared in all views on each cap and matched on recorded-input replay. Legacy cleared in 112.38–115.48 s with 35–41 kills. Survivors cleared in 527.55–554.42 s with 724–798 kills. Each digest uses the six terminal hashes in seed order, joined by newlines without a trailing newline.
+
+| Mode | Desktop digest | Mobile digest |
+| --- | --- | --- |
+| Legacy | `af3d24241b3189d75139497318fd8c598b836eb61aa99f106b4232e013dd1e86` | `a00ae83151d156c620e7e5b91cdd072e8812829242868e665f76e9f45acc0ea3` |
+| Survivors | `e927f67d2efcf11eb4f30e1f9303773ae88ea6f3b658a02cb5b250007f5f7e1f` | `35201c443e9c9941cab4175ca372392ab13f5cdfa8079f1d1c5b095a1eb3fd32` |
+
+The isolated [World lane](lanes/S7d.md) used the Warden. Its 100-seed results per cap were as follows.
+
+| Profile | Clear before → after | Boss kill before → after | Survival p10 / median / p90 before → after (s) | Median sortie before → after (s) | Median end HP before → after | Median kills before → after | Median level-ups before → after |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Skilled | 96% → 88% | 95% → 87% | 600.0 / 600.0 / 600.0 → 582.1 / 600.0 / 600.0 | 592.6 → 592.6 | 10.5 → 11 | 744.5 → 768 | 26 → 26 |
+| Average | 65% → 38% | 64% → 38% | 542.5 / 600.0 / 600.0 → 190.6 / 585.0 / 600.0 | 590.4 → 585.0 | 5.5 → 0 | 696 → 697 | 25 → 25 |
+| Weak | 5% → 5% | 2% → 0% | 87.2 / 276.4 / 567.2 → 88.7 / 199.0 / 519.5 | 276.4 → 199.0 | 0 → 0 | 191.5 → 133.5 | 12 → 9 |
+
+The integrated batch uses Red Kite, seeds 1–100, and Heat 0. Both caps gave identical per-seed combat outcomes.
+
+| Pilot | Clear before → after | Ace wins before → after | Median survival before → after | Median end hull before → after | Median kills before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 99% → 98% | 99% → 98% | 600.0 → 600.0 s | 12 → 10 | 780 → 779.5 |
+| Average | 57% → 31% | 42% → 26% | 600.0 → 550.1 s | 2.5 → 0 | 767 → 765 |
+| Weak | 14% → 8% | 0% → 0% | 266.4 → 193.1 s | 0 → 0 | 235.5 → 150 |
+
+The integrated peak was 48 live Gnats. The average clear rate and weak median survival are below target and set the baseline for Stage 7c.
+
+High quality max-load p95 in TOP/CHASE/COCKPIT was 16.7/16.8/16.8 ms at 1920×1080 and 16.7/16.7/16.7 ms in 390×844 emulation. The native RTX 4090 run sampled 300 frames in each view. Desktop COCKPIT averaged 59.6 FPS after two dropped intervals on the warmed repeat. A live remote SKIM run crossed a streamed chunk, climbed out of SKIM, then returned to 30 m clearance.

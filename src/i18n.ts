@@ -224,7 +224,7 @@ const en = {
   'hangar.quest.ion': "Fly 30 maneuvers across sorties.",
   'hangar.quest.drones': "Collect 100 salvage orbs across sorties.",
   'hangar.quest.arc': "Score an ACE WIPE ×6.",
-  'hangar.quest.band-lens': "Get kills in all three bands in one sortie.",
+  'hangar.quest.band-lens': "Get kills at LOW, MID, and HIGH in one sortie.",
   'hangar.quest.vector-thrusters': "Boost for 60 seconds across sorties.",
   'hangar.quest.fire-control': "Get 20 kills with target lock.",
   'hangar.quest.flare-bay': "Down 20 pursuers with rear flares.",
@@ -391,7 +391,7 @@ const en = {
   'item.swarm-rack.title': "Swarm Rack",
   'item.swarm-rack.copy': "Launches a dozen homing rockets that favor elite targets.",
   'item.prism-lance.title': "Prism Lance",
-  'item.prism-lance.copy': "Fires piercing beams across all three altitude bands.",
+  'item.prism-lance.copy': "Fires piercing beams across all four altitude bands.",
   'item.skybreaker.title': "Skybreaker",
   'item.skybreaker.copy': "Sets off a chain of all-band bursts.",
   'item.plasma-ribbon.title': "Plasma Ribbon",
@@ -494,6 +494,15 @@ const en = {
   'enemy.carrier': "CARRIER",
   'enemy.patrol': "PATROL",
   'enemy.interceptor': "INTERCEPTOR",
+
+  // --- S7d lane ---
+  'hud.bandSkim': "SKIM",
+  'nav.site.beacon': "BEACON",
+  'nav.site.supply': "SUPPLY DROP",
+  'nav.site.xp': "XP WELL",
+  'objective.worldSite': "{name} · {bearing}° · {distance} m · ALT {altitude}",
+  'guide.skim': "Dive below LOW to enter terrain-following SKIM. Climb to exit. The cockpit shows the altitude difference to your target.",
+  'guide.worldRadar': "The TOP map follows your position. Radar edge ticks show distant or aft contacts. Cyan diamonds are beacons, pink squares are supply drops and green crosses are XP wells.",
 };
 
 export type MessageKey = keyof typeof en;
@@ -725,7 +734,7 @@ const ko = {
   'hangar.quest.ion': "기동을 총 30번 하세요.",
   'hangar.quest.drones': "회수 구슬을 총 100개 모으세요.",
   'hangar.quest.arc': "ACE WIPE ×6을 달성하세요.",
-  'hangar.quest.band-lens': "한 출격에서 고도 3곳 모두에서 적을 격추하세요.",
+  'hangar.quest.band-lens': "한 출격에서 저고도, 중고도, 고고도 적을 모두 격추하세요.",
   'hangar.quest.vector-thrusters': "부스트를 총 60초 쓰세요.",
   'hangar.quest.fire-control': "조준 고정으로 적을 총 20기 격추하세요.",
   'hangar.quest.flare-bay': "후방 플레어로 추격기를 총 20기 격추하세요.",
@@ -892,7 +901,7 @@ const ko = {
   'item.swarm-rack.title': "군집 로켓",
   'item.swarm-rack.copy': "추적 로켓 12발을 쏘며 정예 적을 우선 조준합니다.",
   'item.prism-lance.title': "프리즘 랜스",
-  'item.prism-lance.copy': "세 고도 밴드에 관통 광선을 쏩니다.",
+  'item.prism-lance.copy': "네 고도 밴드에 관통 광선을 쏩니다.",
   'item.skybreaker.title': "스카이브레이커",
   'item.skybreaker.copy': "모든 밴드에 연쇄 폭발을 일으킵니다.",
   'item.plasma-ribbon.title': "플라즈마 리본",
@@ -995,6 +1004,15 @@ const ko = {
   'enemy.carrier': "모함",
   'enemy.patrol': "초계기",
   'enemy.interceptor': "요격기",
+
+  // --- S7d lane ---
+  'hud.bandSkim': "초저",
+  'nav.site.beacon': "비콘",
+  'nav.site.supply': "보급품",
+  'nav.site.xp': "XP 지점",
+  'objective.worldSite': "{name} · {bearing}° · {distance} m · 고도 {altitude}",
+  'guide.skim': "저고도보다 더 내려가면 지형을 따라 초저공 비행합니다. 상승하면 빠져나옵니다. 조종석에는 표적과의 고도 차가 표시됩니다.",
+  'guide.worldRadar': "탑뷰 지도는 내 위치를 중심으로 움직입니다. 레이더 테두리 표시는 먼 곳이나 뒤쪽을 가리킵니다. 하늘색 마름모는 비콘, 분홍색 사각형은 보급품, 초록색 십자는 XP 지점입니다.",
 } satisfies Record<MessageKey, string>;
 
 export const strings = { en, ko };

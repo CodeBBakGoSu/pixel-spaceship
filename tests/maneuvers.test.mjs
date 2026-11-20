@@ -154,9 +154,10 @@ for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['spli
 }
 
 test('a loop at the extreme band returns to its launch height and marks the limit', () => {
-  for (const [maneuver, altitude] of [['immelmann', 151], ['split-s', 72]]) {
+  for (const [maneuver, altitude] of [['immelmann', 151], ['split-s', 65]]) {
     const state = empty();
     state.player.altitude = altitude;
+    if (maneuver === 'split-s') state.player.skim = 'water';
     run(state, 1, { maneuver });
     assert.equal(state.maneuverTrail?.limited, true);
     run(state, moves.MANEUVERS[maneuver].ticks - 1);
@@ -164,7 +165,7 @@ test('a loop at the extreme band returns to its launch height and marks the limi
   }
 });
 
-test('Split-S at the low band guards terrain clearance throughout the dive', () => {
+test('Split-S from LOW clears raised terrain and settles into SKIM', () => {
   const state = empty();
   state.player.altitude = 75;
   run(state, 1, { maneuver: 'split-s' }, () => 49);
@@ -172,7 +173,8 @@ test('Split-S at the low band guards terrain clearance throughout the dive', () 
     run(state, 1, {}, () => 49);
     assert.ok(state.player.altitude >= 71);
   }
-  assert.equal(state.player.altitude, 75);
+  assert.equal(state.player.altitude, 79);
+  assert.equal(state.player.skim, 'land');
 });
 
 test('pause freezes maneuvers and preserves view-independent flight on resume', () => {
@@ -339,20 +341,20 @@ test('rear stores enforce 24 ticks between drops and refill one charge every 450
   assert.equal(state.bombReloadAt, null);
 });
 
-test('the wider Reach rim warns at 60 m and contains all three maneuvers', () => {
+test('all three maneuvers cross the old rim and stay available in streamed airspace', () => {
   for (const kind of ['immelmann', 'split-s', 'j-turn']) {
     const state = pursuit();
     const { player, arena } = state;
-    assert.equal(arena.radius, 560);
+    assert.ok(arena.radius >= Math.sqrt(10) * 560);
     state.enemies.length = 0;
-    Object.assign(player, { x: arena.x + 505, z: arena.z, yaw: Math.PI / 2 });
-    stepStage(state);
-    assert.equal(state.boundaryWarning, true);
-    Object.assign(player, { x: arena.x + arena.radius - 0.2, z: arena.z });
+    Object.assign(player, { x: arena.x + arena.radius - 0.2, z: arena.z, yaw: Math.PI / 2 });
+    let passed = false;
     for (let n = 0; n < moves.MANEUVERS[kind].ticks; n++) {
       stepStage(state, n === 0 ? { maneuver: kind } : {});
-      assert.ok(Math.hypot(player.x - arena.x, player.z - arena.z) <= arena.radius + 1e-9);
+      passed ||= player.x > arena.x + arena.radius;
+      assert.equal(state.boundaryWarning, false);
     }
+    assert.ok(passed);
     assert.ok(state.maneuverReadyAt > state.tick);
   }
 });

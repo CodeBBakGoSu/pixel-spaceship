@@ -1,11 +1,9 @@
 import { clamp, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { FlyIn, Ground, Point, Position, StageState } from './stage-types.ts';
+import { FLY_IN_WORLD } from './data/world.ts';
 
 export const WAVE_FLY_IN_TICKS = 1.5 * TICKS_PER_SECOND;
-const RIM_CLEARANCE = 70;
-const MIN_APPROACH_DISTANCE = 640;
-const TRANSIT_ALTITUDE = 150;
-const FLIGHT_CLEARANCE = 22;
+const { minApproachDistance, transitAltitude, clearance: flightClearance } = FLY_IN_WORLD;
 
 function exitDistance(start: Point, center: Point, radius: number, fx: number, fz: number): number {
   const x = start.x - center.x, z = start.z - center.z;
@@ -13,19 +11,16 @@ function exitDistance(start: Point, center: Point, radius: number, fx: number, f
   return -projection + Math.sqrt(Math.max(0, projection ** 2 + radius ** 2 - x ** 2 - z ** 2));
 }
 
-export function planFlyIn(state: Pick<StageState, 'arena' | 'tick' | 'player'>, anchor: Point, target: Position,
+export function planFlyIn(state: Pick<StageState, 'tick' | 'player'>, anchor: Point, target: Position,
   plan: { ticks: number; bend: number; exitSpeed: number; clearance?: number }): FlyIn {
-  const { arena } = state;
   const outward = Math.atan2(target.x - anchor.x, target.z - anchor.z);
   const fx = Math.sin(outward), fz = Math.cos(outward);
-  // Follow the engagement bearing outward until the entry point clears both the rim and the nearby view.
-  const run = Math.max(MIN_APPROACH_DISTANCE,
-    exitDistance(target, arena, arena.radius + RIM_CLEARANCE, fx, fz),
-    exitDistance(target, state.player, MIN_APPROACH_DISTANCE, fx, fz));
+  // Start each approach outside the local fight regardless of where the pilot has traveled.
+  const run = Math.max(minApproachDistance, exitDistance(target, state.player, minApproachDistance, fx, fz));
   return {
-    origin: { x: target.x + fx * run, z: target.z + fz * run, alt: Math.max(TRANSIT_ALTITUDE, target.alt) },
+    origin: { x: target.x + fx * run, z: target.z + fz * run, alt: Math.max(transitAltitude, target.alt) },
     target, startedAt: state.tick, arriveAt: state.tick + plan.ticks,
-    bend: plan.bend, exitSpeed: plan.exitSpeed, clearance: plan.clearance ?? FLIGHT_CLEARANCE,
+    bend: plan.bend, exitSpeed: plan.exitSpeed, clearance: plan.clearance ?? flightClearance,
   };
 }
 
@@ -45,7 +40,7 @@ export function sampleFlyIn(path: FlyIn, tick: number, ground: Ground) {
   const x = time === 1 ? target.x : origin.x + dx * progress + dz * side;
   const z = time === 1 ? target.z : origin.z + dz * progress - dx * side;
   const descent = time ** 2 * (3 - 2 * time);
-  const floor = ground(x, z) + FLIGHT_CLEARANCE + (clearance - FLIGHT_CLEARANCE) * descent;
+  const floor = ground(x, z) + flightClearance + (clearance - flightClearance) * descent;
   const alt = Math.max(target.alt + (origin.alt - target.alt) * (1 - descent), floor);
   return { x, z, alt, yaw: Math.atan2(tx, tz), vx: tx * rate, vz: tz * rate };
 }

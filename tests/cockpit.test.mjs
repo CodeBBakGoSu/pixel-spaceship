@@ -8,7 +8,7 @@ import { createTranslator, strings } from '../src/i18n.ts';
 import { cockpitCacheKey, cockpitMfdDue, cockpitWarnings, headingTape, cockpitTarget } from '../src/cockpit.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { MANEUVERS, maneuverAttitude } from '../src/maneuvers.ts';
-import { terrainFogFar, TERRAIN_HALF_WIDTH, World } from '../src/world.ts';
+import { terrainFogFar, World } from '../src/world.ts';
 
 const aiming = { x: 180, y: 235, width: 920, height: 270 };
 test('cockpit artwork stays cached for equivalent layouts and invalidates for language, resize and safe areas', () => {
@@ -104,37 +104,39 @@ test('the inverted cockpit exchanges sky and ground and rotates its horizon thro
   assert.ok(new Vector3(0, 1, 0).applyQuaternion(camera.quaternion).y < -0.999);
 });
 
-test('terrain fog remains positive and continuous through a full cockpit roll', () => {
-  for (const [aspect, fov] of [[1.6, 92], [390 / 844, 78]]) {
+test('terrain fog remains positive and continuous through a full cockpit roll at both tiers', () => {
+  assert.ok(terrainFogFar(1, 60, 0, 0, true) < terrainFogFar(1, 60));
+  for (const [aspect, fov, mobile, far] of [[1.6, 92, false, 1020], [390 / 844, 78, true, 740]]) {
     for (const pitch of [0, -0.48, 0.58]) {
-      const upright = terrainFogFar(aspect, fov, pitch);
-      const inverted = terrainFogFar(aspect, fov, pitch, Math.PI);
+      const upright = terrainFogFar(aspect, fov, pitch, 0, mobile);
+      const inverted = terrainFogFar(aspect, fov, pitch, Math.PI, mobile);
       assert.ok(Math.abs(inverted - upright) < 1e-9);
       for (let angle = -180; angle <= 180; angle++) {
-        const fog = terrainFogFar(aspect, fov, pitch, angle * Math.PI / 180);
-        const next = terrainFogFar(aspect, fov, pitch, (angle + 1) * Math.PI / 180);
-        assert.ok(fog > 245 && fog <= 875);
+        const fog = terrainFogFar(aspect, fov, pitch, angle * Math.PI / 180, mobile);
+        const next = terrainFogFar(aspect, fov, pitch, (angle + 1) * Math.PI / 180, mobile);
+        assert.ok(fog > 245 && fog <= far);
         assert.ok(Math.abs(fog - next) < 20);
       }
     }
   }
 });
 
-test('the zero line follows the visible mesh edge in high level flight', () => {
+test('the zero line follows the visible terrain far beyond the starting islands', () => {
   const width = 1280, height = 720, ground = () => 35, limit = 788;
   const safe = { top: 0, right: 0, bottom: 0, left: 0 };
   const cockpit = cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
   const frame = { width, height, cockpit };
   const camera = new PerspectiveCamera(60, width / height, 0.65, 1060);
-  const player = { x: -96, z: 534 - TERRAIN_HALF_WIDTH, altitude: 165, yaw: Math.PI, bank: 0 };
+  const player = { x: -18173, z: 27343, altitude: 165, yaw: Math.PI, bank: 0 };
   const marks = frameCockpit(camera, player, frame, null, ground, limit);
-  const y = (1 - new Vector3(player.x, 35, TERRAIN_HALF_WIDTH).project(camera).y) * height / 2;
+  const y = (1 - new Vector3(player.x, 35, camera.position.z + limit).project(camera).y) * height / 2;
   const zero = marks.find(mark => mark.angle === 0);
+  assert.ok(zero);
   assert.ok(Math.abs(zero.left[0].to.y - y) < 0.4);
-  assert.ok(y < cockpit.aiming.y + cockpit.aiming.height, `mesh edge y=${y} stays in view of the ladder`);
+  assert.ok(y < cockpit.aiming.y + cockpit.aiming.height, `skyline y=${y} stays in view of the ladder`);
 });
 
-test('the zero line follows a terrain corner between the ends of a rung', () => {
+test('the zero line has the same rolled projection over flat ground in remote chunks', () => {
   const width = 1920, height = 1080, ground = () => 35;
   const safe = { top: 0, right: 0, bottom: 0, left: 0 };
   const frame = { width, height, cockpit: cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective) };
@@ -145,16 +147,21 @@ test('the zero line follows a terrain corner between the ends of a rung', () => 
   for (let tick = 0; tick < Math.round(MANEUVERS.immelmann.flipTick * 0.74); tick++) {
     stepStage(state, tick === 0 ? { maneuver: 'immelmann' } : {}, ground);
   }
-  // Put the clamped camera where the terrain corner crosses the rung.
-  Object.assign(state.player, { x: TERRAIN_HALF_WIDTH - 894, z: 617 - TERRAIN_HALF_WIDTH, altitude: 110 });
+  const attitude = maneuverAttitude(state.maneuver);
+  function zeroPoints() {
+    const marks = frameCockpit(camera, state.player, frame, attitude, ground, 1060);
+    const zero = marks.find(mark => mark.angle === 0);
+    assert.ok(zero);
+    return [...zero.left, ...zero.right].flatMap(line => [line.from, line.to]);
+  }
 
-  const marks = frameCockpit(camera, state.player, frame, maneuverAttitude(state.maneuver), ground, 1060);
-  const zero = marks.find(mark => mark.angle === 0);
-  const corner = new Vector3(TERRAIN_HALF_WIDTH, 35, TERRAIN_HALF_WIDTH).project(camera);
-  const x = (1 + corner.x) * width / 2, y = (1 - corner.y) * height / 2;
-  const { from, to } = zero.left.find(line => x >= line.from.x && x <= line.to.x);
-  const barY = from.y + (to.y - from.y) * (x - from.x) / (to.x - from.x);
-  assert.ok(Math.abs(barY - y) < 0.6, `terrain corner y=${y}, HUD y=${barY}`);
+  const origin = zeroPoints();
+  state.player.x += 8316;
+  state.player.z -= 13817;
+  const remote = zeroPoints();
+  for (let i = 0; i < origin.length; i++) {
+    assert.ok(Math.hypot(origin[i].x - remote[i].x, origin[i].y - remote[i].y) < 0.01);
+  }
 });
 
 test('heading tape wraps through north and localizes cardinal labels and degrees', () => {

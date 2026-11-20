@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relocateStragglers } from '../src/spawn-director.ts';
+import { enemyLimit, relocateStragglers } from '../src/spawn-director.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies, makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
@@ -12,11 +12,12 @@ const advance = (state, count, input = {}) => {
   for (let tick = 0; tick < count; tick++) stepStage(state, tick === 0 ? input : {}, ground);
 };
 
-test('a Skimmer stays over water at LOW and fires two planar darts', () => {
+test('a Skimmer follows the water surface in SKIM and fires two planar darts', () => {
   const state = fixture('skimmer');
   assert.equal(state.enemies[0]?.kind, 'skimmer');
   const skimmer = state.enemies[0];
   assert.equal(skimmer.hp, 2);
+  const launchAlt = ground(skimmer.x, skimmer.z) + 30;
   skimmer.shotAt = state.tick + 1;
   advance(state, 1);
   assert.equal(skimmer.tell?.kind, 'strafe');
@@ -25,9 +26,10 @@ test('a Skimmer stays over water at LOW and fires two planar darts', () => {
   advance(state, 1);
   const shots = state.shots.filter(shot => shot.kind === 'hostile');
   assert.equal(shots.length, 2);
-  assert.ok(shots.every(shot => shot.alt === 75));
+  assert.ok(shots.every(shot => shot.alt === launchAlt));
   advance(state, 85, { turn: 1 });
-  assert.equal(skimmer.alt, 75);
+  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 30);
+  assert.equal(skimmer.skim, true);
   assert.ok(ground(skimmer.x, skimmer.z) <= 39);
 });
 
@@ -214,7 +216,7 @@ test('an airborne straggler re-enters the forward quarter only after staying far
   assert.ok(patrol.z < p.z - 200);
   state.tick++;
   relocateStragglers(state, ground);
-  assert.ok(patrol.entry && Math.hypot(patrol.x, patrol.z) > state.arena.radius);
+  assert.ok(patrol.entry && Math.hypot(patrol.x - p.x, patrol.z - p.z) >= 640);
   while (patrol.entry) {
     state.tick++;
     advanceEnemies(state, ground);
@@ -228,7 +230,7 @@ test('an airborne straggler re-enters the forward quarter only after staying far
   assert.equal(state.pickups.length, 0);
 });
 
-test('stragglers stay put when the rim blocks the forward arc or they are wide of the tail', () => {
+test('the old rim leaves re-entry open while nearby flanking and pursuit contacts stay put', () => {
   const state = fixture('hound'), p = state.player;
   Object.assign(p, { x: 0, z: 455 });
   const aft = makeEnemy(state, p.x + 20, p.z - 225, 2);
@@ -240,7 +242,8 @@ test('stragglers stay put when the rim blocks the forward arc or they are wide o
     state.tick++;
     relocateStragglers(state, ground);
   }
-  assert.deepEqual(state.enemies.map(({ x, z }) => [x, z]), positions);
+  assert.ok(aft.entry?.target.z > p.z + 100);
+  assert.deepEqual(state.enemies.slice(1).map(({ x, z }) => [x, z]), positions.slice(1));
 });
 
 test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
@@ -249,11 +252,11 @@ test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
   const skimmer = state.enemies[0];
   Object.assign(skimmer, { x: 288, z: 208 });
   advance(state, 90, { maneuver: 'split-s' });
-  assert.equal(skimmer.alt, 75);
+  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 30);
   assert.ok(ground(skimmer.x, skimmer.z) <= 39);
 });
 
-test('a far turret transfers only to a vacant landmark ahead and keeps its HP', () => {
+test('a far turret transfers to a local ground site ahead and keeps its HP', () => {
   const state = fixture('turret');
   const turret = state.enemies[0];
   Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 145 });
@@ -265,7 +268,7 @@ test('a far turret transfers only to a vacant landmark ahead and keeps its HP', 
   assert.equal(turret.entry, undefined);
   assert.ok(turret.x > 200 && Math.hypot(turret.x - x, turret.z - z) > 175);
   assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
-  assert.equal(turret.band, 1);
+  assert.equal(turret.skim, true);
   assert.equal(turret.hp, 2);
   assert.equal(state.pickups.length, 0);
 });
@@ -278,12 +281,18 @@ test('seeded sorties keep fly-in and combat turns within 3.2 radians per second'
     state.twinAt = state.podsAt = Infinity;
     state.graceUntil = Infinity;
     state.invulnerability = Infinity;
+    const bomberBeats = [];
     for (let tick = 0; tick < duration; tick++) {
       const before = new Map(state.enemies.map(enemy => [enemy.id, enemy.yaw]));
       stepStage(state, { turn: Math.sin(tick / 137) * 0.6 }, ground);
+      assert.ok(state.enemies.length <= enemyLimit(state));
       for (const enemy of state.enemies) {
         if (!enemy.hp) continue;
         const previous = before.get(enemy.id);
+        if (previous === undefined && enemy.kind === 'bomber') {
+          bomberBeats.push(state.tick);
+          assert.equal(state.enemies.filter(contact => contact.formation?.leader === enemy.id).length, 2);
+        }
         // A straggler gets a fresh heading only when sent to the off-screen origin.
         if (previous === undefined || enemy.entry?.startedAt === state.tick) continue;
         kinds.add(enemy.kind);
@@ -293,6 +302,24 @@ test('seeded sorties keep fly-in and combat turns within 3.2 radians per second'
       }
     }
     assert.equal(state.tick, duration);
+    assert.deepEqual(bomberBeats, [4110, 5310], `reserved bomber formations for seed ${seed}`);
+  }
+  // The saturated patrol cap can skip individual fighters between the two reserved waves.
+  for (const kind of ['hound', 'interceptor']) {
+    const state = fixture('hound');
+    const enemy = makeEnemy(state, state.player.x + 32, state.player.z - 78, 1, kind);
+    state.enemies = [enemy];
+    let steered = false;
+    for (let tick = 0; tick < 90; tick++) {
+      assert.ok(enemy.hp > 0);
+      const yaw = enemy.yaw;
+      stepStage(state, { turn: 0.6 }, ground);
+      const turn = Math.atan2(Math.sin(enemy.yaw - yaw), Math.cos(enemy.yaw - yaw));
+      assert.ok(Math.abs(turn) <= 3.2 / 60 + 1e-9, `${kind} turned ${turn} rad at tick ${tick}`);
+      steered ||= turn !== 0;
+    }
+    assert.ok(steered);
+    kinds.add(kind);
   }
   assert.equal(kinds.size, 10, `only checked ${[...kinds]}`);
 });

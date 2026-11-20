@@ -1,13 +1,14 @@
 import { phaseAt, type RegularSpawn } from './data/phases.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import { SPAWN_WORLD } from './data/world.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
-import { BASALT_STACKS, keepInsideArena, LANDMARKS } from './reach.ts';
 import { angleTo, BANDS, TICKS_PER_SECOND } from './stage-combat.ts';
-import { addBomberEscort, beginEnemyFlyIn, bomberWingPosition, makeEnemy, SKIMMER_WATER } from './stage-enemies.ts';
+import { addBomberEscort, beginEnemyFlyIn, bomberWingPosition, makeEnemy, placeSkimEnemy } from './stage-enemies.ts';
 import { random } from './stage-random.ts';
 import { spawnSwarm, type SwarmObserver } from './swarm.ts';
 import type { Band, Enemy, Ground, Point, StageState } from './stage-types.ts';
+import { isWater } from './world.ts';
 
 type Spawn = { kind: RegularEnemyKind; band: Band | 'flank'; bearing: number; range: number };
 type Wave = { time: number; members: Spawn[] };
@@ -61,6 +62,18 @@ export function enemyLimit(state: Pick<StageState, 'boss' | 'tick'> & Partial<Pi
   return state.tick < 70 * TICKS_PER_SECOND ? 16 : 24;
 }
 
+const SCRIPTED_BOMBER_WAVES = WAVES.filter(wave => wave.members.some(member => member.kind === 'bomber'));
+
+function waveContactLimit(state: StageState, wave: Wave): number {
+  const limit = enemyLimit(state);
+  if (state.run || wave !== WAVES[state.nextWave]) return limit;
+  const nextBomber = SCRIPTED_BOMBER_WAVES.find(entry => entry.time > wave.time);
+  if (!nextBomber) return limit;
+  // The patrol cap can rise while the next formation is already approaching.
+  const entryTick = nextBomber.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS;
+  return Math.min(limit, enemyLimit({ tick: entryTick, boss: null }) - SPAWN_WORLD.bomberFormationSize);
+}
+
 const ESCAPE_HALF = 35 * Math.PI / 180;
 const ESCAPE_BEARINGS = [90, -90, 135, -135, 45, -45, 0, 180];
 const ENTRY_TURNS = [0, -0.36, 0.36, -0.79, 0.79, -1.33, 1.33, -2.1, 2.1, Math.PI];
@@ -68,22 +81,12 @@ const AFT_TURNS = [0, -0.19, 0.19, -0.37, 0.37];
 const REENTRY_TURNS = [0, -0.23, 0.23, -0.53, 0.53, -0.85, 0.85];
 const REENTRY_RANGES = [216, 196, 176];
 const REENTRY_AFT = 190, REENTRY_TICKS = 156;
-const SHOALS = [LANDMARKS.strait, LANDMARKS.atoll];
-const TURRET_SITES: readonly (Point & { band: Band })[] = [
-  { x: -320, z: 96, band: 0 },
-  { x: -240, z: 96, band: 1 },
-  ...BASALT_STACKS.map(({ x, z }) => ({ x, z, band: 1 as const })),
-];
-
-function inside(state: StageState, x: number, z: number, margin: number): boolean {
-  return Math.hypot(x - state.arena.x, z - state.arena.z) <= state.arena.radius - margin;
-}
 
 function escapeBearing(state: StageState, ground: Ground, p = state.player): number | null {
   for (const degrees of ESCAPE_BEARINGS) {
     const yaw = p.yaw + degrees * Math.PI / 180;
     const x = p.x + Math.sin(yaw) * 90, z = p.z + Math.cos(yaw) * 90;
-    if (!inside(state, x, z, 20) || ground(x, z) + 22 > Math.max(110, p.altitude)) continue;
+    if (ground(x, z) + 22 > Math.max(BANDS[1], p.altitude)) continue;
     if (state.enemies.some(enemy => enemy.kind !== 'gnat' && enemy.hp && Math.hypot(enemy.x - p.x, enemy.z - p.z) <= 150
       && Math.abs(angleTo(yaw, enemy.x - p.x, enemy.z - p.z)) < ESCAPE_HALF)) continue;
     return yaw;
@@ -94,44 +97,28 @@ function escapeBearing(state: StageState, ground: Ground, p = state.player): num
 function engagementSite(state: StageState, ground: Ground, kind: RegularEnemyKind, alt: number,
   yaw: number, range: number, escape: number, turns: number[], p: Point = state.player): Point | null {
   const wedge = kind === 'bomber' ? ESCAPE_HALF + 0.22 : ESCAPE_HALF;
+  let fallback: Point | null = null;
   for (const turn of turns) {
     const bearing = yaw + turn, dx = Math.sin(bearing) * range, dz = Math.cos(bearing) * range;
     const x = p.x + dx, z = p.z + dz;
-    if (!inside(state, x, z, 16) || Math.abs(angleTo(escape, dx, dz)) < wedge) continue;
+    if (Math.abs(angleTo(escape, dx, dz)) < wedge) continue;
+    if (kind === 'turret' && state.enemies.some(enemy => {
+      const contact = enemy.entry?.target ?? enemy;
+      return enemy.kind === 'turret' && enemy.hp && (contact.x - x) ** 2 + (contact.z - z) ** 2 < SPAWN_WORLD.turretSeparation ** 2;
+    })) continue;
     if (turns === REENTRY_TURNS && state.enemies.some(enemy => {
       const contact = enemy.entry?.target ?? enemy;
       return enemy.kind !== 'gnat' && enemy.hp && Math.hypot(contact.x - x, contact.z - z) < 27;
     })) continue;
     const floor = ground(x, z);
-    if (kind === 'skimmer' ? floor <= SKIMMER_WATER : floor + 22 <= alt) return { x, z };
-  }
-  if (kind === 'skimmer' && turns === ENTRY_TURNS) {
-    for (const shore of SHOALS) {
-      const dx = shore.x - p.x, dz = shore.z - p.z, distance = Math.hypot(dx, dz);
-      if (distance >= 85 && distance <= range + 38 && ground(shore.x, shore.z) <= SKIMMER_WATER
-        && Math.abs(angleTo(escape, dx, dz)) >= ESCAPE_HALF) return shore;
+    if (kind === 'skimmer' || kind === 'turret') {
+      if (isWater(floor) === (kind === 'skimmer')) return { x, z };
+      fallback ??= { x, z };
+    } else if (floor + 22 <= alt) {
+      return { x, z };
     }
   }
-  return null;
-}
-
-function turretSite(state: StageState, escape: number, p: Pick<StageState['player'], 'x' | 'z' | 'yaw'>, reentryBand?: Band) {
-  let best: typeof TURRET_SITES[number] | null = null, bestRange = Infinity;
-  for (const site of TURRET_SITES) {
-    const dx = site.x - p.x, dz = site.z - p.z, range = Math.hypot(dx, dz);
-    if (range < 85 || ((range < 150 || reentryBand !== undefined) && Math.abs(angleTo(escape, dx, dz)) < ESCAPE_HALF)
-      || state.enemies.some(enemy => {
-        const contact = enemy.entry?.target ?? enemy;
-        return enemy.kind === 'turret' && contact.x === site.x && contact.z === site.z;
-      })) continue;
-    if (reentryBand !== undefined && (site.band !== reentryBand || range < 176 || range > 264
-      || Math.abs(angleTo(p.yaw, dx, dz)) > Math.PI / 3)) continue;
-    if (range < bestRange) {
-      best = site;
-      bestRange = range;
-    }
-  }
-  return best;
+  return fallback;
 }
 
 export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { rng: number } = state, hpScale = 1): void {
@@ -140,30 +127,16 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
   // Lay out the same combat formation at the pilot's projected position on the original wave beat.
   const travel = state.speed * WAVE_FLY_IN_TICKS / TICKS_PER_SECOND;
   const projected = { ...p, x: p.x + Math.sin(p.yaw) * travel, z: p.z + Math.cos(p.yaw) * travel };
-  keepInsideArena(projected, state.arena, 20);
   const escape = escapeBearing(state, ground, projected);
   if (escape === null) return;
   const rotation = (random(rng) - 0.5) * 0.24;
   const mirror = random(rng) < 0.5 ? -1 : 1;
-  const cap = enemyLimit(state);
+  const cap = waveContactLimit(state, wave);
   let occupied = state.run ? enemies.filter(enemy => enemy.kind !== 'gnat').length : enemies.length;
   for (const member of wave.members) {
     const { kind } = member;
-    const slots = kind === 'bomber' ? 3 : 1;
+    const slots = kind === 'bomber' ? SPAWN_WORLD.bomberFormationSize : 1;
     if (occupied + slots > cap || enemies.filter(enemy => enemy.kind === kind).length >= ENEMY_KINDS[kind].cap) continue;
-    if (kind === 'turret') {
-      const site = turretSite(state, escape, projected);
-      if (site) {
-        const enemy = makeEnemy(state, site.x, site.z, site.band, kind);
-        enemy.alt = ground(site.x, site.z) + 5;
-        enemy.hp = Math.round(enemy.hp * hpScale) * heatArmor;
-        enemy.shotAt += WAVE_FLY_IN_TICKS;
-        beginEnemyFlyIn(state, enemy, ground, projected, mirror * 0.32);
-        enemies.push(enemy);
-        occupied++;
-      }
-      continue;
-    }
     const band = member.band === 'flank' ? random(rng) < 0.5 ? 0 : 2 : member.band;
     const offset = (random(rng) - 0.5) * (kind === 'patrol' || kind === 'interceptor' ? 12 : 8);
     const yaw = p.yaw + member.bearing * mirror + rotation;
@@ -171,6 +144,7 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
     const position = engagementSite(state, ground, kind, BANDS[band] + offset, yaw, member.range, escape, turns, projected);
     if (!position) continue;
     const enemy = makeEnemy(state, position.x, position.z, band, kind, offset);
+    placeSkimEnemy(enemy, ground);
     enemy.yaw = Math.atan2(projected.x - position.x, projected.z - position.z);
     enemy.shotAt += Math.floor(random(rng) * 21);
     const first = enemies.length;
@@ -247,7 +221,8 @@ function moveToEntry(state: StageState, enemy: Enemy, point: Point, ground: Grou
   enemy.shotAt = Math.max(enemy.shotAt, state.tick + 90);
   enemy.maneuverAt = Math.max(enemy.maneuverAt, state.tick + 90);
   enemy.maneuver = null;
-  enemy.alt = enemy.kind === 'turret' ? ground(point.x, point.z) + 5 : BANDS[enemy.band] + enemy.offset;
+  enemy.alt = BANDS[enemy.band] + enemy.offset;
+  placeSkimEnemy(enemy, ground);
   delete enemy.flightSpeed;
   delete enemy.closeRange;
   delete enemy.longRange;
@@ -261,10 +236,12 @@ export function relocateStragglers(state: StageState, ground: Ground): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   let escape: number | null | undefined;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || enemy.formation || enemy.kind === 'gnat' || enemy.kind === 'hound' || enemy.kind === 'harrier') continue;
+    if (!enemy.hp || enemy.entry || enemy.formation || enemy.kind === 'gnat') continue;
     const dx = p.x - enemy.x, dz = p.z - enemy.z;
     const aft = dx * fx + dz * fz;
-    if (aft < REENTRY_AFT || Math.abs(dx * fz - dz * fx) > aft * 0.9) {
+    const outside = dx * dx + dz * dz > SPAWN_WORLD.recycleDistance ** 2;
+    const pursuer = enemy.kind === 'hound' || enemy.kind === 'harrier';
+    if (!outside && (pursuer || aft < REENTRY_AFT || Math.abs(dx * fz - dz * fx) > aft * 0.9)) {
       if (enemy.farTicks) enemy.farTicks = 0;
       continue;
     }
@@ -273,14 +250,6 @@ export function relocateStragglers(state: StageState, ground: Ground): void {
     if (escape === undefined) escape = escapeBearing(state, ground);
     if (escape === null) continue;
     const bend = enemy.id % 2 ? 0.32 : -0.32;
-    if (enemy.kind === 'turret') {
-      const site = turretSite(state, escape, p, enemy.band);
-      if (site) {
-        moveToEntry(state, enemy, site, ground);
-        beginEnemyFlyIn(state, enemy, ground, p, bend);
-      }
-      continue;
-    }
     let position: Point | null = null;
     for (const range of REENTRY_RANGES) {
       position = engagementSite(state, ground, enemy.kind, BANDS[enemy.band] + enemy.offset, p.yaw, range, escape, REENTRY_TURNS);

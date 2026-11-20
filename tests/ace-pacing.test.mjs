@@ -4,6 +4,7 @@ import test from 'node:test';
 import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { ROLLS } from '../src/data/roll.ts';
 import { advanceAce, makeAce } from '../src/ace.ts';
+import { SKIM_BAND } from '../src/bands.ts';
 import { aceVulnerable, advanceShots, BANDS, hurtAce } from '../src/stage-combat.ts';
 import { activeAce, createStage, parseStageOptions, RUN_BOSS_TICK, RUN_END_TICK, stepStage } from '../src/stage.ts';
 
@@ -23,6 +24,33 @@ test('the survivor Ace enters at 8:00 and the deadline is still 10:00', () => {
   assert.ok(ace.entry);
   assert.equal(aceVulnerable(ace), false);
   assert.equal(RUN_END_TICK, 10 * 60 * 60);
+});
+
+test('a distant pilot gets a local Ace intercept and cover after leaving the original rally', () => {
+  const state = stage('?mode=survivors&autoplay=1');
+  const p = state.player;
+  Object.assign(p, { x: -4200, z: 2875, yaw: 0 });
+  state.rally = { x: 160, z: -128, alt: 110 };
+  state.tick = RUN_BOSS_TICK - 1;
+  stepStage(state, {}, ground);
+  const ace = state.boss;
+  const { target, arriveAt } = ace.entry;
+  assert.ok(Math.hypot(target.x - p.x, target.z - p.z) <= 380);
+  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) >= 600);
+
+  while (state.tick < arriveAt) {
+    state.tick++;
+    advanceAce(state, ground);
+  }
+  assert.equal(ace.entry, undefined);
+  state.enemies = [];
+  hurtAce(state, ace, ace.maxHp * 0.36);
+  state.tick++;
+  advanceAce(state, ground);
+  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) <= 390);
+  assert.ok(state.enemies.some(enemy => enemy.kind === 'interceptor'));
+  assert.ok(state.enemies.some(enemy => enemy.kind === 'gnat'));
+  assert.ok(state.enemies.every(enemy => Math.hypot(enemy.x - ace.x, enemy.z - ace.z) < 65));
 });
 
 test('Ace health crosses both phase thresholds and only calls cover once', () => {
@@ -115,24 +143,26 @@ test('a guided Ace missile travels through the existing same-band parry path', (
   assert.equal(state.shots.length, 0);
 });
 
-test('Ace flight accepts a fourth terrain-relative band and uses bank-to-turn', () => {
+test('the Ace descends into SKIM and follows the changing terrain while turning', () => {
   const state = stage('?fixture=ace'), ace = state.boss;
-  const bands = (x, z) => [ground(x, z) + 30, ...BANDS];
-  const open = makeAce(state, ace.x, ace.z, bands);
+  const terrain = (x, z) => 35 + (x + z + 480) * 0.01;
+  const open = makeAce(state, ace.x, ace.z);
   state.boss = open;
-  open.band = 1;
+  open.band = 0;
   open.alt = BANDS[0];
   open.bandAt = state.tick;
   open.tell = null;
-  state.player.altitude = 30;
   state.player.x += 110;
+  state.player.skim = 'land';
+  state.player.altitude = terrain(state.player.x, state.player.z) + 30;
   const heading = open.yaw;
   for (let i = 0; i < 120; i++) {
     state.tick++;
-    advanceAce(state, ground, undefined, undefined, bands);
+    advanceAce(state, terrain);
   }
-  assert.equal(open.band, 0);
-  assert.ok(Math.abs(open.alt - 30) < 8);
+  assert.equal(open.band, SKIM_BAND);
+  const clearance = open.alt - terrain(open.x, open.z);
+  assert.ok(clearance >= 25 && clearance <= 35);
   assert.notEqual(open.yaw, heading);
   assert.ok(Math.abs(open.bank) > 0);
 });

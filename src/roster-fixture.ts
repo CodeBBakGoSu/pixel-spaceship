@@ -1,10 +1,11 @@
 import { ACE_PHASES } from './data/ace.ts';
 import { ROSTER } from './data/roster.ts';
 import { beginAceDefeat, makeAce, setAceTell } from './ace.ts';
+import { skimAltitude } from './bands.ts';
 import { CRUISE_SPEED } from './flight.ts';
 import { LANDMARKS } from './reach.ts';
 import { BANDS } from './stage-combat.ts';
-import { makeEnemy } from './stage-enemies.ts';
+import { makeEnemy, placeSkimEnemy } from './stage-enemies.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
 import type { AcePhase, Band, Enemy, Ground, StageState } from './stage-types.ts';
 
@@ -29,7 +30,7 @@ export function stageAceFixture(state: StageState, phase: AcePhase, cue: string 
   ace.tail = tail;
   ace.boosting = ACE_PHASES[phase].afterburner;
   if (legacy) {
-    ace.band = BANDS.length - 1;
+    ace.band = ROSTER.bands.high;
     ace.alt = BANDS[ace.band];
   }
   if (cue === 'missile' || cue === 'roll' || cue === 'gun' || (!cue && !legacy)) {
@@ -67,6 +68,7 @@ export function stageRosterFixture(state: StageState, ground: Ground, cue?: stri
   const stage = ([key, kind, band, side, depth]: typeof roster[number]): void => {
     const x = p.x + (selected ? side * 0.35 : side), z = p.z + (selected && depth > 0 ? Math.min(depth, 100) : depth);
     const enemy = makeEnemy(state, x, z, band, kind);
+    placeSkimEnemy(enemy, ground);
     enemy.yaw = depth < 0 ? 0 : Math.PI + (key === 'aegis' ? 0.23 : 0);
     const warn = (kind: Exclude<NonNullable<Enemy['tell']>['kind'], 'snipe' | 'flak'>, ticks: number) => {
       enemy.tell = { kind, started: t - Math.floor(ticks / 3), until: t + Math.ceil(ticks * 2 / 3) };
@@ -76,8 +78,8 @@ export function stageRosterFixture(state: StageState, ground: Ground, cue?: stri
         enemy.tell = { kind: 'snipe', started: t - 16, until: t + 32, target: origin };
         break;
       case 'flak':
-        enemy.alt = ground(x, z) + 5;
-        enemy.tell = { kind: 'flak', x: origin.x + 12, z: origin.z + 27, alt: origin.alt,
+        enemy.tell = { kind: 'flak', x: origin.x + 12, z: origin.z + 27,
+          alt: skimAltitude(ground(origin.x + 12, origin.z + 27)),
           started: t - 39, until: t + ROSTER.flak.warningTicks - 39 };
         break;
       case 'diver':

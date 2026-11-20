@@ -6,7 +6,7 @@ import { FLIGHT_SURFACE, WING_TRAIL } from './data/flight-world.ts';
 import { CRUISE_SPEED } from './flight.ts';
 import { clamp, STEP } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
-import { TERRAIN_SIZE } from './world.ts';
+import { isWater } from './world.ts';
 
 const TRAIL_STRIDE = 8;
 const WAKE_STRIDE = 5;
@@ -89,7 +89,6 @@ export class FlightSurface {
   wakeMarks = 0;
   clearance = Infinity;
   private readonly ground: Ground;
-  private readonly terrain?: Uint8Array;
   private readonly trail = new WingtipRing();
   private readonly ribbons = makeDynamicQuads('Wingtip ribbons', 2 * (WING_TRAIL.capacity - 1), WING_TRAIL.opacity);
   private readonly wake = makeDynamicQuads('Foam and dust', FLIGHT_SURFACE.wakeCapacity * 4, FLIGHT_SURFACE.wakeOpacity);
@@ -118,18 +117,9 @@ export class FlightSurface {
   private lastTrailTick = -Infinity;
   private lastWakeTick = -Infinity;
 
-  constructor(ground: Ground, terrain?: Uint8Array) {
+  constructor(ground: Ground) {
     this.ground = ground;
-    this.terrain = terrain;
     this.group.add(this.shadow, this.ribbons, this.wake);
-  }
-
-  private isWater(x: number, z: number): boolean {
-    if (!this.terrain) return this.ground(x, z) < 40;
-    const mask = TERRAIN_SIZE - 1;
-    const texel = (((Math.floor(z) & mask) * TERRAIN_SIZE) + (Math.floor(x) & mask)) * 4;
-    const red = this.terrain[texel], green = this.terrain[texel + 1], blue = this.terrain[texel + 2];
-    return blue - red >= 20 && green - red >= 20;
   }
 
   private storeWings(ship: Object3D, tick: number, width: number, altitudeShift: number): void {
@@ -149,7 +139,7 @@ export class FlightSurface {
     points[i + 1] = z;
     points[i + 2] = yaw;
     points[i + 3] = tick;
-    points[i + 4] = Number(this.isWater(x, z));
+    points[i + 4] = Number(isWater(this.ground(x, z)));
     this.wakeCursor = (this.wakeCursor + 1) % FLIGHT_SURFACE.wakeCapacity;
     this.wakeSize = Math.min(this.wakeSize + 1, FLIGHT_SURFACE.wakeCapacity);
     this.lastWakeTick = tick;

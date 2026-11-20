@@ -1,19 +1,28 @@
 import type { createTranslator } from './i18n.ts';
+import { NAV_MAP_RANGE, RADAR_RANGE } from './data/navigation.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
-import { LANDMARKS, RIM_WARNING } from './reach.ts';
+import { LANDMARKS, type LandmarkId, type WorldSite } from './reach.ts';
 import { activeAce, beaconTick } from './stage.ts';
 import { angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
-export const RADAR_RANGE = 210;
+export { RADAR_RANGE } from './data/navigation.ts';
 const REAR_WARNING_SECONDS = 0.8;
 const BODY_RADIUS = 7;
+type Translate = ReturnType<typeof createTranslator>;
+type SiteKind = WorldSite['kind'];
+type MapMark = LandmarkId | SiteKind | 'ace' | 'chest';
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
 export type Track = Position & { id: number; kind: EnemyKind | 'ace' | 'carrier' | 'salvage' | 'chest'; range: number; ahead: number; former?: true };
-type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null; former?: true };
-type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'ace' | 'chest' };
-const MAP_LANDMARKS = Object.entries(LANDMARKS);
+type Blip = { x: number; y: number; kind: Track['kind'] | SiteKind; mark: AltitudeMark | null; former?: true };
+type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'ace' | 'chest' | SiteKind };
+const MAP_LANDMARKS = Object.entries(LANDMARKS) as [LandmarkId, Position][];
+const NO_SITES: readonly WorldSite[] = [];
+const MAP_COLORS: Record<MapMark, string> = {
+  ridge: '#a9c165', strait: '#6bc4c9', stacks: '#94a6a6', atoll: '#b7cda2',
+  chest: '#ffe6a9', ace: '#ffd783', beacon: '#8adffc', supply: '#ffb1da', xp: '#97e994',
+};
 export type RearDanger = Position & { seconds: number } & ({ kind: 'shot' } | { kind: 'contact'; enemyId: number });
 // --- S7e lane ---
 export type RearPursuit = Track & { kind: 'ace' | 'hound' | 'interceptor' | 'harrier' };
@@ -21,7 +30,7 @@ export type RadarReadout = {
   contacts: Blip[]; priority: Track | null; salvage: Track | null;
   rear: boolean; rearCount: number; rearBandMatch: boolean;
   rearMarks: AltitudeMark[]; rearDanger: RearDanger | null; rearPursuit: RearPursuit | null;
-  rim: RimTick[]; boundaryBearing: number | null;
+  rim: RimTick[];
 };
 
 function isRearPursuer(track: Track): track is RearPursuit {
@@ -30,58 +39,107 @@ function isRearPursuer(track: Track): track is RearPursuit {
 
 export function beaconTrack(state: StageState): Position | null {
   if (state.boss) return activeAce(state);
-  return state.tick >= beaconTick(state) ? LANDMARKS.atoll : null;
+  return state.tick >= beaconTick(state) ? state.rally ?? LANDMARKS.atoll : null;
 }
 
-export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, north: string, font: string, yaw = state.player.yaw): void {
+export function worldSiteObjective(state: StageState, t: Translate): string | null {
+  const { player } = state;
+  let nearest: WorldSite | undefined;
+  let distanceSquared = Infinity;
+  for (const site of state.worldSites ?? NO_SITES) {
+    if (site.claimed) continue;
+    const rangeSquared = (site.x - player.x) ** 2 + (site.z - player.z) ** 2;
+    if (rangeSquared >= distanceSquared) continue;
+    nearest = site;
+    distanceSquared = rangeSquared;
+  }
+  if (!nearest || distanceSquared > NAV_MAP_RANGE ** 2) return null;
+  const angle = Math.atan2(nearest.x - player.x, nearest.z - player.z);
+  const bearing = (Math.round(angle * 180 / Math.PI) + 360) % 360;
+  return t('objective.worldSite', {
+    name: t(`nav.site.${nearest.kind}`),
+    bearing: String(bearing).padStart(3, '0'),
+    distance: Math.round(Math.sqrt(distanceSquared)),
+    altitude: Math.round(nearest.alt),
+  });
+}
+
+function drawMapGlyph(c: CanvasRenderingContext2D, kind: MapMark, x: number, y: number): void {
+  const px = Math.round(x), py = Math.round(y);
+  c.fillStyle = c.strokeStyle = MAP_COLORS[kind];
+  if (kind === 'ridge' || kind === 'beacon') {
+    c.beginPath();
+    c.moveTo(px, py - 4);
+    c.lineTo(px - 4, kind === 'ridge' ? py + 3 : py);
+    if (kind === 'beacon') c.lineTo(px, py + 4);
+    c.lineTo(px + 4, kind === 'ridge' ? py + 3 : py);
+    c.fill();
+  } else if (kind === 'strait') {
+    c.fillRect(px - 4, py - 1, 9, 3);
+  } else if (kind === 'stacks') {
+    c.fillRect(px - 3, py - 1, 3, 5);
+    c.fillRect(px + 1, py - 4, 3, 7);
+  } else if (kind === 'xp') {
+    c.fillRect(px - 3, py, 7, 1);
+    c.fillRect(px, py - 3, 1, 7);
+  } else {
+    const size = kind === 'ace' ? 9 : 5;
+    c.strokeRect(px - size / 2, py - size / 2, size, size);
+    if (kind === 'supply') c.fillRect(px - 1, py, 3, 1);
+  }
+}
+
+function drawMapDestination(c: CanvasRenderingContext2D, kind: MapMark, dx: number, dz: number,
+  center: number, middle: number, radius: number): void {
+  const distance = Math.hypot(dx, dz);
+  if (distance <= NAV_MAP_RANGE) {
+    const scale = radius / NAV_MAP_RANGE;
+    drawMapGlyph(c, kind, center + dx * scale, middle - dz * scale);
+    return;
+  }
+  const nx = dx / distance, ny = -dz / distance;
+  const x = center + nx * radius, y = middle + ny * radius;
+  c.strokeStyle = MAP_COLORS[kind];
+  c.beginPath();
+  c.moveTo(x - nx * 3 - ny * 2, y - ny * 3 + nx * 2);
+  c.lineTo(x + nx, y + ny);
+  c.lineTo(x - nx * 3 + ny * 2, y - ny * 3 - nx * 2);
+  c.stroke();
+}
+
+export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, t: Translate, font: string, yaw = state.player.yaw): void {
   const { width, height } = c.canvas;
-  const center = width / 2, middle = height / 2 + 2, radius = width / 2 - 6;
-  const { arena, player } = state, scale = radius / arena.radius;
+  const center = width / 2, middle = height / 2 - 2, radius = Math.max(4, Math.min(width, height) / 2 - 10);
+  const { player } = state;
   c.fillStyle = '#091d23';
   c.fillRect(0, 0, width, height);
   c.strokeStyle = '#52796b';
   c.strokeRect(0.5, 0.5, width - 1, height - 1);
+  c.strokeStyle = '#294f42';
   c.beginPath();
   c.arc(center, middle, radius, 0, Math.PI * 2);
   c.stroke();
   c.fillStyle = '#9abebc';
   c.font = '9px ' + font;
-  c.fillText(north, 4, 11);
-  c.fillRect(center - 1, 4, 2, 4);
+  c.fillText(t('cockpit.north'), 4, 11);
+  c.fillText(t('cockpit.range', { value: NAV_MAP_RANGE }), 4, height - 4);
+  c.fillRect(center - 1, middle - radius - 3, 2, 4);
   for (const [kind, landmark] of MAP_LANDMARKS) {
-    const x = center + (landmark.x - arena.x) * scale, y = middle - (landmark.z - arena.z) * scale;
-    c.fillStyle = kind === 'strait' ? '#6bc4c9' : kind === 'ridge' ? '#a9c165' : '#94a6a6';
-    const px = Math.round(x), py = Math.round(y);
-    if (kind === 'ridge') {
-      c.beginPath();
-      c.moveTo(px, py - 4);
-      c.lineTo(px - 4, py + 3);
-      c.lineTo(px + 4, py + 3);
-      c.fill();
-    } else if (kind === 'strait') {
-      c.fillRect(px - 4, py - 1, 9, 3);
-    } else if (kind === 'stacks') {
-      c.fillRect(px - 3, py - 1, 3, 5);
-      c.fillRect(px + 1, py - 4, 3, 7);
-    } else {
-      c.strokeStyle = '#b7cda2';
-      c.strokeRect(px - 2.5, py - 2.5, 5, 5);
+    const dx = landmark.x - player.x, dz = landmark.z - player.z;
+    if (dx ** 2 + dz ** 2 <= NAV_MAP_RANGE ** 2) {
+      drawMapGlyph(c, kind, center + dx * radius / NAV_MAP_RANGE, middle - dz * radius / NAV_MAP_RANGE);
     }
   }
-  const beacon = beaconTrack(state);
-  if (beacon) {
-    const x = center + (beacon.x - arena.x) * scale, y = middle - (beacon.z - arena.z) * scale;
-    c.strokeStyle = '#ffd783';
-    c.strokeRect(Math.round(x) - 4.5, Math.round(y) - 4.5, 9, 9);
+  for (const site of state.worldSites ?? NO_SITES) {
+    if (!site.claimed) drawMapDestination(c, site.kind, site.x - player.x, site.z - player.z, center, middle, radius);
   }
-  c.strokeStyle = '#ffe6a9';
   for (const drop of state.chests.drops) {
-    const x = center + (drop.x - arena.x) * scale, y = middle - (drop.z - arena.z) * scale;
-    c.strokeRect(Math.round(x) - 2.5, Math.round(y) - 2.5, 5, 5);
+    drawMapDestination(c, 'chest', drop.x - player.x, drop.z - player.z, center, middle, radius);
   }
-  const x = center + (player.x - arena.x) * scale, y = middle - (player.z - arena.z) * scale;
+  const beacon = beaconTrack(state);
+  if (beacon) drawMapDestination(c, 'ace', beacon.x - player.x, beacon.z - player.z, center, middle, radius);
   c.save();
-  c.translate(x, y);
+  c.translate(center, middle);
   c.rotate(yaw);
   c.fillStyle = '#f6fddd';
   c.beginPath();
@@ -98,7 +156,7 @@ export function relativeMark(delta: number, coarse: boolean): AltitudeMark {
   return coarse ? '■' : '=';
 }
 
-export function altitudeDeltaText(delta: number, t: ReturnType<typeof createTranslator>): string {
+export function altitudeDeltaText(delta: number, t: Translate): string {
   const value = Math.round(Math.abs(delta));
   return t('cockpit.altDelta', { sign: delta < 0 && value ? '−' : '+', value: String(value).padStart(2, '0') });
 }
@@ -152,8 +210,6 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     const angle = (bin + 16) % 16 * Math.PI / 8;
     if (!rim.some(tick => tick.kind === kind && tick.angle === angle)) rim.push({ kind, angle });
   };
-  const rx = p.x - state.arena.x, rz = p.z - state.arena.z;
-  const boundaryBearing = Math.hypot(rx, rz) > state.arena.radius - RIM_WARNING ? angleTo(yaw, rx, rz) : null;
   let rearCount = 0, rearBandMatch = false;
   let rearHigher = false, rearLower = false;
   const rearDanger = findRearDanger(state, fx, fz);
@@ -192,6 +248,12 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     if (!top && ahead < 0) return;
     visible.push({ track, across: dx * cos - dz * sin });
   };
+  const scanDestination = (item: Position, kind: SiteKind | 'ace', tracked = false): void => {
+    const dx = item.x - p.x, dz = item.z - p.z;
+    const ahead = dx * sin + dz * cos;
+    if (dx ** 2 + dz ** 2 > RADAR_RANGE ** 2 || (!top && ahead < 0)) rimTick(kind, dx, dz);
+    else if (!tracked) contacts.push({ x: (dx * cos - dz * sin) / RADAR_RANGE, y: -ahead / RADAR_RANGE, kind, mark: null });
+  };
   const trail = activeTrail(state);
   for (const enemy of state.enemies) if (enemy.hp) {
     const tail = !enemy.entry && enemy.tell?.kind === 'tail' && state.tick < enemy.tell.until;
@@ -201,7 +263,11 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   for (const pickup of state.pickups) scan(pickup, 'salvage');
   state.chests.drops.forEach((drop, index) => scan({ ...drop, id: -2 - index }, 'chest'));
   const beacon = beaconTrack(state);
-  if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('ace', beacon.x - p.x, beacon.z - p.z);
+  for (const site of state.worldSites ?? NO_SITES) {
+    if (site.claimed || (beacon && site.kind === 'beacon' && site.x === beacon.x && site.z === beacon.z)) continue;
+    scanDestination(site, site.kind);
+  }
+  if (beacon) scanDestination(beacon, 'ace', !!ace);
   const nearest = (tracks: Track[]): Track | null =>
     tracks.reduce<Track | null>((best, track) => !best || track.range < best.range ? track : best, null);
   const forward = visible.map(({ track }) => track);
@@ -225,7 +291,7 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   if (rearHigher) rearMarks.push('△');
   if (rearBandMatch) rearMarks.push('■');
   if (rearLower) rearMarks.push('▽');
-  return { contacts, rim, boundaryBearing, priority: priority ?? nearest(hostiles), salvage,
+  return { contacts, rim, priority: priority ?? nearest(hostiles), salvage,
     rear: rearCount > 0, rearCount, rearBandMatch, rearMarks, rearDanger, rearPursuit };
 }
 
@@ -297,21 +363,13 @@ export class RadarDisplay {
     }
     for (const { kind, angle } of readout.rim) {
       const dx = Math.sin(angle), dy = -Math.cos(angle);
-      c.strokeStyle = kind === 'chest' ? '#ffe6a9' : kind === 'ace' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
-      const offset = kind === 'chest' ? 5 : kind === 'salvage' ? -5 : kind === 'ace' ? 2 : 0;
+      c.strokeStyle = kind === 'salvage' ? '#7cece0' : kind === 'enemy' ? '#ff9683' : MAP_COLORS[kind];
+      const offset = kind === 'chest' || kind === 'supply' ? 5 : kind === 'salvage' || kind === 'xp' ? -5
+        : kind === 'ace' || kind === 'beacon' ? 2 : 0;
       c.beginPath();
       c.moveTo(x + dx * (radius - 3 + offset), y + dy * (radius - 3 + offset));
       c.lineTo(x + dx * (radius + offset), y + dy * (radius + offset));
       c.stroke();
-    }
-    if (readout.boundaryBearing !== null) {
-      const edge = readout.boundaryBearing - Math.PI / 2;
-      c.strokeStyle = '#fa565f';
-      c.lineWidth = 2;
-      c.beginPath();
-      c.arc(x, y, radius + 2, edge - 0.55, edge + 0.55);
-      c.stroke();
-      c.lineWidth = 1;
     }
     if (readout.rear || readout.rearPursuit) {
       c.strokeStyle = readout.rearPursuit ? '#ff9a78' : '#a8c5bb';
@@ -328,6 +386,10 @@ export class RadarDisplay {
 
   private drawBlip(c: CanvasRenderingContext2D, x: number, y: number, contact: Blip): void {
     const { kind, mark } = contact;
+    if (kind === 'beacon' || kind === 'supply' || kind === 'xp' || (kind === 'ace' && !mark)) {
+      drawMapGlyph(c, kind, x, y);
+      return;
+    }
     const salvage = kind === 'salvage';
     const chest = kind === 'chest';
     const ace = kind === 'ace';

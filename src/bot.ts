@@ -1,41 +1,42 @@
 import { autopilotInput } from './autoplay.ts';
+import { bandDistance, contactBand, fixedBand, playerBand, SKIM_BAND, type FlightBand } from './bands.ts';
 import { BOT_DRAFT_VALUES, BOT_POLICY, BOT_PROFILES, type BotProfile, type BotProfileId } from './data/bot-profiles.ts';
 import { DRAFT_RULES, EVOLUTIONS, WEAPONS, WEAPON_IDS } from './data/items.ts';
 import { ROLL_PARRY_TICKS } from './data/roll.ts';
 import { isWeaponId, type DraftCard } from './progression.ts';
 import { canRoll } from './roll.ts';
-import { BANDS, clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, impactTime, inBand, MINE_RADIUS, TICKS_PER_SECOND } from './stage-combat.ts';
+import { clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, impactTime, inBand, MINE_RADIUS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { chestEvolutions } from './stage.ts';
 import { random, rngStream } from './stage-random.ts';
-import type { Band, Ground, Position, StageInput, StageState } from './stage-types.ts';
+import type { Ground, Position, StageInput, StageState } from './stage-types.ts';
 
-function nearestBand(alt: number): Band {
-  return alt < (BANDS[0] + BANDS[1]) / 2 ? 0 : alt > (BANDS[1] + BANDS[2]) / 2 ? 2 : 1;
-}
+// --- S7d lane ---
+const SCOUT_BANDS = [0, 1, 2, SKIM_BAND] as const;
 
-function scoutBand(state: StageState, profile: BotProfile): Band {
-  const { x, z, altitude } = state.player;
-  const current = nearestBand(altitude);
-  const scores = BANDS.map((_, band) => -Math.abs(band - current) * BOT_POLICY.bandSwitchCost);
+function scoutBand(state: StageState, profile: BotProfile, includeSkim: boolean): FlightBand {
+  const { x, z } = state.player;
+  const current = playerBand(state.player);
+  const scores = SCOUT_BANDS.map(band => -bandDistance(band, current) * BOT_POLICY.bandSwitchCost);
   for (const enemy of state.enemies) {
     const range = Math.hypot(enemy.x - x, enemy.z - z);
     if (enemy.hp > 0 && !enemy.entry && range < BOT_POLICY.sightRange) {
-      scores[nearestBand(enemy.alt)] += 1 - range / BOT_POLICY.sightRange;
+      scores[contactBand(enemy)] += 1 - range / BOT_POLICY.sightRange;
     }
   }
   const pickupRange = BOT_POLICY.salvageSightMinimum +
     (BOT_POLICY.salvageSightRange - BOT_POLICY.salvageSightMinimum) * profile.pickupGreed;
   for (const pickup of state.pickups) {
     const range = Math.hypot(pickup.x - x, pickup.z - z);
-    if (range < pickupRange) scores[nearestBand(pickup.alt)] += Math.sqrt(pickup.xp) * BOT_POLICY.salvageValue * (1 - range / pickupRange);
+    if (range < pickupRange) scores[pickup.skim ? SKIM_BAND : fixedBand(pickup.alt)] += Math.sqrt(pickup.xp) * BOT_POLICY.salvageValue * (1 - range / pickupRange);
   }
   for (const shot of state.shots) {
     if (shot.kind !== 'hostile') continue;
     const range = Math.hypot(shot.x - x, shot.z - z);
-    if (range < BOT_POLICY.sightRange) scores[nearestBand(shot.alt)] -=
+    if (range < BOT_POLICY.sightRange) scores[fixedBand(shot.alt)] -=
       BOT_POLICY.threatCost * profile.dodgeQuality * (1 - range / BOT_POLICY.sightRange);
   }
-  return scores.reduce<Band>((best, value, band) => value > scores[best] ? band as Band : best, current);
+  if (!includeSkim) scores[SKIM_BAND] = -Infinity;
+  return SCOUT_BANDS.reduce<FlightBand>((best, band) => scores[band] > scores[best] ? band : best, current);
 }
 
 function projectedThreat(state: StageState, quality: number) {
@@ -53,9 +54,9 @@ function projectedThreat(state: StageState, quality: number) {
   };
 }
 
-function perceive(state: StageState, profile: BotProfile, band: Band): StageState {
+function perceive(state: StageState, profile: BotProfile, band: FlightBand): StageState {
   const withinThreatRange = projectedThreat(state, profile.dodgeQuality);
-  const onBand = (contact: Position) => nearestBand(contact.alt) === band;
+  const onBand = (contact: Position & { skim?: true }) => (contact.skim ? SKIM_BAND : fixedBand(contact.alt)) === band;
   const p = state.player;
   const pickupRange = BOT_POLICY.salvageSightMinimum +
     (BOT_POLICY.salvageSightRange - BOT_POLICY.salvageSightMinimum) * profile.pickupGreed;
@@ -117,9 +118,10 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
   const profile = BOT_PROFILES[profileId];
   const rng = rngStream(seed, `bot:${profileId}`);
   const rollRng = rngStream(seed, `bot:${profileId}:roll`);
+  const skimRng = rngStream(seed, `bot:${profileId}:skim`);
   let nextDecision = 0;
   let nextScout = 0;
-  let preferredBand: Band = 1;
+  let preferredBand: FlightBand = 1;
   let seeksAltitude = false;
   let latestBill: string | null = null;
   let handlesBill = false;
@@ -148,7 +150,7 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     if (state.tick >= nextScout) {
       nextScout = state.tick + BOT_POLICY.scoutTicks;
       seeksAltitude = random(rng) < profile.altitudeUse;
-      preferredBand = seeksAltitude ? scoutBand(state, profile) : nearestBand(state.player.altitude);
+      preferredBand = seeksAltitude ? scoutBand(state, profile, random(skimRng) < profile.skimUse) : playerBand(state.player);
     }
     const activeBill = state.bills.active?.id ?? null;
     if (activeBill !== latestBill) {
@@ -157,7 +159,7 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     }
     const perceived = perceive(state, profile, preferredBand);
     if (!handlesBill) perceived.bills = { ...state.bills, active: null };
-    const base = autopilotInput(perceived, 'full', ground, profile);
+    const base = autopilotInput(perceived, 'full', ground, profile, preferredBand === SKIM_BAND);
     const aimOffset = (random(rng) * 2 - 1) * profile.aimErrorRad;
     const useManeuvers = random(rng) < profile.maneuverUse;
     held = {

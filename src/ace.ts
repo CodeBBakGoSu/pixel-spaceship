@@ -1,34 +1,34 @@
 import { ACE, ACE_PHASES } from './data/ace.ts';
+import { adjacentBand, bandAltitude, bandDistance, fixedBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { ROLLS } from './data/roll.ts';
+import { WORLD_SITES, WORLD_TERRAIN } from './data/world.ts';
 import { ENEMY_KINDS } from './enemy-kinds.ts';
 import { advanceBank, advanceBankDrive, advanceBankDrop, bankYawRate, BOOST_SPEED, CRUISE_SPEED } from './flight.ts';
 import { planFlyIn, sampleFlyIn } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
-import { keepInsideArena, LANDMARKS } from './reach.ts';
+import { findRally } from './reach.ts';
 import { rollAltitude, rollLateralStep } from './roll.ts';
 import { enemyLimit } from './spawn-director.ts';
-import { angleTo, BANDS, clamp, fireAceSalvo, HIT_WINDOW, impactTime, inBand, STEP, VERTICAL_SPEED } from './stage-combat.ts';
+import { angleTo, clamp, fireAceSalvo, HIT_WINDOW, impactTime, inBand, STEP, VERTICAL_SPEED } from './stage-combat.ts';
 import { makeEnemy, spawnEscortGnats } from './stage-enemies.ts';
 import { random, rngStream } from './stage-random.ts';
-import type { Ace, AceTell, Band, Ground, Point, Position, StageState } from './stage-types.ts';
+import type { Ace, AceTell, Ground, Position, StageState } from './stage-types.ts';
 import type { SwarmObserver } from './swarm.ts';
 
-// The streamed world's terrain-relative SKIM can be supplied alongside the fixed bands.
-export type AceBands = (x: number, z: number) => readonly number[];
-const fixedBands: AceBands = () => BANDS;
-const nearest = (bands: readonly number[], altitude: number): number =>
-  bands.reduce((best, height, index) => Math.abs(height - altitude) < Math.abs(bands[best] - altitude) ? index : best, 0);
+function flightAltitude(band: FlightBand, floor: number): number {
+  return Math.max(bandAltitude(band, floor), floor + ACE.flight.clearance);
+}
 
-export function makeAce(state: StageState, x: number, z: number, bandsAt = fixedBands): Ace {
+export function makeAce(state: StageState, x: number, z: number, ground?: Ground): Ace {
   const rng = rngStream(state.seed, 'ace');
   const side = random(rng) < 0.5 ? -1 : 1;
-  const bands = bandsAt(x, z);
-  const band = nearest(bands, state.player.altitude);
+  const band = playerBand(state.player);
+  const alt = flightAltitude(band, ground?.(x, z) ?? WORLD_TERRAIN.seaLevel);
   const armor = state.run && HEAT_TIERS[state.heat].extraAceArmor ? ACE.hull.heatArmorScale : 1;
   const hp = Math.round((state.run ? ACE.hull.survivors : ACE.hull.legacy) * armor);
   return {
-    id: ++state.nextId, kind: 'ace', x, z, alt: bands[band], yaw: Math.atan2(state.player.x - x, state.player.z - z),
+    id: ++state.nextId, kind: 'ace', x, z, alt, yaw: Math.atan2(state.player.x - x, state.player.z - z),
     vx: 0, vz: 0, bank: 0, bankDrive: 0, bankDrop: 0, pitch: 0, hp, maxHp: hp, hits: 0, hitUntil: 0,
     phase: 1, band, bandAt: state.tick + ACE_PHASES[1].bandTicks, bandSide: side, side, boosting: false,
     tail: false, tailReadyAt: state.tick, breakUntil: 0, tell: null, attacks: 0,
@@ -37,22 +37,27 @@ export function makeAce(state: StageState, x: number, z: number, bandsAt = fixed
   };
 }
 
-export function deployAce(state: StageState, bandsAt = fixedBands, rendezvous: Point = LANDMARKS.atoll): Ace {
-  const { x, z } = rendezvous;
-  const ace = makeAce(state, x, z, bandsAt);
-  ace.entry = planFlyIn(state, state.arena, { x, z, alt: ace.alt }, { ...ACE.entry, exitSpeed: CRUISE_SPEED });
+export function deployAce(state: StageState, ground: Ground, existing?: Ace): Ace {
+  const p = state.player, rally = state.rally;
+  state.rally = rally && Math.hypot(rally.x - p.x, rally.z - p.z) <= WORLD_SITES.rallyNear ? rally : findRally(state, ground);
+  const { x, z } = state.rally;
+  const ace = existing ?? makeAce(state, x, z, ground);
+  const alt = flightAltitude(ace.band, ground(x, z));
+  ace.entry = planFlyIn(state, p, { x, z, alt }, { ...ACE.entry, exitSpeed: CRUISE_SPEED, clearance: ACE.flight.clearance });
+  Object.assign(ace, sampleFlyIn(ace.entry, state.tick, ground));
   return ace;
 }
 
-function nextBand(ace: Ace, state: StageState, bandsAt: AceBands): void {
-  const bands = bandsAt(ace.x, ace.z);
-  const player = state.player;
-  const wanted = nearest(bandsAt(player.x, player.z), player.altitude);
+function nextBand(ace: Ace, state: StageState): void {
+  const wanted = playerBand(state.player);
   if (wanted !== ace.band) {
-    ace.band += Math.sign(wanted - ace.band);
-  } else if (!ace.tail && bands.length > 1) {
-    if (ace.band + ace.bandSide < 0 || ace.band + ace.bandSide >= bands.length) ace.bandSide = ace.bandSide === 1 ? -1 : 1;
-    ace.band += ace.bandSide;
+    const higher = adjacentBand(ace.band, 1);
+    ace.band = higher !== null && bandDistance(higher, wanted) < bandDistance(ace.band, wanted)
+      ? higher : adjacentBand(ace.band, -1) ?? ace.band;
+  } else if (!ace.tail) {
+    const next = adjacentBand(ace.band, ace.bandSide);
+    if (next === null) ace.bandSide = ace.bandSide === 1 ? -1 : 1;
+    ace.band = next ?? adjacentBand(ace.band, ace.bandSide) ?? ace.band;
   }
   ace.bandAt = state.tick + ACE_PHASES[ace.phase].bandTicks;
 }
@@ -61,12 +66,11 @@ function callCover(state: StageState, ace: Ace, ground: Ground, events?: CombatE
   const fx = Math.sin(ace.yaw), fz = Math.cos(ace.yaw);
   const { distance, side } = ACE.cover;
   const regulars = state.enemies.filter(enemy => enemy.kind !== 'gnat' && enemy.hp > 0);
-  const band = nearest(BANDS, ace.alt) as Band;
+  const band = fixedBand(ace.alt);
   const escorts = regulars.filter(enemy => enemy.kind === 'interceptor').length;
   for (let i = 0; i < 2 && regulars.length + i < enemyLimit(state) && escorts + i < ENEMY_KINDS.interceptor.cap; i++) {
     const lateral = i === 0 ? -side : side;
     const position = { x: ace.x - fx * distance + fz * lateral, z: ace.z - fz * distance - fx * lateral };
-    keepInsideArena(position, state.arena, ACE.flight.rimInset);
     const enemy = makeEnemy(state, position.x, position.z, band, 'interceptor');
     enemy.alt = Math.max(enemy.alt, ground(enemy.x, enemy.z) + ACE.flight.clearance);
     enemy.yaw = ace.yaw;
@@ -103,7 +107,7 @@ function markTail(state: StageState, ace: Ace, range: number, forward: number, h
   ace.tail = tailing;
 }
 
-function updateFlight(state: StageState, ace: Ace, ground: Ground, bandsAt: AceBands): void {
+function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
   const { player: p, tick } = state;
   const tuning = ACE_PHASES[ace.phase], data = ACE.flight;
   const dx = p.x - ace.x, dz = p.z - ace.z, range = Math.hypot(dx, dz);
@@ -118,9 +122,7 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground, bandsAt: AceB
   const aft = towardTail ? data.tailDistance : 0;
   const side = towardTail ? ace.side * data.tailDistance * 0.55 : 0;
   const moveX = targetX - fx * aft + fz * side - ace.x, moveZ = targetZ - fz * aft - fx * side - ace.z;
-  const rim = Math.hypot(ace.x - state.arena.x, ace.z - state.arena.z) > state.arena.radius - data.rimInset;
-  const course = rim ? angleTo(ace.yaw, state.arena.x - ace.x, state.arena.z - ace.z)
-    : extending ? data.turnDrag * ace.side : angleTo(ace.yaw, moveX, moveZ);
+  const course = extending ? data.turnDrag * ace.side : angleTo(ace.yaw, moveX, moveZ);
   const turn = ace.roll ? 0 : clamp(course * data.turnGain, -1, 1);
   ace.boosting = !ace.roll && tuning.afterburner && (extending || range > ACE.attack.range) && Math.abs(course) < ACE.attack.cone;
   ace.bankDrive = advanceBankDrive(ace.bankDrive, turn, STEP);
@@ -132,16 +134,22 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground, bandsAt: AceB
   const x = ace.x, z = ace.z;
   ace.x += sin * speed * STEP + cos * lateral;
   ace.z += cos * speed * STEP - sin * lateral;
-  keepInsideArena(ace, state.arena);
   ace.vx = (ace.x - x) / STEP;
   ace.vz = (ace.z - z) / STEP;
 
+  const groundHeight = ground(ace.x, ace.z);
   const lockedAltitude = ace.tell && ace.tell.kind !== 'roll' ? ace.tell.alt + ace.bankDrop : null;
-  const desired = lockedAltitude ?? bandsAt(ace.x, ace.z)[ace.band];
+  const desired = lockedAltitude ?? flightAltitude(ace.band, groundHeight);
   const rate = VERTICAL_SPEED * data.verticalScale;
   const change = clamp(desired - ace.alt - ace.bankDrop, -rate * STEP, rate * STEP);
   ace.pitch = ace.roll ? 0 : change / (rate * STEP) * data.pitchScale;
-  const floor = ground(ace.x, ace.z) + data.clearance;
+  if (ace.band === SKIM_BAND && inBand(ace.alt, bandAltitude(SKIM_BAND, ground(x, z)), SKIM.maxClearance - SKIM.clearance)) {
+    const rollLift = ace.roll ? rollAltitude(ace.roll) - ace.roll.altitude : 0;
+    ace.alt = clamp(desired + rollLift, groundHeight + SKIM.minClearance, groundHeight + SKIM.maxClearance);
+    ace.bankDrop = 0;
+    return;
+  }
+  const floor = groundHeight + data.clearance;
   const level = ace.alt + ace.bankDrop + change;
   const drop = ace.roll ? 0 : advanceBankDrop(ace.bankDrop, ace.bank, STEP);
   ace.alt = Math.max(floor, ace.roll ? rollAltitude(ace.roll) : level - drop);
@@ -224,8 +232,7 @@ function advanceDefeat(state: StageState, ace: Ace, ground: Ground): void {
 }
 
 /** Flight, phase changes, and cue timing all advance once per sortie tick. */
-export function advanceAce(state: StageState, ground: Ground, events?: CombatEvents, observe?: SwarmObserver,
-  bandsAt = fixedBands): void {
+export function advanceAce(state: StageState, ground: Ground, events?: CombatEvents, observe?: SwarmObserver): void {
   const ace = state.boss;
   if (!ace || ace.crashed) return;
   if (ace.defeatedAt !== null) {
@@ -242,9 +249,9 @@ export function advanceAce(state: StageState, ground: Ground, events?: CombatEve
   updatePhase(state, ace, ground, events, observe);
   if (ace.roll && ++ace.roll.elapsed >= ROLLS.barrel.ticks) ace.roll = null;
   if (!ace.tell && !ace.roll && state.tick >= ace.bandAt
-    && Math.abs(ace.alt - bandsAt(ace.x, ace.z)[ace.band]) <= HIT_WINDOW) nextBand(ace, state, bandsAt);
+    && inBand(ace.alt, flightAltitude(ace.band, ground(ace.x, ace.z)), HIT_WINDOW)) nextBand(ace, state);
   updateTell(state, ace, events);
-  updateFlight(state, ace, ground, bandsAt);
+  updateFlight(state, ace, ground);
   const p = state.player, dx = p.x - ace.x, dz = p.z - ace.z;
   markTail(state, ace, Math.hypot(dx, dz), -(dx * Math.sin(p.yaw) + dz * Math.cos(p.yaw)), angleTo(ace.yaw, dx, dz), events);
 }

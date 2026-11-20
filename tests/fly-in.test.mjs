@@ -42,7 +42,7 @@ function boltAt({ x, z, alt }, overrides = {}) {
     life: 0.5, damage: 1, volley: 1, nearMiss: false, lockId: null, ...overrides };
 }
 
-test('the opening patrols start beyond the rim, bank and slow into their scheduled wave', () => {
+test('opening patrols start outside the local fight, bank and slow into their scheduled wave', () => {
   const state = launch(1);
   while (!state.enemies.length && state.tick < 120) tick(state);
   const first = state.enemies[0], approach = first?.entry;
@@ -50,7 +50,6 @@ test('the opening patrols start beyond the rim, bank and slow into their schedul
   const duration = (approach.arriveAt - state.tick) / TICKS_PER_SECOND;
   assert.ok(duration >= 1 && duration <= 2);
   for (const enemy of state.enemies) {
-    assert.ok(planarDistance(enemy, state.arena) >= state.arena.radius + 50);
     assert.ok(planarDistance(enemy, state.player) >= 600);
   }
 
@@ -219,10 +218,10 @@ test('locked shots pass through the inbound Ace and its own guns stay quiet on e
   assert.equal(boss.attackAt, state.tick + ACE.attack.startDelay);
 });
 
-test('the Ace crosses the rim, enters the dogfight at the atoll, and can be hit on arrival', () => {
+test('the Ace enters near Reach through the atoll approach and can be hit on arrival', () => {
   const { state, boss } = incomingAce();
   const approach = boss.entry;
-  assert.ok(approach && planarDistance(boss, state.arena) >= state.arena.radius + 50);
+  assert.ok(approach && planarDistance(boss, state.player) >= 600);
   assert.equal(approach.arriveAt - approach.startedAt, ACE.entry.ticks);
   assert.deepEqual(approach.target, { x: LANDMARKS.atoll.x, z: LANDMARKS.atoll.z, alt: BANDS[1] });
   while (state.tick < approach.arriveAt) tick(state);

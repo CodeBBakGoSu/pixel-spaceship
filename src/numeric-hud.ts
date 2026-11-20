@@ -1,9 +1,10 @@
+import { playerBand } from './bands.ts';
 import { reversalCharge } from './cockpit.ts';
 import { HUD_ALTITUDE_BAND_KEYS, HUD_CRITICAL_HULL, HUD_LOW_BOOST, HUD_LOW_HULL } from './data/hud.ts';
 import { phaseAt } from './data/phases.ts';
 import { ROLL_COOLDOWN_TICKS } from './data/roll.ts';
 import type { createTranslator, MessageKey } from './i18n.ts';
-import { maneuverAllowsControl, nearestBand } from './maneuvers.ts';
+import { maneuverAllowsControl } from './maneuvers.ts';
 import { canRoll, rollBoltImmune } from './roll.ts';
 import { bossTick, endTick, requiredXp } from './stage.ts';
 import {
@@ -22,7 +23,8 @@ export const hudBoostTone = (boost: number) => boost < HUD_LOW_BOOST ? 'low' : '
 export const shieldActive = (state: Pick<StageState, 'invulnerability' | 'roll'>) =>
   state.invulnerability > 0 || rollBoltImmune(state.roll);
 
-export const altitudeBandKey = (altitude: number) => HUD_ALTITUDE_BAND_KEYS[nearestBand(altitude)];
+export const altitudeBandKey = (player: Pick<StageState['player'], 'altitude' | 'skim'>) =>
+  HUD_ALTITUDE_BAND_KEYS[playerBand(player)];
 
 export function clockText(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -129,7 +131,8 @@ export class NumericHud {
       el.speed.textContent = String(speed);
       this.speed = speed;
     }
-    const altitude = state.player.altitude, roundedAltitude = Math.round(altitude), band = altitudeBandKey(altitude);
+    const { altitude, skim } = state.player;
+    const roundedAltitude = Math.round(altitude), band = altitudeBandKey(state.player);
     if (this.altitude !== roundedAltitude) {
       el.altitude.textContent = String(roundedAltitude);
       this.altitude = roundedAltitude;
@@ -138,9 +141,10 @@ export class NumericHud {
       el.band.textContent = t(band);
       this.band = band;
     }
-    if (this.markerAltitude !== altitude) {
-      this.markerAltitude = altitude;
-      el.altMarker.style.top = `${(MAX_ALTITUDE - altitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
+    const markerAltitude = skim ? MIN_ALTITUDE : clamp(altitude, MIN_ALTITUDE, MAX_ALTITUDE);
+    if (this.markerAltitude !== markerAltitude) {
+      this.markerAltitude = markerAltitude;
+      el.altMarker.style.top = `${(MAX_ALTITUDE - markerAltitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
     }
 
     this.updateStores(state, t, translated);
