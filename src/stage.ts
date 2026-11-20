@@ -1,14 +1,14 @@
 import { advanceBank, advanceBankDrive, advanceBankDrop, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
 import { advanceRoll, rollAltitude, rollLateralStep } from './roll.ts';
 import { ROLL_TURN_DEADZONE } from './data/roll.ts';
-import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
+import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
-import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage-enemies.ts';
+import { addBomberEscort, advanceEnemies, makeEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
-import { random, rngStream } from './stage-random.ts';
+import { rngStream } from './stage-random.ts';
 import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
   REGULAR_SALVAGE_MULTIPLIER, RUN_BEACON_LEAD_SECONDS, SURVIVOR_START_HULL, SURVIVOR_XP_SCALE, WEAPON_FX_LIMIT } from './data/run-balance.ts';
@@ -24,7 +24,10 @@ import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
-import { firePacedWarden, makePacedWarden, pacedExposureTick, positionPacedWeakPoints } from './warden.ts';
+// --- S7e lane ---
+import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
+import { ACE } from './data/ace.ts';
+import { stageAceFixture, stageRosterFixture } from './roster-fixture.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS,
@@ -32,10 +35,10 @@ import {
   MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
   openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { Band, Boss, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome,
+import type { AcePhase, Band, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome,
   StageInput, StageOptions, StageState } from './stage-types.ts';
 
-export { activeWeakPoint } from './stage-combat.ts';
+export { activeAce } from './stage-combat.ts';
 export const END_TICK = LEGACY_END_SECONDS * TICKS_PER_SECOND;
 export const BOSS_TICK = LEGACY_BOSS_SECONDS * TICKS_PER_SECOND;
 export const RUN_BOSS_TICK = RUN_BOSS_SECONDS * TICKS_PER_SECOND;
@@ -44,9 +47,6 @@ export const bossTick = (state: Pick<StageState, 'run'>): number => state.run ? 
 export const endTick = (state: Pick<StageState, 'run'>): number => state.run ? RUN_END_TICK : END_TICK;
 export const beaconTick = (state: Pick<StageState, 'run'>): number =>
   state.run ? RUN_BOSS_TICK - RUN_BEACON_LEAD_SECONDS * TICKS_PER_SECOND : BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND;
-const BOSS_SIGNAL = 3 * TICKS_PER_SECOND;
-const BOSS_FLY_IN_TICKS = 2 * TICKS_PER_SECOND;
-const BOSS_ORBIT_PER_TICK = 0.010;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
 const seaLevel: Ground = () => 35;
 
@@ -55,6 +55,10 @@ export function parseStageOptions(search: string): StageOptions {
   const v = q.get('view');
   const fixture = q.get('fixture');
   const mode = q.get('mode');
+  // --- S7e lane ---
+  const phase = Number(q.get('phase'));
+  const fixtureCue = q.get('cue');
+  const survivorTime = mode === 'survivors' || fixture === 'ace' && mode !== 'legacy';
   const seed = q.get('seed') ?? '';
   const time = q.has('t') ? Number(q.get('t')) : NaN;
   return {
@@ -62,78 +66,14 @@ export function parseStageOptions(search: string): StageOptions {
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
     fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'flare'
       || fixture === 'reversal' || fixture === 'flyby' || fixture === 'rear-threat' || fixture === 'strafe'
-      || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
-    time: Number.isFinite(time) ? clamp(time, 0, mode === 'survivors' ? RUN_END_SECONDS : LEGACY_END_SECONDS) : null,
+      || fixture === 'ace' || fixture === 'roster' || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
+    time: Number.isFinite(time) ? clamp(time, 0, survivorTime ? RUN_END_SECONDS : LEGACY_END_SECONDS) : null,
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
+    ...(fixture === 'ace' && (phase === 1 || phase === 2 || phase === 3) ? { acePhase: phase as AcePhase } : {}),
+    ...((fixture === 'ace' || fixture === 'roster') && fixtureCue ? { fixtureCue } : {}),
     ...(mode === 'survivors' || mode === 'legacy' ? { mode } : {}),
   };
-}
-
-function makeBoss(state: StageState, x: number, z: number): Boss {
-  const roll = state.run ? rngStream(state.seed, 'warden') : state;
-  const high = BANDS[2] + (random(roll) - 0.5) * 11;
-  const low = BANDS[0] + (random(roll) - 0.5) * 11;
-  const core = BANDS[1] + (random(roll) < 0.5 ? -1 : 1) * (4.5 + random(roll) * 1.5);
-  return {
-    x, z, alt: BANDS[1], orbitAngle: state.seed * 1.79, orbitStartTick: state.tick, index: 0, changedTick: state.tick, exposeTick: state.tick + BOSS_SIGNAL,
-    shotAt: state.tick + BOSS_SIGNAL + 90,
-    weakPoints: [
-      { id: ++state.nextId, kind: 'pod', band: 2, x, z, alt: high, hp: 10, maxHp: 10, hits: 0, window: 8, vx: 0, vz: 0 },
-      { id: ++state.nextId, kind: 'pod', band: 0, x, z, alt: low, hp: 10, maxHp: 10, hits: 0, window: 8, vx: 0, vz: 0 },
-      { id: ++state.nextId, kind: 'core', band: 1, x, z, alt: core, hp: 8, maxHp: 8, hits: 0, window: 3, vx: 0, vz: 0 },
-    ],
-  };
-}
-
-function positionWeakPoints(boss: Boss, tick: number): void {
-  const travel = Math.max(0, tick - boss.orbitStartTick) * BOSS_ORBIT_PER_TICK;
-  const speed = tick < boss.orbitStartTick ? 0 : BOSS_ORBIT_PER_TICK * TICKS_PER_SECOND;
-  for (const [index, point] of boss.weakPoints.entries()) {
-    // A rotating gantry carries the exposed hardware, with altitude fixed for each seeded part.
-    const radius = point.kind === 'core' ? 17 : 41;
-    const angle = boss.orbitAngle + travel + [0, Math.PI, 0.8][index];
-    const sin = Math.sin(angle), cos = Math.cos(angle);
-    point.x = boss.x + radius * sin;
-    point.z = boss.z + radius * cos;
-    point.vx = radius * speed * cos;
-    point.vz = -radius * speed * sin;
-  }
-}
-
-function updateBoss(state: StageState, ground: Ground, events?: CombatEvents): void {
-  const boss = state.boss;
-  if (!boss) return;
-  if (boss.entry) {
-    const { x, z, alt } = sampleFlyIn(boss.entry, state.tick, ground);
-    for (const point of boss.weakPoints) point.alt += alt - boss.alt;
-    Object.assign(boss, { x, z, alt });
-    if (state.tick >= boss.entry.arriveAt) delete boss.entry;
-  }
-  if (boss.paced) {
-    positionPacedWeakPoints(boss, state.heat, state.tick);
-    firePacedWarden(state, boss, events);
-    return;
-  }
-  positionWeakPoints(boss, state.tick);
-  const point = boss.weakPoints[boss.index];
-  if (!boss.entry && state.tick >= boss.shotAt && point?.hp) {
-    for (const spread of [-0.21, 0, 0.21]) fireHostile(state, point, 68, spread, events);
-    boss.shotAt = state.tick + 255;
-  }
-}
-
-function advanceWeakPoint(state: StageState): boolean {
-  const boss = state.boss;
-  if (!boss || boss.weakPoints[boss.index].hp > 0) return false;
-  const next = boss.weakPoints.findIndex(point => point.hp > 0);
-  if (next === -1) return true;
-  boss.index = next;
-  boss.changedTick = state.tick;
-  boss.exposeTick = boss.paced ? pacedExposureTick(boss, state.heat, next, state.tick) : state.tick + BOSS_SIGNAL;
-  if (!boss.paced) boss.shotAt = boss.exposeTick + 90;
-  state.lock = null;
-  return false;
 }
 
 export function requiredXp(level: number, survivor = false): number | null {
@@ -279,13 +219,22 @@ const fixtureBands: Record<NewEnemyKind, Band> = {
   skimmer: 0, spotter: 2, hound: 1, flanker: 2, harrier: 1, diver: 2, bomber: 1, turret: 1,
 };
 
-function applyFixture(state: StageState, fixture: StageOptions['fixture'], ground: Ground): void {
+function applyFixture(state: StageState, options: StageOptions, ground: Ground): void {
+  const { fixture } = options;
   if (!fixture) return;
   const landmark = isLandmarkId(fixture) ? LANDMARKS[fixture] : null;
-  const seconds = landmark ? BEACON_SIGNAL_SECONDS : fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
+  const seconds = landmark ? BEACON_SIGNAL_SECONDS : fixture === 'draft' ? 45 : fixture === 'boss' ? 108
+    : fixture === 'ace' ? bossTick(state) / TICKS_PER_SECOND : 30;
   state.tick = seconds * TICKS_PER_SECOND;
   state.nextWave = WAVES.findIndex(wave => wave.time > seconds);
-  if (landmark) {
+  // --- S7e lane ---
+  if (fixture === 'ace' || fixture === 'boss') {
+    state.nextWave = WAVES.length;
+    stageAceFixture(state, options.acePhase ?? 1, options.fixtureCue, fixture === 'boss');
+  } else if (fixture === 'roster') {
+    state.nextWave = WAVES.length;
+    stageRosterFixture(state, ground, options.fixtureCue);
+  } else if (landmark) {
     Object.assign(state.player, { x: landmark.x, z: landmark.z - 70, altitude: landmark.alt });
   } else if (isNewEnemyKind(fixture)) {
     state.nextWave = WAVES.length;
@@ -359,21 +308,12 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
     state.xp = state.salvage = requiredXp(1, !!state.run)!;
     state.salvageBands[1] = state.xp;
     openDraft(state, null);
-  } else {
-    // Keep the fixture clear for a reproducible approach to the first weak point.
-    state.boss = makeBoss(state, state.player.x, state.player.z + 109);
-    state.boss.orbitAngle = Math.PI;
-    state.boss.orbitStartTick = state.tick + 4 * TICKS_PER_SECOND;
-    positionWeakPoints(state.boss, state.tick);
-    state.boss.changedTick = BOSS_TICK;
-    state.boss.exposeTick = state.tick;
-    state.boss.shotAt = state.tick + 90;
   }
 }
 
 export function createStage(options: StageOptions = parseStageOptions(''), ground: Ground = seaLevel): StageState {
   const x = ARENA.x, z = ARENA.z - 85;
-  const survivor = options.mode === 'survivors';
+  const survivor = options.mode === 'survivors' || options.fixture === 'ace' && options.mode !== 'legacy';
   const profile = normalizeProfile(options.profile), daily = survivor && !!options.daily;
   const hangar = hangarLoadout(profile, daily);
   const rank = options.aceRank ?? aceRank(profile);
@@ -407,7 +347,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
     wrongLayer: null, altitudeHint: null,
   };
-  applyFixture(state, options.fixture, ground);
+  applyFixture(state, options, ground);
   return state;
 }
 
@@ -416,18 +356,18 @@ function finish(state: StageState, outcome: Outcome): void {
   state.boosting = false;
   const hits = state.hitsTaken;
   state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits === 3 ? 'B' : 'C';
-  if (outcome === 'clear') state.score += 2500;
+  if (outcome === 'clear') state.score += ACE.defeat.score;
   if (state.run && !state.summary) {
     const settlement = settleRun(state.profile, state.metrics, {
       outcome, score: state.score, credits: state.run.credits, heat: state.heat,
     });
-    state.summary = { seconds: state.tick / TICKS_PER_SECOND, wardenCache: outcome === 'clear',
+    state.summary = { seconds: state.tick / TICKS_PER_SECOND, aceCache: outcome === 'clear',
       credits: state.daily ? 0 : settlement.credits, unlocked: state.daily ? [] : settlement.unlocked };
     if (!state.daily) state.profile = settlement.profile;
   }
 }
 
-function startManeuver(state: StageState, kind: ManeuverKind, turn: number): void {
+function startManeuver(state: StageState, kind: ManeuverKind, turn: number, events?: CombatEvents): void {
   if (state.run) state.metrics.maneuvers++;
   const p = state.player, spec = MANEUVERS[kind];
   const maneuver: Maneuver = {
@@ -451,7 +391,7 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number): voi
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
     if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 190) trail.pursuers.push(enemy.id);
-    warnHarrier(state, enemy, maneuver, aft, lateral);
+    warnHarrier(state, enemy, maneuver, aft, lateral, events);
     if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
     if (aft >= 34 && aft <= 140) {
@@ -471,7 +411,7 @@ function reverseHeading(state: StageState, entryYaw: number): void {
   p.yaw = Math.atan2(-fx, -fz);
   for (const enemy of state.enemies) {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
-    if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= 160) enemy.shotAt = Math.max(enemy.shotAt, state.tick + 25);
+    if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= 160) postponeEnemyShot(enemy, state.tick + 25);
   }
 }
 
@@ -666,7 +606,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     }
     return;
   }
-  if (input.retreat && state.run) {
+  if (input.retreat && state.run && state.boss?.defeatedAt == null) {
     state.paused = false;
     finish(state, 'retreated');
     return;
@@ -679,6 +619,14 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.paused) return;
 
   state.tick++;
+  // --- S7e lane ---
+  if (state.boss && state.boss.defeatedAt !== null) {
+    for (const effect of state.effects) effect.life -= STEP;
+    state.effects = state.effects.filter(effect => effect.life > 0);
+    advanceAce(state, ground);
+    if (state.boss.crashed || state.tick >= endTick(state)) finish(state, 'clear');
+    return;
+  }
   if (state.run) {
     advancePhasePacing(state);
     startBillTick(state);
@@ -704,7 +652,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   const turn = input.turn ?? 0;
   advanceRoll(state, input.roll ? input.rollTurn ?? turn : undefined, events);
   if (Math.abs(turn) >= ROLL_TURN_DEADZONE) state.player.lastTurn = turn < 0 ? -1 : 1;
-  if (!input.roll && input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? turn);
+  if (!input.roll && input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? turn, events);
   const maneuver = state.maneuver;
   const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);
@@ -718,9 +666,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   if (state.tick === bossTick(state) && !state.boss) {
-    const boss = state.boss = (state.run ? makePacedWarden : makeBoss)(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
-    boss.entry = planFlyIn(state, state.arena, { x: boss.x, z: boss.z, alt: boss.alt },
-      { ticks: BOSS_FLY_IN_TICKS, bend: 0.23, exitSpeed: 0 });
+    // --- S7e lane ---
+    state.boss = deployAce(state);
     trimEscorts(state);
   }
   if (state.run) {
@@ -736,8 +683,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   relocateStragglers(state, ground);
-  advanceEnemies(state, ground, events);
-  updateBoss(state, ground, events);
+  advanceEnemies(state, ground, events, observeSwarm);
+  advanceAce(state, ground, events, observeSwarm);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
@@ -766,7 +713,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   advanceShots(state, ground, events);
   if (state.run) {
     state.metrics.peakAceWipe = Math.max(state.metrics.peakAceWipe, state.reversal?.streak ?? 0);
-    if (state.boss) state.metrics.weakPointHits = state.boss.weakPoints.reduce((sum, point) => sum + point.hits, 0);
+    // Keep the stored quest key so existing hangar progress carries over.
+    if (state.boss) state.metrics.weakPointHits = state.boss.hits;
   }
   if (state.weaponFx.length > WEAPON_FX_LIMIT) state.weaponFx.splice(0, state.weaponFx.length - WEAPON_FX_LIMIT);
   advanceEnemyHazards(state, ground, events);
@@ -782,8 +730,10 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
   advanceSalvage(state, ground);
   if (state.run && state.hull) applyBillReward(state);
-  const defeated = advanceWeakPoint(state);
-  const outcome = defeated ? 'clear' : state.tick >= endTick(state) ? 'timeout' : null;
+  // --- S7e lane ---
+  const defeated = state.hull > 0 && state.boss?.hp === 0;
+  if (defeated && state.boss) beginAceDefeat(state, state.boss, events);
+  const outcome = state.tick >= endTick(state) ? defeated ? 'clear' : 'timeout' : null;
   const cost = requiredXp(state.level, !!state.run);
   if (!state.hull) finish(state, 'lost');
   else if (state.run && (state.chestReveal || collectChest(state))) {

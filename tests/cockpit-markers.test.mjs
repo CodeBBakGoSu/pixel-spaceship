@@ -36,7 +36,10 @@ function fixture(width = 1280, height = 800) {
     return item;
   };
   const face = (attitude = null) => frameCockpit(camera, state.player, frame, attitude, ground, 1060);
-  const read = (mirror = null) => markers.update(state, layout, source, mirror, buildRadar(state).rearDanger);
+  const read = (mirror = null) => {
+    const { rearDanger, rearPursuit } = buildRadar(state);
+    return markers.update(state, layout, source, mirror, rearDanger, rearPursuit);
+  };
   face();
   return { camera, enemy, face, layout, projections, read, state };
 }
@@ -90,16 +93,17 @@ test('the cockpit reuses one rear marker for an incoming bolt ahead of harmless 
   assert.equal(rear[0].danger, true);
 });
 
-test('the live Warden lock keeps its box and dwell when a closer aircraft is present', () => {
+test('the live Ace lock keeps its box and dwell when a closer aircraft is present', () => {
   const { enemy, read, state } = fixture();
-  const bossStage = createStage(parseStageOptions('?view=cockpit&fixture=boss'), ground);
+  const bossStage = createStage(parseStageOptions('?view=cockpit&fixture=ace'), ground);
   state.boss = bossStage.boss;
-  const weak = state.boss.weakPoints[state.boss.index];
-  Object.assign(weak, { x: 32, z: 130, alt: 117 });
+  const ace = state.boss;
+  Object.assign(ace, { x: 32, z: 130, alt: 117 });
   const near = enemy(0, 80, 110);
-  state.lock = { id: weak.id, progress: 0.75, ready: false };
+  state.lock = { id: ace.id, progress: 0.75, ready: false };
   const markers = read();
-  assert.deepEqual(markers.map(({ id, boxed }) => [id, boxed]), [[weak.id, true], [near.id, false]]);
+  assert.deepEqual(markers.map(({ id, boxed }) => [id, boxed]), [[ace.id, true], [near.id, false]]);
+  assert.equal(markers[0].ace, true);
   assert.equal(markers[0].lockProgress, 0.75);
   assert.equal(markers[0].locked, false);
   state.lock.progress = 1;

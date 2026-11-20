@@ -1,5 +1,6 @@
 import type { RegularEnemyKind } from '../enemy-kinds.ts';
 import type { Band } from '../stage-types.ts';
+import { ROSTER } from './roster.ts';
 
 export const PHASE_SECONDS = 120;
 export const LULL_SECONDS = 15;
@@ -19,7 +20,7 @@ export type RegularSpawn = {
   weight: number;
 };
 export type RunPhase = {
-  id: 'coast' | 'skirmish' | 'siege' | 'storm' | 'warden';
+  id: 'coast' | 'skirmish' | 'siege' | 'storm' | 'ace';
   starts: number;
   ends: number;
   lull: number;
@@ -45,7 +46,9 @@ const diver: RegularSpawn = { kind: 'diver', band: 2, bearing: -5, range: 162, w
 const flanker: RegularSpawn = { kind: 'flanker', band: 'flank', bearing: 48, range: 148, weight: 2 };
 const bomber: RegularSpawn = { kind: 'bomber', band: 1, bearing: 5, range: 167, weight: 1 };
 const harrier: RegularSpawn = { kind: 'harrier', band: 1, bearing: -157, range: 104, weight: 2 };
-const coast = [patrol, skimmer, turret];
+const aegis: RegularSpawn = { kind: 'aegis', band: ROSTER.bands.mid, bearing: -34, range: 155, weight: 1 };
+// Aegis takes one patrol slot, preserving the other kinds' selection ranges.
+const coast = [{ ...patrol, weight: patrol.weight - aegis.weight }, aegis, skimmer, turret];
 const skirmish = [...coast, interceptor, spotter, hound];
 const siege = [...skirmish, diver, flanker, bomber];
 
@@ -71,7 +74,7 @@ export const PHASES: readonly RunPhase[] = [
     gnatsPerMinute: 130, gnatStart: 0, packSize: 14, formations: ['ring', 'vee', 'line'], bands: [0, 1, 2], splitBands: true,
   },
   {
-    id: 'warden', starts: RUN_BOSS_SECONDS, ends: RUN_END_SECONDS, lull: 0, hpScale: 1.12 ** 3,
+    id: 'ace', starts: RUN_BOSS_SECONDS, ends: RUN_END_SECONDS, lull: 0, hpScale: 1.12 ** 3,
     regularCap: 14, regularPerMinute: 8, enemies: [patrol, interceptor, harrier],
     gnatsPerMinute: 60, gnatStart: 0, packSize: 10, formations: ['vee', 'ring'], bands: [0, 1, 2], splitBands: false,
   },

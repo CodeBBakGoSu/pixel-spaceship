@@ -176,6 +176,7 @@ test('the reticle reflects simulation dwell for the instrument track and stays i
   assert.equal(cockpitTarget(track, center, aiming, state.lock).locked, false);
   assert.equal(cockpitTarget(track, { x: aiming.x + 3, y: center.y }, aiming, state.lock), null);
   state.player.altitude = track.alt;
+  state.player.yaw = Math.atan2(track.x - state.player.x, track.z - state.player.z);
   for (let i = 0; i < 12; i++) stepStage(state);
   const inProgress = cockpitTarget(track, center, aiming, state.lock);
   assert.ok(inProgress.progress > 0 && inProgress.progress < 1);
@@ -198,7 +199,7 @@ test('cockpit caution lights respond to ground clearance, descent and boost char
 
 test('cockpit copy covers warnings, instruments and targeting in both languages', () => {
   for (const suffix of [
-    'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'track', 'gLoad',
+    'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'ace', 'gLoad',
     'masterCaution', 'cautionShort', 'lowHull', 'altLow', 'pullUp',
     'airframe', 'weapons', 'altDelta', 'bombs', 'flares', 'inverted',
   ]) {

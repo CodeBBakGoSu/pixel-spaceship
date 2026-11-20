@@ -51,7 +51,7 @@ test('every burning contact can emit fire and smoke with several volleys active'
     x: i, z: -30, alt: 72, born: 20, vx: 0, vz: -44, vy: -28,
   }));
   state.enemies = Array.from({ length: 24 }, (_, i) => makeEnemy(state, 100 + 18 * i, 0, 1));
-  const burning = [...state.enemies, ...state.boss.weakPoints];
+  const burning = [...state.enemies, state.boss];
   for (const contact of burning) contact.burnUntil = 90;
 
   const visuals = new FlareVisuals();
@@ -74,6 +74,14 @@ test('every burning contact can emit fire and smoke with several volleys active'
   assert.ok(smoke.count > 0);
 
   state.tick = 90;
+  visuals.update(state);
+  assert.equal(fire.count, 0);
+  assert.equal(smoke.count, 0);
+
+  Object.assign(state.boss, { hp: 0, defeatedAt: state.tick });
+  visuals.update(state);
+  assert.ok(fire.count && smoke.count, 'the defeated Ace trails smoke until impact');
+  state.boss.crashed = true;
   visuals.update(state);
   assert.equal(fire.count, 0);
   assert.equal(smoke.count, 0);

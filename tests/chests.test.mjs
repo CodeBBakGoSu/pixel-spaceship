@@ -6,7 +6,7 @@ import { WAVE_FLY_IN_TICKS } from '../src/fly-in.ts';
 import { buildRadar } from '../src/instruments.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
-import { TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { BANDS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { enemyLimit, trimEscorts } from '../src/spawn-director.ts';
 import { random } from '../src/stage-random.ts';
 
@@ -33,6 +33,7 @@ test('the four differently seeded carriers arrive at their scheduled beats', () 
       assert.equal(state.enemies.length, chest.escort ? 3 : 1);
       const carrier = state.enemies.find(enemy => enemy.carrier === chest.id);
       assert.equal(carrier.entry.arriveAt, arrival);
+      assert.equal(carrier.entry.target.alt, BANDS[2]);
       assert.ok(state.enemies.every(enemy => enemy.entry));
       arrivals.push(carrier.entry.target);
       advanceChestSpawns(state, ground);
@@ -62,7 +63,7 @@ test('a full regular cap defers a carrier rather than discarding its event', () 
   assert.ok(state.enemies.some(enemy => enemy.carrier === CHESTS[0].id));
 });
 
-test('Warden escort trimming preserves living carriers for their scheduled loot', () => {
+test('Ace escort trimming preserves living carriers for their scheduled loot', () => {
   const state = game();
   const { x, z } = state.player;
   state.tick = 480 * TICKS_PER_SECOND;

@@ -65,7 +65,7 @@ export function renderRunSummary(panel: HTMLElement, state: StageState, language
   reward.textContent = [
     t('menu.summary.credits', { credits: summary.credits }),
     state.daily ? t('menu.summary.daily', { seed: state.seed }) : '',
-    summary.wardenCache ? t('menu.summary.warden') : '',
+    summary.aceCache ? t('menu.summary.ace') : '',
   ].filter(Boolean).join(' · ');
   const empty = t('menu.summary.none');
   panel.replaceChildren(stats, reward,

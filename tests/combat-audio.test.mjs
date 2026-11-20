@@ -197,3 +197,28 @@ test('cue buffers are deterministic, brief, and keep the muzzle tick quiet', t =
   assert.ok(peaks[3] < peaks[0] / 4);
   assert.ok(peaks.reduce((total, peak) => total + peak, 0) < 1);
 });
+
+test('tail, missile lock and roster alerts play distinct cues with independent cooldowns', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const cues = ['snipe', 'flak', 'dive', 'tail', 'strafe', 'mine', 'aegis', 'carrier', 'gnat', 'gun', 'missile', 'roll', 'ace-down']
+    .map(kind => `tell:${kind}`);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  for (const cue of cues) {
+    audio.play(cue);
+    audio.play(cue);
+  }
+  assert.equal(context.started.length, cues.length);
+  assert.equal(new Set(context.started).size, cues.length);
+  const sampleData = context.started.map(buffer => buffer.getChannelData(0));
+  for (const samples of sampleData) {
+    assert.equal(Math.abs(samples[0]), 0);
+    assert.equal(Math.abs(samples.at(-1)), 0);
+    assert.ok(samples.some(value => Math.abs(value) > 0.05));
+  }
+  context.currentTime += 0.5;
+  audio.play('tell:missile');
+  assert.equal(context.started.at(-1), context.started[cues.indexOf('tell:missile')]);
+});

@@ -1,3 +1,5 @@
+import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
+
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
 const CUE_HEADROOM = 0.85;
@@ -5,7 +7,7 @@ const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
 
 const COOLDOWN_SECONDS = { hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12 };
-export type CombatSound = keyof typeof COOLDOWN_SECONDS;
+export type CombatSound = keyof typeof COOLDOWN_SECONDS | RosterSound;
 
 interface AudioOutput {
   context: AudioContext;
@@ -74,6 +76,8 @@ function synthesizeCues(context: AudioContext): AudioOutput['buffers'] {
       const tone = Math.sin(TAU * 760 * elapsed) + 0.51 * Math.sin(TAU * 1340 * elapsed);
       return 0.073 * tone * attackDecay(elapsed, progress, 0.002);
     }),
+    // --- S7e lane ---
+    ...synthesizeRosterCues(context, synthesize),
   };
 }
 
@@ -81,7 +85,7 @@ export class CombatAudio {
   private output: AudioOutput | undefined;
   private isMuted = storedMute();
   private level = DEFAULT_VOLUME;
-  private readonly nextPlayAt: Record<CombatSound, number> = { hit: 0, graze: 0, warning: 0, muzzle: 0, roll: 0, parry: 0 };
+  private readonly nextPlayAt: Partial<Record<CombatSound, number>> = {};
 
   get muted(): boolean { return this.isMuted; }
   get volume(): number { return this.level; }
@@ -132,7 +136,7 @@ export class CombatAudio {
     const { context, master, buffers } = this.output;
     if (context.state !== 'running') return;
     const now = context.currentTime;
-    if (now < this.nextPlayAt[sound]) return;
+    if (now < (this.nextPlayAt[sound] ?? 0)) return;
 
     const buffer = buffers[sound];
     const source = context.createBufferSource();
@@ -140,7 +144,8 @@ export class CombatAudio {
     source.connect(master);
     source.start(now);
     // Each cue gets one voice, so frequent muzzle ticks cannot crowd out the hit or warning.
-    this.nextPlayAt[sound] = now + Math.max(COOLDOWN_SECONDS[sound], buffer.duration);
+    const cooldown = COOLDOWN_SECONDS[sound as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
+    this.nextPlayAt[sound] = now + Math.max(cooldown, buffer.duration);
   }
 
   private updateGain(): void {

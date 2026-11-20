@@ -1,6 +1,6 @@
 # ASTER WING
 
-A three-minute sortie over Kestrel Reach. Match altitude to shoot and collect salvage, upgrade Twin Cannon and Wing Pods, and destroy the Warden before time runs out. The game uses TypeScript, Vite, and Three.js instanced voxels drawn through a nearest-filtered low-resolution buffer.
+Fly a ten-minute survival sortie over Kestrel Reach. Match altitude to shoot and collect salvage, draft weapons and buffs, and defeat the enemy Ace that arrives at 8:00. The game uses TypeScript, Vite, and Three.js instanced voxels drawn through a nearest-filtered low-resolution buffer.
 
 ## Run
 
@@ -14,13 +14,14 @@ The development and preview servers default to port 5180. To use a different por
 ## Controls
 
 - **Enter** opens the preflight guide from the title. Press **Enter** again, choose **Start Sortie**, or skip the guide to fly. **P** pauses and resumes. **Enter** or **R** retries the same seed from the result card.
-- The ship cruises automatically at 52 m/s. Use **A/D** or **←/→** to turn and **W/S** or **↑/↓** to change altitude. Move the mouse to steer. Twin Cannon and Wing Pods auto-fire at matching altitude. Twin adds a slow amber bolt against aircraft exactly one band below. Warden locks and salvage still require matching altitude.
+- The ship cruises automatically at 52 m/s. Use **A/D** or **←/→** to bank and turn, and **W/S** or **↑/↓** to change altitude. Move the mouse to steer. Twin Cannon and Wing Pods auto-fire at matching altitude. Twin also fires a slow amber bolt at aircraft one band below. Match the Ace's altitude to maintain a lock.
 - Hold **Shift** for 91 m/s boost with a brief 101 m/s ignition kick. Use **Space** or **W/↑ + Space** to climb and reverse (Immelmann). Use **S/↓ + Space** to dive and reverse (Split-S), or **A/D or ←/→ + Space** to snap and slide around (J-turn). A reversal opens a 1.5-second Twin follow-up window against former pursuers. The J-turn spends 40% of your boost and starts a 7-second cooldown at the snap.
+- Press **Shift + Space** to roll. Holding **Shift** when you press **Space** or pressing **Shift** within 80 ms after **Space** triggers a roll. Steer sideways for a barrel roll or center the stick for an aileron roll. Time the roll as an incoming bolt or Ace missile reaches you to parry it.
 - Press **X** or **K** to drop a bomb behind you. It glides before falling through the lower bands and bursts near an in-band enemy or on contact with the ground. The blast clears nearby hostile shots at all heights. One of the three charges refills every 7.5 seconds while stocks are low.
 - Press **C** to fire a rear flare volley, even during maneuvers. Flares sink and burn pursuers at your height or below. One of the three charges refills every 7 seconds while stocks are low. Bombs and flares briefly open the rear camera in TOP and CHASE and highlight the mirror in COCKPIT.
-- **V** cycles TOP, CHASE and COCKPIT. TOP shows coarse altitude on the nose-up radar with △ above, ■ level and ▽ below. CHASE shows the three bands and a correction cue. COCKPIT shows signed altitude error and Warden lock progress. The rear warning pulses when a same-band aircraft or bolt is about to close on you.
-- On touchscreens, tap **LOOP** with the stick neutral or up for Immelmann, down for Split-S, or sideways for J-turn. Tap **FLR** next to **BOMB** to deploy flares. The other controls are **BOOST**, **VIEW** and pause.
-- Match the salvage height to collect XP. Draft one of three upgrades at 6 XP and again after 10 more. Press **1–3** or select a card. The sortie pauses during the draft.
+- **V** cycles TOP, CHASE and COCKPIT. TOP shows coarse altitude on the nose-up radar with △ above, ■ level and ▽ below. CHASE shows the three bands and a correction cue. COCKPIT shows signed altitude error and Ace lock progress. Watch the rear feed for a fighter lining up on your tail.
+- On touchscreens, tap **LOOP** with the stick neutral or up for Immelmann, down for Split-S, or sideways for J-turn. Tap **ROLL** to dodge or **FLR** next to **BOMB** to deploy flares. The other controls are **BOOST**, **VIEW** and pause.
+- Match the salvage height to collect XP. At each level, press **1–3** or select a card to draft an upgrade. The sortie pauses during the draft.
 
 ## Language
 
@@ -39,12 +40,14 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 
 - `?fixture=stack` starts at 0:30 with three vertically stacked patrols.
 - `?fixture=draft` opens the first draft at 0:45.
-- `?fixture=boss` starts at 1:48 with the high weak point ahead.
+- `?fixture=ace&phase=1` shows the Ace's gun run. Set `phase=2` for missile lock or `phase=3` for the roll warning and afterburner. Add `cue=tail` to open the rear feed, `cue=rolling` to see the active roll, or `cue=down` to see the defeat spiral. The short legacy Ace fixture is still available as `?fixture=boss`.
+- `?fixture=roster` shows the enemy lineup and tells. Use `cue=spotter`, `cue=flak`, `cue=aegis` or another enemy name to isolate it. Use `cue=carrier` for an elite's Gnat launch warning. Ace and roster fixtures hold a fixed pose by default. Add `live=1` to resume the simulation.
+- `?fixture=bullets&stress=1` keeps the Ace, 24 regular enemies, a capped Gnat swarm, and capped projectile pools active for frame-time measurements.
 - `?fixture=pursuit` starts in CHASE at 0:30 with four pursuers behind at three heights.
 - `?fixture=reversal` puts a high-band pack behind you for **W + Space**. `?fixture=flyby` stages two overtakes on a straight course. `?fixture=rear-threat` demonstrates a closing bolt. `?fixture=strafe` puts targets one and two bands below you.
 - `?fixture=flare` lines up pursuers behind the player. Press **C** or tap **FLR** to see the flare fan and the resulting fires in the rear view.
 - Review the new enemies with `?fixture=skimmer|spotter|hound|flanker|harrier|diver|bomber|turret`. Each fixture puts its featured enemy ahead for inspection.
-- Review the terrain and map with `?fixture=ridge|strait|stacks|atoll`. In TOP, the inset shows the 560 m arena, north, player heading, four landmarks, and the Warden signal.
+- Review the terrain and map with `?fixture=ridge|strait|stacks|atoll`. In TOP, the inset shows the 560 m arena, north, player heading, four landmarks, and the Ace signal.
 - Use `?seed=1`, `?view=overhead|chase|cockpit`, `?touch=1`, and `?autoplay=1` for replay checks. `?t=SECONDS` seeks to an absolute sortie time and returns control to the player unless autoplay is active.
 
-`window.__game` exposes a read-only snapshot with tick, altitude, enemy contacts, mine count, draft choices, weak-point hits, and lock progress.
+`window.__game` exposes a read-only snapshot with tick, altitude, enemy contacts, mine count, draft choices, Ace health and phase, and lock progress.

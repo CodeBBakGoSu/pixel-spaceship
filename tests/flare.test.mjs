@@ -76,22 +76,23 @@ test('a same-band Hound aft burns and takes damage over time while the contacts 
   assert.equal(ahead.burnUntil, undefined);
 });
 
-test('an exposed Warden point burns with reduced damage', () => {
+test('the Ace burns at a slower damage cadence after a rear flare hit', () => {
   const state = createStage(parseStageOptions('?fixture=boss'));
-  const point = state.boss.weakPoints[0];
-  const { x, z, alt } = point;
+  const ace = state.boss;
+  ace.yaw = 0;
+  const { x, z, alt } = ace;
   Object.assign(state.player, { x, z: z + 21, altitude: alt });
   state.twinAt = state.podsAt = Infinity;
   run(state, 1, { flare: true });
-  for (let i = 0; i < 25 && !point.burnUntil; i++) run(state, 1);
-  assert.ok(point.burnUntil > state.tick);
-  assert.ok(point.hp < point.maxHp);
+  for (let i = 0; i < 25 && !ace.burnUntil; i++) run(state, 1);
+  assert.ok(ace.burnUntil > state.tick);
+  assert.ok(ace.hp < ace.maxHp);
   state.flares.length = 0;
-  const healthOnIgnition = point.hp;
+  const healthOnIgnition = ace.hp;
   run(state, 30);
-  assert.equal(point.hp, healthOnIgnition);
+  assert.equal(ace.hp, healthOnIgnition);
   run(state, 65);
-  assert.equal(point.hp, healthOnIgnition - 1);
+  assert.equal(ace.hp, healthOnIgnition - 1);
 });
 
 test('flares can fire during the scripted half-loop', () => {

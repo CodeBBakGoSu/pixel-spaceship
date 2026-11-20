@@ -1,7 +1,7 @@
 import {
   BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
   InstancedBufferAttribute, InstancedMesh, Object3D,
-  EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
+  Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RepeatWrapping, RingGeometry, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
   type Camera,
 } from 'three';
@@ -25,11 +25,14 @@ import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
 import { hitWindow } from './loadout.ts';
 import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude, maneuverViewYaw,
   TRAIL_LINGER_TICKS, TRAIL_LIMIT, trailEnd } from './maneuvers.ts';
-import { enemyAirframe, wardenFaces, wardenPalette } from './models.ts';
+import { enemyAirframe } from './models.ts';
+// --- S7e lane ---
+import { aegisAirframe } from './models-roster.ts';
+import { RosterVisuals } from './roster-visuals.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
 import { rollAltitude, rollAttitude } from './roll.ts';
-import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT,
+import { BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE_LIMIT, SHOT_LIMIT,
   STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { ManeuverTrail, Position, Roll, Shot, StageState } from './stage-types.ts';
 import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
@@ -197,17 +200,15 @@ export class FlightScene {
   private readonly flareVisuals = new FlareVisuals();
   private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
   private readonly gnats = makeGnatBatch();
-  private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS] as const).map(kind => {
+  // --- S7e lane ---
+  private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS, 'aegis'] as const).map(kind => {
     const { faces, palette, size } = kind === 'interceptor'
       ? { faces: droneFaces(kind), palette: dronePalette, size: 0.84 * 1.18 }
-      : enemyAirframe(kind);
+      : kind === 'aegis' ? aegisAirframe() : enemyAirframe(kind);
     return { kind, mesh: instances(bakeVoxels(faces, palette, size), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0 };
   });
   private readonly airframeByKind = new Map<EnemyKind, (typeof this.airframes)[number]>(this.airframes.map(batch => [batch.kind, batch]));
-  private readonly warden = new Mesh(bakeVoxels(wardenFaces(), wardenPalette, 0.65), this.voxelMaterial.clone());
-  private readonly weakPoints = instances(new BoxGeometry(), 10);
-  private readonly weakPointBorder = new LineSegments(new EdgesGeometry(this.weakPoints.geometry),
-    new LineBasicMaterial({ color: 0xffefac }));
+  private readonly rosterVisuals = new RosterVisuals();
   private readonly pickups = instances(new BoxGeometry(), PICKUP_LIMIT);
   private readonly chestMarkers = makeChestBatch();
   private readonly pickupTrails = instances(new BoxGeometry(), PICKUP_LIMIT,
@@ -245,9 +246,9 @@ export class FlightScene {
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
-    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.chestMarkers, this.bullets, this.sparks,
+    this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickups, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
-      this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
+      this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.pickupTrails,
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
@@ -360,7 +361,8 @@ export class FlightScene {
     this.rearTarget.texture.repeat.x = -crop;
   }
 
-  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean): void {
+  // --- S7e lane ---
+  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean, rearPursuit?: Position): void {
     const { tick, view } = state;
     const glimpse = state.phase === 'playing' ? state.rearGlimpse : null;
     const reveal = glimpseWipe(tick, glimpse, this.reducedMotion.matches);
@@ -373,7 +375,7 @@ export class FlightScene {
       this.rearRect = { ...rest, x: rest.x - grow, width: rest.width + grow,
         height: Math.round((rest.width + grow) / REAR_VIEW_ASPECT) };
     } else if (view !== 'cockpit' && this.rearSlot) {
-      const width = Math.round(this.rearSlot.width * reveal);
+      const width = Math.round(this.rearSlot.width * (rearPursuit ? 1 : reveal));
       if (width < 8) return;
       this.rearRect = { ...this.rearSlot, width };
       crop = (width - 6) / (this.rearSlot.width - 6);
@@ -390,7 +392,7 @@ export class FlightScene {
       const activeColor = this.color.setHex(glimpse.kind === 'bomb' ? 0xf490af : 0xffb363);
       activeColor.lerp(this.rearFlash, flash * 0.55);
       bezel.lerp(activeColor, reveal);
-    } else if (view === 'cockpit' && rearDanger) {
+    } else if (rearDanger) {
       const pulse = this.reducedMotion.matches || Math.floor(tick / 8) % 2 ? 1 : 0.55;
       bezel.lerp(this.color.setHex(0xff6256), pulse);
     }
@@ -402,7 +404,7 @@ export class FlightScene {
 
     if (!hostileColorsChanged && tick >= this.rearTick && tick - this.rearTick < 2) return;
     this.rearTick = tick;
-    frameRearCamera(this.rearCamera, state.player, reveal > 0, reveal > 0 ? glimpse?.target : undefined);
+    frameRearCamera(this.rearCamera, state.player, reveal > 0 || !!rearPursuit, reveal > 0 ? glimpse?.target : rearPursuit);
     // TOP uses a flattened altitude plane. Rebuild world instances only on rear-feed updates.
     if (view === 'overhead') this.updateWorld(state, 'rear');
     else if (view === 'chase') this.flareVisuals.update(state);
@@ -722,11 +724,6 @@ export class FlightScene {
       }
       if (external && formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
       if (!flat && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 6.5, 6, enemy.yaw);
-      const tell = enemy.tell;
-      if (tell?.kind === 'flak' && rings < FLAK_RING_LIMIT) {
-        this.write(this.flak, rings++, tell.x, tell.z, flat ? TOP_FLIGHT + 4 : tell.alt, 0,
-          FLAK_RADIUS, 1.6, FLAK_RADIUS, warning ? 0xffc879 : 0xd66c50);
-      }
     }
     upload(this.drones, drones);
     upload(this.gnats, gnats);
@@ -734,36 +731,10 @@ export class FlightScene {
     upload(this.enemyTrails, trails);
     for (const { mesh, count } of this.airframes) upload(mesh, count);
 
+    // --- S7e lane ---
     const boss = state.boss;
-    const active = activeWeakPoint(state);
-    let weakPoints = 0;
-    this.warden.visible = !!active && !!boss;
-    this.weakPointBorder.visible = false;
-    if (boss && active) {
-      const yaw = Math.atan2(p.x - boss.x, p.z - boss.z);
-      this.warden.position.set(boss.x, flat ? TOP_FLIGHT - 5 : boss.alt, -boss.z);
-      this.warden.rotation.y = -yaw;
-      if (!flat) {
-        this.writeShadow(shadows++, boss.x, boss.z, 22, 8, yaw);
-        for (const point of boss.weakPoints) {
-          if (!point.hp) continue;
-          const highlighted = point.id === active.id;
-          const paint = (point.burnUntil ?? 0) > state.tick ? fireTint
-            : highlighted && active.exposed ? 0xd8a858 : 0x455761;
-          const size = point.kind === 'core' ? 6 : 9;
-          this.write(this.weakPoints, weakPoints++, point.x, point.z, point.alt, yaw, size, size * 0.83, size * 0.86, paint, Math.PI / 4);
-          this.connect(this.weakPoints, weakPoints++, boss, point);
-        }
-      }
-      if (active.exposed) {
-        const size = active.kind === 'core' ? 6 : 9;
-        this.weakPointBorder.visible = true;
-        this.weakPointBorder.position.set(active.x, flat ? TOP_FLIGHT + 1 : active.alt, -active.z);
-        this.weakPointBorder.rotation.set(0, -yaw, Math.PI / 4, 'YXZ');
-        this.weakPointBorder.scale.set(size * 1.06, size * 0.88, size * 0.91);
-      }
-    }
-    upload(this.weakPoints, weakPoints);
+    if (!flat && boss && !boss.crashed) this.writeShadow(shadows++, boss.x, boss.z, 14, 12, boss.yaw);
+    this.rosterVisuals.update(state, flat ? TOP_FLIGHT : undefined, this.reducedMotion.matches);
     upload(this.shadows, shadows);
 
     let salvage = 0, magnetTrails = 0;
@@ -879,7 +850,7 @@ export class FlightScene {
     this.flareVisuals.update(state, flat ? TOP_FLIGHT + 7 : undefined, chase ? this.chase : undefined);
   }
 
-  draw(state: StageState, rearDanger = false): PitchMark[] {
+  draw(state: StageState, rearDanger = false, rearPursuit?: Position): PitchMark[] {
     const reduceMotion = this.reducedMotion.matches;
     const delta = state.tick - this.lastMotionTick;
     if (delta < 0 || reduceMotion) this.boostLens = 0;
@@ -906,7 +877,7 @@ export class FlightScene {
     this.hostileVisuals.setView(this.target.height, state.view === 'overhead' ? TOP_FLIGHT + 6 : undefined);
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
-    this.drawRearView(state, rearDanger, hostileColorsChanged);
+    this.drawRearView(state, rearDanger, hostileColorsChanged, rearPursuit);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
     return ladder;

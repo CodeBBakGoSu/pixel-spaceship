@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Object3D } from 'three';
+import { Matrix4, Object3D } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { HostileVisuals } from '../src/hostile-visuals.ts';
-import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
+import { enemyAirframe } from '../src/models.ts';
+import { aceAirframe, aegisAirframe } from '../src/models-roster.ts';
+import { RosterVisuals } from '../src/roster-visuals.ts';
 import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
 import { SHOT_LIMIT, STEP } from '../src/stage-combat.ts';
@@ -26,17 +28,22 @@ test('finer player voxels preserve the interceptor world dimensions', () => {
   });
 });
 
-test('player and Warden details fit the craft budgets and the heaviest legal cap mix', () => {
+test('player and roster details fit the craft budgets and the heaviest legal cap mix', () => {
   const playerFaces = shipFaces();
   assert.ok(playerFaces.some(face => face.material === 9 && face.side === 4), 'teal canopy panels');
   const player = triangleCount(playerFaces, shipPalette);
-  const warden = triangleCount(wardenFaces(), wardenPalette);
+  const ace = aceAirframe(), aegis = aegisAirframe();
+  const aceTriangles = triangleCount(ace.faces, ace.palette);
+  const aegisTriangles = triangleCount(aegis.faces, aegis.palette);
   assert.ok(player <= 1620, `player: ${player}`);
-  assert.ok(warden > 1204 && warden <= 1500, `Warden: ${warden}`);
+  assert.ok(ace.size <= 0.6 && aegis.size <= 0.6, 'roster airframes use half-size cells');
+  assert.ok(aceTriangles > 0 && aceTriangles <= 1500, `Ace: ${aceTriangles}`);
+  assert.ok(aegisTriangles > 0 && aegisTriangles <= 300, `Aegis: ${aegisTriangles}`);
 
   const kinds = [
     ['patrol', triangleCount(droneFaces(), dronePalette)],
     ['interceptor', triangleCount(droneFaces('interceptor'), dronePalette)],
+    ['aegis', aegisTriangles],
     ...NEW_ENEMY_KINDS.map(kind => {
       const { faces, palette } = enemyAirframe(kind);
       return [kind, triangleCount(faces, palette)];
@@ -45,9 +52,32 @@ test('player and Warden details fit the craft budgets and the heaviest legal cap
   const byCost = kinds.flatMap(([kind, count]) => Array(ENEMY_KINDS[kind].cap).fill(count)).sort((a, b) => b - a);
   const atCap = cap => byCost.slice(0, cap).reduce((sum, count) => sum + count, 0);
   const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity }));
-  const boss = player + warden + atCap(enemyLimit({ boss: {} }));
+  const boss = player + aceTriangles + atCap(enemyLimit({ boss: {} }));
   assert.ok(wave <= 6032 * 1.25, `wave: ${wave}`);
   assert.ok(boss <= 5360 * 1.25, `boss: ${boss}`);
+});
+
+test('Flak warnings expand in their target altitude plane in one rear-visible cue batch', () => {
+  const visuals = new RosterVisuals();
+  const state = { tick: 0, boss: null, swarmCap: 80, enemies: [
+    { kind: 'turret', hp: 4, x: 11, z: 13, alt: 49, tell: { kind: 'flak', x: 100, z: 150, alt: 110, started: 0, until: 84 } },
+  ] };
+  const cue = visuals.group.getObjectByName('Enemy warning rings');
+  const matrix = new Matrix4();
+  visuals.update(state, undefined, false);
+  assert.equal(cue.count, 1);
+  cue.getMatrixAt(0, matrix);
+  const initialRadius = matrix.elements[0];
+  assert.equal(matrix.elements[13], 110);
+  assert.equal(cue.layers.mask, 1);
+  state.tick = 63;
+  visuals.update(state, undefined, false);
+  cue.getMatrixAt(0, matrix);
+  assert.ok(matrix.elements[0] > initialRadius);
+  assert.equal(matrix.elements[13], 110);
+  state.tick = 84;
+  visuals.update(state, undefined, false);
+  assert.equal(cue.visible, false);
 });
 
 test('a full Gnat swarm adds one instanced batch and at most 1,280 triangles', () => {
@@ -138,6 +168,21 @@ test('hostile glyphs retain their emitted shapes across altitude and shield chan
   visuals.setView(56);
   assert.equal(drops.visible, true);
   assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
+});
+
+test('Ace missiles keep their narrow rocket glyph when restored without a muzzle event', () => {
+  const visuals = new HostileVisuals(() => 35);
+  const state = {
+    tick: 20, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
+    shots: [{ kind: 'hostile', hostileKind: 'ace-missile', x: 0, z: 32, alt: 110, vx: 0, vz: -200, life: 2 }],
+  };
+  visuals.update(state);
+  const glyphs = visuals.group.getObjectByName('Hostile projectile glyphs');
+  const style = glyphs.geometry.getAttribute('glyphStyle');
+  const last = glyphs.geometry.instanceCount - 1;
+  assert.equal(style.getX(last), 4);
+  assert.equal(style.getY(last), 0, 'same-band danger colors are unchanged');
+  assert.equal(style.getW(last), 1);
 });
 
 test('each weapon mounts one distinct mesh to the existing ship and the four heaviest fit the budget', () => {

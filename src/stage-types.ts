@@ -11,7 +11,7 @@ import type { RangedShotFields } from './ranged-weapons.ts';
 import type { RollKind } from './data/roll.ts';
 
 export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
-  | LandmarkId | NewEnemyKind;
+  | 'ace' | 'roster' | LandmarkId | NewEnemyKind;
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -19,6 +19,9 @@ export type StageOptions = {
   time: number | null;
   autoplay: boolean;
   touch: boolean;
+  // --- S7e lane ---
+  acePhase?: AcePhase;
+  fixtureCue?: string;
   mode?: 'legacy' | 'survivors';
   mobile?: boolean;
   aceRank?: number;
@@ -80,7 +83,7 @@ export type StageInput = {
 
 export type ChestReward = { kind: 'evolution'; id: EvolutionId } | { kind: 'upgrade'; id: DraftChoiceId; level?: number };
 export type KillCredit = { weapon?: WeaponId | 'manual-flare' | 'manual-bomb'; locked?: boolean; rear?: boolean };
-export type RunSummary = { seconds: number; credits: number; unlocked: GearId[]; wardenCache: boolean };
+export type RunSummary = { seconds: number; credits: number; unlocked: GearId[]; aceCache: boolean };
 
 export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
@@ -114,7 +117,8 @@ export type Enemy = Position & {
   killCredit?: KillCredit;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
-  tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
+  // --- S7e lane ---
+  tell?: EnemyTell;
   formation?: { leader: number; side: number };
   fanFired?: boolean;
   farTicks?: number;
@@ -135,6 +139,11 @@ export type Enemy = Position & {
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
+export type EnemyTell = { until: number; started?: number } & (
+  { kind: 'snipe'; target?: Position } |
+  { kind: 'gun' | 'strafe' | 'tail' | 'mine' | 'aegis' | 'carrier' | 'gnat' } |
+  (Position & { kind: 'flak' })
+);
 export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean };
 type ShotCommon = Position & {
   vx: number;
@@ -148,7 +157,7 @@ type ShotCommon = Position & {
   pierce?: { remaining: number; hits: number[] };
 };
 export type Shot = ShotCommon & (
-  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
+  { kind: 'twin' | 'pods' | 'hostile'; hostileKind?: 'ace-missile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
   { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never } |
   { kind: 'drone-bolt'; weapon: 'drones'; reversal?: never; reversalTick?: never } |
   (RangedShotFields & { reversal?: never; reversalTick?: never })
@@ -173,36 +182,46 @@ export type Effect = Position & (
   { kind: 'flak'; life: number } |
   { kind: 'miss'; life: number; delta: number; vx: number; vz: number }
 );
-export type WeakPoint = Position & {
+// --- S7e lane ---
+export type AcePhase = 1 | 2 | 3;
+export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number };
+export type Ace = Position & {
   id: number;
-  kind: 'pod' | 'core';
-  band: Band;
+  kind: 'ace';
+  band: number;
   hp: number;
   maxHp: number;
   hits: number;
-  window: number;
+  hitUntil: number;
+  yaw: number;
   vx: number;
   vz: number;
+  bank: number;
+  bankDrive: number;
+  bankDrop: number;
+  pitch: number;
+  entry?: FlyIn;
+  phase: AcePhase;
+  bandAt: number;
+  bandSide: -1 | 1;
+  side: -1 | 1;
+  boosting: boolean;
+  tail: boolean;
+  tailReadyAt: number;
+  breakUntil: number;
+  tell: AceTell | null;
+  attacks: number;
+  attackAt: number;
+  roll: Roll | null;
+  rollReadyAt: number;
+  defeatedAt: number | null;
+  crashed: boolean;
   burnUntil?: number;
   burnNextAt?: number;
   burnDamage?: number;
   ionReadyAt?: number;
   droneReadyAt?: number;
   aegisReadyAt?: number;
-};
-export type Boss = {
-  x: number;
-  z: number;
-  alt: number;
-  entry?: FlyIn;
-  paced?: true;
-  weakPoints: WeakPoint[];
-  orbitAngle: number;
-  orbitStartTick: number;
-  index: number;
-  exposeTick: number;
-  changedTick: number;
-  shotAt: number;
 };
 export type Lock = { id: number; progress: number; ready: boolean };
 export type StageState = {
@@ -309,7 +328,7 @@ export type StageState = {
   pickups: Pickup[];
   shots: Shot[];
   effects: Effect[];
-  boss: Boss | null;
+  boss: Ace | null;
   lock: Lock | null;
   wrongLayer: { id: number; since: number } | null;
   altitudeHint: { delta: number } | null;

@@ -15,7 +15,7 @@ test('terrain wraps seamlessly and neighboring samples stay smooth', () => {
   assert.ok(steepest < 4.5, `adjacent terrain jumped ${steepest.toFixed(2)} units`);
 });
 
-test('Reach terrain separates the low strait, ridge, stacks and open Warden orbit', () => {
+test('Reach terrain separates the low strait, ridge, stacks and open atoll approach', () => {
   const world = new World();
   assert.ok(world.height(-240, 96) + 22 > 100, 'Kestrel Ridge requires a climb');
   assert.ok(world.height(-128, -320) + 22 < 68, 'the strait has a clear LOW approach');

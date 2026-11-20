@@ -24,7 +24,7 @@ test('the sortie clock counts elapsed seconds up to the correct mode duration', 
   assert.equal(createTranslator('en')(hudPhaseKey(survivors)), 'SIEGE');
   survivors.tick = 36_001;
   assert.equal(hudTimer(survivors), '10:00 / 10:00');
-  assert.equal(createTranslator('ko')(hudPhaseKey(survivors)), '워든');
+  assert.equal(createTranslator('ko')(hudPhaseKey(survivors)), '에이스 결투');
 
   const legacy = createStage(parseStageOptions(''));
   assert.equal(hudTimer(legacy), '00:00 / 03:00');

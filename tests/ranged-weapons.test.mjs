@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS, openReversal } from '../src/stage-combat.ts';
@@ -157,28 +158,29 @@ test('Arc level five visits six contacts, then the last link splashes an unvisit
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'arc-blast').length, 1);
 });
 
-test('an inbound enemy and Warden weak point ignore ranged hits until engagement and lock', () => {
+test('an inbound enemy and Ace ignore ranged hits until engagement and lock', () => {
   const state = setup('rail');
   const enemy = contact(state, 0, 46);
   enemy.entry = {};
-  const weak = { id: 99, x: 0, z: 78, alt: mid, window: 3, kind: 'core', hp: 12, hits: 0 };
-  state.boss = { weakPoints: [weak], index: 0, exposeTick: 0, entry: {} };
-  state.lock = { id: weak.id, progress: 1, ready: true };
+  const ace = state.boss = makeAce(state, 0, 78);
+  ace.hp = 12;
+  ace.entry = {};
+  state.lock = { id: ace.id, progress: 1, ready: true };
   state.railChargeAt = 0;
   advanceRangedWeapons(state, ground);
   assert.equal(enemy.hp, 12);
-  assert.equal(weak.hp, 12);
+  assert.equal(ace.hp, 12);
   delete enemy.entry;
   delete state.boss.entry;
   state.railChargeAt = 0;
   state.lock = null;
   advanceRangedWeapons(state, ground);
   assert.equal(enemy.hp, 9);
-  assert.equal(weak.hp, 12);
+  assert.equal(ace.hp, 12);
   state.railChargeAt = 0;
-  state.lock = { id: weak.id, progress: 1, ready: true };
+  state.lock = { id: ace.id, progress: 1, ready: true };
   advanceRangedWeapons(state, ground);
-  assert.equal(weak.hp, 9);
+  assert.equal(ace.hp, 9);
 });
 
 test('the normal fixed-step flight path fires and advances a timed shell', () => {
