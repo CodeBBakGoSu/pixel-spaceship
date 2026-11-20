@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import './style.css';
 import './numeric-hud.css';
 import { autopilotInput, seekStage } from './autoplay.ts';
@@ -16,6 +17,7 @@ import { isNewEnemyKind } from './enemy-kinds.ts';
 import { FlightChord, type SpaceAction } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
 import { createGearIcon } from './gear-icons.ts';
+import { GraphicsRecovery } from './graphics-recovery.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { createHangarDisplay } from './hangar-display.ts';
 import type { CombatEvents } from './hostile-events.ts';
@@ -92,6 +94,14 @@ const cockpitMarkers = new CockpitMarkers();
 const feedback = new HostileFeedback(root);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 const query = new URLSearchParams(location.search);
+const graphics = new GraphicsRecovery();
+const graphicsOverlay = $<HTMLElement>('#graphics-recovery');
+const glDebug = import.meta.env.DEV || query.get('glDebug') === '1';
+const forcedLossSeconds = glDebug && query.has('glloss') ? Number(query.get('glloss')) : NaN;
+const forcedLossTick = forcedLossSeconds >= 0 && Number.isFinite(forcedLossSeconds)
+  ? Math.round(forcedLossSeconds * TICKS_PER_SECOND) : null;
+let forceUsed = false;
+let forcedRestore: WEBGL_lose_context | null = null;
 const audio = new CombatAudio(query.get('audioDebug') === '1');
 const effectsEnabled = query.get('fx') !== '0';
 const demoBullets = query.get('fixture') === 'bullets';
@@ -153,10 +163,13 @@ const hangarDisplay = createHangarDisplay($('#hangar-panel'), {
   },
 });
 let scene: FlightScene | null = null;
-try {
-  scene = new FlightScene(canvas, world, state.arena, {
+function createFlightScene(): FlightScene {
+  return new FlightScene(canvas, world, state.arena, {
     enabled: effectsEnabled, fixture: query.get('fixture'), quality: preferredRenderQuality, comparisonScale,
   });
+}
+try {
+  scene = createFlightScene();
 } catch (error) {
   console.error(error);
 }
@@ -884,6 +897,10 @@ function flushSpaceInput(): void {
 }
 
 window.addEventListener('keydown', event => {
+  if (graphics.recovering) {
+    event.preventDefault();
+    return;
+  }
   // --- S7f lane ---
   const focused = document.activeElement;
   if (focused instanceof HTMLSelectElement || focused instanceof HTMLInputElement) return;
@@ -950,10 +967,10 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
 function syncAudioPause(): void {
-  audio.setSuspended(touch && (document.hidden || interrupted));
+  audio.setSuspended(!graphics.canAdvance || (touch && (document.hidden || interrupted)));
 }
 
-function interruptFlight(): void {
+function interruptFlight(reason: 'focus' | 'graphics' = 'focus'): void {
   keys.clear();
   pendingBomb = pendingFlare = false;
   pendingManeuver = undefined;
@@ -961,18 +978,21 @@ function interruptFlight(): void {
   flushSpaceInput();
   resetTouch();
   resumeAt = 0;
-  if (!persistent || !scene || guide || state.phase !== 'playing' || state.paused) return;
+  if (!scene || guide) return;
+  if (reason === 'graphics') {
+    if (!graphics.pauseFlight(state)) return;
+  } else if (!persistent || state.phase !== 'playing' || state.paused) return;
   interrupted = true;
   syncAudioPause();
   pendingPause = false;
   carry = 0;
-  stepStage(state, { pause: true }, ground);
+  if (reason === 'focus') stepStage(state, { pause: true }, ground);
   dirty = true;
   updateMenu();
 }
 
 function updateAutoResume(now: number): boolean {
-  if (!interrupted) return false;
+  if (!interrupted || graphics.recovering) return false;
   if (document.hidden || !document.hasFocus()) {
     resumeAt = 0;
     setText('#card-copy', t('checkpoint.interrupted'));
@@ -987,13 +1007,13 @@ function updateAutoResume(now: number): boolean {
   interrupted = false;
   resumeAt = 0;
   keys.clear();
-  stepStage(state, { pause: true }, ground);
+  if (!graphics.resumeFlight(state)) stepStage(state, { pause: true }, ground);
   syncAudioPause();
   dirty = true;
   return true;
 }
 
-window.addEventListener('blur', interruptFlight);
+window.addEventListener('blur', () => interruptFlight());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     audio.updateFlight(state, 0, Infinity, scene?.cloudPass ?? 0, false);
@@ -1002,6 +1022,46 @@ document.addEventListener('visibilitychange', () => {
     dirty = true;
   }
   syncAudioPause();
+});
+
+function loseGraphics(): void {
+  if (!graphics.lose()) return;
+  interruptFlight('graphics');
+  carry = 0;
+  audio.updateFlight(state, 0, Infinity, scene?.cloudPass ?? 0, false);
+  syncAudioPause();
+  graphicsOverlay.hidden = false;
+  setText('#graphics-status', t('graphics.restoring'));
+  const discarded = scene;
+  scene = null;
+  discarded?.dispose();
+}
+
+canvas.addEventListener('webglcontextlost', event => {
+  event.preventDefault();
+  loseGraphics();
+  if (forcedRestore) {
+    const extension = forcedRestore;
+    forcedRestore = null;
+    window.setTimeout(() => extension.restoreContext(), 750);
+  }
+});
+
+canvas.addEventListener('webglcontextrestored', () => {
+  if (!graphics.restore()) return;
+  try {
+    // The restored canvas retains its context. A new scene drops the old renderer's resource listeners.
+    scene = createFlightScene();
+    layoutFlight();
+    refreshRenderQuality();
+  } catch (error) {
+    const lost = canvas.getContext('webgl2')?.isContextLost();
+    loseGraphics();
+    if (!lost) {
+      setText('#graphics-status', t('menu.webgl.copy'));
+      console.error(error);
+    }
+  }
 });
 
 function steerMouse(event: PointerEvent): void {
@@ -1112,7 +1172,7 @@ function flightInput(): StageInput {
 }
 
 function advance(): void {
-  if (!scene || guide || (persistent && document.hidden)) return;
+  if (!graphics.canAdvance || !scene || guide || (persistent && document.hidden)) return;
   if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
@@ -1267,15 +1327,19 @@ function updateRearViewCue(readout: RadarReadout): void {
   rearViewCue.style.maxWidth = `${rect.width - 8}px`;
 }
 
-function render(now: number): void {
+function render(now: number): boolean {
   if (layoutView !== state.view) layoutFlight();
   // The impact holds the scene and projected canopy instruments. The flight clock keeps ticking.
-  const redrawFlight = now >= visualFreezeUntil || dirty || lastRenderTick < 0;
+  const redrawFlight = graphics.recovering || now >= visualFreezeUntil || dirty || lastRenderTick < 0;
   const yaw = maneuverViewYaw(state);
   const readout = buildRadar(state, yaw);
   rearDanger = readout.rearDanger;
   const ladder = redrawFlight ? scene?.draw(state, !!rearDanger || !!readout.rearPursuit, readout.rearPursuit ?? undefined) : undefined;
-  const audioActive = effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
+  if (ladder === null) {
+    loseGraphics();
+    return false;
+  }
+  const audioActive = graphics.canAdvance && effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
   if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass, audioActive);
   updateHud(readout);
   updateManeuverCue();
@@ -1334,6 +1398,7 @@ function render(now: number): void {
     }
   }
   dirty = false;
+  return true;
 }
 
 Object.defineProperty(window, '__game', { get: () => Object.freeze({
@@ -1380,6 +1445,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
   // --- S7f lane ---
   renderQuality: { preferred: preferredRenderQuality, active: scene?.renderQuality, width: canvas.width, height: canvas.height },
+  ...(glDebug ? { graphics: graphics.status } : {}),
   layout: phone && { orientation: phone.orientation, buffer: { width: canvas.width, height: canvas.height }, playfield: { ...phone.playfield },
     controls: { ...phone.controls }, dashboard: phone.dashboard && { ...phone.dashboard } },
 }) });
@@ -1399,10 +1465,33 @@ function animate(now: number): void {
   frameNow = now;
   const elapsed = Math.max(0, (now - previousTime) / 1000);
   previousTime = now;
+  if (scene?.contextLost) loseGraphics();
+  if (scene && !forceUsed && forcedLossTick !== null && state.tick >= forcedLossTick) {
+    forceUsed = true;
+    forcedRestore = scene.lossExtension();
+    if (forcedRestore) {
+      forcedRestore.loseContext();
+      loseGraphics();
+    }
+  }
+  if (graphics.recovering) {
+    carry = 0;
+    if (graphics.status === 'restoring' && scene && render(now) && !scene?.terrainPending && graphics.frameReady()) {
+      graphicsOverlay.hidden = true;
+      syncAudioPause();
+      dirty = true;
+    }
+    requestAnimationFrame(animate);
+    return;
+  }
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
   if (updateAutoResume(now)) carry = 0;
   else carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
   while (carry >= STEP) {
+    if (scene?.contextLost) {
+      loseGraphics();
+      break;
+    }
     const burst = state.reversal?.burstAt;
     advance();
     carry -= STEP;
@@ -1414,6 +1503,10 @@ function animate(now: number): void {
       break;
     }
   }
+  if (graphics.recovering) {
+    requestAnimationFrame(animate);
+    return;
+  }
   const timingFlight = state.phase === 'playing' && !state.paused && !document.hidden && !guide
     && !flightFixture && !fidelityFixture && !freezeRoster && !staticWorldFixture && !rosterSheet && (!bulletFixture || bulletFixture.stress);
   if (scene?.observeRenderFrame(timingFlight ? elapsed * 1000 : null)) {
@@ -1421,9 +1514,10 @@ function animate(now: number): void {
     dirty = true;
   }
   if (dirty || scene?.terrainPending || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
-    render(now);
-    lastRenderTick = state.tick;
-    lastRenderPhase = state.phase;
+    if (render(now)) {
+      lastRenderTick = state.tick;
+      lastRenderPhase = state.phase;
+    }
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   requestAnimationFrame(animate);

@@ -254,6 +254,8 @@ export class FlightScene {
     this.surface = this.feelEnabled ? new FlightSurface(this.ground) : null;
     this.post = this.feelEnabled ? new FlightPost(this.target.texture) : null;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+    // Three r170 trims nullable WebGL info logs before its error callback can run.
+    this.renderer.debug.checkShaderErrors = false;
     this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x081424);
     this.scene.background = this.fog.color;
@@ -292,6 +294,7 @@ export class FlightScene {
   }
 
   resize(framing: Framing & { hud: HudLayout }): void {
+    if (this.contextLost) return;
     const { width, height, phone, cockpit, hud } = framing;
     // --- S7f lane ---
     if (width !== this.framing.width || height !== this.framing.height || !!phone !== !!this.framing.phone) {
@@ -321,7 +324,7 @@ export class FlightScene {
 
   private resizeWorldBuffer(): void {
     const { width, height, phone } = this.framing;
-    if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0 || this.contextLost) return;
     const buffer = renderBuffer(width, height, phone, this.quality.tier, this.comparisonScale);
     this.setAirframeDetail(RENDER_QUALITY[this.quality.tier].detailedModels);
     this.post?.resize(buffer.width, buffer.height, choosePostTier(!!phone));
@@ -341,12 +344,23 @@ export class FlightScene {
   }
 
   observeRenderFrame(milliseconds: number | null): boolean {
-    if (!this.quality.observe(milliseconds)) return false;
+    if (this.contextLost || !this.quality.observe(milliseconds)) return false;
     this.resizeWorldBuffer();
     return true;
   }
 
   get renderQuality(): RenderQuality { return this.quality.tier; }
+
+  get contextLost(): boolean { return this.renderer.getContext().isContextLost(); }
+
+  lossExtension(): WEBGL_lose_context | null {
+    return this.renderer.getContext().getExtension('WEBGL_lose_context');
+  }
+
+  dispose(): void {
+    // Loss has already freed the GL allocations. Detach Three's canvas listeners and drop its caches.
+    this.renderer.dispose();
+  }
 
   get rearView(): Readonly<Rect> | null {
     return this.rearRect;
@@ -934,7 +948,19 @@ export class FlightScene {
     if (strength > 0) this.motion.shock('explosion', state.tick, strength);
   }
 
-  draw(state: StageState, rearDanger = false, rearPursuit?: Position): PitchMark[] {
+  draw(state: StageState, rearDanger = false, rearPursuit?: Position): PitchMark[] | null {
+    if (this.contextLost) return null;
+    try {
+      const ladder = this.drawFrame(state, rearDanger, rearPursuit);
+      return this.contextLost ? null : ladder;
+    } catch (error) {
+      // Loss can begin in a draw call before the canvas event is dispatched.
+      if (!this.contextLost) throw error;
+      return null;
+    }
+  }
+
+  private drawFrame(state: StageState, rearDanger: boolean, rearPursuit?: Position): PitchMark[] {
     const reduceMotion = this.reducedMotion.matches;
     const phone = !!this.framing.phone;
     const delta = state.tick - this.lastMotionTick;
