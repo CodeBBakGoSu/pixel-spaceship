@@ -16,6 +16,9 @@ export type BotProfile = {
   draftPickQuality: number;
   chestPick: number;
   billsHandling: number;
+  // --- S7e lane ---
+  aceLead: number;
+  aceWarningTicks: number;
 };
 
 export const BOT_PROFILES = {
@@ -23,16 +26,19 @@ export const BOT_PROFILES = {
     reactionDelayTicks: 2, aimErrorRad: 0.02, dodgeQuality: 0.98, maneuverUse: 0.98,
     rollUse: 0.84, parryTiming: 0.94, rollDodgeQuality: 0.9,
     altitudeUse: 0.98, pickupGreed: 1, draftPickQuality: 0.97, chestPick: 0.98, billsHandling: 0.96,
+    aceLead: 1, aceWarningTicks: 22,
   },
   average: {
     reactionDelayTicks: 9, aimErrorRad: 0.17, dodgeQuality: 0.37, maneuverUse: 0.52,
     rollUse: 0.09, parryTiming: 0.58, rollDodgeQuality: 0.56,
     altitudeUse: 0.58, pickupGreed: 0.65, draftPickQuality: 0.63, chestPick: 0.65, billsHandling: 0.56,
+    aceLead: 0.45, aceWarningTicks: 7,
   },
   weak: {
     reactionDelayTicks: 19, aimErrorRad: 0.43, dodgeQuality: 0.08, maneuverUse: 0.23,
     rollUse: 0.06, parryTiming: 0.2, rollDodgeQuality: 0.28,
     altitudeUse: 0.24, pickupGreed: 0.36, draftPickQuality: 0.17, chestPick: 0.35, billsHandling: 0.22,
+    aceLead: 0.1, aceWarningTicks: 0,
   },
 } as const satisfies Record<BotProfileId, BotProfile>;
 
@@ -43,6 +49,12 @@ export const BOT_POLICY = {
   turnGain: 2.35, pairBonus: 1.6, familyBonus: 0.8, emptyWeaponBonus: 2.7,
   levelValue: 0.75, riskHullCost: 2, repairValue: 5, missingHullValue: 1.7,
   rollAnticipation: 0.22, rollPredictionMargin: 2.2,
+} as const;
+
+// --- S7e lane ---
+export const ACE_PILOT = {
+  leadSeconds: 0.72, pursuitRange: 153, extensionRange: 45,
+  extensionAngle: Math.PI * 0.69, warningMargin: 15, warningClimb: 13,
 } as const;
 
 export const BOT_DRAFT_VALUES = {

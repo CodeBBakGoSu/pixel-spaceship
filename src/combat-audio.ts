@@ -1,5 +1,6 @@
 import { FLIGHT_AUDIO } from './data/flight-audio.ts';
 import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
+import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
 
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
@@ -11,7 +12,7 @@ const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.15, warning: 0.45, muzzle: 0.09, roll: 0.21, parry: 0.12,
   flyby: FLIGHT_AUDIO.cues.flyby.cooldown, cloud: FLIGHT_AUDIO.cues.cloud.cooldown,
 };
-export type CombatSound = keyof typeof COOLDOWN_SECONDS;
+export type CombatSound = keyof typeof COOLDOWN_SECONDS | RosterSound;
 
 interface AudioOutput {
   context: AudioContext;
@@ -95,7 +96,22 @@ function synthesizeCues(context: AudioContext): AudioOutput['buffers'] {
     }),
     flyby: synthesizeWhoosh(context, 'flyby'),
     cloud: synthesizeWhoosh(context, 'cloud'),
+    ...synthesizeRosterCues(context, synthesize),
   };
+}
+
+function mixLimiterCurve(knee: number) {
+  // The odd sample count places a curve point at silence.
+  const curve = new Float32Array(1025);
+  const span = 1 - knee;
+  for (let i = 0; i < curve.length; i++) {
+    const input = 2 * i / (curve.length - 1) - 1;
+    const magnitude = Math.abs(input);
+    const aboveKnee = Math.max(0, magnitude - knee) / span;
+    // Keep unity below the knee and ease the slope to zero at the ends of the curve.
+    curve[i] = Math.sign(input) * (magnitude - span * aboveKnee ** 5 / 5);
+  }
+  return curve;
 }
 
 export class CombatAudio {
@@ -138,8 +154,11 @@ export class CombatAudio {
         master.gain.value = this.isMuted ? 0 : this.level;
         const headroom = context.createGain();
         headroom.gain.value = FLIGHT_AUDIO.mixHeadroom;
+        const limiter = context.createWaveShaper();
+        limiter.curve = mixLimiterCurve(FLIGHT_AUDIO.mixLimiterKnee);
         master.connect(headroom);
-        headroom.connect(context.destination);
+        headroom.connect(limiter);
+        limiter.connect(context.destination);
         this.output = { context, master, buffers: synthesizeCues(context) };
       } catch {
         void context?.close().catch(() => {});
@@ -166,7 +185,8 @@ export class CombatAudio {
     source.connect(destination);
     source.start(now);
     // Each cue gets one voice, so frequent muzzle ticks cannot crowd out the hit or warning.
-    this.nextPlayAt[sound] = now + Math.max(COOLDOWN_SECONDS[sound], buffer.duration);
+    const cooldown = COOLDOWN_SECONDS[sound as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
+    this.nextPlayAt[sound] = now + Math.max(cooldown, buffer.duration);
   }
 
   updateFlight(state: FlightAudioState, boostAmount: number, clearance: number, cloudPass: number, active: boolean): void {

@@ -772,6 +772,8 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   pointer-events: none;
 }
 .rear-view-cue[data-hit="true"] { background: #381d13; color: #ffe0ad; }
+/* --- S7e lane --- */
+.rear-view-cue[data-pursuit="true"][data-hit="false"] { background: #3a1d24; color: #ffe0ce; }
 @media (min-height: 600px) {
   .experience.cockpit-view .rear-danger-cue[data-docked="true"],
   .experience.cockpit-view .rear-view-cue { font-size: clamp(11px, 1vw, 12px); }

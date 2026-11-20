@@ -105,12 +105,12 @@ test('Overdrive Coil extends a reversal and Capacitor shortens the forward firin
   assert.equal(weaponCooldown(state, 'bomb-bay', 360), 295);
 });
 
-test('Fire Control shortens a real weak-point lock and crits use only the combat RNG', () => {
+test('Fire Control shortens a real Ace lock and crits use only the combat RNG', () => {
   function sequence() {
     const state = createStage(parseStageOptions('?mode=survivors&fixture=boss&seed=21'), ground);
-    const point = state.boss.weakPoints[0];
+    const ace = state.boss;
     const { x, z, altitude } = state.player;
-    Object.assign(point, { x, z: z + 90, alt: altitude });
+    Object.assign(ace, { x, z: z + 90, alt: altitude });
     state.run.buffLevels['fire-control'] = 3;
     state.twinAt = Infinity;
     for (let tick = 1; tick <= 12; tick++) {

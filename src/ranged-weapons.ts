@@ -1,12 +1,13 @@
+import { ACE } from './data/ace.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
 import { RANGED_EVOLUTION_TUNING } from './data/ranged-evolutions.ts';
 import { familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
 import {
-  activeWeakPoint, angleTo, BANDS, clamp, groundImpact, HIT_WINDOW, hurtEnemy, hurtWeakPoint, impactTime,
+  activeAce, aceVulnerable, angleTo, BANDS, clamp, groundImpact, HIT_WINDOW, hurtAce, hurtEnemy, impactTime,
   inBand, projectileRoom, STEP, TICKS_PER_SECOND,
 } from './stage-combat.ts';
-import type { Band, Enemy, Ground, Position, Shot, StageState, WeakPoint } from './stage-types.ts';
+import type { Ace, Band, Enemy, Ground, Position, Shot, StageState } from './stage-types.ts';
 
 export type RangedShotFields =
   { kind: 'seeker'; weapon: 'seeker'; targetId: number | null; sourceBand: Band; vy: number; radius: number; rack?: true } |
@@ -15,7 +16,7 @@ export type RangedShotFields =
   { kind: 'flak-shard'; weapon: 'flak'; pierce?: { remaining: number; hits: number[] } };
 
 type RangedShot = Extract<Shot, { kind: RangedShotFields['kind'] }>;
-type Target = Enemy | WeakPoint;
+type Target = Enemy | Ace;
 const seeker = WEAPONS.seeker.tuning;
 const rail = WEAPONS.rail.tuning;
 const flak = WEAPONS.flak.tuning;
@@ -30,31 +31,22 @@ const BLAST_TICKS = 21;
 const pose = ({ x, z, alt }: Position): Position => ({ x, z, alt });
 const range2 = (a: Position, b: Position): number => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 const engaged = (enemy: Enemy): boolean => enemy.hp > 0 && !enemy.entry;
-const weakPoint = (target: Target): target is WeakPoint => target.kind === 'core' || target.kind === 'pod';
-
-function lockedPoint(state: StageState, id = state.lock?.ready ? state.lock.id : null): WeakPoint | null {
+// --- S7e lane ---
+function lockedAce(state: StageState, id = state.lock?.ready ? state.lock.id : null): Ace | null {
   if (id === null) return null;
-  const point = activeWeakPoint(state);
-  return point?.exposed && point.id === id ? point : null;
+  const ace = activeAce(state);
+  return ace?.id === id && !ace.entry ? ace : null;
 }
 
-function hitTarget(state: StageState, target: Target, damage: number, weapon: WeaponId): void {
-  if (weakPoint(target)) {
-    if (state.boss) hurtWeakPoint(state, state.boss, damage);
-  } else {
-    hurtEnemy(state, target, damage, { weapon });
-  }
-}
-
-function targetWindow(state: StageState, target: Target, base?: number, narrow = false): number {
-  const window = weakPoint(target) ? Math.min(base ?? target.window, target.window) : base;
-  return hitWindow(state, window, narrow);
+function hitTarget(state: StageState, target: Target, damage: number, weapon: WeaponId, source?: Position): void {
+  if (target.kind === 'ace') hurtAce(state, target, damage);
+  else hurtEnemy(state, target, damage, { weapon }, source);
 }
 
 function candidates(state: StageState): Target[] {
   const targets: Target[] = state.enemies.filter(engaged);
-  const point = lockedPoint(state);
-  if (point) targets.push(point);
+  const ace = lockedAce(state);
+  if (ace) targets.push(ace);
   return targets;
 }
 
@@ -79,7 +71,7 @@ function fireSeekers(state: StageState, source: Position, level: number): boolea
   const contacts = candidates(state).filter(target =>
     range2(source, target) <= seeker.range ** 2 && Math.abs(nearestBand(target.alt) - band) <= 1);
   if (!contacts.length) return false;
-  const priority = (target: Target): number => weakPoint(target) ? 2 : rack && target.carrier ? 1 : 0;
+  const priority = (target: Target): number => target.kind === 'ace' ? 2 : rack && target.carrier ? 1 : 0;
   contacts.sort((a, b) => priority(b) - priority(a) || range2(source, a) - range2(source, b) || a.id - b.id);
   const preferred = priority(contacts[0]) > 0 ? contacts[0] : null;
   const volley = ++state.nextVolley;
@@ -93,7 +85,7 @@ function fireSeekers(state: StageState, source: Position, level: number): boolea
     state.shots.push({
       x, z, alt: source.alt, kind: 'seeker', weapon: 'seeker', targetId: target.id, sourceBand: band,
       vx: Math.sin(aim) * seeker.speed, vz: Math.cos(aim) * seeker.speed, vy: 0, radius,
-      life: seeker.lifeSeconds, volley, damage, nearMiss: false, lockId: weakPoint(target) ? target.id : null,
+      life: seeker.lifeSeconds, volley, damage, nearMiss: false, lockId: target.kind === 'ace' ? target.id : null,
       ...(rack ? { rack: true } : {}),
     });
   }
@@ -127,7 +119,7 @@ function railLines(state: StageState, source: Position, level: number) {
 function railOverlaps(state: StageState, line: { from: Position; to: Position }, target: Target, width: number): boolean {
   const { from, to } = line;
   if (from.x === to.x && from.z === to.z) return false;
-  return inBand(from.alt, target.alt, targetWindow(state, target, rail.window, true))
+  return inBand(from.alt, target.alt, hitWindow(state, rail.window, true))
     && impactTime(from, to.x - from.x, to.z - from.z, target, width) !== Infinity;
 }
 
@@ -148,7 +140,7 @@ function advanceRail(state: StageState, source: Position, level: number, ground:
   if (charge !== null && state.tick >= charge) {
     const damage = weaponDamage(state, 'rail', rail.damage[level - 1]);
     for (const target of contacts) {
-      if (onRail(target)) hitTarget(state, target, damage, 'rail');
+      if (onRail(target)) hitTarget(state, target, damage, 'rail', source);
     }
     for (const line of lines) state.weaponFx.push({ kind: 'rail-beam', ...line, radius: width, until: state.tick + BEAM_TICKS });
     state.railChargeAt = null;
@@ -169,7 +161,7 @@ const skybreakerHeight = (state: StageState): number => BANDS[2] - BANDS[1] + hi
 
 function flakInBand(state: StageState, origin: Position, target: Target, skybreaker: boolean): boolean {
   if (skybreaker) return inBand(BANDS[1], target.alt, skybreakerHeight(state));
-  return inBand(origin.alt, target.alt, targetWindow(state, target, flak.halfHeight));
+  return inBand(origin.alt, target.alt, hitWindow(state, flak.halfHeight));
 }
 
 function fireFlak(state: StageState, source: Position, level: number): void {
@@ -183,7 +175,7 @@ function fireFlak(state: StageState, source: Position, level: number): void {
     && (range2(centre, contact) <= radius ** 2
       || (contact.x + contact.vx * seconds - centre.x) ** 2 + (contact.z + contact.vz * seconds - centre.z) ** 2 <= radius ** 2));
   if (!target) return;
-  const lockId = lockedPoint(state)?.id ?? null;
+  const lockId = lockedAce(state)?.id ?? null;
   state.shots.push({
     ...source, kind: 'flak-shell', weapon: 'flak', vx, vz, life: seconds, radius,
     fuseAt: state.tick + Math.round(seconds * TICKS_PER_SECOND) - 1,
@@ -195,8 +187,8 @@ function fireFlak(state: StageState, source: Position, level: number): void {
 }
 
 function arcNeighbours(state: StageState, from: Position, to: Target, hopping: boolean): boolean {
-  if (weakPoint(to) || !hopping || nearestBand(from.alt) === nearestBand(to.alt)) {
-    return inBand(from.alt, to.alt, targetWindow(state, to));
+  if (to.kind === 'ace' || !hopping || nearestBand(from.alt) === nearestBand(to.alt)) {
+    return inBand(from.alt, to.alt, hitWindow(state));
   }
   const step = BANDS[1] - BANDS[0];
   return Math.abs(nearestBand(from.alt) - nearestBand(to.alt)) === 1 && inBand(from.alt, to.alt, hitWindow(state, step + HIT_WINDOW));
@@ -212,7 +204,7 @@ function fireStormCrown(state: StageState, source: Position, contacts: Target[],
   for (const orb of orbs) {
     let struck = false;
     for (const target of contacts) {
-      if (used.has(target.id) || !inBand(orb.alt, target.alt, targetWindow(state, target))
+      if (used.has(target.id) || !inBand(orb.alt, target.alt, hitWindow(state))
         || range2(orb, target) > tuning.radius ** 2 || visibleFraction(orb, target, ground) < 1) continue;
       hitTarget(state, target, damage * tuning.damageScale, 'arc');
       used.add(target.id);
@@ -280,8 +272,8 @@ export function advanceRangedWeapons(state: StageState, ground: Ground): void {
 }
 
 function seekerContact(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' }>): Target | null {
-  const weak = lockedPoint(state, shot.lockId);
-  if (weak) return weak;
+  const ace = lockedAce(state, shot.lockId);
+  if (ace) return ace;
   let next: Enemy | null = null, best = seeker.range ** 2, elite = false;
   for (const enemy of state.enemies) {
     if (!engaged(enemy) || Math.abs(nearestBand(enemy.alt) - shot.sourceBand) > 1) continue;
@@ -301,8 +293,8 @@ function seekerContact(state: StageState, shot: Extract<RangedShot, { kind: 'see
 }
 
 function projectileImpact(state: StageState, shot: RangedShot, dx: number, dz: number, dy: number, target: Target): number {
-  const radius = target.kind === 'core' ? 4.5 : CONTACT_RADIUS;
-  const window = targetWindow(state, target);
+  const radius = target.kind === 'ace' ? ACE.hitRadius : CONTACT_RADIUS;
+  const window = hitWindow(state);
   if (!dy) return inBand(shot.alt, target.alt, window) ? impactTime(shot, dx, dz, target, radius) : Infinity;
   const entry = (target.alt - window - shot.alt) / dy;
   const exit = (target.alt + window - shot.alt) / dy;
@@ -331,7 +323,7 @@ function explode(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' |
   const isFlak = shot.kind === 'flak-shell';
   const skybreaker = isFlak && !!shot.skybreaker;
   const matches = (target: Target) => range2(shot, target) <= shot.radius ** 2
-    && (isFlak ? flakInBand(state, shot, target, skybreaker) : inBand(shot.alt, target.alt, targetWindow(state, target)))
+    && (isFlak ? flakInBand(state, shot, target, skybreaker) : inBand(shot.alt, target.alt, hitWindow(state)))
     && visibleFraction(shot, target, ground) >= 1;
   for (const target of state.enemies) {
     if (!engaged(target) || (!isFlak && Math.abs(nearestBand(target.alt) - shot.sourceBand) > 1)) continue;
@@ -340,8 +332,8 @@ function explode(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' |
       hurtEnemy(state, target, shot.damage, credit);
     }
   }
-  const point = lockedPoint(state, shot.lockId);
-  if (point && matches(point)) hitTarget(state, point, shot.damage, shot.weapon);
+  const ace = lockedAce(state, shot.lockId);
+  if (ace && matches(ace)) hitTarget(state, ace, shot.damage, shot.weapon);
   state.weaponFx.push({
     kind: isFlak ? 'flak-blast' : 'seeker-blast',
     from: { x: shot.x, z: shot.z, alt: skybreaker ? BANDS[1] : shot.alt },
@@ -368,8 +360,9 @@ function explode(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' |
 function advanceShards(
   state: StageState, shot: Extract<RangedShot, { kind: 'flak-shard' }>, dx: number, dz: number, terrain: number,
 ): number {
+  const ace = activeAce(state);
   for (;;) {
-    let victim: Enemy | null = null, first = terrain;
+    let victim: Target | null = null, first = terrain;
     for (const enemy of state.enemies) {
       if (!engaged(enemy) || shot.pierce?.hits.includes(enemy.id)) continue;
       const time = projectileImpact(state, shot, dx, dz, 0, enemy);
@@ -378,8 +371,15 @@ function advanceShards(
         victim = enemy;
       }
     }
+    if (ace && aceVulnerable(ace) && !shot.pierce?.hits.includes(ace.id)) {
+      const time = projectileImpact(state, shot, dx, dz, 0, ace);
+      if (time < first) {
+        first = time;
+        victim = ace;
+      }
+    }
     if (!victim) return terrain;
-    hurtEnemy(state, victim, shot.damage, { weapon: 'flak' });
+    hitTarget(state, victim, shot.damage, 'flak', shot);
     if (!shot.pierce || --shot.pierce.remaining <= 0) return first;
     shot.pierce.hits.push(victim.id);
   }

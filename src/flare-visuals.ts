@@ -1,8 +1,8 @@
 import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, MeshBasicMaterial, Object3D, type Camera } from 'three';
 import { FLARE_GRAVITY, FLARE_LIFE_TICKS, STEP } from './stage-combat.ts';
-import type { Enemy, Flare, StageState, WeakPoint } from './stage-types.ts';
+import type { Ace, Enemy, Flare, StageState } from './stage-types.ts';
 
-// Fit three volleys and a burning fleet, including the Warden's weak points.
+// Fit three volleys, a burning fleet and the Ace.
 const FIRE_LIMIT = 144;
 const SMOKE_LIMIT = 256;
 const SMOKE_SAMPLES = 8;
@@ -50,11 +50,9 @@ export class FlareVisuals {
     this.fire.count = this.smoke.count = 0;
     for (const flare of state.flares) this.drawFlare(flare, state.tick, topAltitude);
     for (const enemy of state.enemies) this.drawBurn(enemy, enemy.yaw, state.tick, topAltitude);
-    if (state.boss) {
-      for (const point of state.boss.weakPoints) {
-        this.drawBurn(point, Math.atan2(point.vx, point.vz), state.tick, topAltitude);
-      }
-    }
+    // --- S7e lane ---
+    const ace = state.boss;
+    if (ace && !ace.crashed) this.drawBurn(ace, ace.yaw, state.tick, topAltitude);
     upload(this.fire);
     upload(this.smoke);
   }
@@ -120,11 +118,12 @@ export class FlareVisuals {
     }
   }
 
-  private drawBurn(target: Enemy | WeakPoint, yaw: number, tick: number, topAltitude?: number): void {
+  private drawBurn(target: Enemy | Ace, yaw: number, tick: number, topAltitude?: number): void {
     const { x, z, alt, id, vx, vz, burnUntil = 0 } = target;
-    if (!target.hp || burnUntil <= tick) return;
+    const falling = target.kind === 'ace' && target.defeatedAt !== null;
+    if (!falling && (!target.hp || burnUntil <= tick)) return;
     const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
-    const fade = Math.min(1, (burnUntil - tick) / 16);
+    const fade = falling ? 1 : Math.min(1, (burnUntil - tick) / 16);
     for (let i = 0; i < 3; i++) {
       const rise = ((tick + id * 7 + i * 7) % 21) / 21;
       const across = (i - 1) * (3.6 + rise);
@@ -136,9 +135,10 @@ export class FlareVisuals {
     for (let i = 0; i < 4; i++) {
       const rise = ((tick + id * 11 + i * 9) % 36) / 36;
       const across = (i % 2 ? -1 : 1) * (1.9 + rise * 3.4);
-      const y = topAltitude === undefined ? alt + 4.3 + rise * 14 : topAltitude - 3;
+      const y = topAltitude === undefined ? alt + 4.3 + rise * (falling ? 21 : 14) : topAltitude - 3;
       const size = (2.7 + rise * 4.6) * (0.55 + fade * 0.45);
-      this.voxel(this.smoke, x + rightX * across - vx * rise * 0.42, z + rightZ * across - vz * rise * 0.42,
+      const wake = rise * (falling ? 0.72 : 0.42);
+      this.voxel(this.smoke, x + rightX * across - vx * wake, z + rightZ * across - vz * wake,
         y, size, i % 2 ? 0x765e62 : 0x4a454d, yaw + i * 0.7);
     }
   }

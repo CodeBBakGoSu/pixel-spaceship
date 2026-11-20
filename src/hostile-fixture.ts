@@ -6,7 +6,7 @@ import type { CombatEvents } from './hostile-events.ts';
 import { advanceShots, BANDS, clamp, MINE_LIMIT, STEP } from './stage-combat.ts';
 import { makeEnemy } from './stage-enemies.ts';
 import type { Band, Ground, Shot, StageState } from './stage-types.ts';
-import { makePacedWarden } from './warden.ts';
+import { makeAce, setAceTell } from './ace.ts';
 
 const SHAPES = ['orb', 'needle', 'diamond'] as const;
 const KINDS = Object.keys(ENEMY_KINDS).filter((kind): kind is RegularEnemyKind => kind !== 'gnat') as RegularEnemyKind[];
@@ -58,7 +58,14 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
     }
     state.hull = state.maxHull;
     state.xp = 0;
-    state.boss ??= makePacedWarden(state, p.x + 18, p.z + 146);
+    if (!state.boss) {
+      const ace = state.boss = makeAce(state, p.x + 18, p.z + 146);
+      ace.phase = 3;
+      ace.hp = Math.floor(ace.maxHp / 4);
+      ace.bank = 1.1;
+      ace.boosting = true;
+      setAceTell(state, ace, 'missile', { x: p.x, z: p.z + 40, alt: p.altitude });
+    }
     let regular = 0, gnats = 0, enemyShots = 0;
     for (const enemy of state.enemies) {
       if (enemy.kind === 'gnat') gnats++;

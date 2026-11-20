@@ -47,7 +47,7 @@ export type HangarUpgradeId = keyof typeof HANGAR;
 export const HANGAR_IDS = Object.keys(HANGAR) as HangarUpgradeId[];
 
 export const ACE_SCORE_THRESHOLDS = [0, 40_000, 160_000, 350_000, 700_000] as const;
-export const RUN_PAYOUT = { creditsPerScore: 1 / 500, wardenCache: 250, retreatScale: 0.5 } as const;
+export const RUN_PAYOUT = { creditsPerScore: 1 / 500, aceCache: 250, retreatScale: 0.5 } as const;
 
 export const HEAT_LEVELS = [0, 1, 2, 3, 4, 5] as const;
 export type Heat = (typeof HEAT_LEVELS)[number];
@@ -56,7 +56,7 @@ export const HEAT_TIERS = HEAT_LEVELS.map(level => ({
   armorScale: level >= 1 ? 1.15 : 1,
   shotIntervalScale: level >= 2 ? 1 / 1.15 : 1,
   magnetScale: level >= 3 ? 0.8 : 1,
-  extraWeakPoint: level >= 4,
+  extraAceArmor: level >= 4,
   carrierEscort: level >= 5,
   rewardScale: 1 + 0.15 * level,
 }));

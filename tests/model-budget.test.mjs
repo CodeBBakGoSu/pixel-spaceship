@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Mesh, Object3D, Raycaster, Vector3 } from 'three';
+import { Matrix4, Mesh, Object3D, Raycaster, Vector3 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
 import { SWARM_CAPS } from '../src/data/phases.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { HostileVisuals } from '../src/hostile-visuals.ts';
 import * as models from '../src/models.ts';
+import { aceAirframe } from '../src/models-roster.ts';
+import { RosterVisuals } from '../src/roster-visuals.ts';
 import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
 import { SHOT_LIMIT, STEP } from '../src/stage-combat.ts';
@@ -67,7 +69,7 @@ test('0.155 m player voxels preserve the world dimensions and the exhaust socket
   }
 });
 
-test('every enemy and the Warden keep their silhouettes at double voxel density', () => {
+test('the existing regular airframes keep their silhouettes at double voxel density', () => {
   for (const kind of enemyKinds) {
     const low = models.enemyAirframe(kind, false), detailed = models.enemyAirframe(kind, true);
     assert.equal(detailed.size, low.size / 2, kind);
@@ -77,40 +79,42 @@ test('every enemy and the Warden keep their silhouettes at double voxel density'
     const { min, max } = coarseGeometry.boundingBox;
     assertBounds(bake(detailed), [...min.toArray(), ...max.toArray()], kind);
   }
-  const warden = models.wardenAirframe(true), coarseWarden = models.wardenAirframe(false);
-  assert.equal(warden.size, 0.325);
-  assertSameSilhouette(coarseWarden, warden, 'Warden');
-  const coarseGeometry = bake(coarseWarden);
-  coarseGeometry.computeBoundingBox();
-  const { min, max } = coarseGeometry.boundingBox;
-  assertBounds(bake(warden), [...min.toArray(), ...max.toArray()], 'Warden');
+});
+
+test('the fine Ace and Aegis retain their authored hull bounds and fit their roster caps', () => {
+  const ace = bake(aceAirframe());
+  const aegis = bake(models.enemyAirframe('aegis', true));
+  assert.equal(aceAirframe().size, 0.5);
+  assert.equal(models.enemyAirframe('aegis', true).size, 0.55);
+  assertBounds(ace, [-16.25, -2.25, -16.25, 16.25, 7.25, 14.75], 'Ace');
+  assertBounds(aegis, [-10.175, -1.925, -7.975, 10.175, 2.475, 7.975], 'Aegis');
+  assert.ok(triangleCount(ace) > craftTriangles(aceAirframe(false)) && triangleCount(ace) <= 1500);
+  assert.ok(triangleCount(aegis) > craftTriangles(models.enemyAirframe('aegis')) && triangleCount(aegis) <= 300);
 });
 
 function cappedEnemyTriangles(detailed) {
-  const kinds = enemyKinds.map(kind => [kind, craftTriangles(models.enemyAirframe(kind, detailed))]);
+  const kinds = [...enemyKinds, 'aegis'].map(kind => [kind, craftTriangles(models.enemyAirframe(kind, detailed))]);
   const byCost = kinds.flatMap(([kind, count]) => Array(ENEMY_KINDS[kind].cap).fill(count)).sort((a, b) => b - a);
   return cap => byCost.slice(0, cap).reduce((sum, count) => sum + count, 0);
 }
 
 test('the low craft LOD stays within the existing airframe caps', () => {
   const player = craftTriangles(models.playerAirframe(false));
-  const warden = craftTriangles(models.wardenAirframe(false));
+  const ace = craftTriangles(aceAirframe(false));
   assert.ok(player <= 1620, `player: ${player}`);
-  assert.ok(warden > 1204 && warden <= 1500, `Warden: ${warden}`);
   const atCap = cappedEnemyTriangles(false);
   const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity }));
-  const boss = player + warden + atCap(enemyLimit({ boss: {} }));
+  const boss = player + ace + atCap(enemyLimit({ boss: {} }));
   assert.ok(wave <= 6032 * 1.25, `wave: ${wave}`);
   assert.ok(boss <= 5360 * 1.25, `boss: ${boss}`);
-  const mobileStress = wave + warden + triangleCount(models.gnatGeometry(false)) * SWARM_CAPS.mobile;
+  const mobileStress = wave + ace + triangleCount(models.gnatGeometry(false)) * SWARM_CAPS.mobile;
   assert.ok(mobileStress <= 10000, `mobile max-load fixture: ${mobileStress}`);
 });
 
-test('the detailed craft LOD adds geometry within the combined wave and Warden budgets', () => {
+test('the detailed craft LOD fits the combined wave and Ace budgets', () => {
   const player = craftTriangles(models.playerAirframe(true));
-  const warden = craftTriangles(models.wardenAirframe(true));
+  const ace = craftTriangles(aceAirframe(true));
   assert.ok(player >= 2200 && player <= 3400, `player: ${player}`);
-  assert.ok(warden > 1500 && warden <= 3600, `Warden: ${warden}`);
   for (const kind of enemyKinds) {
     const low = craftTriangles(models.enemyAirframe(kind, false));
     const detailed = craftTriangles(models.enemyAirframe(kind, true));
@@ -119,11 +123,34 @@ test('the detailed craft LOD adds geometry within the combined wave and Warden b
   const atCap = cappedEnemyTriangles(true);
   const swarm = triangleCount(models.gnatGeometry(true)) * SWARM_CAPS.desktop;
   const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity })) + swarm;
-  const boss = player + warden + atCap(enemyLimit({ boss: {} })) + swarm;
+  const boss = player + ace + atCap(enemyLimit({ boss: {} })) + swarm;
   assert.ok(wave <= 17500, `wave with swarm: ${wave}`);
-  assert.ok(boss <= 16500, `Warden with swarm: ${boss}`);
-  // The profiling fixture also stacks a Warden on the largest wave and swarm.
-  assert.ok(wave + warden <= 21000, `desktop max-load fixture: ${wave + warden}`);
+  assert.ok(boss <= 16500, `Ace with swarm: ${boss}`);
+  // The profiling fixture stacks the Ace on the largest wave and swarm.
+  assert.ok(wave + ace <= 21000, `desktop max-load fixture: ${wave + ace}`);
+});
+
+test('Flak warnings expand in their target altitude plane in one rear-visible cue batch', () => {
+  const visuals = new RosterVisuals();
+  const state = { tick: 0, boss: null, swarmCap: 80, enemies: [
+    { kind: 'turret', hp: 4, x: 11, z: 13, alt: 49, tell: { kind: 'flak', x: 100, z: 150, alt: 110, started: 0, until: 84 } },
+  ] };
+  const cue = visuals.group.getObjectByName('Enemy warning rings');
+  const matrix = new Matrix4();
+  visuals.update(state, undefined, false);
+  assert.equal(cue.count, 1);
+  cue.getMatrixAt(0, matrix);
+  const initialRadius = matrix.elements[0];
+  assert.equal(matrix.elements[13], 110);
+  assert.equal(cue.layers.mask, 1);
+  state.tick = 63;
+  visuals.update(state, undefined, false);
+  cue.getMatrixAt(0, matrix);
+  assert.ok(matrix.elements[0] > initialRadius);
+  assert.equal(matrix.elements[13], 110);
+  state.tick = 84;
+  visuals.update(state, undefined, false);
+  assert.equal(cue.visible, false);
 });
 
 test('each Gnat LOD fits a full swarm in one instanced world batch', () => {
@@ -218,6 +245,21 @@ test('hostile glyphs retain their emitted shapes across altitude and shield chan
   visuals.setView(56);
   assert.equal(drops.visible, true);
   assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
+});
+
+test('Ace missiles keep their narrow rocket glyph when restored without a muzzle event', () => {
+  const visuals = new HostileVisuals(() => 35);
+  const state = {
+    tick: 20, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
+    shots: [{ kind: 'hostile', hostileKind: 'ace-missile', x: 0, z: 32, alt: 110, vx: 0, vz: -200, life: 2 }],
+  };
+  visuals.update(state);
+  const glyphs = visuals.group.getObjectByName('Hostile projectile glyphs');
+  const style = glyphs.geometry.getAttribute('glyphStyle');
+  const last = glyphs.geometry.instanceCount - 1;
+  assert.equal(style.getX(last), 4);
+  assert.equal(style.getY(last), 0, 'same-band danger colors are unchanged');
+  assert.equal(style.getW(last), 1);
 });
 
 test('each weapon mounts one distinct mesh to the existing ship and the four heaviest fit the budget', () => {

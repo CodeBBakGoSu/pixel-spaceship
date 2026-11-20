@@ -135,7 +135,7 @@ export function settleRun(profile: Profile, metrics: RunMetrics, result: RunSett
   const victory = result.outcome === 'clear';
   const score = whole(result.score);
   const runCredits = whole(result.credits);
-  const reward = runCredits + score * RUN_PAYOUT.creditsPerScore + (victory ? RUN_PAYOUT.wardenCache : 0);
+  const reward = runCredits + score * RUN_PAYOUT.creditsPerScore + (victory ? RUN_PAYOUT.aceCache : 0);
   const payoutScale = HEAT_TIERS[heat].rewardScale * hangarLoadout(profile, result.daily).creditScale;
   const credits = whole(reward * payoutScale * (result.outcome === 'retreated' ? RUN_PAYOUT.retreatScale : 1));
   const nextMetrics = createRunMetrics();

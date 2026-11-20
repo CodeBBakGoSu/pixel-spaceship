@@ -94,7 +94,7 @@ test('phases reserve their final fifteen seconds for the lull', () => {
   }
 });
 
-test('the Warden escort limit trims regulars without removing Gnats', () => {
+test('the Ace escort limit trims regulars without removing Gnats', () => {
   const state = waveState();
   for (let i = 0; i < 24; i++) state.enemies.push(makeEnemy(state, i, 100, 1, 'patrol'));
   for (let i = 0; i < 80; i++) state.enemies.push(makeEnemy(state, i, 140, 1, 'gnat'));
@@ -104,7 +104,7 @@ test('the Warden escort limit trims regulars without removing Gnats', () => {
   assert.equal(state.enemies.length, 94);
 });
 
-test('engaged Gnats keep formation velocity and retire without attacks or a kill drop', () => {
+test('engaged Gnats drift with the pack and retire without attacks or a kill drop', () => {
   const state = waveState();
   spawnAt(state, 45);
   const [gnat] = gnats(state);

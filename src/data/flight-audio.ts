@@ -1,5 +1,6 @@
 export const FLIGHT_AUDIO = {
   mixHeadroom: 0.69,
+  mixLimiterKnee: 0.70,
   glideSeconds: 0.055,
   fadeInSeconds: 0.042,
   fadeOutSeconds: 0.032,

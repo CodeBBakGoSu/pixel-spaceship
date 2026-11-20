@@ -2,28 +2,34 @@ import type { createTranslator } from './i18n.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
 import { LANDMARKS, RIM_WARNING } from './reach.ts';
-import { beaconTick } from './stage.ts';
-import { activeWeakPoint, angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
+import { activeAce, beaconTick } from './stage.ts';
+import { angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 210;
 const REAR_WARNING_SECONDS = 0.8;
 const BODY_RADIUS = 7;
 export type AltitudeMark = '△' | '■' | '▽' | '^' | '=' | 'v';
-export type Track = Position & { id: number; kind: EnemyKind | 'pod' | 'core' | 'warden' | 'salvage' | 'chest'; range: number; ahead: number; former?: true };
+export type Track = Position & { id: number; kind: EnemyKind | 'ace' | 'carrier' | 'salvage' | 'chest'; range: number; ahead: number; former?: true };
 type Blip = { x: number; y: number; kind: Track['kind']; mark: AltitudeMark | null; former?: true };
-type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'warden' | 'chest' };
+type RimTick = { angle: number; kind: 'enemy' | 'salvage' | 'ace' | 'chest' };
 const MAP_LANDMARKS = Object.entries(LANDMARKS);
 export type RearDanger = Position & { seconds: number } & ({ kind: 'shot' } | { kind: 'contact'; enemyId: number });
+// --- S7e lane ---
+export type RearPursuit = Track & { kind: 'ace' | 'hound' | 'interceptor' | 'harrier' };
 export type RadarReadout = {
   contacts: Blip[]; priority: Track | null; salvage: Track | null;
   rear: boolean; rearCount: number; rearBandMatch: boolean;
-  rearMarks: AltitudeMark[]; rearDanger: RearDanger | null;
+  rearMarks: AltitudeMark[]; rearDanger: RearDanger | null; rearPursuit: RearPursuit | null;
   rim: RimTick[]; boundaryBearing: number | null;
 };
 
+function isRearPursuer(track: Track): track is RearPursuit {
+  return track.kind === 'ace' || track.kind === 'hound' || track.kind === 'interceptor' || track.kind === 'harrier';
+}
+
 export function beaconTrack(state: StageState): Position | null {
-  if (state.boss) return state.boss;
+  if (state.boss) return activeAce(state);
   return state.tick >= beaconTick(state) ? LANDMARKS.atoll : null;
 }
 
@@ -151,10 +157,13 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   let rearCount = 0, rearBandMatch = false;
   let rearHigher = false, rearLower = false;
   const rearDanger = findRearDanger(state, fx, fz);
-  const active = activeWeakPoint(state);
+  // --- S7e lane ---
+  const ace = activeAce(state);
+  const running = state.phase === 'playing' && !state.paused;
+  let rearPursuit: RearPursuit | null = null;
   const visible: { track: Track; across: number }[] = [];
   const hostiles: Track[] = [];
-  const scan = (item: Position & { id: number }, kind: Track['kind'], former = false): void => {
+  const scan = (item: Position & { id: number }, kind: Track['kind'], former = false, tail = false): void => {
     const dx = item.x - p.x, dz = item.z - p.z;
     const range = Math.hypot(dx, dz), ahead = dx * sin + dz * cos;
     const track: Track = { x: item.x, z: item.z, alt: item.alt, id: item.id, kind, range, ahead };
@@ -167,10 +176,14 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     }
     if (range > RADAR_RANGE) {
       if (kind === 'salvage') rimTick(kind, dx, dz);
-      else if (kind !== 'warden' && kind !== 'pod' && kind !== 'core') rimTick('enemy', dx, dz);
+      else rimTick(kind === 'ace' ? 'ace' : 'enemy', dx, dz);
       return;
     }
-    if (!top && dx * fx + dz * fz < 0 && hostile && kind !== 'turret' && kind !== 'gnat') {
+    const aft = dx * fx + dz * fz < 0;
+    if (aft && tail && running && isRearPursuer(track) && (kind === 'ace' || !rearPursuit || range < rearPursuit.range)) {
+      rearPursuit = track;
+    }
+    if (!top && aft && hostile && kind !== 'turret' && kind !== 'gnat') {
       rearCount++;
       rearBandMatch ||= inBand(item.alt, p.altitude);
       rearHigher ||= item.alt - p.altitude > HIT_WINDOW;
@@ -180,26 +193,25 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
     visible.push({ track, across: dx * cos - dz * sin });
   };
   const trail = activeTrail(state);
-  for (const enemy of state.enemies) if (enemy.hp) scan(enemy, enemy.kind, formerPursuer(state, trail, enemy));
-  // The flat radar resolves the Warden as one airframe. The forward views resolve its exposed hardware.
-  if (active && state.boss) {
-    if (top) scan({ id: -1, x: state.boss.x, z: state.boss.z, alt: state.boss.alt }, 'warden');
-    else scan(active, active.kind);
+  for (const enemy of state.enemies) if (enemy.hp) {
+    const tail = !enemy.entry && enemy.tell?.kind === 'tail' && state.tick < enemy.tell.until;
+    scan(enemy, enemy.carrier ? 'carrier' : enemy.kind, formerPursuer(state, trail, enemy), tail);
   }
+  if (ace) scan(ace, 'ace', false, ace.tail && !ace.entry);
   for (const pickup of state.pickups) scan(pickup, 'salvage');
   state.chests.drops.forEach((drop, index) => scan({ ...drop, id: -2 - index }, 'chest'));
   const beacon = beaconTrack(state);
-  if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('warden', beacon.x - p.x, beacon.z - p.z);
+  if (beacon && Math.hypot(beacon.x - p.x, beacon.z - p.z) > RADAR_RANGE) rimTick('ace', beacon.x - p.x, beacon.z - p.z);
   const nearest = (tracks: Track[]): Track | null =>
     tracks.reduce<Track | null>((best, track) => !best || track.range < best.range ? track : best, null);
   const forward = visible.map(({ track }) => track);
   const charging = !top && state.enemies.find(enemy => enemy.tell?.kind === 'snipe');
-  const priority = top ? null : forward.find(track => track.id === (state.lock?.id ?? active?.id)) ??
+  const priority = top ? null : forward.find(track => track.id === (state.lock?.id ?? ace?.id)) ??
     (charging ? forward.find(track => track.id === charging.id) : undefined) ??
     nearest(forward.filter(track => track.kind !== 'salvage' && track.kind !== 'chest'));
   const salvage = top ? null : nearest(forward.filter(track => track.kind === 'salvage'));
   for (const { track, across } of visible) {
-    const marked = top || track.kind === 'chest' || track.id === priority?.id || track.id === salvage?.id;
+    const marked = top || track.kind === 'chest' || track.kind === 'ace' || track.id === priority?.id || track.id === salvage?.id;
     const blip: Blip = {
       x: across / RADAR_RANGE,
       y: -track.ahead / RADAR_RANGE,
@@ -214,7 +226,7 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
   if (rearBandMatch) rearMarks.push('■');
   if (rearLower) rearMarks.push('▽');
   return { contacts, rim, boundaryBearing, priority: priority ?? nearest(hostiles), salvage,
-    rear: rearCount > 0, rearCount, rearBandMatch, rearMarks, rearDanger };
+    rear: rearCount > 0, rearCount, rearBandMatch, rearMarks, rearDanger, rearPursuit };
 }
 
 export class RadarDisplay {
@@ -285,8 +297,8 @@ export class RadarDisplay {
     }
     for (const { kind, angle } of readout.rim) {
       const dx = Math.sin(angle), dy = -Math.cos(angle);
-      c.strokeStyle = kind === 'chest' ? '#ffe6a9' : kind === 'warden' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
-      const offset = kind === 'chest' ? 5 : kind === 'salvage' ? -5 : kind === 'warden' ? 2 : 0;
+      c.strokeStyle = kind === 'chest' ? '#ffe6a9' : kind === 'ace' ? '#ffd783' : kind === 'salvage' ? '#7cece0' : '#ff9683';
+      const offset = kind === 'chest' ? 5 : kind === 'salvage' ? -5 : kind === 'ace' ? 2 : 0;
       c.beginPath();
       c.moveTo(x + dx * (radius - 3 + offset), y + dy * (radius - 3 + offset));
       c.lineTo(x + dx * (radius + offset), y + dy * (radius + offset));
@@ -301,9 +313,9 @@ export class RadarDisplay {
       c.stroke();
       c.lineWidth = 1;
     }
-    if (readout.rear) {
-      c.strokeStyle = '#a8c5bb';
-      c.lineWidth = readout.rearBandMatch ? 2 : 1;
+    if (readout.rear || readout.rearPursuit) {
+      c.strokeStyle = readout.rearPursuit ? '#ff9a78' : '#a8c5bb';
+      c.lineWidth = readout.rearPursuit || readout.rearBandMatch ? 2 : 1;
       c.beginPath();
       c.arc(x, y, radius, Math.PI * 0.35, Math.PI * 0.65);
       c.moveTo(x - 4, y + radius - 4);
@@ -318,7 +330,10 @@ export class RadarDisplay {
     const { kind, mark } = contact;
     const salvage = kind === 'salvage';
     const chest = kind === 'chest';
-    const base = salvage ? '#7cece0' : kind === 'pod' || kind === 'core' || kind === 'warden' ? '#ffd783' : '#ff9683';
+    const ace = kind === 'ace';
+    const aegis = kind === 'aegis';
+    const carrier = kind === 'carrier';
+    const base = salvage ? '#7cece0' : ace || carrier ? '#ffd783' : aegis ? '#9acbff' : '#ff9683';
     if (contact.former) {
       c.strokeStyle = '#91fff1';
       c.strokeRect(x - 4.5, y - 4.5, 9, 9);
@@ -331,6 +346,18 @@ export class RadarDisplay {
       c.fillRect(x, y - 2, 1, 5);
       c.fillRect(x - 1, y - 1, 3, 3);
       c.fillRect(x - 2, y, 5, 1);
+    } else if (carrier) {
+      c.fillRect(x - 3, y - 1, 7, 3);
+      c.fillRect(x - 2, y - 3, 5, 1);
+    } else if (ace || aegis) {
+      c.strokeStyle = base;
+      c.beginPath();
+      c.moveTo(x, y - 3);
+      c.lineTo(x + 3, y);
+      c.lineTo(x, y + 3);
+      c.lineTo(x - 3, y);
+      c.closePath();
+      c.stroke();
     } else if (mark !== '△' && mark !== '▽') {
       c.fillRect(x - 1, y - 1, 3, 3);
     }
@@ -347,7 +374,7 @@ export class RadarDisplay {
     } else {
       const triangle = mark === '△' || mark === '▽';
       const direction = mark === '^' || mark === '△' ? 1 : -1;
-      const cx = x + (!triangle || salvage || chest ? 5 : 0), cy = y - (!triangle ? 3 : 0);
+      const cx = x + (!triangle || salvage || chest || ace || aegis || carrier ? 5 : 0), cy = y - (!triangle ? 3 : 0);
       c.moveTo(cx - 2.5, cy + direction * 2.5);
       c.lineTo(cx, cy - direction * 2.5);
       c.lineTo(cx + 2.5, cy + direction * 2.5);

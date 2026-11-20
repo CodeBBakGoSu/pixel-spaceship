@@ -1,8 +1,11 @@
-import type { Band, Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
-  WeakPoint } from './stage-types.ts';
+import type { Ace, AceTell, Band, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot,
+  StageState } from './stage-types.ts';
+import { ACE } from './data/ace.ts';
+import { aegisBlocks } from './data/roster.ts';
+import { BOOST_SPEED } from './flight.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape, type HostileSourceKind } from './data/hostile-fire.ts';
-import { ROLL_PARRY_XP } from './data/roll.ts';
+import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, SURVIVOR_PLAYER_DAMAGE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
@@ -39,7 +42,6 @@ const FLARE_KICK = 70;
 const FLARE_HIT_RADIUS = 4.5;
 const FLARE_BURN_TICKS = 88;
 const FLARE_BURN_INTERVAL = 27;
-const WARDEN_BURN_INTERVAL = 54;
 const FLARE_CONFIRM_TICKS = 72;
 const FLARE_FAN = [-2, -1, 0, 1, 2];
 const BOMB_DROP_TICKS = 24;
@@ -83,17 +85,6 @@ export function hostileCanHit(altitude: number, state: Pick<StageState, 'player'
   return state.hull > 0 && state.invulnerability <= 0 && !rollBoltImmune(state.roll) && inBand(altitude, state.player.altitude);
 }
 
-function weakPointExposed(boss: Boss, tick: number): boolean {
-  return !boss.entry && tick >= boss.exposeTick;
-}
-
-export function activeWeakPoint(state: StageState): (WeakPoint & { exposed: boolean }) | null {
-  const boss = state.boss;
-  if (!boss) return null;
-  const point = boss.weakPoints[boss.index];
-  return point && point.hp > 0 ? { ...point, exposed: weakPointExposed(boss, state.tick) } : null;
-}
-
 export function hurtPlayer(state: StageState, source?: Position, events?: CombatEvents): void {
   if (state.invulnerability > 0 || !state.hull) return;
   const p = state.player;
@@ -110,8 +101,12 @@ export function hurtPlayer(state: StageState, source?: Position, events?: Combat
   events?.hit?.(damage, source?.x ?? p.x, source?.z ?? p.z, source?.alt ?? p.altitude);
 }
 
-export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credit?: KillCredit): void {
+export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credit?: KillCredit, source?: Point): void {
   if (!enemy.hp || enemy.entry) return;
+  if (source && aegisBlocks(enemy, source.x, source.z)) {
+    state.effects.push({ kind: 'hit', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.16 });
+    return;
+  }
   enemy.hp = Math.max(0, enemy.hp - criticalDamage(state, damage));
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
@@ -134,12 +129,21 @@ function friendlyShotCredit(state: StageState, enemy: Enemy, shot: Shot): KillCr
   return shot.lockId === enemy.id ? { weapon, locked: true } : { weapon };
 }
 
-export function hurtWeakPoint(state: StageState, boss: Boss, damage: number): void {
-  const point = boss.weakPoints[boss.index];
-  if (!point.hp || !weakPointExposed(boss, state.tick)) return;
-  point.hp = Math.max(0, point.hp - criticalDamage(state, damage));
-  point.hits++;
-  state.effects.push({ kind: point.hp ? 'hit' : 'burst', x: point.x, z: point.z, alt: point.alt, life: point.hp ? 0.16 : 0.52 });
+// --- S7e lane ---
+export function activeAce(state: Pick<StageState, 'boss'>): Ace | null {
+  return state.boss?.hp ? state.boss : null;
+}
+
+export function aceVulnerable(ace: Ace): boolean {
+  return ace.hp > 0 && !ace.entry && (!ace.roll || ace.roll.elapsed >= ROLLS.barrel.iframeTicks);
+}
+
+export function hurtAce(state: StageState, ace: Ace, damage: number): void {
+  if (!aceVulnerable(ace)) return;
+  ace.hp = Math.max(0, ace.hp - criticalDamage(state, damage));
+  ace.hits++;
+  ace.hitUntil = state.tick + 8;
+  state.effects.push({ kind: 'hit', x: ace.x, z: ace.z, alt: ace.alt, life: 0.16 });
 }
 
 export function projectileRoom(state: StageState, kind: WeaponId | 'hostile'): number {
@@ -167,7 +171,35 @@ export function fireHostile(state: StageState, source: Position & { kind?: Hosti
   events?.muzzle?.(shot, hostileShape(source.kind), source.x, source.z, source.alt);
 }
 
-type Aim = Position & { vx?: number; vz?: number; id: number; window?: number };
+// --- S7e lane ---
+export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern: readonly number[], events?: CombatEvents): void {
+  const guided = tell.kind === 'missile';
+  const speed = BOOST_SPEED * (guided ? ACE.missile.speedScale : ACE.gun.speedScale);
+  const yaw = Math.atan2(tell.x - ace.x, tell.z - ace.z);
+  let room = projectileRoom(state, 'hostile');
+  for (const offset of pattern) {
+    if (room-- <= 0) break;
+    const shot: Shot = {
+      kind: 'hostile', x: ace.x, z: ace.z, alt: ace.alt,
+      vx: Math.sin(yaw + offset) * speed, vz: Math.cos(yaw + offset) * speed,
+      damage: 2, life: guided ? ACE.missile.life : 3.75, volley: 0, nearMiss: false, lockId: null,
+      ...(guided ? { hostileKind: 'ace-missile' } : {}),
+    };
+    state.shots.push(shot);
+    events?.muzzle?.(shot, guided ? 'diamond' : 'needle', ace.x, ace.z, ace.alt);
+  }
+}
+
+function steerAceMissile(shot: Shot, player: Position): void {
+  const yaw = Math.atan2(shot.vx, shot.vz);
+  const turn = ACE.missile.turnRate * STEP;
+  const steering = yaw + clamp(angleTo(yaw, player.x - shot.x, player.z - shot.z), -turn, turn);
+  const speed = Math.hypot(shot.vx, shot.vz);
+  shot.vx = Math.sin(steering) * speed;
+  shot.vz = Math.cos(steering) * speed;
+}
+
+type Aim = Position & { vx?: number; vz?: number; id: number };
 
 function fireFriendly(
   state: StageState, kind: 'twin' | 'pods', offsets: number[], target: Aim | null, lockId: number | null,
@@ -277,26 +309,25 @@ export function acquireAndFire(state: StageState): void {
   const aurora = !!state.run?.evolutions.twin;
   const hasPods = !state.run || (!!podLevel && !state.run.evolutions.pods);
   const weaponWindow = hitWindow(state);
-  const weak = activeWeakPoint(state);
-  const weakRange = weak ? Math.hypot(weak.x - p.x, weak.z - p.z) : Infinity;
-  const weakAngle = weak ? angleTo(p.yaw, weak.x - p.x, weak.z - p.z) : Infinity;
+  const ace = activeAce(state);
+  const aceRange = ace ? Math.hypot(ace.x - p.x, ace.z - p.z) : Infinity;
+  const aceAngle = ace ? Math.abs(angleTo(p.yaw, ace.x - p.x, ace.z - p.z)) : Infinity;
   const lockTicks = Math.round(LOCK_TICKS * (buffTuning(state, 'fire-control')?.lockScale ?? 1));
-  const weakWindow = weak ? hitWindow(state, weak.window) : HIT_WINDOW;
-  const aligned = weak?.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= Math.PI / 15 && inBand(p.altitude, weak.alt, weakWindow);
-  if (weak && aligned) {
-    const previous = state.lock?.id === weak.id ? state.lock.progress : 0;
+  const aceVisible = ace !== null && !ace.entry && aceRange <= LOCK_RANGE && aceAngle <= TWIN_CONE;
+  const aceAligned = aceVisible && inBand(p.altitude, ace.alt, weaponWindow);
+  if (aceAligned && aceAngle <= Math.PI / 15) {
+    const previous = state.lock?.id === ace.id ? state.lock.progress : 0;
     const ticks = Math.min(lockTicks, Math.round(previous * lockTicks) + 1);
-    state.lock = { id: weak.id, progress: ticks / lockTicks, ready: ticks === lockTicks };
+    state.lock = { id: ace.id, progress: ticks / lockTicks, ready: ticks === lockTicks };
   } else {
     state.lock = null;
   }
 
-  const locked = !!(state.lock?.ready && weak);
-  let twin: Aim | null = locked ? weak : null;
-  let wrong: Aim | null = weak && weak.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= TWIN_CONE
-    && !inBand(p.altitude, weak.alt, weakWindow) ? weak : null;
+  const locked = !!state.lock?.ready;
+  let twin: Aim | null = aceAligned ? ace : null;
+  let wrong: Aim | null = aceVisible && !aceAligned ? ace : null;
   const forwardRange = state.run ? WEAPONS.twin.tuning.range : TWIN_RANGE;
-  let twinRange: number = forwardRange, wrongRange: number = wrong ? weakRange : forwardRange;
+  let twinRange: number = twin ? aceRange : forwardRange, wrongRange: number = wrong ? aceRange : forwardRange;
   let left: Enemy | null = null, right: Enemy | null = null, rear: Enemy | null = null;
   let leftRange: number = podLevel ? WEAPONS.pods.tuning.range[podLevel - 1] : POD_RANGE;
   let rightRange = leftRange, rearRange = leftRange;
@@ -356,7 +387,7 @@ export function acquireAndFire(state: StageState): void {
   const primary = hasTwin && state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
   if (primary) {
     const paired = twinLevel ? WEAPONS.twin.tuning.barrels[twinLevel - 1] === 4 : state.twinRank === 3;
-    fireFriendly(state, 'twin', paired ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && weak ? weak.id : null);
+    fireFriendly(state, 'twin', paired ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && ace ? ace.id : null);
     const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks[twinLevel - 1] : state.twinRank === 1 ? 21 : 13;
     state.twinAt = state.tick + weaponCooldown(state, 'twin', cadence);
   }
@@ -433,10 +464,9 @@ function blast(state: StageState, bomb: RearBomb): void {
       hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, bomb.weapon ?? 'manual-bomb'));
     }
   }
-  const point = activeWeakPoint(state);
-  if (state.boss && point?.exposed && belowLaunchBand(point) && nearBomb(bomb, point, radius)
-    && inBand(point.alt, bomb.alt, hitWindow(state, point.window))) {
-    hurtWeakPoint(state, state.boss, damage);
+  const ace = activeAce(state);
+  if (ace && belowLaunchBand(ace) && nearBomb(bomb, ace, radius) && inBand(ace.alt, bomb.alt, window)) {
+    hurtAce(state, ace, damage);
   }
 }
 
@@ -482,7 +512,7 @@ export function dropFlares(state: StageState, vx: number, vz: number): void {
   showRearLaunch(state, 'flare');
 }
 
-function setBurn(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare, credit?: KillCredit): void {
+function setBurn(state: StageState, target: Enemy | Ace, interval: number, flare: Flare, credit?: KillCredit): void {
   if (!target.hp) return;
   if (state.tick >= (target.burnUntil ?? 0)) target.burnNextAt = state.tick + interval;
   const bonus = buffTuning(state, 'flare-bay')?.burnBonusTicks ?? 0;
@@ -492,7 +522,7 @@ function setBurn(state: StageState, target: Enemy | WeakPoint, interval: number,
   if (flare.damage !== undefined) target.burnDamage = Math.max(target.burnDamage ?? 1, flare.damage);
 }
 
-function ignite(state: StageState, target: Enemy | WeakPoint, interval: number, flare: Flare, credit?: KillCredit): void {
+function ignite(state: StageState, target: Enemy | Ace, interval: number, flare: Flare, credit?: KillCredit): void {
   setBurn(state, target, interval, flare, credit);
   if (flare.spread) {
     const window = hitWindow(state);
@@ -510,7 +540,7 @@ function ignite(state: StageState, target: Enemy | WeakPoint, interval: number, 
   state.flareHit = { until: state.tick + FLARE_CONFIRM_TICKS };
 }
 
-function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): boolean {
+function burnTick(target: Enemy | Ace, tick: number, interval: number): boolean {
   if (!target.hp || target.burnNextAt === undefined || target.burnUntil === undefined) return false;
   if (tick >= target.burnUntil) {
     delete target.burnUntil;
@@ -524,19 +554,19 @@ function burnTick(target: Enemy | WeakPoint, tick: number, interval: number): bo
   return true;
 }
 
-function steerFirebird(state: StageState, flare: Flare, point: WeakPoint | null): boolean {
+function steerFirebird(state: StageState, flare: Flare, ace: Ace | null): boolean {
   const tuning = CLOSE_EVOLUTIONS.phoenix;
   const sourceBand = flare.sourceBand ?? nearestBand(flare.alt);
-  let aim: Enemy | WeakPoint | null = null;
+  let aim: Enemy | Ace | null = null;
   let best: number = tuning.range ** 2;
-  const targetDistance = (candidate: Enemy | WeakPoint): number => {
+  const targetDistance = (candidate: Enemy | Ace): number => {
     const band = nearestBand(candidate.alt);
     return candidate.hp && band <= sourceBand && band + 1 >= sourceBand
       ? (candidate.x - flare.x) ** 2 + (candidate.z - flare.z) ** 2 : Infinity;
   };
-  if (point && targetDistance(point) < best) {
-    aim = point;
-    best = targetDistance(point);
+  if (ace && targetDistance(ace) < best) {
+    aim = ace;
+    best = targetDistance(ace);
   }
   for (const enemy of state.enemies) {
     if (enemy.entry) continue;
@@ -570,16 +600,14 @@ export function advanceFlares(state: StageState, ground: Ground): void {
       hurtEnemy(state, enemy, enemy.burnDamage ?? 1, enemy.burnCredit);
     }
   }
-  const boss = state.boss;
-  const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
-  if (boss && point && burnTick(point, state.tick, WARDEN_BURN_INTERVAL)) hurtWeakPoint(state, boss, point.burnDamage ?? 1);
+  const ace = activeAce(state);
+  if (ace && burnTick(ace, state.tick, ACE.burnInterval)) hurtAce(state, ace, ace.burnDamage ?? 1);
 
   let alive = 0;
   const window = hitWindow(state);
-  const pointWindow = point ? hitWindow(state, point.window) : HIT_WINDOW;
   for (const flare of state.flares) {
     if (state.tick - flare.born >= (flare.lifeTicks ?? FLARE_LIFE_TICKS)) continue;
-    if (!flare.phoenix || !steerFirebird(state, flare, point)) flare.vy -= FLARE_GRAVITY * STEP;
+    if (!flare.phoenix || !steerFirebird(state, flare, ace && !ace.entry ? ace : null)) flare.vy -= FLARE_GRAVITY * STEP;
     const dx = flare.vx * STEP, dz = flare.vz * STEP, dy = flare.vy * STEP;
     const terrain = groundImpact(flare, dx, dz, ground, dy);
 
@@ -593,10 +621,9 @@ export function advanceFlares(state: StageState, ground: Ground): void {
         hit = enemy;
       }
     }
-    const pointTime = point?.hp ? altitudeImpactTime(flare, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, pointWindow) : Infinity;
-    if (boss && point && pointTime < first) {
-      hurtWeakPoint(state, boss, flare.damage ?? 1);
-      ignite(state, point, WARDEN_BURN_INTERVAL, flare);
+    if (ace && aceVulnerable(ace) && altitudeImpactTime(flare, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
+      hurtAce(state, ace, flare.damage ?? 1);
+      ignite(state, ace, ACE.burnInterval, flare);
     } else if (hit) {
       const credit = rearWeaponCredit(state, hit, flare.weapon ?? 'manual-flare');
       hurtEnemy(state, hit, flare.damage ?? 1, credit);
@@ -644,12 +671,12 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     bomb.z += bomb.vz * drift;
     const impactHeight = ground(bomb.x, bomb.z) + 1;
     if (age > BOMB_HOLD_TICKS) bomb.alt = Math.max(impactHeight, bomb.alt - BOMB_FALL_SPEED * STEP);
-    const point = activeWeakPoint(state);
-    const close = (target: Position, window = HIT_WINDOW): boolean =>
-      target.alt <= (bomb.ceiling ?? Infinity) && inBand(target.alt, bomb.alt, hitWindow(state, window))
+    const ace = activeAce(state);
+    const close = (target: Position): boolean =>
+      target.alt <= (bomb.ceiling ?? Infinity) && inBand(target.alt, bomb.alt, hitWindow(state))
       && nearBomb(bomb, target, BOMB_PROXIMITY);
     if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && !enemy.entry && close(enemy))
-      && !(point?.exposed && close(point, point.window))) return true;
+      && !(ace && aceVulnerable(ace) && close(ace))) return true;
     blast(state, bomb);
     return false;
   });
@@ -689,7 +716,7 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
   }
 }
 
-// Check the thin per-tick segment so fast bolts cannot skip over small weak points.
+// Sweep the thin per-tick segment so fast bolts cannot skip a contact.
 export function impactTime(origin: Point, dx: number, dz: number, target: Point, radius: number, from = 0, to = 1): number {
   const x = origin.x - target.x + dx * from, z = origin.z - target.z + dz * from;
   const c = x * x + z * z - radius * radius;
@@ -742,6 +769,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
   } else {
     let first = obstacle;
     let hit: Enemy | null = null;
+    const ace = activeAce(state);
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, bandWindow)) continue;
       const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
@@ -750,8 +778,12 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
         hit = enemy;
       }
     }
-    if (hit) {
-      hurtEnemy(state, hit, shot.damage, { weapon: 'twin' });
+    if (ace && aceVulnerable(ace) && inBand(ace.alt, bandAltitude, bandWindow)
+      && altitudeImpactTime(shot, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
+      hurtAce(state, ace, shot.damage);
+      shot.life = 0;
+    } else if (hit) {
+      hurtEnemy(state, hit, shot.damage, { weapon: 'twin' }, shot);
       shot.life = 0;
     }
   }
@@ -767,8 +799,7 @@ function advancePiercingShot(
   dy = 0, strafeWindow = STRAFE_BAND_WINDOW,
 ): boolean {
   const pass = state.reversal?.startTick === shot.reversalTick ? state.reversal : null;
-  const boss = shot.lockId === null ? null : state.boss;
-  const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
+  const ace = activeAce(state);
   const altitude = shot.kind === 'strafe' ? BANDS[shot.targetBand] : shot.alt;
   const bandWindow = shot.kind === 'strafe' ? strafeWindow : window;
   let hit = false;
@@ -782,11 +813,11 @@ function advancePiercingShot(
         first = time;
       }
     }
-    if (boss && point?.hp && point.id === shot.lockId && !bolt.hits.includes(point.id)
-      && altitudeImpactTime(shot, dx, dz, dy, point, point.kind === 'core' ? 4.5 : 7, hitWindow(state, point.window)) < first) {
-      bolt.hits.push(point.id);
+    if (ace && aceVulnerable(ace) && !bolt.hits.includes(ace.id) && inBand(altitude, ace.alt, bandWindow)
+      && altitudeImpactTime(shot, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
+      bolt.hits.push(ace.id);
       bolt.remaining--;
-      hurtWeakPoint(state, boss, shot.damage);
+      hurtAce(state, ace, shot.damage);
       hit = true;
       continue;
     }
@@ -794,7 +825,7 @@ function advancePiercingShot(
     hit = true;
     bolt.hits.push(target.id);
     bolt.remaining--;
-    hurtEnemy(state, target, shot.damage * (pass?.pursuers.includes(target.id) ? 2 : 1), friendlyShotCredit(state, target, shot));
+    hurtEnemy(state, target, shot.damage * (pass?.pursuers.includes(target.id) ? 2 : 1), friendlyShotCredit(state, target, shot), shot);
     if (target.shotDown && pass) {
       target.reversalKill = true;
       pass.kills++;
@@ -858,6 +889,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       advanceRangedShot(state, shot, ground);
       continue;
     }
+    if (shot.kind === 'hostile' && shot.hostileKind === 'ace-missile') steerAceMissile(shot, player);
     const dx = shot.vx * STEP, dz = shot.vz * STEP;
     const terrain = groundImpact(shot, dx, dz, ground);
     if (shot.kind === 'hostile') {
@@ -923,25 +955,23 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
           delta = enemy.alt - shot.alt;
         }
       }
-      const boss = state.boss;
-      const point = boss?.weakPoints[boss.index];
-      if (boss && point?.hp && weakPointExposed(boss, state.tick)) {
-        const time = impactTime(shot, dx, dz, point, point.kind === 'core' ? 4.5 : 7);
-        const sameBand = inBand(shot.alt, point.alt, hitWindow(state, point.window));
-        if (time < first && shot.lockId === point.id && sameBand) {
-          first = time;
+      const ace = activeAce(state);
+      if (ace && aceVulnerable(ace)) {
+        const time = impactTime(shot, dx, dz, ace, ACE.hitRadius);
+        const sameBand = inBand(shot.alt, ace.alt, weaponWindow);
+        if (time < first && sameBand) {
           bossHit = true;
         } else if (time < miss && !sameBand) {
           miss = time;
-          delta = point.alt - shot.alt;
+          delta = ace.alt - shot.alt;
         }
       }
-      if (bossHit && boss) {
-        hurtWeakPoint(state, boss, shot.damage);
+      if (bossHit && ace) {
+        hurtAce(state, ace, shot.damage);
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (enemyHit) {
-        hurtEnemy(state, enemyHit, shot.damage, friendlyShotCredit(state, enemyHit, shot));
+        hurtEnemy(state, enemyHit, shot.damage, friendlyShotCredit(state, enemyHit, shot), shot);
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (miss < terrain && !shot.nearMiss && !misses.has(shot.volley)) {

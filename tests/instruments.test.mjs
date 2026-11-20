@@ -4,6 +4,7 @@ import { createStage, parseStageOptions } from '../src/stage.ts';
 import { altitudeDeltaText, buildRadar, relativeMark } from '../src/instruments.ts';
 import { createTranslator } from '../src/i18n.ts';
 import { fireHostile } from '../src/stage-combat.ts';
+import { makeEnemy } from '../src/stage-enemies.ts';
 
 test('TOP radar exposes only coarse marks for overlapping bands', () => {
   const state = createStage(parseStageOptions('?fixture=stack'));
@@ -116,20 +117,39 @@ test('instruments use the inclusive altitude window and format a signed compact 
   assert.equal(altitudeDeltaText(-4.5, t), '−05 m');
 });
 
-test('TOP uses a single Warden return, while forward instruments track the exposed weak point', () => {
-  const state = createStage(parseStageOptions('?fixture=boss'));
+test('TOP and forward radar track the same single Ace airframe and its actual altitude', () => {
+  const state = createStage(parseStageOptions('?fixture=ace&view=top'));
+  const { boss: ace, player: p } = state;
+  state.enemies.length = 0;
+  Object.assign(p, { x: 0, z: 0, yaw: 0 });
+  Object.assign(ace, { x: 10, z: 90, alt: p.altitude + 10 });
   const radar = buildRadar(state);
   assert.equal(radar.contacts.length, 1);
-  assert.equal(radar.contacts[0].mark, '■');
-  const weak = state.boss.weakPoints[0];
-  weak.z += 14;
-  weak.alt += 5;
-  assert.deepEqual(buildRadar(state), radar);
+  assert.equal(radar.contacts[0].kind, 'ace');
+  assert.equal(radar.contacts[0].mark, '△');
   state.view = 'cockpit';
   const forward = buildRadar(state);
-  assert.equal(forward.priority.id, weak.id);
-  assert.equal(forward.priority.alt, weak.alt);
+  assert.equal(forward.priority.id, ace.id);
+  assert.equal(forward.priority.alt, ace.alt);
   assert.equal(forward.contacts[0].mark, '^');
+});
+
+test('a tailing Ace outranks a regular tail warning in every view until it crosses the nose', () => {
+  const state = createStage(parseStageOptions('?fixture=ace'));
+  const { boss: ace, player: p } = state;
+  Object.assign(p, { x: 0, z: 0, yaw: 0 });
+  Object.assign(ace, { x: -10, z: -70, alt: p.altitude, tail: true, entry: undefined });
+  const hound = makeEnemy(state, 0, -40, 1, 'hound');
+  hound.tell = { kind: 'tail', until: state.tick + 30 };
+  state.enemies = [hound];
+  for (const view of ['overhead', 'chase', 'cockpit']) {
+    state.view = view;
+    assert.equal(buildRadar(state).rearPursuit?.id, ace.id, view);
+  }
+  ace.z *= -1;
+  assert.equal(buildRadar(state).rearPursuit?.id, hound.id);
+  hound.tell.until = state.tick;
+  assert.equal(buildRadar(state).rearPursuit, null);
 });
 
 test('far radar groups share a rim tick and the warning arc points to the nearest boundary', () => {
@@ -149,6 +169,6 @@ test('far radar groups share a rim tick and the warning arc points to the neares
   assert.equal(readout.contacts.length, 1);
   assert.equal(readout.rim.filter(tick => tick.kind === 'enemy').length, 1);
   assert.equal(readout.rim.filter(tick => tick.kind === 'salvage').length, 1);
-  assert.equal(readout.rim.filter(tick => tick.kind === 'warden').length, 1);
+  assert.equal(readout.rim.filter(tick => tick.kind === 'ace').length, 1);
   assert.ok(Math.abs(readout.boundaryBearing - Math.PI / 2) < 0.001);
 });

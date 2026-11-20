@@ -78,3 +78,15 @@ test('survivor state hashes repeat with the same seed and input stream', () => {
   assert.equal(hash(first.state), hash(second));
   assert.notEqual(hash(first.state), hash(replay(11).state));
 });
+
+test('all six Survivors replays chase and defeat the Ace within the sortie', () => {
+  for (const seed of [1, 11, 27, 42, 128, 2026]) {
+    const state = start(`seed=${seed}`);
+    for (let inputs = 0; inputs < 37_000 && ['playing', 'draft', 'chest'].includes(state.phase); inputs++) {
+      stepStage(state, autopilotInput(state, 'full', ground), ground);
+    }
+    assert.equal(state.phase, 'clear', `seed ${seed}`);
+    assert.equal(state.boss.phase, 3, `seed ${seed}`);
+    assert.equal(state.boss.crashed, true, `seed ${seed}`);
+  }
+});

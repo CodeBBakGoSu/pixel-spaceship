@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput } from '../src/autoplay.ts';
 import * as moves from '../src/maneuvers.ts';
+import { advanceRearBombs, HIT_WINDOW } from '../src/stage-combat.ts';
 
 const pursuit = (view = 'chase') => createStage(parseStageOptions('?fixture=pursuit&view=' + view));
 const run = (state, ticks, input = {}, ground) => {
@@ -300,18 +301,21 @@ test('falling bomb damage is altitude gated and clears only nearby hostile shots
   assert.deepEqual(state.shots.filter(shot => shot.kind === 'hostile'), [outside]);
 });
 
-test('a bomb falling toward an exposed core waits for its tighter damage window', () => {
+test('a falling bomb detonates when it reaches the Ace’s altitude damage window', () => {
   const state = createStage(parseStageOptions('?fixture=boss'));
-  state.boss.index = 2;
-  const point = state.boss.weakPoints[2];
-  const bomb = { x: point.x, z: point.z, alt: point.alt + 7.9, vx: 0, vz: 0, born: state.tick - 27 };
+  const ace = state.boss;
+  const bomb = { x: ace.x, z: ace.z, alt: ace.alt + HIT_WINDOW + 1, vx: 0, vz: 0, born: state.tick - 27 };
   state.rearBombs.push(bomb);
-  run(state, 1);
-  assert.equal(state.rearBombs.length, 1);
-  assert.equal(point.hp, 8);
-  run(state, 15);
+  for (let tick = 0; tick < 2; tick++) {
+    state.tick++;
+    advanceRearBombs(state, () => 35);
+    assert.equal(state.rearBombs.length, 1);
+    assert.equal(ace.hp, ace.maxHp);
+  }
+  state.tick++;
+  advanceRearBombs(state, () => 35);
   assert.equal(state.rearBombs.length, 0);
-  assert.equal(point.hp, 4);
+  assert.equal(ace.hp, ace.maxHp - 4);
 });
 
 test('rear stores enforce 24 ticks between drops and refill one charge every 450 active ticks', () => {

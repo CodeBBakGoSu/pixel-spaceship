@@ -5,12 +5,14 @@ export const HOSTILE_GRAZE_RADIUS = HOSTILE_HIT_RADIUS * 1.6;
 export const HOSTILE_IFRAME_TICKS = 60;
 
 export type HostileShape = 'orb' | 'needle' | 'diamond';
-export type HostileSourceKind = EnemyKind | 'pod' | 'core';
+export type HostileSourceKind = EnemyKind;
 
 const HOSTILE_SHAPES = {
   patrol: 'orb', skimmer: 'orb', hound: 'orb', flanker: 'orb', gnat: 'orb',
   interceptor: 'needle', spotter: 'needle', harrier: 'needle', diver: 'needle',
-  turret: 'diamond', bomber: 'diamond', pod: 'diamond', core: 'diamond',
+  turret: 'diamond', bomber: 'diamond',
+  // --- S7e lane ---
+  aegis: 'diamond',
 } as const satisfies Record<HostileSourceKind, HostileShape>;
 
 export function hostileShape(kind?: HostileSourceKind): HostileShape {

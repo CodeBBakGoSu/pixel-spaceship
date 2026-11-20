@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { createTranslator, detectLanguage, initialLanguage, saveLanguage, strings } from '../src/i18n.ts';
+import { rosterThreatMessage } from '../src/roster-hud.ts';
 
 const placeholders = text => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
 
@@ -14,15 +15,17 @@ test('every translation is nonempty and uses the same placeholders in both langu
   }
 });
 
-test('translations format draft and weak-point countdowns in both languages', () => {
+test('translations format draft, Ace phases, and Ace arrival in both languages', () => {
   const en = createTranslator('en'), ko = createTranslator('ko');
   assert.equal(en('draft.detail', { level: 2 }), 'LEVEL 2 · CHOOSE ONE');
   assert.equal(ko('draft.detail', { level: 2 }), '레벨 2 · 하나 선택');
-  assert.equal(en('objective.bandSignal', { part: en('boss.low'), seconds: 3 }), 'LOW POD OPENS IN 3s');
-  assert.equal(ko('objective.bandSignal', { part: ko('boss.low'), seconds: 3 }), '3초 후 저고도 포드 노출');
+  assert.equal(en('ace.label', { phase: 2 }), 'ACE · RED KITE · P2');
+  assert.equal(ko('ace.label', { phase: 2 }), '에이스 · 붉은 솔개 · 2단계');
+  assert.equal(en('stageHud.aceEta', { time: '00:03' }), 'ACE IN 00:03');
+  assert.equal(ko('stageHud.aceEta', { time: '00:03' }), '에이스까지 00:03');
 });
 
-test('the title and briefing give the Warden arrival and sortie deadline in both languages', () => {
+test('the title and briefing give the Ace arrival and sortie deadline in both languages', () => {
   for (const language of ['en', 'ko']) {
     const t = createTranslator(language);
     for (const key of ['menu.survivors.copy', 'guide.sortieTiming']) {
@@ -103,12 +106,26 @@ test('every upgrade offered by either draft has a translated title and detail', 
 
 test('review fixtures and navigation warnings have English and Korean names', () => {
   const keys = [
-    'aria.arenaMap', 'objective.beacon', 'hud.flakWarning', 'hud.spotterWarning',
-    ...['skimmer', 'spotter', 'hound', 'flanker', 'harrier', 'diver', 'bomber', 'turret'].map(kind => 'enemy.' + kind),
+    'aria.arenaMap', 'objective.beacon', 'objective.roster', 'phase.ace', 'menu.summary.ace',
+    'hud.flakWarning', 'hud.spotterWarning', 'hud.aceGun', 'hud.aceMissile', 'hud.aceRoll', 'hud.aceTail', 'hud.rosterTail',
+    ...['patrol', 'interceptor', 'skimmer', 'spotter', 'hound', 'flanker', 'harrier', 'diver', 'bomber', 'turret',
+      'aegis', 'carrier', 'gnat'].map(kind => 'enemy.' + kind),
     ...['ridge', 'strait', 'stacks', 'atoll'].map(kind => 'landmark.' + kind),
   ];
   for (const key of keys) {
     assert.ok(strings.en[key], key);
     assert.match(strings.ko[key], /[가-힣]/, key);
+  }
+});
+
+test('roster and Ace fixtures expose the active tell and paused sorties suppress it', () => {
+  for (const [fixture, cue, key] of [
+    ['ace', 'missile', 'hud.aceMissile'], ['roster', 'spotter', 'hud.spotterWarning'],
+    ['roster', 'flak', 'hud.flakWarning'], ['roster', 'diver', 'hud.rosterDive'],
+  ]) {
+    const state = createStage(parseStageOptions(`?fixture=${fixture}&cue=${cue}`));
+    assert.equal(rosterThreatMessage(state, 210), key);
+    state.paused = true;
+    assert.equal(rosterThreatMessage(state, 210), null);
   }
 });

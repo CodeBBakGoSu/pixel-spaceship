@@ -161,7 +161,7 @@ class GlassLabels {
   private readonly numbers = new Map<number, CockpitLabel>();
   private readonly gLoads = new Map<number, CockpitLabel>();
   private readonly deltas = new Map<string, CockpitLabel>();
-  private readonly tracked = new Map<number, CockpitLabel>();
+  private readonly aceRanges = new Map<number, CockpitLabel>();
   private readonly locked = new Map<number, CockpitLabel>();
   private readonly ranges = new Map<number, CockpitLabel>();
   private readonly relativeDeltas = new Map<number, CockpitLabel>();
@@ -215,12 +215,13 @@ class GlassLabels {
     return label;
   }
 
-  contact(value: number, status: 'lock' | 'track' | null): CockpitLabel {
-    const map = status === 'lock' ? this.locked : status === 'track' ? this.tracked : this.ranges;
+  contact(value: number, status: 'lock' | 'ace' | null): CockpitLabel {
+    const map = status === 'lock' ? this.locked : status === 'ace' ? this.aceRanges : this.ranges;
     const cached = map.get(value);
     if (cached) return cached;
     const range = this.t('cockpit.range', { value });
-    const label = this.atlas.add(status ? this.t(`cockpit.${status}`, { range }) : range, status === 'lock' ? green : '#e0f6eb');
+    const label = this.atlas.add(status ? this.t(`cockpit.${status}`, { range }) : range,
+      status === 'lock' ? green : status === 'ace' ? amber : '#e0f6eb');
     map.set(value, label);
     return label;
   }
@@ -492,8 +493,8 @@ function drawMarkers(c: Context, layout: CockpitLayout, markers: readonly Cockpi
   let count = 0, labeledFormerArrow = false;
   for (const marker of markers) {
     const arrow = marker.placement === 'edge';
-    if (arrow && (!marker.former || labeledFormerArrow)) continue;
-    const range = labels.contact(Math.round(marker.range), marker.locked ? 'lock' : marker.warden ? 'track' : null);
+    if (arrow && !marker.ace && (!marker.former || labeledFormerArrow)) continue;
+    const range = labels.contact(Math.round(marker.range), marker.locked ? 'lock' : marker.ace ? 'ace' : null);
     const delta = labels.relativeDelta(marker.delta);
     const rear = marker.placement === 'rear' ? labels.rear : null;
     const box = boxes[count];
@@ -501,7 +502,7 @@ function drawMarkers(c: Context, layout: CockpitLayout, markers: readonly Cockpi
     box.height = compact ? 13 : 15;
     if (!placeMarkerLabel(box, marker, layout, markers, obstructions, boxes, count)) continue;
     count++;
-    if (arrow) labeledFormerArrow = true;
+    if (arrow && marker.former) labeledFormerArrow = true;
     c.globalAlpha = marker.opacity;
     fill(c, marker.danger ? '#382326' : marker.locked && pulse ? '#204335' : ink, box.x, box.y, box.width, box.height);
     const y = box.y + (box.height - 1) / 2;

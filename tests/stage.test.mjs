@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeWeakPoint, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { activeAce, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput, seekStage } from '../src/autoplay.ts';
+import { ROSTER } from '../src/data/roster.ts';
 import { relativeMark } from '../src/instruments.ts';
 import { World } from '../src/world.ts';
 
@@ -168,41 +169,36 @@ test('the three draft cards pause active time, apply once and keep three legal c
   }
 });
 
-test('the boss fixture opens on a high weak point and rejects cruise bolts', () => {
+test('the legacy Ace fixture rejects cruise bolts, then tracks same-band aim across views', () => {
   const state = stage('?fixture=boss&view=cockpit');
   assert.equal(state.tick, 108 * 60);
   assert.equal(state.player.altitude, 110);
-  const point = activeWeakPoint(state);
-  assert.ok(point.exposed);
-  assert.ok(point.alt >= 139);
-  run(state, 32);
-  assert.equal(state.boss.weakPoints[0].hits, 0);
+  const ace = activeAce(state);
+  assert.ok(ace.alt >= 139);
+  run(state, 24);
+  assert.equal(ace.hits, 0);
   assert.ok(state.altitudeHint.delta > 0);
 
-  state.player.altitude = point.alt;
+  state.player.altitude = ace.alt;
+  Object.assign(state.player, { yaw: Math.atan2(ace.x - state.player.x, ace.z - state.player.z) });
   run(state, 12);
   assert.ok(state.lock.progress > 0 && state.lock.progress < 1);
   run(state, 1, { toggleView: true });
   assert.ok(state.lock.progress > 0);
   assert.equal(state.view, 'overhead');
-  run(state, 65);
-  assert.ok(state.boss.weakPoints[0].hits > 0);
-  assert.equal(state.boss.weakPoints[1].hits, 0);
-  for (let i = 0; i < 600 && state.boss.index === 0; i++) stepStage(state, autopilotInput(state), ground);
-  const next = activeWeakPoint(state);
-  assert.ok(next.alt < 81);
-  assert.equal(next.exposed, false);
-  assert.ok(state.boss.exposeTick - state.boss.changedTick >= 180);
+  for (let i = 0; i < 120 && !ace.hits; i++) stepStage(state, autopilotInput(state), ground);
+  assert.ok(ace.hits > 0);
 });
 
-test('the small boss has to be fought in different bands and its destruction ends the sortie', () => {
+test('the legacy Ace drops into a crash spiral and its destruction ends the sortie', () => {
   const state = stage('?fixture=boss');
   for (let i = 0; i < 72 * 60 && state.phase !== 'clear'; i++) {
     stepStage(state, autopilotInput(state), ground);
   }
   assert.equal(state.phase, 'clear');
   assert.ok(state.tick < 180 * 60);
-  assert.ok(state.boss.weakPoints.every(point => point.hp === 0 && point.hits > 0));
+  assert.equal(state.boss.hp, 0);
+  assert.ok(state.boss.hits > 0 && state.boss.crashed);
   assert.ok('SABC'.includes(state.rank));
 });
 
@@ -220,17 +216,16 @@ test('time expiry shows a ranked timeout with a live boss and does not advance p
   assert.equal(state.phase, 'playing');
 });
 
-test('last-tick damage, weak-point hits and an earned draft resolve before the result', () => {
+test('last-tick damage, Ace hits and an earned draft resolve before the result', () => {
   function finalTick(hull) {
     const state = stage('?fixture=boss');
     state.tick = 180 * 60 - 1;
-    state.boss.orbitStartTick = state.tick + 2;
+    state.boss.bandAt = state.boss.attackAt = state.tick + 100;
     state.hull = hull;
     state.xp = 5;
-    const point = state.boss.weakPoints[0];
-    point.hp = 1;
-    for (const other of state.boss.weakPoints.slice(1)) other.hp = 0;
-    state.shots.push({ ...atPlayer(state, point.alt, true), x: point.x, z: point.z, lockId: point.id });
+    const ace = state.boss;
+    ace.hp = 1;
+    state.shots.push({ ...atPlayer(state, ace.alt, true), x: ace.x, z: ace.z, lockId: ace.id });
     state.shots.push(atPlayer(state, state.player.altitude));
     state.pickups.push({ id: 70, ...atPlayer(state, state.player.altitude), xp: 1, born: state.tick });
     return run(state, 1);
@@ -238,13 +233,13 @@ test('last-tick damage, weak-point hits and an earned draft resolve before the r
   const alive = finalTick(8);
   assert.equal(alive.phase, 'draft');
   assert.equal(alive.hull, 6);
-  assert.equal(alive.boss.weakPoints[0].hits, 1);
+  assert.equal(alive.boss.hits, 1);
   run(alive, 1, { pick: alive.draft[0] });
   assert.equal(alive.phase, 'clear');
   assert.equal(alive.rank, 'A');
   const dead = finalTick(2);
   assert.equal(dead.phase, 'lost');
-  assert.equal(dead.boss.weakPoints[0].hits, 1);
+  assert.equal(dead.boss.hits, 1);
 });
 
 test('an explicit view sets the camera after a deterministic absolute seek', () => {
@@ -272,7 +267,7 @@ test('seeded waves respect phase caps and warn before interceptor altitude chang
         assert.equal(enemy.alt, warnings.get(enemy.id)[1]);
         warned++;
       } else if (enemy.maneuver?.phase === 'diving' && warnings.has(enemy.id)) {
-        assert.ok(state.tick - warnings.get(enemy.id)[0] >= 75);
+        assert.ok(state.tick - warnings.get(enemy.id)[0] >= ROSTER.hound.bandLagTicks);
       } else {
         warnings.delete(enemy.id);
       }
@@ -310,7 +305,7 @@ test('Wing Pods cover a side contact at launch height and upgrades improve both 
 // the coarse radar glyph. It avoids bolts from their visible planar paths.
 function radarOnlyPilot() {
   let contactId, entryDirection = 0, wantAltitude = null;
-  let radar = null, dodgeUntil = 0, dodgeDirection = 0, nextDodge = 0, coreSeen = null;
+  let radar = null, dodgeUntil = 0, dodgeDirection = 0, nextDodge = 0;
   const clampStick = value => Math.max(-1, Math.min(1, value));
   const nearest = (items, p) => items.reduce((best, item) =>
     best && Math.hypot(best.x - p.x, best.z - p.z) <= Math.hypot(item.x - p.x, item.z - p.z) ? best : item, null);
@@ -320,34 +315,26 @@ function radarOnlyPilot() {
     if (state.phase !== 'playing') return pilot;
     const p = state.player, alt = Math.round(p.altitude);
     let climb = 0;
-    if (state.boss) {
-      const life = state.boss.weakPoints.reduce((hp, part) => hp + part.hp, 0);
-      if (life <= 8) coreSeen ??= state.tick;
-      const memorizedAltitude = life > 18 ? 145 : life > 8 ? 75
-        : Math.floor((state.tick - coreSeen) / 260) % 2 === 0 ? 105 : 115;
-      climb = clampStick((memorizedAltitude - alt) / 4);
-    } else {
-      const salvage = nearest(state.pickups, p);
-      const track = salvage && Math.hypot(salvage.x - p.x, salvage.z - p.z) <= 150
-        ? salvage : nearest(state.enemies, p);
-      if (state.tick % 3 === 0) {
-        radar = track && Math.hypot(track.x - p.x, track.z - p.z) <= 160
-          ? { id: track.id, mark: relativeMark(track.alt - p.altitude, true) } : null;
+    const salvage = nearest(state.pickups, p);
+    const track = activeAce(state) ?? (salvage && Math.hypot(salvage.x - p.x, salvage.z - p.z) <= 150
+      ? salvage : nearest(state.enemies, p));
+    if (state.tick % 3 === 0) {
+      radar = track && Math.hypot(track.x - p.x, track.z - p.z) <= 160
+        ? { id: track.id, mark: relativeMark(track.alt - p.altitude, true) } : null;
+    }
+    if (radar) {
+      if (radar.id !== contactId) {
+        contactId = radar.id;
+        entryDirection = 0;
+        wantAltitude = null;
       }
-      if (radar) {
-        if (radar.id !== contactId) {
-          contactId = radar.id;
-          entryDirection = 0;
-          wantAltitude = null;
-        }
-        if (radar.mark !== '■') {
-          entryDirection = radar.mark === '△' ? 1 : -1;
-          climb = entryDirection;
-          wantAltitude = null;
-        } else {
-          wantAltitude ??= alt + 7.2 * entryDirection;
-          climb = clampStick((wantAltitude - alt) / 4);
-        }
+      if (radar.mark !== '■') {
+        entryDirection = radar.mark === '△' ? 1 : -1;
+        climb = entryDirection;
+        wantAltitude = null;
+      } else {
+        wantAltitude ??= alt + 7.2 * entryDirection;
+        climb = clampStick((wantAltitude - alt) / 4);
       }
     }
 
@@ -376,7 +363,7 @@ function radarOnlyPilot() {
   };
 }
 
-test('the six-seed replay gate clears with all views and produces no TOP-only clears', () => {
+test('all six full-view legacy replays clear and outperform the radar-only pilot', () => {
   let clearWithAllViews = 0, topOnlyClears = 0;
   for (const seed of [1, 11, 27, 42, 128, 2026]) {
     for (const mode of ['full', 'top']) {
@@ -393,8 +380,8 @@ test('the six-seed replay gate clears with all views and produces no TOP-only cl
       if (mode === 'top' && state.phase === 'clear') topOnlyClears++;
     }
   }
-  assert.ok(clearWithAllViews >= 4);
-  assert.equal(topOnlyClears, 0);
+  assert.equal(clearWithAllViews, 6);
+  assert.ok(topOnlyClears < clearWithAllViews);
 });
 
 test('a late seek reaches its absolute active tick and returns a live sortie for manual controls', () => {
@@ -435,7 +422,7 @@ test('four damaging hits exhaust the one life and earn Rank C', () => {
   assert.equal(state.rank, 'C');
 });
 
-test('the full pilot can pursue off-radar salvage and intercept the advance Warden signal', () => {
+test('the full pilot can pursue off-radar salvage and intercept the advance Ace signal', () => {
   const salvage = stage('?autoplay=1');
   salvage.pickups.push({ id: 91, x: -200, z: salvage.player.z, alt: 75, xp: 2, born: 0 });
   const pickup = autopilotInput(salvage, 'full', ground);

@@ -1,7 +1,7 @@
 import { WEAPONS } from './data/items.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { buffTuning, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
-import { activeWeakPoint, clamp, HIT_WINDOW, hurtEnemy, hurtWeakPoint, inBand, projectileRoom, rearWeaponCredit, STEP,
+import { activeAce, aceVulnerable, clamp, HIT_WINDOW, hurtAce, hurtEnemy, inBand, projectileRoom, rearWeaponCredit, STEP,
   TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Ground, Position, StageState } from './stage-types.ts';
 
@@ -41,13 +41,10 @@ function advanceWake(state: StageState, level: number): void {
     hurtEnemy(state, enemy, damage, { weapon: 'ion' });
     enemy.ionReadyAt = next;
   }
-  const boss = state.boss, point = boss?.weakPoints[boss.index];
-  if (boss && point?.hp && state.tick >= (point.ionReadyAt ?? 0)
-    && crossesWake(trail, point, width, hitWindow(state, point.window), plasma)) {
-    if (!boss.entry && state.tick >= boss.exposeTick) {
-      hurtWeakPoint(state, boss, damage);
-      point.ionReadyAt = next;
-    }
+  const ace = activeAce(state);
+  if (ace && aceVulnerable(ace) && state.tick >= (ace.ionReadyAt ?? 0) && crossesWake(trail, ace, width, window, plasma)) {
+    hurtAce(state, ace, damage);
+    ace.ionReadyAt = next;
   }
   if (level >= tuning.salvageAt) {
     const pickupWindow = HIT_WINDOW + (buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
@@ -64,7 +61,7 @@ function advanceDrones(state: StageState, level: number): void {
   const radius = tuning.radius[level - 1];
   const window = hitWindow(state), damage = weaponDamage(state, 'drones', tuning.damage);
   const next = state.tick + weaponCooldown(state, 'drones', tuning.hitCooldownTicks);
-  const point = activeWeakPoint(state);
+  const ace = activeAce(state);
   let shotRoom = (collector || level >= tuning.fireAt) && state.tick >= (state.weaponFireAt.drones ?? 0)
     ? projectileRoom(state, 'drones') : 0;
   let fired = false;
@@ -89,14 +86,13 @@ function advanceDrones(state: StageState, level: number): void {
         target = enemy;
       }
     }
-    const boss = state.boss, exposed = point?.exposed && boss?.weakPoints[boss.index];
-    if (boss && exposed && exposed.hp && inBand(drone.alt, exposed.alt, hitWindow(state, exposed.window))) {
-      const range = Math.hypot(drone.x - exposed.x, drone.z - exposed.z);
-      if (range <= tuning.hitRadius && state.tick >= (exposed.droneReadyAt ?? 0)) {
-        hurtWeakPoint(state, boss, damage);
-        exposed.droneReadyAt = next;
+    if (ace && aceVulnerable(ace) && inBand(drone.alt, ace.alt, window)) {
+      const range = Math.hypot(drone.x - ace.x, drone.z - ace.z);
+      if (range <= tuning.hitRadius && state.tick >= (ace.droneReadyAt ?? 0)) {
+        hurtAce(state, ace, damage);
+        ace.droneReadyAt = next;
       }
-      if (shotRoom && exposed.hp && range < best) target = exposed;
+      if (shotRoom && ace.hp && range < best) target = ace;
     }
     if (target && shotRoom) {
       const bearing = Math.atan2(target.x - drone.x, target.z - drone.z);
@@ -104,7 +100,7 @@ function advanceDrones(state: StageState, level: number): void {
         x: drone.x, z: drone.z, alt: drone.alt, kind: 'drone-bolt', weapon: 'drones',
         vx: Math.sin(bearing) * tuning.fireSpeed, vz: Math.cos(bearing) * tuning.fireSpeed, life: tuning.fireRange / tuning.fireSpeed,
         damage: weaponDamage(state, 'drones', tuning.fireDamage), volley: ++state.nextVolley,
-        nearMiss: false, lockId: target.id === point?.id ? target.id : null,
+        nearMiss: false, lockId: target.id === ace?.id ? target.id : null,
       });
       shotRoom--;
       fired = true;
@@ -154,12 +150,10 @@ function advanceAegis(state: StageState): void {
     hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, 'pods'));
     enemy.aegisReadyAt = next;
   }
-  const boss = state.boss;
-  if (!boss || boss.entry || state.tick < boss.exposeTick) return;
-  const point = boss.weakPoints[boss.index];
-  if (!point?.hp || state.tick < (point.aegisReadyAt ?? 0) || !colliding(point, hitWindow(state, point.window))) return;
-  hurtWeakPoint(state, boss, damage);
-  point.aegisReadyAt = next;
+  const ace = activeAce(state);
+  if (!ace || !aceVulnerable(ace) || state.tick < (ace.aegisReadyAt ?? 0) || !colliding(ace, window)) return;
+  hurtAce(state, ace, damage);
+  ace.aegisReadyAt = next;
 }
 
 export function advanceSupportWeapons(state: StageState, ground?: Ground): void {

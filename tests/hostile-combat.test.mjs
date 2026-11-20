@@ -83,7 +83,7 @@ test('a real hit reports actual damage and direction, then opens 60 deterministi
 test('muzzle reports the emitter shape and original shot without adding presentation data to saves', () => {
   const stage = sortie(), muzzle = [];
   const events = { muzzle: (...args) => muzzle.push(args) };
-  for (const [i, kind] of ['patrol', 'spotter', 'core'].entries()) {
+  for (const [i, kind] of ['patrol', 'spotter', 'aegis'].entries()) {
     fireHostile(stage, { x: i * 10, z: 40, alt: 110, kind }, 60, 0, events);
     assert.equal(muzzle[i][0], stage.shots[i]);
     assert.equal(muzzle[i][1], hostileShape(kind));

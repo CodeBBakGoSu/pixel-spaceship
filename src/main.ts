@@ -30,9 +30,10 @@ import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, 
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
 import { clockText, NumericHud } from './numeric-hud.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
+import { rosterThreatMessage } from './roster-hud.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
-import { activeWeakPoint, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
+import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
@@ -78,6 +79,8 @@ const flightMessage = $('#flight-message');
 const maneuverCue = $('#maneuver-cue');
 const reversalCue = $('#reversal-cue');
 const numericHud = new NumericHud(root);
+// --- S7e lane ---
+const aceHud = $('#boss-hud'), aceBar = $('#boss-health'), aceMeter = $('#ace-meter');
 const mirrorThreat = new RearMirrorThreat();
 const radar = $<HTMLCanvasElement>('#nav-radar'), radarContext = radar.getContext('2d')!;
 const arenaMap = $<HTMLCanvasElement>('#arena-map'), mapContext = arenaMap.getContext('2d')!;
@@ -103,6 +106,8 @@ if (demoBullets || flightFixture || fidelityFixture) {
 }
 if (!query.has('mode') && !query.has('fixture')) query.set('mode', 'survivors');
 const options = parseStageOptions(query.toString());
+// --- S7e lane ---
+const freezeRoster = (options.fixture === 'ace' || options.fixture === 'roster') && query.get('live') !== '1';
 options.mobile = options.touch || coarse.matches;
 const PROFILE_KEY = 'aster-wing.pilot.v1';
 const persistent = options.mode === 'survivors' && !options.autoplay && !options.fixture && options.time === null;
@@ -213,6 +218,10 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
     scene?.hostileGraze(shot, x, z, alt, state.tick);
     scene?.shock('parry', state.tick);
     audio.play('parry');
+  },
+  // --- S7e lane ---
+  tell(kind, x, z) {
+    if ((x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) audio.play(`tell:${kind}`);
   },
 } : undefined;
 let helpTimer = 0, lastHelp = '';
@@ -437,6 +446,12 @@ function objectiveText(): string {
   if (fixture === 'flare' && state.tick >= 30 * TICKS_PER_SECOND && state.tick < 40 * TICKS_PER_SECOND) {
     return t('hud.flareDemo', { control: touch ? t('control.flareShort') : 'C' });
   }
+  // --- S7e lane ---
+  if (fixture === 'roster') {
+    const cue = options.fixtureCue === 'flak' ? 'turret' : options.fixtureCue;
+    const focus = state.enemies.find(enemy => cue === 'carrier' ? !!enemy.carrier : enemy.kind === cue);
+    return focus ? t(focus.carrier ? 'enemy.carrier' : `enemy.${focus.kind}`) : t('objective.roster');
+  }
   if (isNewEnemyKind(fixture) && state.enemies.some(enemy => enemy.kind === fixture)) return t(`enemy.${fixture}`);
   if (isLandmarkId(fixture) && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND && !state.boss) return t(`landmark.${fixture}`);
   const p = state.player, beacon = state.view !== 'overhead' ? beaconTrack(state) : null;
@@ -444,48 +459,45 @@ function objectiveText(): string {
   const range = Math.hypot(dx, dz);
   const bearing = (Math.round(Math.atan2(dx, dz) * 180 / Math.PI) + 360) % 360;
   const navigation = beacon && (range > RADAR_RANGE || !state.boss) ? ` · ${String(bearing).padStart(3, '0')}°` : '';
-  const point = activeWeakPoint(state);
-  if (!point || !state.boss) {
+  const ace = activeAce(state);
+  if (!ace) {
+    if (state.boss) return t('objective.aceDown');
     if (beaconTrack(state)) return t('objective.beacon', { bearing: navigation });
-    if (state.run) return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
-    return t(state.tick < 40 * TICKS_PER_SECOND ? 'objective.reach' :
-      state.tick < bossTick(state) ? 'objective.waves' : 'objective.boss');
+    if (!state.run && state.tick < 40 * TICKS_PER_SECOND) return t('objective.reach');
+    return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
   }
-  const seconds = Math.ceil((state.boss.exposeTick - state.tick) / TICKS_PER_SECOND);
-  if (state.view === 'overhead') return point.exposed ? t('objective.boss') : t('objective.bossSignal', { seconds });
-  const part = t(point.kind === 'core' ? 'boss.core' : point.band === 2 ? 'boss.high' : point.band === 1 ? 'boss.mid' : 'boss.low');
-  return (point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds })) + navigation;
+  return t(ace.entry ? 'objective.aceInbound' : 'objective.aceFight') + navigation;
 }
 
-function drawPortrait(warden: boolean): void {
+function drawPortrait(hostile: boolean): void {
   const c = $<HTMLCanvasElement>('#portrait').getContext('2d')!;
   const rect = (color: string, x: number, y: number, w: number, h: number) => {
     c.fillStyle = color;
     c.fillRect(x, y, w, h);
   };
-  rect(warden ? '#41262d' : '#163d45', 0, 0, 32, 32);
-  rect(warden ? '#813e3d' : '#3d8974', 2, 3, 8, 2);
-  rect(warden ? '#813e3d' : '#3d8974', 22, 5, 8, 2);
-  rect(warden ? '#606b70' : '#8a745f', 7, 10, 18, 16);
+  rect(hostile ? '#41262d' : '#163d45', 0, 0, 32, 32);
+  rect(hostile ? '#813e3d' : '#3d8974', 2, 3, 8, 2);
+  rect(hostile ? '#813e3d' : '#3d8974', 22, 5, 8, 2);
+  rect(hostile ? '#606b70' : '#8a745f', 7, 10, 18, 16);
   rect('#222d35', 9, 7, 14, 5);
   rect('#17212b', 8, 26, 16, 6);
-  rect(warden ? '#b25b59' : '#d7c3a0', 11, 13, 11, 8);
+  rect(hostile ? '#b25b59' : '#d7c3a0', 11, 13, 11, 8);
   rect('#f0e8d0', 17, 14, 5, 5);
   rect('#161d27', 19, 15, 2, 3);
-  rect(warden ? '#bd5c4b' : '#f4a34d', 20, 19, 10, 4);
+  rect(hostile ? '#bd5c4b' : '#f4a34d', 20, 19, 10, 4);
 }
 
 function updateRadio(): void {
   const sec = state.tick / TICKS_PER_SECOND;
-  const wardenIn = (state.tick - bossTick(state)) / TICKS_PER_SECOND;
+  const sinceAce = (state.tick - bossTick(state)) / TICKS_PER_SECOND;
   const message = state.phase === 'title' ? null : sec < 5 ? 'dialogue.reachArrival' :
-    sec >= 22 && sec < 26 ? 'dialogue.stack' : wardenIn >= 0 && wardenIn < 3 ? 'dialogue.warden' : null;
+    sec >= 22 && sec < 26 ? 'dialogue.stack' : sinceAce >= 0 && sinceAce < 3 ? 'dialogue.ace' : null;
   $('#radio').hidden = !message;
   if (!message || lastFlightKey === message) return;
   lastFlightKey = message;
-  const warden = message === 'dialogue.warden';
-  drawPortrait(warden);
-  setText('#radio-speaker', t(warden ? 'speaker.warden' : 'speaker.opal'));
+  const hostile = message === 'dialogue.ace';
+  drawPortrait(hostile);
+  setText('#radio-speaker', t(hostile ? 'speaker.ace' : 'speaker.opal'));
   setText('#radio-text', t(message));
 }
 
@@ -501,7 +513,7 @@ function updateHud(readout: RadarReadout): void {
   const notice = state.phaseNotice, banner = $('#phase-banner');
   banner.hidden = !notice || state.phase !== 'playing' || state.paused;
   if (notice && !banner.hidden) {
-    const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.wardenInbound') : t(`phase.${notice.phase}`);
+    const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.aceInbound') : t(`phase.${notice.phase}`);
     const lull = notice.kind === 'lull'
       ? ' · ' + (notice.repaired ? t('phase.lullRepair', { hull: notice.repaired }) : t('phase.lull')) : '';
     setText('#phase-banner', context + lull);
@@ -519,16 +531,24 @@ function updateHud(readout: RadarReadout): void {
   if (state.run) {
     const eta = Math.ceil((bossTick(state) - state.tick) / TICKS_PER_SECOND);
     setText('#sortie-phase', t(`phase.${phaseAt(state.tick / TICKS_PER_SECOND).id}`));
-    setText('#warden-countdown', eta > 0 ? t('stageHud.wardenEta', { time: clockText(eta) }) :
+    setText('#ace-countdown', eta > 0 ? t('stageHud.aceEta', { time: clockText(eta) }) :
       t('stageHud.timeLeft', { time: clockText(time) }));
   }
   setText('#score', String(state.score).padStart(6, '0'));
   setText('#salvage', `◆ ${state.salvage}`);
   setText('#objective', objectiveText());
-  const boss = state.boss;
-  const hp = boss?.weakPoints.reduce((sum, point) => sum + point.hp, 0) ?? 0;
-  $('#boss-hud').hidden = !hp;
-  if (boss && hp) $('#boss-health').style.width = `${100 * hp / boss.weakPoints.reduce((sum, point) => sum + point.maxHp, 0)}%`;
+  // --- S7e lane ---
+  const ace = activeAce(state);
+  aceHud.hidden = !ace;
+  if (ace) {
+    const percent = Math.ceil(100 * ace.hp / ace.maxHp);
+    setText('#ace-label', t('ace.label', { phase: ace.phase }));
+    const value = String(percent);
+    if (aceMeter.getAttribute('aria-valuenow') !== value) {
+      aceBar.style.width = `${value}%`;
+      aceMeter.setAttribute('aria-valuenow', value);
+    }
+  }
   updateRadio();
   updateMenu();
   if (!touch && state.phase === 'playing' && !state.paused && lastHelp !== state.view) {
@@ -598,16 +618,13 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
-  const flak = state.enemies.some(enemy => enemy.tell?.kind === 'flak'
-    && Math.hypot(p.x - enemy.tell.x, p.z - enemy.tell.z) < 85);
-  const spotter = state.enemies.some(enemy => enemy.tell?.kind === 'snipe' && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 165);
+  const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
   let threat = '';
   if (state.boundaryWarning) message = 'hud.boundary';
   else if (warnings.terrain === 'pullUp') message = 'cockpit.pullUp';
-  else if (flak) message = 'hud.flakWarning';
-  else if (spotter) message = 'hud.spotterWarning';
+  else if (rosterWarning) message = rosterWarning;
   else if (miss?.kind === 'miss') message = top ? 'hud.checkAlt' : miss.delta > 0 ? 'hud.shotLow' : 'hud.shotHigh';
   else if (warning?.maneuver) {
     const down = warning.maneuver.band < warning.band;
@@ -1071,8 +1088,7 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
-  // --- S7f lane ---
-  if (flightFixture || fidelityFixture || (bulletFixture && !bulletFixture.stress)) return;
+  if (flightFixture || fidelityFixture || freezeRoster || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
@@ -1155,18 +1171,18 @@ function updateRearBombMarker(): void {
 }
 
 function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flareReady: boolean): void {
-  const danger = readout.rearDanger;
+  const { rearDanger: danger, rearPursuit: pursuit } = readout;
   const running = state.phase === 'playing' && !state.paused;
   if (!running || state.view !== 'cockpit') mirrorThreat.clear();
   const threat = running && state.view === 'cockpit' ? mirrorThreat.update(state) : null;
   const neutral = state.view === 'chase' && readout.rearMarks.length > 0;
-  rearDangerCue.hidden = !running || (!danger && !neutral && !threat);
+  rearDangerCue.hidden = !running || (!danger && !pursuit && !neutral && !threat);
   if (rearDangerCue.hidden) return;
 
   const mirror = scene?.cockpitMirror;
   const docked = !!mirror && mirror.width >= 94;
   rearDangerCue.dataset.docked = String(docked);
-  rearDangerCue.dataset.danger = String(!!danger);
+  rearDangerCue.dataset.danger = String(!!danger || !!pursuit);
   if (mirror && docked) {
     rearDangerCue.style.setProperty('--rear-left', `${mirror.x + 3}px`);
     rearDangerCue.style.setProperty('--rear-right', `${innerWidth - mirror.x - mirror.width + 3}px`);
@@ -1177,6 +1193,14 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
     : danger && reversalReady ? (touch ? t('control.loop') : `SPACE ${t('hud.rearReverse')}`)
     : danger ? t('hud.rearEvade') : readout.rearMarks.join(' ');
   if (danger) description = t('hud.rearDanger');
+  // --- S7e lane ---
+  else if (pursuit) {
+    description = t(pursuit.kind === 'ace' ? 'hud.aceTail' : 'hud.rosterTail');
+    const p = state.player;
+    const lateral = (pursuit.x - p.x) * Math.cos(p.yaw) - (pursuit.z - p.z) * Math.sin(p.yaw);
+    position = lateral < -pursuit.range * 0.25 ? '←' : lateral > pursuit.range * 0.25 ? '→' : '▼';
+    action = (scene?.rearView?.width ?? 0) < 74 ? description : t(reversalReady ? 'hud.rearReverse' : 'hud.rearEvade');
+  }
   else if (threat) {
     const bearing = { Left: '←', Centre: '•', Right: '→' }[threat.side];
     const altitude = { Above: '↑', Level: '=', Below: '↓' }[threat.height];
@@ -1199,14 +1223,16 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
   rearDangerCue.setAttribute('aria-label', `${description} · ${action}`);
 }
 
-function updateRearViewCue(): void {
+function updateRearViewCue(readout: RadarReadout): void {
   const rect = scene?.rearView;
+  const pursuit = readout.rearPursuit;
   const hit = state.rearGlimpse?.kind === 'flare' && !!state.flareHit && state.tick < state.flareHit.until;
   const active = !!state.rearGlimpse && state.tick < state.rearGlimpse.until;
-  rearViewCue.hidden = !rect || rect.width < 74 || state.phase !== 'playing' || state.paused || (!active && !hit);
+  rearViewCue.hidden = !rect || rect.width < 74 || state.phase !== 'playing' || state.paused || (!active && !hit && !pursuit);
   if (rearViewCue.hidden || !rect) return;
-  setText('#rear-view-cue', t(hit ? 'hud.flareHit' : 'hud.rearView'));
+  setText('#rear-view-cue', t(hit ? 'hud.flareHit' : pursuit?.kind === 'ace' ? 'hud.aceTail' : pursuit ? 'hud.rosterTail' : 'hud.rearView'));
   rearViewCue.dataset.hit = String(hit);
+  rearViewCue.dataset.pursuit = String(!!pursuit);
   rearViewCue.style.left = `${rect.x + 4}px`;
   rearViewCue.style.top = `${rect.y + 4}px`;
   rearViewCue.style.maxWidth = `${rect.width - 8}px`;
@@ -1220,13 +1246,13 @@ function render(now: number): void {
   const readout = buildRadar(state, yaw);
   if (effectsEnabled && readout.rearDanger && !rearDanger) audio.play('warning');
   rearDanger = readout.rearDanger;
-  const ladder = redrawFlight ? scene?.draw(state, !!rearDanger) : undefined;
+  const ladder = redrawFlight ? scene?.draw(state, !!rearDanger || !!readout.rearPursuit, readout.rearPursuit ?? undefined) : undefined;
   if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass,
     effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
-  updateRearViewCue();
+  updateRearViewCue(readout);
   const progress = 1 - state.wipe / WIPE_DURATION;
   wipe.hidden = state.wipe <= 0;
   if (!wipe.hidden) wipe.style.top = `${progress * 100}%`;
@@ -1247,7 +1273,7 @@ function render(now: number): void {
     const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
       (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
     const mirror = scene.cockpitMirror;
-    const markers = cockpitMarkers.update(state, cockpit, scene, mirror, rearDanger);
+    const markers = cockpitMarkers.update(state, cockpit, scene, mirror, rearDanger, readout.rearPursuit);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;
     feedbackAnchor = aim;
     cockpitDisplay.draw(state, aim, ladder ?? [],
@@ -1307,8 +1333,9 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
     { id, kind, x, z, alt, hp, burnUntil, flyby: flyby?.phase ?? null, flybySide: flyby?.side }
   )),
   mineCount: state.enemyMines.length,
-  weakPointHits: state.boss?.weakPoints.map(point => point.hits) ?? [],
-  bossHp: state.boss?.weakPoints.map(point => point.hp) ?? [],
+  bossHp: state.boss?.hp ?? null,
+  ace: state.boss && { phase: state.boss.phase, tail: state.boss.tail, boosting: state.boss.boosting,
+    roll: state.boss.roll && { ...state.boss.roll }, tell: state.boss.tell && { ...state.boss.tell }, defeatedAt: state.boss.defeatedAt },
   lock: state.lock && { ...state.lock }, cockpitDelta, cockpitMarkers: cockpit && scene ? cockpitMarkers.snapshot() : [],
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
   // --- S7f lane ---
@@ -1349,7 +1376,7 @@ function animate(now: number): void {
   }
   // --- S7f lane ---
   const timingFlight = state.phase === 'playing' && !state.paused && !document.hidden && !guide
-    && !flightFixture && !fidelityFixture && (!bulletFixture || bulletFixture.stress);
+    && !flightFixture && !fidelityFixture && !freezeRoster && (!bulletFixture || bulletFixture.stress);
   if (scene?.observeRenderFrame(timingFlight ? elapsed * 1000 : null)) {
     refreshRenderQuality();
     dirty = true;

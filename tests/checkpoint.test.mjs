@@ -33,6 +33,21 @@ test('restoring a phase boundary preserves the deterministic state and the next 
   assert.equal(JSON.stringify(restored), JSON.stringify(original));
 });
 
+test('a pre-Ace 8:00 checkpoint deploys the new fighter while preserving the sortie', () => {
+  const original = stateAt(480 * 60);
+  const envelope = JSON.parse(encodeCheckpoint(original));
+  envelope.state.boss = { weakPoints: [{ hp: 47 }], index: 0, exposeTick: original.tick + 180 };
+  envelope.state.phaseNotice.phase = 'warden';
+  const restored = decodeCheckpoint(JSON.stringify(envelope));
+  assert.equal(restored.tick, original.tick);
+  assert.deepEqual(restored.run, original.run);
+  assert.equal(restored.boss.kind, 'ace');
+  assert.ok(restored.boss.entry);
+  assert.equal(restored.phaseNotice.phase, 'ace');
+  stepStage(restored, {}, ground);
+  assert.ok(Number.isFinite(restored.boss.x));
+});
+
 test('checkpoint decoder ignores stale, incomplete, and corrupt storage', () => {
   const envelope = JSON.parse(encodeCheckpoint(stateAt(7200)));
   assert.equal(decodeCheckpoint(JSON.stringify({ ...envelope, version: 99 })), null);

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ACE } from '../src/data/ace.ts';
 import { ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { sampleFlyIn } from '../src/fly-in.ts';
 import { BOSS_TICK, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
-import { activeWeakPoint, advanceFlares, advanceRearBombs, advanceShots, BANDS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { advanceFlares, advanceRearBombs, advanceShots, BANDS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { LANDMARKS } from '../src/reach.ts';
 import { World } from '../src/world.ts';
@@ -27,7 +28,7 @@ function openingPatrol() {
   return { state, patrol };
 }
 
-function incomingWarden() {
+function incomingAce() {
   const state = launch(42);
   state.tick = BOSS_TICK - 1;
   state.nextWave = -1;
@@ -152,7 +153,7 @@ test('a patrol takes damage on arrival and drops collectible salvage when shot d
   assert.equal(state.salvage, 1);
 });
 
-for (const kind of ['patrol', 'Warden']) {
+for (const kind of ['patrol', 'Ace']) {
   test(`rear bombs, flares and ongoing burns pass over an inbound ${kind}`, () => {
     let state, target;
     if (kind === 'patrol') {
@@ -160,10 +161,9 @@ for (const kind of ['patrol', 'Warden']) {
       state = flight;
       target = patrol;
     } else {
-      const { state: flight, boss } = incomingWarden();
+      const { state: flight, boss } = incomingAce();
       state = flight;
-      boss.exposeTick = state.tick;
-      target = boss.weakPoints[boss.index];
+      target = boss;
     }
     const { x, z, alt, hp } = target;
     const bomb = { x, z, alt, vx: 0, vz: 0, born: state.tick };
@@ -195,50 +195,42 @@ for (const kind of ['patrol', 'Warden']) {
   });
 }
 
-test('locked shots pass through the inbound Warden even if its expose timer expires early', () => {
-  const { state, boss } = incomingWarden();
+test('locked shots pass through the inbound Ace and its own guns stay quiet on entry', () => {
+  const { state, boss } = incomingAce();
   const { arriveAt } = boss.entry;
-  const point = boss.weakPoints[boss.index];
   const assertShotPasses = () => {
-    const shot = boltAt(point, { lockId: point.id });
+    const shot = boltAt(boss, { lockId: boss.id });
     state.shots.push(shot);
     advanceShots(state, ground);
-    assert.equal(point.hp, point.maxHp);
-    assert.equal(point.hits, 0);
+    assert.equal(boss.hp, boss.maxHp);
+    assert.equal(boss.hits, 0);
     assert.ok(state.shots.includes(shot));
     state.shots.length = 0;
   };
   assertShotPasses();
-  boss.exposeTick = state.tick;
-  boss.shotAt = state.tick;
+  boss.attackAt = state.tick;
   assertShotPasses();
-  assert.equal(activeWeakPoint(state).exposed, false);
-  while (state.tick < arriveAt - 1) {
+  while (state.tick < arriveAt) {
     tick(state);
     assert.deepEqual(state.shots, []);
+    assert.equal(boss.tell, null);
   }
-  tick(state);
   assert.equal(boss.entry, undefined);
-  assert.equal(activeWeakPoint(state).exposed, true);
-  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 3);
+  assert.equal(boss.attackAt, state.tick + ACE.attack.startDelay);
 });
 
-test('Warden crosses the rim during the existing shield signal and stops at the atoll', () => {
-  const { state, boss } = incomingWarden();
+test('the Ace crosses the rim, enters the dogfight at the atoll, and can be hit on arrival', () => {
+  const { state, boss } = incomingAce();
   const approach = boss.entry;
   assert.ok(approach && planarDistance(boss, state.arena) >= state.arena.radius + 50);
-  assert.equal(boss.exposeTick, BOSS_TICK + 3 * TICKS_PER_SECOND);
-  assert.ok(approach.arriveAt < boss.exposeTick);
+  assert.equal(approach.arriveAt - approach.startedAt, ACE.entry.ticks);
+  assert.deepEqual(approach.target, { x: LANDMARKS.atoll.x, z: LANDMARKS.atoll.z, alt: BANDS[1] });
   while (state.tick < approach.arriveAt) tick(state);
   assert.equal(boss.entry, undefined);
-  assert.deepEqual([boss.x, boss.z, boss.alt], [LANDMARKS.atoll.x, LANDMARKS.atoll.z, BANDS[1]]);
-  assert.equal(state.shots.length, 0);
-  assert.equal(activeWeakPoint(state).exposed, false);
-  while (state.tick < boss.exposeTick) tick(state);
-  assert.equal(activeWeakPoint(state).exposed, true);
-  const point = boss.weakPoints[boss.index];
-  state.shots.push(boltAt(point, { lockId: point.id }));
+  assert.ok(planarDistance(boss, approach.target) < 2);
+  assert.equal(boss.alt, BANDS[1]);
+  state.shots.push(boltAt(boss, { lockId: boss.id }));
   advanceShots(state, ground);
-  assert.equal(point.hp, point.maxHp - 1);
-  assert.equal(point.hits, 1);
+  assert.equal(boss.hp, boss.maxHp - 1);
+  assert.equal(boss.hits, 1);
 });

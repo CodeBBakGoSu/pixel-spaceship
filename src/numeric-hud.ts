@@ -36,7 +36,7 @@ export function hudTimer(state: Pick<StageState, 'tick' | 'run'>): string {
 
 export function hudPhaseKey(state: Pick<StageState, 'tick' | 'run'>): MessageKey {
   if (state.run) return `phase.${phaseAt(state.tick / TICKS_PER_SECOND).id}`;
-  return state.tick < bossTick(state) ? 'hud.phaseLegacy' : 'phase.warden';
+  return state.tick < bossTick(state) ? 'hud.phaseLegacy' : 'phase.ace';
 }
 
 function setDisabled(button: HTMLElement, ready: boolean): void {

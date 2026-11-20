@@ -1,14 +1,16 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
+import { ACE_PILOT, BOT_PROFILES, type BotProfile } from './data/bot-profiles.ts';
 import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
 import { LANDMARKS } from './reach.ts';
-import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
+import { angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
-import { beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
+import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
-type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby'] };
+type Route = Position & { kind: 'ace' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby'] };
+type AceTactics = Pick<BotProfile, 'aceLead' | 'aceWarningTicks'>;
 
 function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
   let best: T | null = null, range = Infinity;
@@ -22,19 +24,14 @@ function nearest<T extends Position>(items: T[], x: number, z: number): T | null
   return best;
 }
 
-function routeFor(state: StageState, mode: PilotMode): Route {
-  const p = state.player, boss = state.boss;
-  if (mode === 'top' && boss) {
-    const { x, z, alt } = boss.entry?.target ?? boss;
-    return { x, z, alt, kind: 'weak' };
-  }
-  const weak = activeWeakPoint(state);
-  if (weak && boss?.entry) {
-    const { target } = boss.entry;
-    return { x: weak.x + target.x - boss.x, z: weak.z + target.z - boss.z, alt: weak.alt + target.alt - boss.alt, kind: 'weak' };
-  }
-  if (weak && (!boss?.paced || weak.exposed || boss.exposeTick - state.tick <= 8 * TICKS_PER_SECOND)) {
-    return { ...weak, kind: 'weak' };
+function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics): Route {
+  const p = state.player, ace = activeAce(state);
+  // --- S7e lane ---
+  if (ace?.entry) return { ...ace.entry.target, kind: 'ace' };
+  if (ace) {
+    const range = Math.hypot(ace.x - p.x, ace.z - p.z);
+    const lead = mode === 'full' ? tactics.aceLead * ACE_PILOT.leadSeconds * Math.min(1, range / ACE_PILOT.pursuitRange) : 0;
+    return { x: ace.x + ace.vx * lead, z: ace.z + ace.vz * lead, alt: ace.alt, kind: 'ace' };
   }
   if (mode === 'full' && state.run) {
     const chest = nearest(state.chests.drops, p.x, p.z);
@@ -52,7 +49,7 @@ function routeFor(state: StageState, mode: PilotMode): Route {
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
     if (former) return { ...former, kind: 'enemy' };
   }
-  if (mode === 'full' && !boss && state.tick >= beaconTick(state)
+  if (mode === 'full' && !state.boss && state.tick >= beaconTick(state)
     && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
     && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
     return { ...LANDMARKS.atoll, kind: 'beacon' };
@@ -117,7 +114,7 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
 }
 
 function rearManeuver(state: StageState, target: Route, angle: number, range: number): ManeuverKind | undefined {
-  if (target.kind !== 'enemy' || Math.abs(angle) < Math.PI * 155 / 180) return;
+  if ((target.kind !== 'enemy' && target.kind !== 'ace') || Math.abs(angle) < Math.PI * 155 / 180) return;
   const { altitude } = state.player;
   if (inBand(altitude, target.alt)) {
     if (range >= 65 && range <= 115 && canManeuver(state, 'j-turn')) return 'j-turn';
@@ -153,7 +150,17 @@ function hasRearFlareTarget(state: StageState): boolean {
   });
 }
 
-export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
+// --- S7e lane ---
+function dodgeAceWarning(state: StageState, tactics: AceTactics): number | undefined {
+  const ace = state.boss, p = state.player, tell = ace?.tell;
+  if (!ace?.tail || !tell || tell.kind === 'roll' || tell.until - state.tick > tactics.aceWarningTicks
+    || !inBand(p.altitude, tell.alt, ACE_PILOT.warningMargin)) return;
+  const safe = tell.alt + (p.altitude <= tell.alt ? -ACE_PILOT.warningClimb : ACE_PILOT.warningClimb);
+  return clamp((safe - p.altitude) / 2, -1, 1);
+}
+
+export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground,
+  tactics: AceTactics = BOT_PROFILES.skilled): StageInput {
   if (state.phase === 'chest') {
     return { chestPick: state.chestReveal ? 'continue' : chestEvolutions(state)[0] ?? 'open' };
   }
@@ -171,23 +178,23 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   if (state.phase !== 'playing' || state.paused) return {};
   const flare = mode === 'full' && hasRearFlareTarget(state);
   if (!maneuverAllowsControl(state.maneuver)) return { flare };
-  const p = state.player, target = routeFor(state, mode);
+  const p = state.player, target = routeFor(state, mode, tactics);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
   const delta = target.alt - p.altitude;
   const withinCoarse = Math.abs(delta) <= HIT_WINDOW;
   const climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
-  // Extend after each boss pass. Turning tightly around a stationary target would keep it off the nose.
-  const extending = target.kind === 'weak' && range < 72 && Math.abs(angle) > Math.PI * 0.58;
+  const extending = target.kind === 'ace' && range < ACE_PILOT.extensionRange && Math.abs(angle) > ACE_PILOT.extensionAngle;
   const acceptingPass = mode === 'full' && !!target.flyby && !state.boundaryWarning && Math.abs(angle) > Math.PI / 6;
   const turn = extending || acceptingPass ? 0 : target.kind === 'home' && range < 34 ? 0.65 : clamp(angle * 2.35, -1, 1);
 
   let view: StageState['view'] = 'overhead';
   if (mode === 'full' && target.kind !== 'home') {
     if (Math.abs(delta) > 12 || acceptingPass) view = 'chase';
-    else if (target.kind === 'weak' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
+    else if (target.kind === 'ace' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
   }
-  const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb, ground) : undefined;
+  const dodge = state.invulnerability === 0
+    ? dodgeClimb(state, mode, climb, ground) ?? (mode === 'full' ? dodgeAceWarning(state, tactics) : undefined) : undefined;
   const maneuver = mode === 'full' && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
@@ -213,11 +220,10 @@ export function seekStage(options: StageOptions, ground: Ground): StageState {
   const initial = createStage(options, ground);
   const startOptions = target < initial.tick ? { ...options, fixture: null } : options;
 
-  // A replay must be able to reach any active tick. Once the core is the last
-  // objective, fly a holding pattern so an early clear cannot truncate the seek.
+  // Preserve late time seeks even when the replay can defeat the Ace early.
   const replay = (flight: StageState, conservative: boolean): StageState => {
     while (flight.tick < target && (flight.phase === 'playing' || flight.phase === 'draft' || flight.phase === 'chest')) {
-      const holding = conservative || flight.boss?.weakPoints[flight.boss.index]?.kind === 'core';
+      const holding = conservative || !!activeAce(flight);
       stepStage(flight, flight.phase === 'playing' && holding ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
     }
     return flight;

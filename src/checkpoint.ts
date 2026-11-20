@@ -1,4 +1,5 @@
-import { PHASES } from './data/phases.ts';
+import { deployAce } from './ace.ts';
+import { PHASES, RUN_BOSS_SECONDS } from './data/phases.ts';
 import { TICKS_PER_SECOND } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 
@@ -23,6 +24,14 @@ export function decodeCheckpoint(raw: string | null): StageState | null {
       || !state.profile || !state.bills || !state.chests || !state.player || !state.arena
       || ![state.enemies, state.shots, state.pickups, state.effects, state.draft, state.picks].every(Array.isArray)
       || ![state.seed, state.rng, state.player.x, state.player.z, state.player.altitude, state.hull, state.level].every(Number.isFinite)) return null;
+    // --- S7e lane ---
+    if (state.tick === RUN_BOSS_SECONDS * TICKS_PER_SECOND && state.boss?.kind !== 'ace') {
+      const ace = deployAce(state);
+      Object.assign(ace, ace.entry?.origin);
+      state.boss = ace;
+      state.lock = null;
+      if (state.phaseNotice) state.phaseNotice.phase = 'ace';
+    }
     return state;
   } catch {
     return null;

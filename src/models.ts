@@ -2,6 +2,7 @@ import { BufferGeometry, Color, Float32BufferAttribute } from 'three';
 import { dronePalette, makeDroneModel, makeShipModel, shipPalette, SHIP_VOXEL_SUBDIVISIONS } from '../proto/shared/models.ts';
 import { AIRFRAME_VOXEL_SUBDIVISIONS, buildFaces, refineVoxelModel, type VoxelModel } from './voxel.ts';
 import type { NewEnemyKind, RegularEnemyKind } from './enemy-kinds.ts';
+import { aegisAirframe } from './models-roster.ts';
 
 export const SHIP_HULL_UNIT = 0.62;
 export const SHIP_BASE_VOXEL_SIZE = SHIP_HULL_UNIT / SHIP_VOXEL_SUBDIVISIONS;
@@ -54,60 +55,6 @@ export function playerAirframe(detailed: boolean) {
     return material;
   });
   return airframe(hull, detailedShipPalette, SHIP_BASE_VOXEL_SIZE / AIRFRAME_VOXEL_SUBDIVISIONS);
-}
-
-export const wardenPalette = [[0, 0, 0], [54, 64, 77], [102, 121, 133], [149, 162, 166], [81, 104, 118]];
-const WARDEN_VOXEL_SIZE = 0.65;
-const WARDEN_SEAM = wardenPalette.length;
-const WARDEN_RIM = WARDEN_SEAM + 1;
-const WARDEN_BRACE = WARDEN_SEAM + 2;
-const detailedWardenPalette = [...wardenPalette, [72, 83, 94], [173, 186, 187], [112, 137, 151]];
-
-function makeWardenModel(): VoxelModel {
-  const width = 57, length = 7, height = 57;
-  const pivot: [number, number, number] = [28, 3, 28];
-  const data = new Uint8Array(width * length * height);
-  for (let z = 0; z < height; z++) for (let y = 0; y < length; y++) for (let x = 0; x < width; x++) {
-    const dx = x - pivot[0], dz = z - pivot[2];
-    const r = Math.hypot(dx, dz);
-    const brace = Math.min(Math.abs(dx), Math.abs(dz)) <= 2 && r >= 18 && r <= 27;
-    if (brace) data[(z * length + y) * width + x] = 4;
-    else if (y > 0 && y < length - 1 && r >= 20 && r <= 27) data[(z * length + y) * width + x] = r > 25 ? 1 : r < 22 ? 2 : 3;
-  }
-  return { width, length, height, pivot, data };
-}
-
-export function wardenFaces() {
-  return buildFaces(makeWardenModel());
-}
-
-export function wardenAirframe(detailed: boolean) {
-  const model = makeWardenModel();
-  if (!detailed) return airframe(model, wardenPalette, WARDEN_VOXEL_SIZE);
-
-  const ring = refineVoxelModel(model, (x, y, z, material, sample) => {
-    if (!material) return 0;
-    const radius = Math.hypot(x, z);
-    const axial = Math.min(Math.abs(x), Math.abs(z));
-    const end = Math.abs(y);
-    const forward = end > 1.75 && !sample(x, y + Math.sign(y) * 0.5, z);
-    if (material === 4) {
-      if (forward && axial < 0.75 && radius > 19 && radius < 26) {
-        return Math.abs(radius - 24) < 0.5 ? WARDEN_SEAM : WARDEN_BRACE;
-      }
-      return material;
-    }
-
-    // The outer lip steps down to the ring. The inner wall keeps long coplanar spans for the greedy bake.
-    if (forward && radius > 27.15) return 0;
-    if (forward && radius > 22 && radius < 25.5) {
-      if (Math.abs(Math.abs(x) - Math.abs(z)) < 0.65) return WARDEN_SEAM;
-      if (axial < 3.25) return WARDEN_BRACE;
-      if (radius > 24.75) return WARDEN_RIM;
-    }
-    return material;
-  });
-  return airframe(ring, detailedWardenPalette, WARDEN_VOXEL_SIZE / AIRFRAME_VOXEL_SUBDIVISIONS);
 }
 
 type Detail = readonly [x: number, y: number, z: number, width: number, length: number, material: number];
@@ -203,6 +150,7 @@ function shade(color: number[], brightness: number): number[] {
 }
 
 export function enemyAirframe(kind: RegularEnemyKind, detailed = false) {
+  if (kind === 'aegis') return aegisAirframe(detailed);
   const drone = kind === 'patrol' || kind === 'interceptor';
   const model = drone ? makeDroneModel(kind) : makeRosterModel(kind);
   const palette = drone ? dronePalette : enemyAirframes[kind].palette;

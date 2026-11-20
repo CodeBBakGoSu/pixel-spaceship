@@ -10,6 +10,8 @@ import { hostileCanHit, inBand, SHOT_LIMIT, STEP } from './stage-combat.ts';
 import type { Ground, Shot, StageState } from './stage-types.ts';
 
 const SHAPE = { orb: 0, needle: 1, diamond: 2 } as const satisfies Record<HostileShape, number>;
+// --- S7e lane ---
+const ACE_MISSILE_SHAPE = 4;
 const DANGER = 0, ABOVE = 1, BELOW = 2, SHIELDED = 3;
 const MUZZLE = 4, IMPACT = 5, GRAZE = 6;
 const DROP_LIMIT = 48;
@@ -82,14 +84,16 @@ function glyphBatch(data: InstancedInterleavedBuffer, topPlane: IUniform<number>
         float radius = clamp(glyphStyle.z, pixel * (glyphStyle.w > 0.85 ? 2.2 : 0.9), pixel * 12.0);
         local = position.xy * 1.52;
         vec2 offset = local;
-        if (glyphStyle.x > 0.5 && glyphStyle.x < 1.5) {
+        // --- S7e lane ---
+        bool missile = glyphStyle.x > 3.5;
+        if ((glyphStyle.x > 0.5 && glyphStyle.x < 1.5) || missile) {
           vec3 course = mat3(modelViewMatrix) * vec3(glyphMotion.x, 0.0, -glyphMotion.y);
           vec2 axis = course.xy;
           if (!top) axis += mvPosition.xy * course.z / depth;
           // End-on needles retain a narrow silhouette even at the center of the view.
           axis = dot(axis, axis) > max(0.001, 0.018 * dot(course, course))
             ? normalize(axis) : vec2(0.8, 0.6);
-          offset = axis * (local.x * 1.72) + vec2(-axis.y, axis.x) * (local.y * 0.63);
+          offset = axis * (local.x * (missile ? 2.3 : 1.72)) + vec2(-axis.y, axis.x) * (local.y * (missile ? 0.75 : 0.63));
         }
         gl_Position = projectionMatrix * vec4(mvPosition.xy + radius * offset, mvPosition.zw);
         style = glyphStyle.xyw;
@@ -107,7 +111,8 @@ function glyphBatch(data: InstancedInterleavedBuffer, topPlane: IUniform<number>
         if (style.x < 0.5) distanceToEdge = max(max(p.x, p.y), (p.x + p.y) * 0.73);
         else if (style.x < 1.5) distanceToEdge = max(p.x, p.y + 0.59 * p.x);
         else if (style.x < 2.5) distanceToEdge = p.x + p.y;
-        else distanceToEdge = min(p.x + 3.4 * p.y, p.y + 3.4 * p.x);
+        else if (style.x < 3.5) distanceToEdge = min(p.x + 3.4 * p.y, p.y + 3.4 * p.x);
+        else distanceToEdge = max(p.x, p.y + max(0.0, local.x + 0.25) * 0.68);
 
         float tone = style.y;
         float power = style.z * rangeFade();
@@ -318,7 +323,8 @@ export class HostileVisuals {
     for (let i = 0; i < count; i++) {
       const slot = this.slots[i], shot = shots[this.activeIndices[i]];
       const shape = this.shapes[slot];
-      const radius = shape === SHAPE.diamond ? BULLET_RADIUS * 1.21 : BULLET_RADIUS;
+      const radius = shape === ACE_MISSILE_SHAPE ? BULLET_RADIUS * 1.36
+        : shape === SHAPE.diamond ? BULLET_RADIUS * 1.21 : BULLET_RADIUS;
       this.writeGlyph(shot.x, shot.z, shot.alt, shot.vx, shot.vz, shape, this.tones[slot], radius, 1);
     }
     this.drawBursts(tick);
@@ -330,7 +336,7 @@ export class HostileVisuals {
 
   private startTracking(slot: number, shot: Shot, shape: number, tick: number): void {
     this.tracked[slot] = shot;
-    this.shapes[slot] = shape;
+    this.shapes[slot] = shot.kind === 'hostile' && shot.hostileKind === 'ace-missile' ? ACE_MISSILE_SHAPE : shape;
     this.tones[slot] = -1;
     this.sampleCursor[slot] = this.sampleCount[slot] = 0;
     this.sampleTick[slot] = tick;

@@ -134,3 +134,21 @@ Fidelity adds finer airframes and salvage sprites and lets the player select an 
 | Weak | 5% → 5% | 2% → 2% | 276.4 → 276.4 s | 276.4 s | 191.5 |
 
 The integrated max-load boost fixture at High measured p95 frame times of 16.8/16.7/16.7 ms in desktop TOP/CHASE/COCKPIT, and 16.7/16.8/16.7 ms in emulated portrait. Chromium recorded 300 intervals per view using ANGLE Vulkan on an RTX 4090. Desktop used 1920×1080 and portrait 390×844. The desktop COCKPIT repeat averaged 59.8 FPS with one dropped interval after warming up. The other five view and viewport combinations averaged 60.0 FPS.
+
+## Stage 7e merge
+
+Red Kite replaces the Warden, which changes the terminal replay hashes once. The merge matches all four [Roster lane digests](lanes/S7e.md) across the six Legacy and six Survivors seeds on each cap. Recorded inputs reproduce the same hashes, and fidelity-on and fidelity-off runs still agree. Legacy clears took 110.53–125.13 s with 40–44 regular kills. Survivors cleared in 529.05–545.27 s with 696–797 regular kills.
+
+The Ace and Aegis share the Fidelity voxel grid and quality switch. Their fine models retain the authored envelopes and use 1,490 and 292 triangles respectively. The banked rear feed keeps the forward camera's attitude while tracking a pursuer. The shared audio mixer leaves the default volume linear and caps peaks when multiple new enemy warnings overlap.
+
+Each cap ran 100 seeds per pilot at Heat 0. Both caps gave the same combat results. A clear includes a boss kill or a live timeout.
+
+| Profile | Clear incl. timeout before → after | Boss wins before → after | Median survival before → after | Median run length before → after | Median regular kills before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 96% → 99% | 95% → 99% | 600.0 → 600.0 s | 592.6 → 545.2 s | 744.5 → 780 |
+| Average | 65% → 57% | 64% → 42% | 600.0 → 600.0 s | 590.4 → 570.0 s | 696 → 767 |
+| Weak | 5% → 14% | 2% → 0% | 276.4 → 266.4 s | 276.4 → 266.4 s | 191.5 → 235.5 |
+
+All 14 weak clears were live timeouts. Peak live Gnats grew from 41 to 49. Global tuning follows the World merge in Stage 7c.
+
+High quality stayed active throughout the RTX 4090 boost stress samples with the Ace and the full swarm caps. P95 in desktop TOP/CHASE/COCKPIT was 16.7/16.8/16.7 ms and portrait was 16.7/16.7/16.7 ms. Desktop COCKPIT averaged 59.8 FPS and the other five combinations averaged 60.0 FPS.

@@ -7,16 +7,16 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Terminal seed-1 hashes from 5a890c1, using the production terrain and full-view autopilot.
+// Terminal seed-1 hashes from the Red Kite roster, using the production terrain and full-view autopilot.
 const terminalHashes = {
-  legacy: '093931dc6387e721d31962abe05c98d395cb98c39fafe71aae4807e8f2ac6b8d',
-  survivors: 'a5d862cf11aaa429cbac7daf14f0d96754d7cfb4f0cdcf3fa012af1a0c52e507',
+  legacy: '180fbe09a5ab8f95ee120bfec0fa027e43fc66fefec2003a9d0d5fb29ed5bde0',
+  survivors: '4f0449358bb47a93c2cebf13be7aead5c3f8b1f70d14004bc1a165e5649623a2',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);
 
 for (const [mode, expected] of Object.entries(terminalHashes)) {
-  test(`${mode} keeps the Stage 7a replay hash with fidelity rendering enabled or disabled`, () => {
+  test(`${mode} keeps its replay hash with fidelity rendering enabled or disabled`, () => {
     for (const enabled of [false, true]) {
       const stage = createStage(parseStageOptions(`?autoplay=1&mode=${mode}&seed=1`), ground);
       const pickups = enabled ? new PickupVisuals() : null;

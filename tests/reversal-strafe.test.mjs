@@ -97,24 +97,26 @@ test('three overdrive kills in 21 ticks trigger a burst and extend the cue past 
   assert.equal(state.reversal, null);
 });
 
-test('overdrive does not bypass the Warden lock or raise its damage per regular Twin volley', () => {
+test('an Ace takes the same damage from a locked Twin volley in and out of overdrive', () => {
   const damage = [];
   for (const boosted of [false, true]) {
     const state = createStage(parseStageOptions('?fixture=boss'));
-    const point = state.boss.weakPoints[state.boss.index];
-    state.player.altitude = point.alt;
-    state.player.yaw = Math.atan2(point.x - state.player.x, point.z - state.player.z);
+    const ace = state.boss;
+    state.player.altitude = ace.alt;
+    state.player.yaw = Math.atan2(ace.x - state.player.x, ace.z - state.player.z);
     if (boosted) {
-      const escort = contact(state, 18, 55, 2);
-      combat.openReversal(state, [escort.id, point.id]);
+      combat.openReversal(state, [ace.id]);
     }
     for (let i = 0; i < 20; i++) combat.acquireAndFire(state);
+    assert.equal(state.shots.length, boosted ? 0 : 2);
     assert.ok(state.shots.every(shot => shot.lockId === null));
-    assert.equal(point.hp, point.maxHp);
+    assert.equal(ace.hp, ace.maxHp);
+    state.shots.length = 0;
+    state.twinAt = state.tick;
     combat.acquireAndFire(state);
-    assert.equal(state.shots.filter(shot => shot.lockId === point.id).length, 2);
+    assert.equal(state.shots.filter(shot => shot.lockId === ace.id).length, 2);
     sweep(state, 45);
-    damage.push(point.maxHp - point.hp);
+    damage.push(ace.maxHp - ace.hp);
   }
   assert.equal(damage[0], 2);
   assert.equal(damage[1], damage[0]);
@@ -201,11 +203,10 @@ test('terrain intersecting the descending path stops the strafe before an aircra
 test('a missed strafe remains limited to aircraft in its selected lower band', () => {
   const state = flight(145);
   state.boss = createStage(parseStageOptions('?fixture=boss')).boss;
-  state.boss.exposeTick = state.tick;
-  const point = state.boss.weakPoints[0];
+  const ace = state.boss;
   const target = contact(state, 0, 73, 1);
   target.alt = 103;
-  Object.assign(point, { x: target.x, z: target.z, alt: target.alt });
+  Object.assign(ace, { x: target.x, z: target.z, alt: 97.9 });
   combat.acquireAndFire(state);
   const [strafe] = state.shots;
   assert.equal(strafe?.kind, 'strafe');
@@ -217,9 +218,24 @@ test('a missed strafe remains limited to aircraft in its selected lower band', (
   sweep(state, 60);
   assert.equal(outsideBand.hp, 2);
   assert.equal(twoDown.hp, 2);
-  assert.equal(point.hp, point.maxHp);
+  assert.equal(ace.hp, ace.maxHp);
   assert.ok(Math.abs(strafe.alt - 98) < 1e-6);
   assert.equal(state.shots.length, 0);
+});
+
+test('a strafe swept through the selected band can clip the Ace', () => {
+  const state = flight(145);
+  state.boss = createStage(parseStageOptions('?fixture=boss')).boss;
+  const ace = state.boss;
+  const target = contact(state, 0, 73, 1);
+  target.alt = 103;
+  Object.assign(ace, { x: target.x, z: target.z, alt: target.alt });
+  combat.acquireAndFire(state);
+  assert.equal(state.shots[0]?.kind, 'strafe');
+  state.enemies.length = 0;
+  sweep(state, 45);
+  assert.equal(ace.hp, ace.maxHp - 1);
+  assert.equal(state.lock, null);
 });
 
 test('a strafe kill drops salvage in the lower band until the player dives to collect it', () => {

@@ -22,6 +22,14 @@ function audioParam(value) {
   };
 }
 
+function shapeSample(curve, input) {
+  const sample = Math.max(-1, Math.min(1, input));
+  const index = (sample + 1) * (curve.length - 1) / 2;
+  const low = Math.floor(index);
+  const fraction = index - low;
+  return curve[low] * (1 - fraction) + curve[Math.ceil(index)] * fraction;
+}
+
 function browserAudio(t) {
   const storage = new Map();
   const instances = [];
@@ -79,6 +87,10 @@ function browserAudio(t) {
 
       createBiquadFilter() {
         return this.node('filter', { frequency: audioParam(350), Q: audioParam(1) });
+      }
+
+      createWaveShaper() {
+        return this.node('wave-shaper', { curve: null });
       }
 
       createBuffer(channels, length, sampleRate) {
@@ -321,7 +333,7 @@ test('flyby and cloud cues play once, respect cooldown and ignore passes while i
   assert.equal(voices().length, 4);
 });
 
-test('flight buffers are finite and repeatable and the combined mix reserves peak headroom', t => {
+test('flight and roster buffers are repeatable and the combined mix stays below full scale', t => {
   const { instances, userActivation } = browserAudio(t);
   userActivation.hasBeenActive = true;
   for (let i = 0; i < 2; i++) {
@@ -350,5 +362,46 @@ test('flight buffers are finite and repeatable and the combined mix reserves pea
   const loudest = mapFlightAudio(1000, 1, 1.6, -80, 0);
   ceiling += loudest.engineGain * (1 + FLIGHT_AUDIO.engine.noiseMix)
     + loudest.afterburnerGain + loudest.windGain + loudest.rushGain;
-  assert.ok(ceiling * first.master.outputs[0].gain.value < 1);
+  const [headroom] = first.master.outputs;
+  const [limiter] = headroom.outputs;
+  assert.equal(headroom.gain.value, 0.69);
+  assert.ok(limiter.curve instanceof Float32Array, 'the mix needs a peak limiter before the destination');
+  assert.deepEqual(limiter.outputs, [first.destination]);
+
+  const { curve } = limiter;
+  const fullPeak = ceiling * headroom.gain.value;
+  const defaultPeak = fullPeak * first.master.gain.value;
+  assert.ok(fullPeak > 1, 'cover a mixed peak that would clip at full volume');
+  for (const input of [-0.70, -defaultPeak, 0, defaultPeak, 0.70]) {
+    assert.ok(Math.abs(shapeSample(curve, input) - input) < 1e-6, `keep ${input} at unity gain`);
+  }
+  assert.ok(curve.every((value, i) => i === 0 || value >= curve[i - 1]), 'the limiter is monotone');
+  const limitedPeak = shapeSample(curve, fullPeak);
+  assert.ok(limitedPeak > 0.70 && limitedPeak < 1);
+  assert.equal(shapeSample(curve, -fullPeak), -limitedPeak);
+});
+
+test('tail, missile lock and roster alerts play distinct cues with independent cooldowns', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const cues = ['snipe', 'flak', 'dive', 'tail', 'strafe', 'mine', 'aegis', 'carrier', 'gnat', 'gun', 'missile', 'roll', 'ace-down']
+    .map(kind => `tell:${kind}`);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  for (const cue of cues) {
+    audio.play(cue);
+    audio.play(cue);
+  }
+  assert.equal(context.started.length, cues.length);
+  assert.equal(new Set(context.started).size, cues.length);
+  const sampleData = context.started.map(buffer => buffer.getChannelData(0));
+  for (const samples of sampleData) {
+    assert.equal(Math.abs(samples[0]), 0);
+    assert.equal(Math.abs(samples.at(-1)), 0);
+    assert.ok(samples.some(value => Math.abs(value) > 0.05));
+  }
+  context.currentTime += 0.5;
+  audio.play('tell:missile');
+  assert.equal(context.started.at(-1), context.started[cues.indexOf('tell:missile')]);
 });

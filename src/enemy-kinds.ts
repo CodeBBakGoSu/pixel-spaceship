@@ -1,4 +1,5 @@
 import { GNAT, SWARM_CAPS } from './data/phases.ts';
+import { ROSTER } from './data/roster.ts';
 
 export const ENEMY_KINDS = {
   patrol: { hp: 2, xp: 1, cap: 24, firstShot: 86, speed: 22, pursuit: 32, boltSpeed: 58 },
@@ -9,17 +10,18 @@ export const ENEMY_KINDS = {
   flanker: { hp: 3, xp: 1, cap: 2, firstShot: 96, speed: 62, boltSpeed: 69 },
   harrier: { hp: 4, xp: 2, cap: 1, firstShot: 100, speed: 58, boltSpeed: 64 },
   diver: { hp: 4, xp: 2, cap: 2, firstShot: 110, speed: 30, boltSpeed: 76 },
-  bomber: { hp: 10, xp: 3, cap: 6, firstShot: 100, speed: 16 },
+  bomber: { hp: 10, xp: 3, cap: 6, firstShot: 100, speed: 16, boltSpeed: 58 },
   turret: { hp: 4, xp: 1, cap: 12, firstShot: 105 },
+  aegis: ROSTER.aegis,
   gnat: { hp: GNAT.hp, xp: GNAT.xp, cap: SWARM_CAPS.desktop, firstShot: 0, speed: GNAT.speed },
 } as const;
 
 export type EnemyKind = keyof typeof ENEMY_KINDS;
 export type RegularEnemyKind = Exclude<EnemyKind, 'gnat'>;
-export type NewEnemyKind = Exclude<RegularEnemyKind, 'patrol' | 'interceptor'>;
+export type NewEnemyKind = Exclude<RegularEnemyKind, 'patrol' | 'interceptor' | 'aegis'>;
 
 export function isNewEnemyKind(value: string | null): value is NewEnemyKind {
-  return value !== null && value !== 'patrol' && value !== 'interceptor' && value !== 'gnat'
+  return value !== null && value !== 'patrol' && value !== 'interceptor' && value !== 'gnat' && value !== 'aegis'
     && Object.prototype.hasOwnProperty.call(ENEMY_KINDS, value);
 }
 

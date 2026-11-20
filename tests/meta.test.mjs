@@ -105,7 +105,7 @@ test('Heat tiers stack their pressure, and boss clears unlock the next tier up t
   assert.equal(HEAT_TIERS[1].armorScale, 1.15);
   assert.ok(HEAT_TIERS[2].shotIntervalScale < 1);
   assert.equal(HEAT_TIERS[3].magnetScale, 0.8);
-  assert.equal(HEAT_TIERS[4].extraWeakPoint, true);
+  assert.equal(HEAT_TIERS[4].extraAceArmor, true);
   assert.equal(HEAT_TIERS[5].carrierEscort, true);
   assert.equal(HEAT_TIERS[5].rewardScale, 1.75);
 
