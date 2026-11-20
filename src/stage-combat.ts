@@ -1,4 +1,6 @@
 import type { Boss, Effect, Enemy, Ground, Point, Position, RearBomb, RearGlimpse, Shot, StageState, WeakPoint } from './stage-types.ts';
+import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
+import { DRAFT_RULES, WEAPON_DAMAGE_LEVEL, WEAPONS, type WeaponId } from './data/items.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -101,8 +103,27 @@ function hurtWeakPoint(state: StageState, boss: Boss, damage: number): void {
   state.effects.push({ kind: point.hp ? 'hit' : 'burst', x: point.x, z: point.z, alt: point.alt, life: point.hp ? 0.16 : 0.52 });
 }
 
+export function projectileRoom(state: StageState, kind: WeaponId | 'hostile'): number {
+  if (!state.run) return Math.max(0, SHOT_LIMIT - state.shots.length);
+  let hostile = 0, weapon = 0;
+  for (const shot of state.shots) {
+    if (shot.kind === 'hostile') hostile++;
+    else if ((shot.kind === 'strafe' ? 'twin' : shot.kind) === kind) weapon++;
+  }
+  return kind === 'hostile' ? Math.max(0, HOSTILE_SHOT_LIMIT - hostile) :
+    Math.max(0, Math.min(PLAYER_SHOT_LIMIT - (state.shots.length - hostile), WEAPON_PROJECTILE_LIMITS[kind] - weapon));
+}
+
+function damageFor(state: StageState, weapon: 'twin' | 'pods', base: number): number {
+  const run = state.run;
+  if (!run) return base;
+  const level = run.weaponLevels[weapon] ?? 1;
+  return base * (level >= WEAPON_DAMAGE_LEVEL.level ? WEAPON_DAMAGE_LEVEL.multiplier : 1)
+    * (1 + run.damageUpgrades * DRAFT_RULES.damagePerUpgrade);
+}
+
 export function fireHostile(state: StageState, source: Position, speed: number, spread = 0): void {
-  if (state.shots.length >= SHOT_LIMIT) return;
+  if (!projectileRoom(state, 'hostile')) return;
   const p = state.player;
   const yaw = Math.atan2(p.x - source.x, p.z - source.z) + spread;
   state.shots.push({
@@ -121,8 +142,9 @@ function fireFriendly(
   const forwardX = Math.sin(p.yaw), forwardZ = Math.cos(p.yaw);
   const lead = target ? Math.hypot(target.x - p.x, target.z - p.z) / BOLT_SPEED : 0;
   const volley = ++state.nextVolley;
+  let room = projectileRoom(state, kind);
   for (const side of offsets) {
-    if (state.shots.length >= SHOT_LIMIT) break;
+    if (room-- <= 0) break;
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
@@ -131,8 +153,10 @@ function fireFriendly(
       : p.yaw;
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
-      damage: kind === 'twin' ? state.twinDamage : state.podDamage,
+      damage: damageFor(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
       life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId,
+      ...(kind === 'twin' && !lockId && state.run?.weaponLevels.twin === WEAPONS.twin.tuning.pierceAt
+        ? { pierce: { remaining: 2, hits: [] } } : {}),
     });
   }
 }
@@ -140,12 +164,13 @@ function fireFriendly(
 type RankedTarget = { enemy: Enemy; range: number };
 
 function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal']>, targets: RankedTarget[]): void {
-  if (!targets.length || state.shots.length >= SHOT_LIMIT) return;
+  const room = projectileRoom(state, 'twin');
+  if (!targets.length || !room) return;
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const volley = ++state.nextVolley;
   targets.sort((a, b) => a.range - b.range);
-  for (let i = 0; i < REVERSAL_SPREAD.length && state.shots.length < SHOT_LIMIT; i++) {
+  for (let i = 0; i < Math.min(room, REVERSAL_SPREAD.length); i++) {
     const { enemy, range } = targets[i % targets.length];
     const side = REVERSAL_MUZZLES[i];
     const x = p.x + fx * TWIN_MUZZLE + fz * side;
@@ -156,7 +181,7 @@ function fireOverdrive(state: StageState, pass: NonNullable<StageState['reversal
     state.shots.push({
       x, z, alt: p.altitude, kind: 'twin',
       vx: Math.sin(yaw) * REVERSAL_SPEED, vz: Math.cos(yaw) * REVERSAL_SPEED,
-      damage: state.twinDamage, life: 0.44, volley, nearMiss: false, lockId: null,
+      damage: damageFor(state, 'twin', state.twinDamage), life: 0.44, volley, nearMiss: false, lockId: null,
       reversal: { remaining: REVERSAL_HITS, hits: [] }, reversalTick: pass.startTick,
     });
   }
@@ -188,7 +213,7 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,
     vx: dx / lead + target.vx, vz: dz / lead + target.vz, vy,
-    damage: 1, life: (p.altitude - BANDS[targetBand] + STRAFE_BAND_WINDOW) / -vy,
+    damage: damageFor(state, 'twin', 1), life: (p.altitude - BANDS[targetBand] + STRAFE_BAND_WINDOW) / -vy,
     volley: ++state.nextVolley, nearMiss: false, lockId: null,
   });
   state.strafeAt = state.tick + STRAFE_CADENCE;
@@ -196,6 +221,9 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: 0 | 1): void {
 
 export function acquireAndFire(state: StageState): void {
   const p = state.player;
+  const twinLevel = state.run?.weaponLevels.twin;
+  const podLevel = state.run?.weaponLevels.pods;
+  const hasPods = !state.run || !!podLevel;
   const weak = activeWeakPoint(state);
   const weakRange = weak ? Math.hypot(weak.x - p.x, weak.z - p.z) : Infinity;
   const weakAngle = weak ? angleTo(p.yaw, weak.x - p.x, weak.z - p.z) : Infinity;
@@ -214,7 +242,8 @@ export function acquireAndFire(state: StageState): void {
     && !inBand(p.altitude, weak.alt, weak.window) ? weak : null;
   let twinRange = TWIN_RANGE, wrongRange = wrong ? weakRange : TWIN_RANGE;
   let left: Enemy | null = null, right: Enemy | null = null;
-  let leftRange = POD_RANGE, rightRange = POD_RANGE;
+  let leftRange: number = podLevel ? WEAPONS.pods.tuning.range[podLevel - 1] : POD_RANGE;
+  let rightRange = leftRange;
   const reversal = state.reversal;
   const overdrive = reversal && state.tick < reversal.until ? reversal : null;
   const reversalReady = overdrive && state.tick >= overdrive.nextShotAt;
@@ -237,7 +266,7 @@ export function acquireAndFire(state: StageState): void {
         wrongRange = range;
       }
       if (sameBand && reversalReady && range <= TWIN_RANGE) overdriveTargets.push({ enemy, range });
-    } else if (sameBand && angle >= Math.PI * 0.2) {
+    } else if (hasPods && sameBand && angle >= Math.PI * 0.2) {
       if (bearing < 0 && range < leftRange) {
         left = enemy;
         leftRange = range;
@@ -261,17 +290,21 @@ export function acquireAndFire(state: StageState): void {
   const primary = state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
   if (primary) {
     fireFriendly(state, 'twin', state.twinRank === 3 ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && weak ? weak.id : null);
-    state.twinAt = state.tick + (state.twinRank === 1 ? 21 : 13);
+    const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks[twinLevel - 1] : state.twinRank === 1 ? 21 : 13;
+    state.twinAt = state.tick + cadence;
   }
   if (overdrive && reversalReady) fireOverdrive(state, overdrive, overdriveTargets);
   if (state.tick >= state.podsAt && (left || right)) {
     if (left) fireFriendly(state, 'pods', [-6], left, null);
     if (right) fireFriendly(state, 'pods', [6], right, null);
-    state.podsAt = state.tick + (state.podRank === 1 ? 43 : 25);
+    if (podLevel === WEAPONS.pods.tuning.rearBonusAt) fireFriendly(state, 'pods', [0], left ?? right, null);
+    const cadence = podLevel ? WEAPONS.pods.tuning.cooldownTicks[podLevel - 1] : state.podRank === 1 ? 43 : 25;
+    state.podsAt = state.tick + cadence;
   }
   if (lowerBand !== null) {
     strafeTargets.sort((a, b) => a.range - b.range);
-    for (let i = 0; i < Math.min(2, strafeTargets.length) && state.shots.length < SHOT_LIMIT; i++) {
+    const room = projectileRoom(state, 'twin');
+    for (let i = 0; i < Math.min(2, strafeTargets.length, room); i++) {
       fireStrafe(state, strafeTargets[i].enemy, lowerBand);
     }
   }
@@ -571,8 +604,8 @@ export function advanceShots(state: StageState, ground: Ground): void {
         hurtPlayer(state);
         shot.life = 0;
       }
-    } else if (shot.reversal) {
-      if (advanceOverdrive(state, shot, shot.reversal, dx, dz, terrain)) resolved.add(shot.volley);
+    } else if (shot.reversal || shot.pierce) {
+      if (advanceOverdrive(state, shot, (shot.reversal ?? shot.pierce)!, dx, dz, terrain)) resolved.add(shot.volley);
     } else {
       let enemyHit: Enemy | null = null;
       let bossHit = false;

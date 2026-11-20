@@ -1,13 +1,16 @@
 import {
-  BoxGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Fog, Group, InstancedBufferAttribute, InstancedMesh, Object3D,
+  BoxGeometry, BufferGeometry, CircleGeometry, Color, DataTexture, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
+  InstancedBufferAttribute, InstancedMesh, Object3D,
   EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RepeatWrapping, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
-  type BufferGeometry, type Camera,
+  type Camera,
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
+import { SWARM_CAPS } from './data/phases.ts';
+import { PICKUP_LIMIT } from './data/run-balance.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust, SHIP_VOXEL_SIZE } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
@@ -67,9 +70,34 @@ function upload(mesh: InstancedMesh, count: number): void {
   if (mesh.instanceColor) uploadAttribute(mesh.instanceColor, count);
 }
 
+export function makeGnatBatch(): InstancedMesh {
+  // The eight perimeter points and two ridges give the flight group a shaded silhouette in one draw.
+  const outline = [
+    [0, 0, -4.4], [-1.08, 0, -1.9], [-4.3, 0, 1.7], [-1.18, 0, 1.2],
+    [0, 0, 3.5], [1.18, 0, 1.2], [4.3, 0, 1.7], [1.08, 0, -1.9],
+  ];
+  const top = outline.length, bottom = top + 1;
+  const positions = [...outline.flat(), 0, 1.25, 0, 0, -0.95, 0];
+  const swatches = [0xf3e8de, 0x9c9aae, 0x706b7d, 0xaa9fa7, 0xe3d2c6,
+    0xaa9fa7, 0x706b7d, 0x9c9aae, 0xffffff, 0x636a82];
+  const colors = swatches.flatMap(swatch => new Color(swatch).toArray());
+  const indices: number[] = [];
+  for (let index = 0; index < top; index++) {
+    const next = (index + 1) % top;
+    indices.push(top, index, next, bottom, next, index);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  const mesh = instances(geometry, SWARM_CAPS.desktop, new MeshBasicMaterial({ vertexColors: true }));
+  mesh.name = 'Gnat swarm';
+  return mesh;
+}
+
 type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
-const PICKUP_LIMIT = 80;
+const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const FLAK_RING_LIMIT = 24;
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
 const DESKTOP_DOWNSCALE = 2;
@@ -85,6 +113,7 @@ type Framing = {
 
 export class FlightScene {
   private readonly renderer: WebGLRenderer;
+  private readonly world: World;
   private readonly scene = new Scene();
   private readonly fog = new Fog(0x9cbfcc, 245, 875);
   private readonly screen = new Scene();
@@ -134,6 +163,7 @@ export class FlightScene {
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
   private readonly drones = instances(bakeVoxels(droneFaces(), dronePalette, 0.84), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
+  private readonly gnats = makeGnatBatch();
   private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS] as const).map(kind => {
     const { faces, palette, size } = kind === 'interceptor'
       ? { faces: droneFaces(kind), palette: dronePalette, size: 0.84 * 1.18 }
@@ -163,7 +193,8 @@ export class FlightScene {
   private readonly up = new Vector3(0, 1, 0);
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
 
-  constructor(canvas: HTMLCanvasElement, private readonly world: World, arena: StageState['arena']) {
+  constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena']) {
+    this.world = world;
     this.atmosphere = new FlightAtmosphere(arena);
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1);
@@ -171,7 +202,7 @@ export class FlightScene {
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
     this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
-    this.scene.add(this.ship, this.drones, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
+    this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
@@ -485,10 +516,19 @@ export class FlightScene {
     this.drawTrail(state, trail, flat, external);
     const fireTint = Math.floor(state.tick / 6) % 2 ? 0xff9564 : 0xffbf78;
 
-    let shadows = 0, drones = 0, rings = 0, marked = 0, trails = 0;
+    let shadows = 0, drones = 0, gnats = 0, rings = 0, marked = 0, trails = 0;
     if (chase) this.writeShadow(shadows++, p.x, p.z, 8.8, 10.8, p.yaw);
     for (const batch of this.airframes) batch.count = 0;
     for (const enemy of state.enemies) {
+      if (enemy.kind === 'gnat') {
+        if (gnats < state.swarmCap) {
+          const tint = (enemy.burnUntil ?? 0) > state.tick ? fireTint
+            : flat ? GNAT_BAND_TINTS[enemy.band] : 0xffb289;
+          this.write(this.gnats, gnats++, enemy.x, enemy.z, flat ? TOP_FLIGHT - 1 : enemy.alt,
+            enemy.yaw, 1, 1, 1, tint, flat ? 0 : enemy.bank);
+        }
+        continue;
+      }
       const batch = this.airframeByKind.get(enemy.kind);
       const warning = (enemy.tell || enemy.maneuver?.phase === 'warning') && Math.floor(state.tick / 7) % 2;
       const paint = (enemy.burnUntil ?? 0) > state.tick ? fireTint : enemy.hitUntil > state.tick ? 0xffffc1 : warning ? 0xffd069
@@ -515,6 +555,7 @@ export class FlightScene {
       }
     }
     upload(this.drones, drones);
+    upload(this.gnats, gnats);
     upload(this.pursuitRings, marked);
     upload(this.enemyTrails, trails);
     for (const { mesh, count } of this.airframes) upload(mesh, count);
@@ -556,7 +597,7 @@ export class FlightScene {
       if (salvage === PICKUP_LIMIT) break;
       const { pulling, reversal } = pickup;
       const pulse = pulling && !this.reducedMotion.matches ? 0.4 * Math.sin(state.tick * 0.36 + salvage) : 0;
-      const size = 3 + pickup.xp * 0.8 + pulse;
+      const size = 3 + Math.min(pickup.xp, 5) * 0.8 + pulse;
       const alt = flat ? TOP_FLIGHT + 5 : pickup.alt;
       const tint = pulling ? reversal ? 0xd6fffc : 0xfff1b4 : pickup.xp >= 2 ? 0xffe49c : 0x8efbe8;
       this.write(this.pickups, salvage++, pickup.x, pickup.z, alt, state.tick / 37, size, size, size, tint, Math.PI / 4);

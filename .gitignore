@@ -2,6 +2,7 @@ node_modules
 dist
 .tmp
 .npm-cache
+sim-out/
 ref/*.mp4
 ref/frames/
 ref/clips/

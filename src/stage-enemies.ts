@@ -1,4 +1,5 @@
 import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
+import { GNAT } from './data/phases.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { nearestBand } from './maneuvers.ts';
 import { keepInsideArena } from './reach.ts';
@@ -358,6 +359,18 @@ function advancePosition(state: StageState, enemy: Enemy, ground: Ground): void 
   keepInsideArena(enemy, state.arena);
 }
 
+function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
+  const x = enemy.x + enemy.vx * STEP, z = enemy.z + enemy.vz * STEP;
+  if ((enemy.leaveAt !== undefined && state.tick >= enemy.leaveAt)
+    || (x - state.arena.x) ** 2 + (z - state.arena.z) ** 2 > state.arena.radius ** 2
+    || ground(x, z) + GNAT.clearance > enemy.alt) {
+    enemy.hp = 0; // The formation left the fight. This is not a kill.
+    return;
+  }
+  enemy.x = x;
+  enemy.z = z;
+}
+
 export function advanceEnemies(state: StageState, ground: Ground): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const enemy of state.enemies) {
@@ -372,6 +385,10 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
         delete enemy.entry;
       }
       // Fly-in skips attack AI. Collision checks use the entry flag until arrival.
+      continue;
+    }
+    if (enemy.kind === 'gnat') {
+      advanceGnat(state, enemy, ground);
       continue;
     }
     const dx = p.x - enemy.x, dz = p.z - enemy.z, range = Math.hypot(dx, dz);
@@ -426,7 +443,7 @@ export function advanceEnemies(state: StageState, ground: Ground): void {
     if ((enemy.kind === 'patrol' || enemy.kind === 'interceptor') && range < 185
       && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
       fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed);
-      enemy.shotAt = state.tick + 255 + Math.floor(random(state) * 105);
+      enemy.shotAt = state.tick + 255 + Math.floor(random(state.run ? state.streams.combat : state) * 105);
     }
   }
 }

@@ -462,6 +462,12 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .draft-options button:hover, .draft-options button:focus-visible { background: #21433b; }
 .draft-options small { color: #cfdfd6; font-size: 11px; line-height: 1.4; }
 .draft-options kbd { color: #ffd68d; font: inherit; }
+.draft-options button[data-variant="overcharged"] { border-color: #b186ff; }
+.draft-options button[data-variant="risky"] { border-color: #e97c79; }
+.draft-actions:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.draft-actions button { padding: 7px 12px; background: #152427; color: #dff8e4; border: 1px solid #6c918a; font: inherit; cursor: pointer; }
+.draft-actions button[aria-pressed="true"] { background: #33483c; border-color: #f5c06f; }
+.draft-actions button:disabled { opacity: 0.45; cursor: default; }
 .experience.phone-layout .draft-card { width: min(650px, 100%); }
 .experience.phone-layout .draft-options kbd { display: none; }
 

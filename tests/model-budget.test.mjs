@@ -5,6 +5,7 @@ import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
+import * as flightScene from '../src/scene.ts';
 import { enemyLimit } from '../src/spawn-director.ts';
 
 const triangleCount = (faces, palette) => bakeVoxels(faces, palette, 1).index.count / 3;
@@ -42,4 +43,16 @@ test('player and Warden details fit the craft budgets and the heaviest legal cap
   const boss = player + warden + atCap(enemyLimit({ boss: {} }));
   assert.ok(wave <= 6032 * 1.25, `wave: ${wave}`);
   assert.ok(boss <= 5360 * 1.25, `boss: ${boss}`);
+});
+
+test('a full Gnat swarm adds one instanced batch and at most 1,280 triangles', () => {
+  assert.equal(typeof flightScene.makeGnatBatch, 'function');
+  const batch = flightScene.makeGnatBatch();
+  assert.ok(batch.isInstancedMesh);
+  assert.equal(batch.count, 0);
+  assert.equal(batch.instanceMatrix.count, 80);
+  assert.equal(batch.instanceColor.count, 80);
+  assert.equal(batch.layers.mask, 1, 'the world batch remains visible in the rear camera');
+  const triangles = batch.geometry.index.count / 3;
+  assert.ok(triangles > 0 && triangles * 80 <= 1280, `swarm: ${triangles * 80}`);
 });

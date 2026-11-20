@@ -1,8 +1,8 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
-import { BEACON_SIGNAL_SECONDS, LANDMARKS } from './reach.ts';
+import { LANDMARKS } from './reach.ts';
 import { activeWeakPoint, angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
-import { createStage, stepStage } from './stage.ts';
+import { beaconTick, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
@@ -38,15 +38,15 @@ function routeFor(state: StageState, mode: PilotMode): Route {
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
     if (former) return { ...former, kind: 'enemy' };
   }
-  if (mode === 'full' && state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND
-    && (state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
+  if (mode === 'full' && state.tick >= beaconTick(state)
+    && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
     && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
     return { ...LANDMARKS.atoll, kind: 'beacon' };
   }
   const enemy = nearest(state.enemies.filter(enemy => !enemy.entry), p.x, p.z);
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
-    const needsXp = mode === 'full' && state.level < 3;
+    const needsXp = mode === 'full' && (!!state.run || state.level < 3);
     const distantEnemy = !enemy || Math.hypot(enemy.x - p.x, enemy.z - p.z) > 120;
     if (Math.hypot(pickup.x - p.x, pickup.z - p.z) <= (needsXp && distantEnemy ? 260 : 150)) {
       return { ...pickup, kind: 'pickup' };
@@ -94,7 +94,7 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
         const dodge = avoid(enemy.tell, FLAK_RADIUS + 5);
         if (dodge !== undefined) return dodge;
       }
-      if (!enemy.entry && state.tick > state.bodyGraceUntil) {
+      if (enemy.kind !== 'gnat' && !enemy.entry && state.tick > state.bodyGraceUntil) {
         const dodge = avoid(enemy, 15);
         if (dodge !== undefined) return dodge;
       }
@@ -140,7 +140,11 @@ function hasRearFlareTarget(state: StageState): boolean {
 }
 
 export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
-  if (state.phase === 'draft') return { pick: state.draft[0] };
+  if (state.phase === 'draft') {
+    const wantsRepair = state.hull <= state.maxHull - 2 && state.draft.includes('repair');
+    const prefers = ['twin', 'pods', 'damage'].find(id => state.run?.cards.some(card => card.id === id && card.variant !== 'risky'));
+    return { pick: wantsRepair ? 'repair' : state.draft.find(id => id === prefers) ?? state.draft[0] };
+  }
   if (state.phase !== 'playing' || state.paused) return {};
   const flare = mode === 'full' && hasRearFlareTarget(state);
   if (!maneuverAllowsControl(state.maneuver)) return { flare };
@@ -164,7 +168,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   const maneuver = mode === 'full' && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
-  const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (state.level < 3 || target.kind === 'beacon')));
+  const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (!!state.run || state.level < 3 || target.kind === 'beacon')));
   return {
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,

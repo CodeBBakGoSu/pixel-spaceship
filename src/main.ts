@@ -4,6 +4,7 @@ import type { Segment } from './camera.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
+import { DRAFT_RULES } from './data/items.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
@@ -13,10 +14,10 @@ import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, 
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { FlightScene } from './scene.ts';
-import { activeWeakPoint, BOSS_TICK, parseStageOptions, requiredXp, stepStage } from './stage.ts';
+import { activeWeakPoint, bossTick, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
 import { BOMB_RELOAD_TICKS, canDropFlare, clamp, inBand, MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { DraftId, Effect, ManeuverKind, StageInput } from './stage-types.ts';
+import type { DraftId, Effect, LegacyDraftId, ManeuverKind, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -59,7 +60,11 @@ const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay
 const cockpitMarkers = new CockpitMarkers();
 const world = new World();
 const ground = (x: number, z: number) => world.height(x, z);
-const options = parseStageOptions(location.search);
+const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
+const query = new URLSearchParams(location.search);
+if (!query.has('mode') && !query.has('fixture')) query.set('mode', 'survivors');
+const options = parseStageOptions(query.toString());
+options.mobile = options.touch || coarse.matches;
 const state = seekStage(options, ground);
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
@@ -76,17 +81,17 @@ try {
 
 const keys = new Set<string>();
 const steeringKeys = new Set(['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
-const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
 let touch = false, phone: PhoneLayout | null = null, cockpit: CockpitLayout | null = null;
 let hud: HudLayout, layoutView: Segment | null = null;
 let safe: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 let guide: 'launch' | 'help' | null = null;
 let guideOpener: HTMLElement | null = null;
 let menuKey = '';
-let draftLevel = 0;
+let renderedDraft: DraftId[] | null = null;
+let banishing = false;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
 let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
-let pendingPick: DraftId | undefined;
+let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
 type ManeuverPress = { kind: ManeuverKind; turn: number };
 let pendingManeuver: ManeuverPress | undefined;
 let stickId: number | null = null;
@@ -219,13 +224,18 @@ function objectiveText(): string {
   const point = activeWeakPoint(state);
   if (!point || !state.boss) {
     if (beaconTrack(state)) return t('objective.beacon', { bearing: navigation });
+    if (state.run) return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
     return t(state.tick < 40 * TICKS_PER_SECOND ? 'objective.reach' :
-      state.tick < BOSS_TICK ? 'objective.waves' : 'objective.boss');
+      state.tick < bossTick(state) ? 'objective.waves' : 'objective.boss');
   }
   const seconds = Math.ceil((state.boss.exposeTick - state.tick) / TICKS_PER_SECOND);
   if (state.view === 'overhead') return point.exposed ? t('objective.boss') : t('objective.bossSignal', { seconds });
   const part = t(point.kind === 'core' ? 'boss.core' : point.band === 2 ? 'boss.high' : 'boss.low');
   return (point.exposed ? t('objective.bandOpen', { part }) : t('objective.bandSignal', { part, seconds })) + navigation;
+}
+
+function clockText(seconds: number): string {
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function drawPortrait(warden: boolean): void {
@@ -293,13 +303,13 @@ function updateHud(readout: RadarReadout): void {
   touchLoop.setAttribute('aria-disabled', String(!ready || lowBoost));
   updateRearDangerCue(readout, ready && !lowBoost, flareReady);
   setText('#view-label', t(`view.${state.view}`));
-  const cost = requiredXp(state.level);
+  const cost = requiredXp(state.level, !!state.run);
   const xp = Math.min(cost ?? 0, state.xp);
   const stats = { level: state.level, xp, cost: cost ?? 0 };
   setText('#xp-label', t(cost === null ? 'hud.xpMax' : 'hud.xp', stats));
   $('#xp-label').style.setProperty('--xp-fill', `${cost === null ? 100 : 100 * xp / cost}%`);
-  const time = Math.max(0, Math.ceil(180 - state.tick / TICKS_PER_SECOND));
-  setText('#segment-timer', `${String(Math.floor(time / 60)).padStart(2, '0')}:${String(time % 60).padStart(2, '0')}`);
+  const time = Math.max(0, Math.ceil((endTick(state) - state.tick) / TICKS_PER_SECOND));
+  setText('#segment-timer', clockText(time));
   setText('#score', String(state.score).padStart(6, '0'));
   setText('#salvage', `◆ ${state.salvage}`);
   setText('#objective', objectiveText());
@@ -432,8 +442,8 @@ function resetTouch(): void {
 function updateMenu(): void {
   const status = !scene ? 'webgl' : guide ? 'guide' : state.paused ? 'paused' : state.phase;
   touchControls.hidden = touchPause.hidden = !touch || status !== 'playing';
-  if (status === menuKey && (status !== 'draft' || state.level === draftLevel)) return;
-  draftLevel = state.level;
+  if (status === menuKey && (status !== 'draft' || state.draft === renderedDraft)) return;
+  renderedDraft = state.draft;
   const oldStatus = menuKey;
   menuKey = status;
   const showing = status !== 'playing';
@@ -454,12 +464,39 @@ function updateMenu(): void {
     guideSkip.hidden = guide !== 'launch';
     setText('#guide-primary', t(guide === 'launch' ? 'guide.launch' : 'guide.back'));
   } else if (drafting) {
+    banishing = false;
     setText('#draft-detail', t('draft.detail', { level: state.level + 1 }));
     for (const [i, button] of draftButtons.entries()) {
       const id = state.draft[i];
-      button.querySelector('strong')!.textContent = t(`draft.${id}.title`);
-      button.querySelector('small')!.textContent = t(`draft.${id}.copy`);
+      const card = state.run?.cards[i];
+      button.hidden = id === undefined;
+      if (!id) continue;
+      button.dataset.variant = card?.variant ?? 'normal';
+      if (card) {
+        const capped = card.id === 'damage' && card.currentLevel === card.maxLevel;
+        const key = capped ? 'draft.damageCap' : `item.${card.id}` as const;
+        const level = !card.maxLevel ? '' : card.currentLevel === 0
+          ? t('draft.new')
+          : t('draft.levels', { from: card.currentLevel, to: card.nextLevel });
+        const suffix = card.variant === 'normal' ? '' : t(`draft.${card.variant}`);
+        const downside = card.variant === 'risky' ? t('draft.riskCost', { hull: DRAFT_RULES.riskHull }) : '';
+        const title = [card.pairHint ? '★' : '', t(`${key}.title`), level].filter(Boolean).join(' ');
+        const copy = [t(`${key}.copy`), suffix, downside].filter(Boolean).join(' · ');
+        button.querySelector('strong')!.textContent = title;
+        button.querySelector('small')!.textContent = copy;
+      } else {
+        const legacy = id as LegacyDraftId;
+        button.querySelector('strong')!.textContent = t(`draft.${legacy}.title`);
+        button.querySelector('small')!.textContent = t(`draft.${legacy}.copy`);
+      }
     }
+    const run = state.run;
+    $('#draft-actions').hidden = !run || !(run.rerolls || run.banishes || run.skips);
+    setText('#draft-reroll', t('draft.rerolls', { count: run?.rerolls ?? 0 }));
+    $<HTMLButtonElement>('#draft-reroll').disabled = !run?.rerolls;
+    $('#draft-banish').hidden = !run?.banishes;
+    $('#draft-banish').setAttribute('aria-pressed', 'false');
+    $('#draft-skip').hidden = !run?.skips;
     draftButtons[0].focus({ preventScroll: true });
   } else if (showing) {
     const intro = status === 'title' || status === 'paused';
@@ -472,7 +509,7 @@ function updateMenu(): void {
     if (intro) {
       setText('#card-kicker', t(`menu.${status}.kicker`));
       setText('#card-title', t(`menu.${status}.title`));
-      setText('#card-copy', t(`menu.${status}.copy`));
+      setText('#card-copy', t(status === 'title' && state.run ? 'menu.survivors.copy' : `menu.${status}.copy`));
       setText('#primary-action', t(`menu.${status}.action`));
       setText('#card-hint', t(`menu.${status}.hint`));
       setText('#help-action-label', t(status === 'title' ? 'guide.title' : 'menu.help'));
@@ -518,7 +555,10 @@ function action(): void {
 }
 
 function choose(index: number): void {
-  if (state.phase === 'draft') pendingPick = state.draft[index];
+  if (state.phase !== 'draft') return;
+  const card = state.run?.cards[index];
+  if (banishing && card) pendingDraft = { banish: card.id };
+  else pendingDraft = { pick: state.draft[index] };
 }
 
 primary.addEventListener('click', action);
@@ -526,6 +566,12 @@ guidePrimary.addEventListener('click', () => closeGuide(true));
 guideSkip.addEventListener('click', () => closeGuide(true));
 $('#help-action').addEventListener('click', () => openGuide('help'));
 draftButtons.forEach((button, index) => button.addEventListener('click', () => choose(index)));
+$('#draft-reroll').addEventListener('click', () => { pendingDraft = { reroll: true }; });
+$('#draft-banish').addEventListener('click', event => {
+  banishing = !banishing;
+  (event.currentTarget as HTMLButtonElement).setAttribute('aria-pressed', String(banishing));
+});
+$('#draft-skip').addEventListener('click', () => { pendingDraft = { skip: true }; });
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 coarse.addEventListener('change', resize);
@@ -705,7 +751,7 @@ function advance(): void {
   if (!scene || guide) return;
   const before = state.tick, yaw = state.player.yaw;
   const wasFlying = maneuverAllowsControl(state.maneuver);
-  const previousPhase = state.phase, previouslyPaused = state.paused, previousLevel = state.level;
+  const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
     ...control,
@@ -716,11 +762,11 @@ function advance(): void {
     maneuver: pendingManeuver?.kind ?? control.maneuver,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
     toggleView: pendingViews > 0 || control.toggleView,
-    pick: pendingPick ?? control.pick,
+    ...pendingDraft,
   }, ground);
   pendingStart = pendingPause = pendingBomb = pendingFlare = false;
   if (pendingViews) pendingViews--;
-  pendingPick = undefined;
+  pendingDraft = {};
   pendingManeuver = undefined;
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
@@ -733,7 +779,7 @@ function advance(): void {
       turn: !wasFlying || !maneuverAllowsControl(state.maneuver) || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
   }
-  if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.level !== previousLevel) {
+  if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft) {
     dirty = true;
     // Open the modal synchronously, even when a slow frame processes several ticks.
     // It clears any pending flight action that arrived with the level-up.
@@ -875,6 +921,8 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   rank: state.rank, fps: Math.round(fps), level: state.level, xp: state.xp, score: state.score,
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
+  kills: state.kills, fodderCount: state.enemies.filter(enemy => enemy.kind === 'gnat').length,
+  weaponLevels: state.run?.weaponLevels, buffLevels: state.run?.buffLevels, swarmCap: state.swarmCap,
   tracers: state.shots.filter(shot => shot.reversal || shot.kind === 'strafe').map(shot => ({
     kind: shot.reversal ? 'reversal' : shot.kind, x: shot.x, z: shot.z, alt: shot.alt, vx: shot.vx, vz: shot.vz,
     vy: shot.kind === 'strafe' ? shot.vy : 0,

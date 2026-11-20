@@ -1,8 +1,9 @@
 import type { createTranslator } from './i18n.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
-import { BEACON_SIGNAL_SECONDS, LANDMARKS, RIM_WARNING } from './reach.ts';
-import { activeWeakPoint, angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
+import { LANDMARKS, RIM_WARNING } from './reach.ts';
+import { beaconTick } from './stage.ts';
+import { activeWeakPoint, angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export const RADAR_RANGE = 210;
@@ -23,7 +24,7 @@ export type RadarReadout = {
 
 export function beaconTrack(state: StageState): Position | null {
   if (state.boss) return state.boss;
-  return state.tick >= BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND ? LANDMARKS.atoll : null;
+  return state.tick >= beaconTick(state) ? LANDMARKS.atoll : null;
 }
 
 export function drawArenaMap(c: CanvasRenderingContext2D, state: StageState, north: string, font: string, yaw = state.player.yaw): void {
@@ -119,7 +120,7 @@ function findRearDanger(state: StageState, fx: number, fz: number): RearDanger |
 
   const bodyFrom = Math.max(STEP, (state.bodyGraceUntil + 1 - state.tick) * STEP);
   for (const enemy of state.enemies) {
-    if (enemy.hp <= 0 || enemy.entry) continue;
+    if (enemy.hp <= 0 || enemy.entry || enemy.kind === 'gnat') continue;
     const seconds = impact(enemy, BODY_RADIUS, bodyFrom, Infinity);
     if (seconds < (closest?.seconds ?? Infinity)) {
       closest = { kind: 'contact', enemyId: enemy.id, x: enemy.x, z: enemy.z, alt: enemy.alt, seconds };
@@ -159,7 +160,7 @@ export function buildRadar(state: StageState, yaw = state.player.yaw): RadarRead
       else if (kind !== 'warden' && kind !== 'pod' && kind !== 'core') rimTick('enemy', dx, dz);
       return;
     }
-    if (!top && dx * fx + dz * fz < 0 && kind !== 'salvage' && kind !== 'turret') {
+    if (!top && dx * fx + dz * fz < 0 && kind !== 'salvage' && kind !== 'turret' && kind !== 'gnat') {
       rearCount++;
       rearBandMatch ||= inBand(item.alt, p.altitude);
       rearHigher ||= item.alt - p.altitude > HIT_WINDOW;
@@ -362,7 +363,7 @@ export class RearMirrorThreat {
     const vx = player.vx ?? state.speed * fx, vz = player.vz ?? state.speed * fz;
     let current = null, best = null;
     for (const enemy of state.enemies) {
-      if (enemy.hp <= 0 || enemy.kind === 'turret') continue;
+      if (enemy.hp <= 0 || enemy.kind === 'turret' || enemy.kind === 'gnat') continue;
       const dx = enemy.x - player.x, dz = enemy.z - player.z;
       const aft = -(dx * fx + dz * fz), distance = Math.hypot(dx, dz);
       if (aft <= 0 || distance > 140) continue;

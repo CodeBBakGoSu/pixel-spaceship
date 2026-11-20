@@ -1,6 +1,8 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId } from './reach.ts';
+import type { DraftChoiceId } from './data/items.ts';
+import type { RunProgression } from './progression.ts';
 
 export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
   | LandmarkId | NewEnemyKind;
@@ -11,8 +13,12 @@ export type StageOptions = {
   time: number | null;
   autoplay: boolean;
   touch: boolean;
+  mode?: 'legacy' | 'survivors';
+  mobile?: boolean;
+  aceRank?: number;
 };
-export type DraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
+export type LegacyDraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
+export type DraftId = LegacyDraftId | DraftChoiceId;
 export type Outcome = 'clear' | 'timeout' | 'lost';
 export type ManeuverKind = 'immelmann' | 'split-s' | 'j-turn';
 export type Maneuver = {
@@ -46,6 +52,9 @@ export type StageInput = {
   start?: boolean;
   pause?: boolean;
   pick?: DraftId;
+  reroll?: boolean;
+  banish?: DraftChoiceId;
+  skip?: boolean;
 };
 
 export type Point = { x: number; z: number };
@@ -75,6 +84,7 @@ export type Enemy = Position & {
   band: Band;
   offset: number;
   entry?: FlyIn;
+  leaveAt?: number;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
   tell?: { kind: 'snipe'; until: number } | (Position & { kind: 'flak'; until: number });
@@ -103,7 +113,7 @@ export type Shot = Position & {
   nearMiss: boolean;
   lockId: number | null;
 } & (
-  { kind: 'twin' | 'pods' | 'hostile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
+  { kind: 'twin' | 'pods' | 'hostile'; pierce?: { remaining: number; hits: number[] }; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
   { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never }
 );
 export type RearBomb = Position & { born: number; vx: number; vz: number };
@@ -148,6 +158,10 @@ export type StageState = {
   resultPending: Outcome | null;
   seed: number;
   rng: number;
+  streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }>;
+  run: RunProgression | null;
+  swarmCap: number;
+  aceRank: number;
   nextId: number;
   nextVolley: number;
   tick: number;
@@ -196,7 +210,8 @@ export type StageState = {
     shownUntil: number;
   } | null;
   xp: number;
-  level: 1 | 2 | 3;
+  level: number;
+  kills: number;
   salvage: number;
   salvageBands: [number, number, number];
   draft: DraftId[];

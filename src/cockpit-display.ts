@@ -572,7 +572,9 @@ function drawStores(c: Context, r: Rect, weapons: WeaponReadout): void {
 }
 
 function weaponReadouts(state: StageState, t: Translate): WeaponReadout {
-  return { gun: t('hud.weapon', { level: state.twinRank }), pods: t('hud.pods', { level: state.podRank }),
+  const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
+  const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
+  return { gun: t('hud.weapon', { level: gunLevel }), pods: t('hud.pods', { level: podLevel }),
     bombs: t('cockpit.bombs', { count: state.bombs, max: MAX_BOMBS }),
     flares: t('cockpit.flares', { count: state.flareCharges, max: MAX_FLARES }) };
 }
@@ -815,7 +817,9 @@ export class CockpitDisplay {
   private drawMfds(layout: CockpitLayout, state: StageState, flicker: number, t: Translate): void {
     const c = this.panels, { stores, weapons } = layout;
     c.globalAlpha = flicker;
-    const weapon = (state.bombs * (MAX_FLARES + 1) + state.flareCharges) * 12 + state.podRank * 4 + state.twinRank;
+    const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
+    const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
+    const weapon = ((state.bombs * 7 + state.flareCharges) * 6 + podLevel) * 6 + gunLevel;
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker) {
       if (!this.weapons.has(weapon)) this.cacheWeapons(layout, weapon, state, t);
       blitPlate(c, weapons, this.weapons.get(weapon)!);

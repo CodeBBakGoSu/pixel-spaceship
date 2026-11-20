@@ -1,14 +1,16 @@
-import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
+import { phaseAt, type RegularSpawn } from './data/phases.ts';
+import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { BASALT_STACKS, keepInsideArena, LANDMARKS } from './reach.ts';
 import { angleTo, BANDS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { addBomberEscort, beginEnemyFlyIn, bomberWingPosition, makeEnemy, SKIMMER_WATER } from './stage-enemies.ts';
 import { random } from './stage-random.ts';
+import { spawnSwarm } from './swarm.ts';
 import type { Band, Enemy, Ground, Point, StageState } from './stage-types.ts';
 
-type Spawn = { kind: EnemyKind; band: Band | 'flank'; bearing: number; range: number };
+type Spawn = { kind: RegularEnemyKind; band: Band | 'flank'; bearing: number; range: number };
 type Wave = { time: number; members: Spawn[] };
-const contact = (kind: EnemyKind, band: Spawn['band'], degrees: number, range = 141): Spawn =>
+const contact = (kind: RegularEnemyKind, band: Spawn['band'], degrees: number, range = 141): Spawn =>
   ({ kind, band, bearing: degrees * Math.PI / 180, range });
 
 const patrol = (band: Band, degrees: number, range?: number) => contact('patrol', band, degrees, range);
@@ -51,7 +53,8 @@ export const WAVES: readonly Wave[] = [
   { time: 172, members: [patrol(0, 22), flanker(-47)] },
 ];
 
-export function enemyLimit(state: Pick<StageState, 'boss' | 'tick'>): number {
+export function enemyLimit(state: Pick<StageState, 'boss' | 'tick'> & Partial<Pick<StageState, 'run'>>): number {
+  if (state.run) return phaseAt(state.tick / TICKS_PER_SECOND).regularCap;
   if (state.boss) return 14;
   if (state.tick < 40 * TICKS_PER_SECOND) return 8;
   return state.tick < 70 * TICKS_PER_SECOND ? 16 : 24;
@@ -80,14 +83,14 @@ function escapeBearing(state: StageState, ground: Ground, p = state.player): num
     const yaw = p.yaw + degrees * Math.PI / 180;
     const x = p.x + Math.sin(yaw) * 90, z = p.z + Math.cos(yaw) * 90;
     if (!inside(state, x, z, 20) || ground(x, z) + 22 > Math.max(110, p.altitude)) continue;
-    if (state.enemies.some(enemy => enemy.hp && Math.hypot(enemy.x - p.x, enemy.z - p.z) <= 150
+    if (state.enemies.some(enemy => enemy.kind !== 'gnat' && enemy.hp && Math.hypot(enemy.x - p.x, enemy.z - p.z) <= 150
       && Math.abs(angleTo(yaw, enemy.x - p.x, enemy.z - p.z)) < ESCAPE_HALF)) continue;
     return yaw;
   }
   return null;
 }
 
-function engagementSite(state: StageState, ground: Ground, kind: EnemyKind, alt: number,
+function engagementSite(state: StageState, ground: Ground, kind: RegularEnemyKind, alt: number,
   yaw: number, range: number, escape: number, turns: number[], p: Point = state.player): Point | null {
   const wedge = kind === 'bomber' ? ESCAPE_HALF + 0.22 : ESCAPE_HALF;
   for (const turn of turns) {
@@ -96,7 +99,7 @@ function engagementSite(state: StageState, ground: Ground, kind: EnemyKind, alt:
     if (!inside(state, x, z, 16) || Math.abs(angleTo(escape, dx, dz)) < wedge) continue;
     if (turns === REENTRY_TURNS && state.enemies.some(enemy => {
       const contact = enemy.entry?.target ?? enemy;
-      return enemy.hp && Math.hypot(contact.x - x, contact.z - z) < 27;
+      return enemy.kind !== 'gnat' && enemy.hp && Math.hypot(contact.x - x, contact.z - z) < 27;
     })) continue;
     const floor = ground(x, z);
     if (kind === 'skimmer' ? floor <= SKIMMER_WATER : floor + 22 <= alt) return { x, z };
@@ -130,7 +133,7 @@ function turretSite(state: StageState, escape: number, p: Pick<StageState['playe
   return best;
 }
 
-export function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
+export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { rng: number } = state, hpScale = 1): void {
   const { player: p, enemies } = state;
   // Lay out the same combat formation at the pilot's projected position on the original wave beat.
   const travel = state.speed * WAVE_FLY_IN_TICKS / TICKS_PER_SECOND;
@@ -138,42 +141,98 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground): void {
   keepInsideArena(projected, state.arena, 20);
   const escape = escapeBearing(state, ground, projected);
   if (escape === null) return;
-  const rotation = (random(state) - 0.5) * 0.24;
-  const mirror = random(state) < 0.5 ? -1 : 1;
+  const rotation = (random(rng) - 0.5) * 0.24;
+  const mirror = random(rng) < 0.5 ? -1 : 1;
   const cap = enemyLimit(state);
+  let occupied = state.run ? enemies.filter(enemy => enemy.kind !== 'gnat').length : enemies.length;
   for (const member of wave.members) {
     const { kind } = member;
     const slots = kind === 'bomber' ? 3 : 1;
-    if (enemies.length + slots > cap || enemies.filter(enemy => enemy.kind === kind).length >= ENEMY_KINDS[kind].cap) continue;
+    if (occupied + slots > cap || enemies.filter(enemy => enemy.kind === kind).length >= ENEMY_KINDS[kind].cap) continue;
     if (kind === 'turret') {
       const site = turretSite(state, escape, projected);
       if (site) {
         const enemy = makeEnemy(state, site.x, site.z, site.band, kind);
         enemy.alt = ground(site.x, site.z) + 5;
+        enemy.hp = Math.round(enemy.hp * hpScale);
         enemy.shotAt += WAVE_FLY_IN_TICKS;
         beginEnemyFlyIn(state, enemy, ground, projected, mirror * 0.32);
         enemies.push(enemy);
+        occupied++;
       }
       continue;
     }
-    const band = member.band === 'flank' ? random(state) < 0.5 ? 0 : 2 : member.band;
-    const offset = (random(state) - 0.5) * (kind === 'patrol' || kind === 'interceptor' ? 12 : 8);
+    const band = member.band === 'flank' ? random(rng) < 0.5 ? 0 : 2 : member.band;
+    const offset = (random(rng) - 0.5) * (kind === 'patrol' || kind === 'interceptor' ? 12 : 8);
     const yaw = p.yaw + member.bearing * mirror + rotation;
     const turns = Math.abs(member.bearing) > Math.PI * 0.66 ? AFT_TURNS : ENTRY_TURNS;
     const position = engagementSite(state, ground, kind, BANDS[band] + offset, yaw, member.range, escape, turns, projected);
     if (!position) continue;
     const enemy = makeEnemy(state, position.x, position.z, band, kind, offset);
     enemy.yaw = Math.atan2(projected.x - position.x, projected.z - position.z);
-    enemy.shotAt += Math.floor(random(state) * 21);
+    enemy.shotAt += Math.floor(random(rng) * 21);
     const first = enemies.length;
     enemies.push(enemy);
     if (kind === 'bomber') addBomberEscort(state, enemy, ground);
     for (let i = first; i < enemies.length; i++) {
       const incoming = enemies[i];
+      incoming.hp = Math.round(incoming.hp * hpScale);
       incoming.shotAt += WAVE_FLY_IN_TICKS;
       incoming.maneuverAt += WAVE_FLY_IN_TICKS;
       beginEnemyFlyIn(state, incoming, ground, projected, mirror * 0.32);
     }
+    occupied += enemies.length - first;
+  }
+}
+
+const COAST_OPENING = WAVES.filter(wave => wave.time <= 22);
+const COAST_OPENING_TOTAL = COAST_OPENING.reduce((count, wave) => count + wave.members.length, 0);
+const COAST_OPENING_END = 23 * TICKS_PER_SECOND;
+
+// Place all groups over the active portion of a phase, including a group on its first tick.
+function groupAt(tick: number, from: number, to: number, groups: number): number {
+  const elapsed = tick - from, length = to - from;
+  if (elapsed < 0 || elapsed >= length) return -1;
+  const group = Math.floor(elapsed * groups / length);
+  return group === Math.floor((elapsed - 1) * groups / length) ? -1 : group;
+}
+
+function regularPick(pool: readonly RegularSpawn[], rng: { rng: number }): RegularSpawn {
+  let roll = random(rng) * pool.reduce((total, entry) => total + entry.weight, 0);
+  for (const entry of pool) {
+    roll -= entry.weight;
+    if (roll < 0) return entry;
+  }
+  return pool[pool.length - 1];
+}
+
+function beatStream(spawn: { rng: number }): { rng: number } {
+  // Taking one seed per scheduled beat keeps later rolls independent of contact caps, terrain, and combat.
+  return { rng: random(spawn) * 0x1_0000_0000 };
+}
+
+export function advancePhaseSpawns(state: StageState, ground: Ground): void {
+  const phase = phaseAt(state.tick / TICKS_PER_SECOND);
+  const from = phase.starts * TICKS_PER_SECOND;
+  const until = (phase.ends - phase.lull) * TICKS_PER_SECOND;
+  const minutes = (phase.ends - phase.starts) / 60;
+  const isOpening = phase.id === 'coast';
+  const regularStart = isOpening ? COAST_OPENING_END : from;
+  const regularCount = phase.regularPerMinute * minutes - (isOpening ? COAST_OPENING_TOTAL : 0);
+  if (isOpening && state.tick < regularStart) {
+    const wave = COAST_OPENING.find(wave => state.tick === wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS);
+    if (wave) spawnWave(state, wave, ground, beatStream(state.streams.spawn));
+  } else if (groupAt(state.tick, regularStart, until, regularCount) >= 0) {
+    const rng = beatStream(state.streams.spawn);
+    const { kind, band, bearing, range } = regularPick(phase.enemies, rng);
+    spawnWave(state, { time: state.tick / TICKS_PER_SECOND, members: [contact(kind, band, bearing, range)] }, ground, rng, phase.hpScale);
+  }
+  const gnatCount = phase.gnatsPerMinute * minutes;
+  const packs = Math.ceil(gnatCount / phase.packSize);
+  const pack = groupAt(state.tick, from + phase.gnatStart * TICKS_PER_SECOND, until, packs);
+  if (pack >= 0) {
+    const members = Math.floor(gnatCount * (pack + 1) / packs) - Math.floor(gnatCount * pack / packs);
+    spawnSwarm(state, phase, members, ground, beatStream(state.streams.spawn));
   }
 }
 
@@ -200,7 +259,7 @@ export function relocateStragglers(state: StageState, ground: Ground): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   let escape: number | null | undefined;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || enemy.formation || enemy.kind === 'hound' || enemy.kind === 'harrier') continue;
+    if (!enemy.hp || enemy.entry || enemy.formation || enemy.kind === 'gnat' || enemy.kind === 'hound' || enemy.kind === 'harrier') continue;
     const dx = p.x - enemy.x, dz = p.z - enemy.z;
     const aft = dx * fx + dz * fz;
     if (aft < REENTRY_AFT || Math.abs(dx * fz - dz * fx) > aft * 0.9) {
@@ -242,6 +301,14 @@ export function trimEscorts(state: StageState): void {
   const limit = enemyLimit(state), p = state.player;
   const range = (enemy: Enemy) => (p.x - enemy.x) ** 2 + (p.z - enemy.z) ** 2;
   if (state.enemies.length <= limit) return;
+  if (state.run) {
+    const regular = state.enemies.filter(enemy => enemy.kind !== 'gnat');
+    if (regular.length <= limit) return;
+    regular.sort((a, b) => range(a) - range(b) || a.id - b.id);
+    const survivors = new Set(regular.slice(0, limit));
+    state.enemies = state.enemies.filter(enemy => enemy.kind === 'gnat' || survivors.has(enemy));
+    return;
+  }
   state.enemies.sort((a, b) => range(a) - range(b) || a.id - b.id);
   state.enemies.length = limit;
 }
