@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Raycaster, Vector3 } from 'three';
+import { FLIGHT_CAMERA } from '../src/data/flight-feel.ts';
 import { TERRAIN_STREAM } from '../src/data/terrain-stream.ts';
 import { chaseEyeHeight, TerrainStream } from '../src/terrain-stream.ts';
 import { skimAltitude } from '../src/bands.ts';
@@ -11,9 +12,10 @@ const size = TERRAIN_STREAM.chunkSize;
 test('the chase eye clears the sea stack behind a SKIM pilot in both viewport shapes', () => {
   const world = new World();
   const ground = world.height.bind(world);
-  const x = 288;
-  for (const [z, aspect] of [[286, 1280 / 800], [302, 390 / 844]]) {
-    const eyeZ = z - 46 - Math.max(0, 1 - aspect) * 30;
+  const x = 256, eyeZ = 304;
+  for (const aspect of [1280 / 800, 390 / 844]) {
+    const { setback, portraitSetback } = FLIGHT_CAMERA.chase;
+    const z = eyeZ + setback + Math.max(0, 1 - aspect) * portraitSetback;
     const requested = skimAltitude(ground(x, z)) + 15;
     assert.ok(requested + 24 < ground(x, eyeZ));
     assert.equal(chaseEyeHeight(ground, x, eyeZ, requested), ground(x, eyeZ) + TERRAIN_STREAM.chaseEyeClearance);

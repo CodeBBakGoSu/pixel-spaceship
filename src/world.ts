@@ -6,8 +6,6 @@ export const TERRAIN_SIZE = WORLD_TERRAIN.period;
 export const TERRAIN_MESH_STEP = WORLD_TERRAIN.step;
 export const TERRAIN_MIN_ALTITUDE = WORLD_TERRAIN.seaLevel;
 export const TERRAIN_MAX_ALTITUDE = WORLD_TERRAIN.maxHeight;
-// The camera uses this margin to account for setback and banked frusta.
-const FOG_MARGIN = 110;
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const smooth = (v: number) => v * v * (3 - 2 * v);
 const shoulder = (r: number, start: number) => 1 - smooth(Math.max(0, Math.min(1, (r - start) / (1 - start))));
@@ -89,7 +87,7 @@ export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0, 
   const across = halfHeight * (aspect * Math.abs(Math.cos(bank)) + 1.8 * Math.abs(Math.sin(bank)));
   const tier = mobile ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop;
   const coverage = tier.radius * TERRAIN_STREAM.chunkSize;
-  const room = Math.max(256, coverage - FOG_MARGIN - MAX_CAMERA_CLEARANCE * slope);
+  const room = Math.max(TERRAIN_STREAM.chunkSize, coverage - TERRAIN_STREAM.fogMargin - MAX_CAMERA_CLEARANCE * slope);
   return Math.min(tier.fogFar, room / Math.hypot(forward, across));
 }
 

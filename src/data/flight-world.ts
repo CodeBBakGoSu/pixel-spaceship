@@ -1,18 +1,23 @@
+import { scaleTravel } from './speed.ts';
+
 export const WIND = {
   capacity: 48,
   idleCount: 12,
   boostCount: { desktop: 36, phone: 23 },
   minimumSpeedRatio: 0.7,
-  repeatDistance: 156,
-  nearDistance: 16,
-  baseLength: 2.2,
-  boostLength: 16,
+  repeatDistance: scaleTravel(156),
+  nearDistance: scaleTravel(16),
+  spacing: scaleTravel(31.43),
+  baseLength: scaleTravel(2.2),
+  boostLength: scaleTravel(16),
+  legacyBoostLength: scaleTravel(10.5),
 } as const;
 
 export const CLOUDS = {
   patchesPerBand: 24,
   opacity: 0.55,
   extraRadius: 55,
+  checkRadius: scaleTravel(47),
   colors: [0xc5e0e0, 0xd3e5e5, 0xecf4e9],
   // x, height, z, width, height, depth in the patch's local coordinates.
   blocks: [
@@ -33,6 +38,7 @@ export const WING_TRAIL = {
   phoneCapacity: 64,
   intervalTicks: { desktop: 2, phone: 3 },
   lifeTicks: 175,
+  maxSegmentLength: scaleTravel(28),
   thresholdRatio: 1.1,
   // Match the swept outer edge of the current ship mesh.
   tip: { x: 9.8, y: -0.62, z: 7.15 },
@@ -54,6 +60,9 @@ export const FLIGHT_SURFACE = {
   wakeOpacity: 0.84,
   foamWidth: 1.35,
   dustWidth: 2.7,
+  wakeSpread: { near: scaleTravel(2.2), growth: scaleTravel(9) },
+  wakeSetback: { near: scaleTravel(6), growth: scaleTravel(8) },
+  foamLength: { near: scaleTravel(4.5), growth: scaleTravel(4) },
   sprayLifeTicks: 16,
   foamColors: [0xe9fff3, 0xa4e4e5, 0x6eb3c3],
   dustColors: [0xe6d3a6, 0xc3a97d, 0x8e886c],

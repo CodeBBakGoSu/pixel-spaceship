@@ -1,3 +1,5 @@
+import { scaleTravel } from './speed.ts';
+
 export const WORLD_TERRAIN = {
   period: 16_384,
   step: 16,
@@ -23,21 +25,21 @@ export const REACH_STACKS = [
 ] as const;
 
 export const WORLD_SITES = {
-  spacing: 768,
-  claimRadius: 25,
+  spacing: scaleTravel(768),
+  claimRadius: scaleTravel(25),
   claimWindow: 12,
   wellXp: 4,
   boost: 0.6,
   reliefBombs: 1,
-  rallyNear: 380,
-  rallyDistance: 230,
+  rallyNear: scaleTravel(380),
+  rallyDistance: scaleTravel(230),
   fixtureExtent: 1_048_576,
 } as const;
 
 export const FLY_IN_WORLD = {
-  minApproachDistance: 640,
+  minApproachDistance: scaleTravel(640),
   transitAltitude: 150,
   clearance: 22,
 } as const;
 
-export const SPAWN_WORLD = { recycleDistance: 465, turretSeparation: 38, bomberFormationSize: 3 } as const;
+export const SPAWN_WORLD = { recycleDistance: scaleTravel(465), turretSeparation: scaleTravel(38), bomberFormationSize: 3 } as const;

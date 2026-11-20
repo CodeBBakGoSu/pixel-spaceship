@@ -1,5 +1,6 @@
 import { phaseAt, type RegularSpawn } from './data/phases.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import { scaleTravel } from './data/speed.ts';
 import { SPAWN_WORLD } from './data/world.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
@@ -13,7 +14,7 @@ import { isWater } from './world.ts';
 type Spawn = { kind: RegularEnemyKind; band: Band | 'flank'; bearing: number; range: number };
 type Wave = { time: number; members: Spawn[] };
 const contact = (kind: RegularEnemyKind, band: Spawn['band'], degrees: number, range = 141): Spawn =>
-  ({ kind, band, bearing: degrees * Math.PI / 180, range });
+  ({ kind, band, bearing: degrees * Math.PI / 180, range: scaleTravel(range) });
 
 const patrol = (band: Band, degrees: number, range?: number) => contact('patrol', band, degrees, range);
 const turret = contact('turret', 1, 0);
@@ -79,15 +80,16 @@ const ESCAPE_BEARINGS = [90, -90, 135, -135, 45, -45, 0, 180];
 const ENTRY_TURNS = [0, -0.36, 0.36, -0.79, 0.79, -1.33, 1.33, -2.1, 2.1, Math.PI];
 const AFT_TURNS = [0, -0.19, 0.19, -0.37, 0.37];
 const REENTRY_TURNS = [0, -0.23, 0.23, -0.53, 0.53, -0.85, 0.85];
-const REENTRY_RANGES = [216, 196, 176];
-const REENTRY_AFT = 190, REENTRY_TICKS = 156;
+const REENTRY_RANGES = [216, 196, 176].map(scaleTravel);
+const REENTRY_AFT = scaleTravel(190), REENTRY_TICKS = 156;
+const ESCAPE_PROBE = scaleTravel(90), ESCAPE_SPACING = scaleTravel(150), REENTRY_SPACING = scaleTravel(27);
 
 function escapeBearing(state: StageState, ground: Ground, p = state.player): number | null {
   for (const degrees of ESCAPE_BEARINGS) {
     const yaw = p.yaw + degrees * Math.PI / 180;
-    const x = p.x + Math.sin(yaw) * 90, z = p.z + Math.cos(yaw) * 90;
+    const x = p.x + Math.sin(yaw) * ESCAPE_PROBE, z = p.z + Math.cos(yaw) * ESCAPE_PROBE;
     if (ground(x, z) + 22 > Math.max(BANDS[1], p.altitude)) continue;
-    if (state.enemies.some(enemy => enemy.kind !== 'gnat' && enemy.hp && Math.hypot(enemy.x - p.x, enemy.z - p.z) <= 150
+    if (state.enemies.some(enemy => enemy.kind !== 'gnat' && enemy.hp && Math.hypot(enemy.x - p.x, enemy.z - p.z) <= ESCAPE_SPACING
       && Math.abs(angleTo(yaw, enemy.x - p.x, enemy.z - p.z)) < ESCAPE_HALF)) continue;
     return yaw;
   }
@@ -108,7 +110,7 @@ function engagementSite(state: StageState, ground: Ground, kind: RegularEnemyKin
     })) continue;
     if (turns === REENTRY_TURNS && state.enemies.some(enemy => {
       const contact = enemy.entry?.target ?? enemy;
-      return enemy.kind !== 'gnat' && enemy.hp && Math.hypot(contact.x - x, contact.z - z) < 27;
+      return enemy.kind !== 'gnat' && enemy.hp && Math.hypot(contact.x - x, contact.z - z) < REENTRY_SPACING;
     })) continue;
     const floor = ground(x, z);
     if (kind === 'skimmer' || kind === 'turret') {
@@ -201,7 +203,8 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
   } else if (groupAt(state.tick, regularStart, until, regularCount) >= 0) {
     const rng = beatStream(state.streams.spawn);
     const { kind, band, bearing, range } = regularPick(phase.enemies, rng);
-    spawnWave(state, { time: state.tick / TICKS_PER_SECOND, members: [contact(kind, band, bearing, range)] }, ground, rng, phase.hpScale);
+    const member = { kind, band, bearing: bearing * Math.PI / 180, range };
+    spawnWave(state, { time: state.tick / TICKS_PER_SECOND, members: [member] }, ground, rng, phase.hpScale);
   }
   const gnatCount = phase.gnatsPerMinute * minutes;
   const packs = Math.ceil(gnatCount / phase.packSize);

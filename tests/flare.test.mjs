@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { autopilotInput } from '../src/autoplay.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
@@ -18,7 +19,7 @@ const run = (state, ticks, input = {}, ground) => {
 
 function contact(state, aft, band, kind = 'patrol', lateral = 0) {
   const { x, z } = state.player;
-  const enemy = makeEnemy(state, x + lateral, z - aft, band, kind);
+  const enemy = makeEnemy(state, x + scaleTravel(lateral), z - scaleTravel(aft), band, kind);
   state.enemies.push(enemy);
   return enemy;
 }
@@ -33,15 +34,15 @@ test('a volley ejects five fanned flares aft and inherits the faster launch from
   assert.equal(boosted.flares?.length, 5);
   assert.equal(cruise.flareCharges, 2);
   const spread = cruise.flares.map(flare => flare.vx * fz - flare.vz * fx);
-  assert.ok(Math.min(...spread) < -12 && Math.max(...spread) > 12);
+  assert.ok(Math.min(...spread) < scaleTravel(-12) && Math.max(...spread) > scaleTravel(12));
   for (const state of [cruise, boosted]) {
     for (const flare of state.flares) {
-      assert.ok((flare.x - state.player.x) * fx + (flare.z - state.player.z) * fz < -5);
+      assert.ok((flare.x - state.player.x) * fx + (flare.z - state.player.z) * fz < scaleTravel(-5));
       assert.ok(flare.vx * fx + flare.vz * fz < state.speed);
     }
   }
   const zSpeed = state => state.flares[2].vx * fx + state.flares[2].vz * fz;
-  assert.ok(zSpeed(boosted) - zSpeed(cruise) > 15);
+  assert.ok(zSpeed(boosted) - zSpeed(cruise) > scaleTravel(15));
 });
 
 test('a volley sinks through the next altitude band and burns out at two seconds', () => {
@@ -81,7 +82,7 @@ test('the Ace burns at a slower damage cadence after a rear flare hit', () => {
   const ace = state.boss;
   ace.yaw = 0;
   const { x, z, alt } = ace;
-  Object.assign(state.player, { x, z: z + 21, altitude: alt });
+  Object.assign(state.player, { x, z: z + scaleTravel(21), altitude: alt });
   state.twinAt = state.podsAt = Infinity;
   run(state, 1, { flare: true });
   for (let i = 0; i < 25 && !ace.burnUntil; i++) run(state, 1);
@@ -197,7 +198,7 @@ test('a delayed bomb blast reopens the rear view at the impact location', () => 
 
 test('a low contact hit after the launch window reopens the rear view', () => {
   const state = empty();
-  const below = contact(state, 84, 0);
+  const below = contact(state, 84, 0, 'patrol', 4);
   run(state, 1, { flare: true });
   const launchWindow = state.rearGlimpse?.until;
   assert.ok(launchWindow > state.tick);

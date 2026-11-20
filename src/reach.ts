@@ -1,4 +1,5 @@
 import { BANDS, skimAltitude } from './bands.ts';
+import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, REACH_LANDMARKS, REACH_STACKS, WORLD_AIRSPACE, WORLD_SITES } from './data/world.ts';
 import type { Ground, Point, Position, StageState } from './stage-types.ts';
 import { worldHash } from './world.ts';
@@ -30,14 +31,14 @@ function worldSite(seed: number, cellX: number, cellZ: number, ground: Ground, c
 
 /** Keep the current and adjacent regions visible while remembering rewards across revisits. */
 export function updateWorldSites(state: StageState, ground: Ground): void {
-  const x = Math.floor(state.player.x / WORLD_SITES.spacing);
-  const z = Math.floor(state.player.z / WORLD_SITES.spacing);
-  if (state.worldRegion?.x === x && state.worldRegion.z === z) return;
+  const { spacing } = WORLD_SITES;
+  const x = Math.floor(state.player.x / spacing), z = Math.floor(state.player.z / spacing);
+  if (state.worldRegion?.x === x && state.worldRegion.z === z && state.worldRegion.spacing === spacing) return;
   const sites: WorldSite[] = [];
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     sites.push(worldSite(state.seed, x + dx, z + dz, ground, state.claimedSites));
   }
-  state.worldRegion = { x, z };
+  state.worldRegion = { x, z, spacing };
   state.worldSites = sites;
 }
 
@@ -54,9 +55,10 @@ export function reachedWorldSite(state: StageState): WorldSite | undefined {
 }
 
 const RALLY_TURNS = [0, 0.8, -0.8, 1.6, -1.6, Math.PI];
+const ORBIT_SAMPLE_OFFSETS = [-45, 0, 45].map(scaleTravel);
 
 function hasClearOrbit(point: Point, ground: Ground): boolean {
-  for (const x of [-45, 0, 45]) for (const z of [-45, 0, 45]) {
+  for (const x of ORBIT_SAMPLE_OFFSETS) for (const z of ORBIT_SAMPLE_OFFSETS) {
     if (ground(point.x + x, point.z + z) > BANDS[0] - 15) return false;
   }
   return true;
@@ -70,7 +72,7 @@ export function findRally(state: StageState, ground: Ground): Position {
   for (const site of state.worldSites ?? []) {
     if (site.kind !== 'beacon') continue;
     const range = Math.hypot(site.x - p.x, site.z - p.z);
-    if (range < 110 || range >= best || !hasClearOrbit(site, ground)) continue;
+    if (range < scaleTravel(110) || range >= best || !hasClearOrbit(site, ground)) continue;
     closest = site;
     best = range;
   }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
@@ -79,11 +80,12 @@ test('Prism Lance charges and strikes along exactly one terrain-clipped ray per 
 
 test('Skybreaker bursts through all four bands and launches one generation of three secondary shells', () => {
   const state = setup('flak', 'skybreaker');
-  const stacked = BANDS.map(alt => contact(state, 0, 90, alt));
-  Object.assign(contact(state, 0, 90, 65), { kind: 'skimmer', skim: true });
+  const range = scaleTravel(90);
+  const stacked = BANDS.map(alt => contact(state, 0, range, alt));
+  Object.assign(contact(state, 0, range, 65), { kind: 'skimmer', skim: true });
   stacked.push(state.enemies.at(-1));
-  const wing = contact(state, 32, 99, high);
-  const incoming = contact(state, 0, 87, low);
+  const wing = contact(state, scaleTravel(32), scaleTravel(99), high);
+  const incoming = contact(state, 0, scaleTravel(87), low);
   incoming.entry = {};
   advanceRangedWeapons(state, ground);
   projectiles(state, 36);
@@ -105,7 +107,7 @@ test('Skybreaker bursts through all four bands and launches one generation of th
 test('Skybreaker reaches a skimming Ace only when the shot has its lock', () => {
   for (const ready of [false, true]) {
     const state = setup('flak', 'skybreaker');
-    const ace = state.boss = makeAce(state, 0, 90);
+    const ace = state.boss = makeAce(state, 0, scaleTravel(90));
     ace.band = SKIM_BAND;
     ace.alt = skimAltitude(ground());
     state.lock = { id: ace.id, ready };
@@ -143,22 +145,22 @@ test('three Ordnance weapons extend a missile explosion by twenty percent', () =
   contact(state, 0, 86);
   advanceRangedWeapons(state, ground);
   assert.ok(state.shots.length > 0);
-  assert.ok(state.shots.every(shot => Math.abs(shot.radius - 15.6 * 1.2) < 1e-9));
+  assert.ok(state.shots.every(shot => Math.abs(shot.radius - scaleTravel(15.6) * 1.2) < 1e-9));
 });
 
 test('three Ballistic weapons let a flak fragment penetrate two contacts once apiece', () => {
   const state = setup('flak');
   state.run.weaponLevels = { twin: 1, pods: 1, flak: 5 };
-  contact(state, 0, 89);
+  contact(state, 0, scaleTravel(89));
   advanceRangedWeapons(state, ground);
   projectiles(state, 36);
   const shard = state.shots.find(shot => shot.kind === 'flak-shard');
   assert.ok(shard);
   state.shots = [shard];
   state.enemies = [];
-  const first = contact(state, shard.x, shard.z + 5);
-  const second = contact(state, shard.x, shard.z + 16);
-  const third = contact(state, shard.x, shard.z + 27);
+  const first = contact(state, shard.x, shard.z + scaleTravel(5));
+  const second = contact(state, shard.x, shard.z + scaleTravel(16));
+  const third = contact(state, shard.x, shard.z + scaleTravel(27));
   projectiles(state, 18);
   const damage = 1.15 * 1.3;
   assert.ok(Math.abs(first.hp - (12 - damage)) < 1e-9);

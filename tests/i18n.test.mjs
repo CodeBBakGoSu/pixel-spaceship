@@ -39,6 +39,7 @@ test('guidance separates maneuver selectors from the flare key and touch control
     assert.match(t('guide.keysLoop'), /Space.*J/);
     assert.match(t('guide.touchLoop'), /LOOP|반전/);
     assert.match(t('help.keys'), /C (FLARE|플레어)/);
+    assert.match(t('help.keys'), /Shift\+Space (ROLL|롤)/i);
     assert.equal(t('control.flareShort'), 'FLR');
     assert.equal(t('cockpit.flares', { count: 2, max: 3 }), 'FLR 2/3');
     assert.ok(t('hud.rear')?.trim());

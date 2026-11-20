@@ -189,3 +189,54 @@ High quality max-load p95 in TOP/CHASE/COCKPIT was 16.7/16.8/16.8 ms at 1920×10
 Open `?fixture=roster-sheet&kind=hound&lang=en` for a fixed three-quarter CHASE view from 88 m. The `kind` parameter accepts every enemy kind, plus `carrier` and `ace`. Use `lang=ko` for Korean or `touch=1` to force touch layout. The fixture holds the flight tick for comparable captures.
 
 Hound uses tapered copper wings and a bright intake. Flanker has cyan twin booms, Harrier a pale swept frame, Diver navy and gold delta wings, Bomber broad olive wings with separated engines, and Turret a raised octagonal receiver with twin barrels. Their fine variants use the shared 2× voxel grid. The High full stress mix went from 17,852 to 18,026 triangles against a 21,000 cap. Low mobile stress fell from 8,626 to 8,520 against a 10,000 cap. The full replay records match the World merge byte for byte.
+
+## Stage 7c flight and world scale
+
+Cruise is 104 m/s, sustained boost is 182 m/s, and ignition starts at 202 m/s before easing to boost over 15 ticks. Player and Ace keep the same bank-to-turn response. A full-stick 180° turn still takes 92 ticks at cruise and 81 under boost. At established full bank, turn radius goes from 15.4 to 21.6 m at cruise and from 22.9 to 32.1 m under boost. The initial roll-in costs more space. Lateral displacement across a full turn from wings-level goes from 35.9 to 54.7 m at cruise and from 55.5 to 86.2 m under boost.
+
+The barrel roll shifts 40 m in 42 ticks. The aileron roll stays on its flight line, and the roll immunity and parry timings are unchanged. Horizontal Immelmann, Split-S, and J-turn travel doubles. Altitude bands and vertical speeds keep their original values. Hound and Harrier tail bolts can catch a steady 104 m/s target, with the inclusive 8 m altitude hit window still in effect. Sustained boost can outrun those bolts. Ace missiles can still overtake boosted flight. Pickup attraction and collection scale with travel, and pull distance clamps to the remaining gap.
+
+The 1,536 m world-site grid covers about 14.8 seconds of straight cruise per cell. Across the 100 tuning seeds the median trip to a cardinal neighbor is 15.0 s, with a 10th–90th percentile range of 11.0–19.2 s. Old checkpoints refresh stale site coordinates and retain claimed site IDs. Rendering streams 512 m chunks at up to six generations per draw. Inner tiles retain the shared 16 m gameplay surface, and the outer rings use stitched 64 and 128 m steps. Desktop and portrait fog reach up to 2,040 and 1,480 m respectively. Tactical radar covers 420 m and the NAV map covers 1,536 m. CHASE base setback grows 40% to preserve ship detail, and the cockpit camera stays attached to the airframe.
+
+The desktop control line includes Shift+Space for roll in both languages. The portrait layout puts roll on its dedicated touch target.
+
+### Balance method
+
+Pilot sight and steering distances scale with speed. Threat and roll prediction still measure time to closest approach in seconds, using the actual horizontal collision radii. The average pilot uses less aim error and takes more opportunities to dodge, roll, change bands, and lead the Ace. The weak pilot lines up attacks more directly while collecting fewer pickups, rolling less often, and drafting less reliably. Weapon damage, armor, enemy HP, the 8:00 Ace entry, and the 10:00 deadline retain their pre-rescale values.
+
+Tuning used seeds 1–100 at Heat 0. The first validation on seeds 1000–1099 reached 67% average clears and 12% weak clears, outside the targets. The next settings came from candidates already measured on the tuning range. Seeds 1000–1099 were rerun for comparison, and seeds 2000–2099 supplied an independent desktop check. Each range runs 100 seeds per profile. The tuning and original validation ranges run on both the 80 desktop and 50 mobile Gnat caps. A clear includes a boss victory or a live timeout. Survival counts those completed runs through the common 600 s time horizon.
+
+Desktop and mobile gave identical per-seed combat outcomes on the two required ranges. The baseline in each row is the integrated World merge.
+
+| Seeds | Pilot | Clear before → after | Ace wins before → after | Median survival before → after (s) | Median end hull before → after | Median level-ups before → after |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1–100 | Skilled | 98% → 95% | 98% → 94% | 600.0 → 600.0 | 10 → 13 | 26 → 26 |
+| 1–100 | Average | 31% → 57% | 26% → 50% | 550.1 → 600.0 | 0 → 1.5 | 25 → 26 |
+| 1–100 | Weak | 8% → 6% | 0% → 0% | 193.1 → 266.4 | 0 → 0 | 10 → 12.5 |
+| 1000–1099 | Skilled | 94% → 98% | 94% → 96% | 600.0 → 600.0 | 10 → 12 | 26 → 26 |
+| 1000–1099 | Average | 45% → 55% | 35% → 45% | 575.2 → 600.0 | 0 → 2 | 26 → 27 |
+| 1000–1099 | Weak | 6% → 4% | 0% → 0% | 194.2 → 274.5 | 0 → 0 | 10 → 14 |
+
+The additional desktop range, seeds 2000–2099, recorded 99% skilled, 53% average, and 6% weak clears. Skilled ended with a median 11.5 hull and weak survived a median 276.8 s. Weak clears in all three ranges were live timeouts. The required ranges peaked at 49 and 48 live Gnats respectively and recorded zero cap-pressure beats on either cap.
+
+In the additional range, the desktop weak pilot reached 53 live Gnats. The matching mobile weak batch peaked at 50 and recorded one cap-pressure beat on seed 2068. That seed timed out alive on desktop and ended in a loss on mobile. The mobile weak clear rate was 5%, with a 276.8 s median survival.
+
+### Replay and render verification
+
+Stage 7c rebaselines the terminal hashes once for the changed flight paths and combat ranges. Legacy and Survivors each cleared seeds 1, 11, 27, 42, 128, and 2026 on both caps. Every run used all three views and reproduced its terminal hash with recorded inputs. Legacy cleared in 112.50–118.18 s with 39–44 regular kills. Survivors cleared in 526.02–558.47 s with 725–783 regular kills. Fidelity rendering enabled and disabled still give identical simulation hashes.
+
+| Mode | Desktop digest | Mobile digest |
+| --- | --- | --- |
+| Legacy | `5a032f314bacbff12fe8a257c3788acfdcab0c1184f4b33a86b8f32e42ae493c` | `40281177fc6926bc74baa7b4ac22e52bf192c4e43f852957c16f96fe52249e13` |
+| Survivors | `d096f216e3a75786fa1de19e7207247454c67f37a73d7c7cc8ee0e808b103132` | `502301b0575a085145156341922c0cee95ea2819e539002728f628c71c9f8594` |
+
+Each digest uses the six terminal hashes in seed order, separated by line breaks with no trailing break.
+
+Native Chromium on the RTX 4090 used ANGLE Vulkan, the High tier, 180 warm-up intervals and 300 measured intervals per view. The remote stress fixture ran at 182 m/s and crossed a 512 m tile boundary in each sample, with phase-3 Red Kite, 24 regular aircraft, 80 or 50 Gnats, 192 projectiles including 64 hostile shots, and 16 mines. The portrait device was emulated at 390×844 CSS pixels and DPR 3.
+
+| Layout | TOP mean FPS / p95 | CHASE mean FPS / p95 | COCKPIT mean FPS / p95 |
+| --- | ---: | ---: | ---: |
+| 1920×1080 | 60.0 / 16.7 ms | 60.0 / 16.7 ms | 59.6 / 16.7 ms |
+| 390×844 | 60.0 / 16.7 ms | 60.0 / 16.8 ms | 60.0 / 16.7 ms |
+
+High stayed active for all 1,800 standalone intervals. Desktop COCKPIT dropped two frames. A separate run during four CPU batch simulations switched desktop COCKPIT to Medium and measured a 33.3 ms p95. Twelve safe-area layouts checked both languages at 44 px minimum touch targets with no controls, NAV, or loadout overlap. This verification used browser emulation for phones.

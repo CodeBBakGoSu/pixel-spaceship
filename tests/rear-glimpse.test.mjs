@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { cockpitLadderSpan } from '../src/camera.ts';
+import { TAIL_TRACK_RANGE } from '../src/data/navigation.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { RearMirrorThreat } from '../src/instruments.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror, REAR_VIEW_ASPECT } from '../src/rear-glimpse.ts';
@@ -114,15 +116,15 @@ test('a delayed bomb blast stays in the rear feed after the pilot turns', () => 
 });
 
 test('the rear mirror confirms one closing contact, keeps it briefly, and clears contacts outside range', () => {
-  const first = { id: 1, kind: 'fighter', x: -40, z: -70, alt: 124, hp: 1, vx: 0, vz: 75 };
-  const second = { id: 2, kind: 'fighter', x: 0, z: -140, alt: 110, hp: 1, vx: 0, vz: 55 };
-  const state = { tick: 300, speed: 50, player: { x: 0, z: 0, yaw: 0, altitude: 110 }, enemies: [first, second] };
+  const first = { id: 1, kind: 'fighter', x: scaleTravel(-40), z: scaleTravel(-70), alt: 124, hp: 1, vx: 0, vz: scaleTravel(75) };
+  const second = { id: 2, kind: 'fighter', x: 0, z: -TAIL_TRACK_RANGE, alt: 110, hp: 1, vx: 0, vz: scaleTravel(55) };
+  const state = { tick: 300, speed: scaleTravel(50), player: { x: 0, z: 0, yaw: 0, altitude: 110 }, enemies: [first, second] };
   const mirror = new RearMirrorThreat();
   assert.equal(mirror.update(state), null);
   state.tick += 9;
   const primary = mirror.update(state);
   assert.deepEqual([primary.id, primary.side, primary.height], [first.id, 'Left', 'Above']);
-  Object.assign(second, { x: 30, z: -40, alt: 95, vz: 120 });
+  Object.assign(second, { x: scaleTravel(30), z: scaleTravel(-40), alt: 95, vz: scaleTravel(120) });
   state.tick++;
   assert.equal(mirror.update(state).id, first.id);
   state.tick += 9;
@@ -130,7 +132,7 @@ test('the rear mirror confirms one closing contact, keeps it briefly, and clears
   state.tick += 5;
   const next = mirror.update(state);
   assert.deepEqual([next.id, next.side, next.height], [second.id, 'Right', 'Below']);
-  second.z = -145;
+  second.z = -TAIL_TRACK_RANGE - 5;
   state.tick++;
   assert.equal(mirror.update(state), null);
 });

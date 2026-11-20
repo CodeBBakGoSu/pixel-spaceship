@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { autopilotInput } from '../src/autoplay.ts';
 import { HOSTILE_GRAZE_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape } from '../src/data/hostile-fire.ts';
+import { scaleTravel } from '../src/data/speed.ts';
+import { ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
-import { advanceShots, fireHostile, HIT_WINDOW, HOSTILE_HIT_RADIUS } from '../src/stage-combat.ts';
+import { advanceShots, fireHostile, HIT_WINDOW, HOSTILE_HIT_RADIUS, TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { World } from '../src/world.ts';
 
 const sea = () => 0;
@@ -90,6 +92,29 @@ test('muzzle reports the emitter shape and original shot without adding presenta
     assert.equal(Object.hasOwn(stage.shots[i], 'shape'), false);
   }
   assert.deepEqual(muzzle.map(([, shape]) => shape), ['orb', 'needle', 'diamond']);
+});
+
+test('tail bolts catch a player at cruise and in band, while boost or another band evades them', () => {
+  const cases = [
+    { offset: HIT_WINDOW, boost: false, hits: 1 },
+    { offset: HIT_WINDOW + 0.01, boost: false, hits: 0 },
+    { offset: HIT_WINDOW, boost: true, hits: 0 },
+  ];
+  for (const [kind, side, aft] of [['hound', 6, 29], ['harrier', 15, 62]]) {
+    for (const { offset, boost, hits } of cases) {
+      const stage = createStage(parseStageOptions('?t=0'), sea);
+      stepStage(stage, {}, sea);
+      const { x, z, altitude } = stage.player;
+      const source = { kind, x: x + scaleTravel(side), z: z - scaleTravel(aft), alt: altitude + offset };
+      fireHostile(stage, source, ENEMY_KINDS[kind].boltSpeed);
+      const shot = stage.shots[0];
+      const expires = stage.tick + Math.ceil(shot.life * TICKS_PER_SECOND) + 1;
+      while (stage.tick < expires && stage.shots.includes(shot)) stepStage(stage, { boost }, sea);
+      assert.ok(!stage.shots.includes(shot), `${kind} bolt hit or expired`);
+      assert.ok(stage.player.z > z + scaleTravel(15), `${kind} fired into a moving target`);
+      assert.equal(stage.hitsTaken, hits, `${kind} at altitude offset ${offset}, boost=${boost}`);
+    }
+  }
 });
 
 test('full seeded replay hashes match with combat events enabled, disabled and repeated', () => {

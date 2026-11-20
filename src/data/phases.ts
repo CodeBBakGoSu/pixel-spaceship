@@ -1,6 +1,7 @@
 import type { RegularEnemyKind } from '../enemy-kinds.ts';
 import type { Band } from '../stage-types.ts';
 import { ROSTER } from './roster.ts';
+import { scaleTravel } from './speed.ts';
 
 export const PHASE_SECONDS = 120;
 export const LULL_SECONDS = 15;
@@ -8,7 +9,7 @@ export const RUN_BOSS_SECONDS = 4 * PHASE_SECONDS;
 export const RUN_END_SECONDS = RUN_BOSS_SECONDS + PHASE_SECONDS;
 export const SWARM_CAPS = { mobile: 50, desktop: 80 } as const;
 export const GNAT = {
-  hp: 1, xp: 1, speed: 32, lifeSeconds: 12, range: 134, clearance: 22, spacing: 11,
+  hp: 1, xp: 1, speed: scaleTravel(32), lifeSeconds: 12, range: scaleTravel(134), clearance: 22, spacing: scaleTravel(11),
 } as const;
 
 export type SwarmFormation = 'ring' | 'line' | 'vee';
@@ -36,17 +37,17 @@ export type RunPhase = {
   splitBands: boolean;
 };
 
-const patrol: RegularSpawn = { kind: 'patrol', band: 1, bearing: 9, range: 132, weight: 6 };
-const skimmer: RegularSpawn = { kind: 'skimmer', band: 0, bearing: -17, range: 136, weight: 3 };
-const turret: RegularSpawn = { kind: 'turret', band: 1, bearing: 0, range: 141, weight: 2 };
-const interceptor: RegularSpawn = { kind: 'interceptor', band: 2, bearing: 25, range: 147, weight: 3 };
-const spotter: RegularSpawn = { kind: 'spotter', band: 2, bearing: 14, range: 170, weight: 2 };
-const hound: RegularSpawn = { kind: 'hound', band: 1, bearing: 180, range: 92, weight: 2 };
-const diver: RegularSpawn = { kind: 'diver', band: 2, bearing: -5, range: 162, weight: 3 };
-const flanker: RegularSpawn = { kind: 'flanker', band: 'flank', bearing: 48, range: 148, weight: 2 };
-const bomber: RegularSpawn = { kind: 'bomber', band: 1, bearing: 5, range: 167, weight: 1 };
-const harrier: RegularSpawn = { kind: 'harrier', band: 1, bearing: -157, range: 104, weight: 2 };
-const aegis: RegularSpawn = { kind: 'aegis', band: ROSTER.bands.mid, bearing: -34, range: 155, weight: 1 };
+const patrol: RegularSpawn = { kind: 'patrol', band: 1, bearing: 9, range: scaleTravel(132), weight: 6 };
+const skimmer: RegularSpawn = { kind: 'skimmer', band: 0, bearing: -17, range: scaleTravel(136), weight: 3 };
+const turret: RegularSpawn = { kind: 'turret', band: 1, bearing: 0, range: scaleTravel(141), weight: 2 };
+const interceptor: RegularSpawn = { kind: 'interceptor', band: 2, bearing: 25, range: scaleTravel(147), weight: 3 };
+const spotter: RegularSpawn = { kind: 'spotter', band: 2, bearing: 14, range: scaleTravel(170), weight: 2 };
+const hound: RegularSpawn = { kind: 'hound', band: 1, bearing: 180, range: scaleTravel(92), weight: 2 };
+const diver: RegularSpawn = { kind: 'diver', band: 2, bearing: -5, range: scaleTravel(162), weight: 3 };
+const flanker: RegularSpawn = { kind: 'flanker', band: 'flank', bearing: 48, range: scaleTravel(148), weight: 2 };
+const bomber: RegularSpawn = { kind: 'bomber', band: 1, bearing: 5, range: scaleTravel(167), weight: 1 };
+const harrier: RegularSpawn = { kind: 'harrier', band: 1, bearing: -157, range: scaleTravel(104), weight: 2 };
+const aegis: RegularSpawn = { kind: 'aegis', band: ROSTER.bands.mid, bearing: -34, range: scaleTravel(155), weight: 1 };
 // Aegis takes one patrol slot, preserving the other kinds' selection ranges.
 const coast = [{ ...patrol, weight: patrol.weight - aegis.weight }, aegis, skimmer, turret];
 const skirmish = [...coast, interceptor, spotter, hound];

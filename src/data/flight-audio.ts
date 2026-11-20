@@ -1,3 +1,5 @@
+import { scaleTravel } from './speed.ts';
+
 export const FLIGHT_AUDIO = {
   mixHeadroom: 0.69,
   mixLimiterKnee: 0.70,
@@ -17,7 +19,7 @@ export const FLIGHT_AUDIO = {
     lowStart: 45, lowFull: 22, lowGain: 0.027, lowHz: 690,
     cutoffHz: 760,
   },
-  flyby: { radius: 39, altitudeWindow: 23, minRelativeSpeed: 33, maxTickGap: 7 },
+  flyby: { radius: scaleTravel(39), altitudeWindow: 23, minRelativeSpeed: scaleTravel(33), maxTickGap: 7 },
   cues: {
     flyby: { seconds: 0.265, cooldown: 0.42, attack: 0.065, filter: 0.13, sweep: 0.45, gain: 0.20, seed: 0x78d92b45 },
     cloud: { seconds: 0.365, cooldown: 0.42, attack: 0.054, filter: 0.08, sweep: 0.17, gain: 0.25, seed: 0x1c5692de },

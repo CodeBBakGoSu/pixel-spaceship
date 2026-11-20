@@ -48,8 +48,9 @@ function terrainLod(stride: number) {
   return { index: new BufferAttribute(new Uint16Array(indices), 1), vertices: new Uint16Array(new Set(indices)) };
 }
 
-const LODS = [terrainLod(1), terrainLod(2), terrainLod(4)] as const;
-const DECOR_STEP = TERRAIN_MESH_STEP * 2;
+const LODS = TERRAIN_STREAM.lodStrides.map(terrainLod);
+const DECOR_STEP = TERRAIN_DECOR.spacing;
+const DECOR_CELLS = DECOR_STEP / TERRAIN_MESH_STEP;
 const DECOR_CAPACITY = (SIZE / DECOR_STEP) ** 2 * 2;
 const HEIGHT_RANGE = TERRAIN_MAX_ALTITUDE - TERRAIN_MIN_ALTITUDE;
 const BOUNDS = new Sphere(new Vector3(SIZE / 2, TERRAIN_MIN_ALTITUDE + HEIGHT_RANGE / 2, -SIZE / 2),
@@ -195,14 +196,16 @@ export class TerrainStream {
     const { position } = mesh.geometry.attributes;
     const seed = this.seed ^ TERRAIN_DECOR.seedSalt;
     let count = 0;
-    for (let row = 0; row < CELLS; row += 2) for (let col = 0; col < CELLS; col += 2) {
-      const hash = worldHash(seed, chunk.x * SIZE / DECOR_STEP + col / 2, chunk.z * SIZE / DECOR_STEP + row / 2);
+    for (let row = 0; row < CELLS; row += DECOR_CELLS) for (let col = 0; col < CELLS; col += DECOR_CELLS) {
+      const hash = worldHash(seed, chunk.x * SIZE / DECOR_STEP + col / DECOR_CELLS,
+        chunk.z * SIZE / DECOR_STEP + row / DECOR_CELLS);
       if ((hash & 7) > 4) continue;
-      const x = (col + 1) * TERRAIN_MESH_STEP, z = (row + 1) * TERRAIN_MESH_STEP;
-      const interior = col > 0 && row > 0 && col + 2 < CELLS && row + 2 < CELLS;
+      const midCol = col + DECOR_CELLS / 2, midRow = row + DECOR_CELLS / 2;
+      const x = midCol * TERRAIN_MESH_STEP, z = midRow * TERRAIN_MESH_STEP;
+      const interior = col > 0 && row > 0 && col + DECOR_CELLS < CELLS && row + DECOR_CELLS < CELLS;
       const y = lod === MIDDLE && interior
-        ? (position.getY(vertex(col, row)) + position.getY(vertex(col + 2, row + 2))) / 2
-        : position.getY(vertex(col + 1, row + 1));
+        ? (position.getY(vertex(col, row)) + position.getY(vertex(col + DECOR_CELLS, row + DECOR_CELLS))) / 2
+        : position.getY(vertex(midCol, midRow));
       const scale = 0.72 + ((hash >>> 6) & 15) * 0.045;
       const yaw = ((hash >>> 16) & 7) * Math.PI / 4;
       const tint = (hash >>> 20) & 1;

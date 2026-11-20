@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { frameCockpit } from '../src/camera.ts';
+import { BOOST_SPEED, CRUISE_SPEED } from '../src/flight.ts';
 import { FlightAtmosphere } from '../src/flight-atmosphere.ts';
 import { cockpitLayout, desktopLayout } from '../src/layout.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -9,18 +10,18 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 test('boost has a short ignition surge, reaches sustained speed, and needs a fresh press to surge again', () => {
   const state = createStage(parseStageOptions('?t=0'));
   stepStage(state);
-  assert.equal(state.speed, 52);
+  assert.equal(state.speed, 104);
   stepStage(state, { boost: true });
-  assert.equal(state.speed, 101);
-  assert.ok(Math.abs(state.player.vz - 101) < 1e-9);
+  assert.equal(state.speed, 202);
+  assert.ok(Math.abs(state.player.vz - 202) < 1e-9);
   for (let i = 1; i < 15; i++) stepStage(state, { boost: true });
-  assert.equal(state.speed, 91);
+  assert.equal(state.speed, 182);
   assert.equal(state.boostTicks, 15);
   stepStage(state);
-  assert.equal(state.speed, 52);
+  assert.equal(state.speed, 104);
   assert.equal(state.boostTicks, 0);
   stepStage(state, { boost: true });
-  assert.equal(state.speed, 101);
+  assert.equal(state.speed, 202);
 });
 
 test('the cockpit boost lens widens the view while projecting the same scenery and ladder', () => {
@@ -46,10 +47,10 @@ test('boost adds more wind streaks in a forward view while TOP and reduced motio
   const air = new FlightAtmosphere(state.arena);
   const camera = new PerspectiveCamera(60, 1.6);
   camera.updateMatrixWorld();
-  state.speed = 52;
+  state.speed = CRUISE_SPEED;
   const cruise = air.update(camera, state, 1, false, 0, false);
   assert.ok(cruise > 0);
-  state.speed = 91;
+  state.speed = BOOST_SPEED;
   assert.ok(air.update(camera, state, 1, false, 1, false) > cruise);
   assert.equal(air.update(camera, state, 1, true, 1, false), 0);
   assert.equal(air.group.visible, true);

@@ -1,11 +1,12 @@
 import { FLIGHT_MODEL } from './data/flight-model.ts';
+import { scaleTravel } from './data/speed.ts';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const MAX_BANK_STEP = 0.05;
 
-export const CRUISE_SPEED = 52;
-export const BOOST_SPEED = 91;
-export const BOOST_IGNITION_SPEED = 101;
+export const CRUISE_SPEED = scaleTravel(52);
+export const BOOST_SPEED = scaleTravel(91);
+export const BOOST_IGNITION_SPEED = scaleTravel(101);
 export const BOOST_IGNITION_TICKS = 15;
 export const TURN_RATE = 1.95;
 export const BOOST_TURN_RATE = 2.3;
@@ -47,6 +48,14 @@ export function bankYawRate(bank: number, turn: number, boosting: boolean): numb
   const levelGain = 1 - Math.abs(command) * (1 - fullStickYawFloor);
   const gain = levelGain + (peakYawGain - levelGain) * Math.sin(alignedBank) ** 3;
   return command * (boosting ? BOOST_TURN_RATE : TURN_RATE) * gain;
+}
+
+export function bankThrustFactor(bank: number, turn: number): number {
+  const { maxBank, levelTurnDrag, deepTurnDrag } = FLIGHT_MODEL;
+  const progress = clamp(Math.abs(bank) / maxBank, 0, 1);
+  const eased = progress ** 2 * (3 - 2 * progress);
+  const drag = levelTurnDrag + (deepTurnDrag - levelTurnDrag) * eased;
+  return 1 - Math.min(1, Math.abs(turn)) * drag;
 }
 
 export function advanceBankDrop(current: number, bank: number, dt: number): number {

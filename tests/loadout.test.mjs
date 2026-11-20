@@ -9,6 +9,7 @@ import {
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
 import { weaponCooldown } from '../src/loadout.ts';
 import { STARTER_BUFFS, STARTER_WEAPONS } from '../src/data/meta.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 
 const ground = () => 35;
 const start = () => createStage(parseStageOptions('?mode=survivors&t=0'), ground);
@@ -63,7 +64,7 @@ test('taking Hull Plating through a real draft raises and repairs hull', () => {
 test('Magnet Core expands both pickup reach and its altitude window', () => {
   const without = start(), withMagnet = start();
   for (const state of [without, withMagnet]) {
-    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + 52, alt: 122, xp: 4, born: 0 });
+    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 122, xp: 4, born: 0 });
   }
   withMagnet.run.buffLevels['magnet-core'] = 2;
   stepStage(without, {}, ground);
@@ -164,11 +165,11 @@ test('Ordnance Rack expands manual stores, recharge and blast reach', () => {
   assert.equal(state.bombs, 5);
   assert.equal(state.bombReloadAt - state.tick, 293);
   const trigger = makeEnemy(state, bomb.x, bomb.z, 1, 'patrol', 0);
-  const edge = makeEnemy(state, bomb.x + 42, bomb.z, 1, 'patrol', 0);
+  const edge = makeEnemy(state, bomb.x + scaleTravel(42), bomb.z, 1, 'patrol', 0);
   state.enemies = [trigger, edge];
   advanceRearBombs(state, ground);
   assert.equal(edge.hp, 0);
-  assert.ok(state.effects.find(effect => effect.kind === 'bomb-blast').radius > 42);
+  assert.ok(state.effects.find(effect => effect.kind === 'bomb-blast').radius > scaleTravel(42));
   state.tick = state.bombReloadAt;
   advanceRearBombs(state, ground);
   assert.equal(state.bombs, 6);
@@ -189,7 +190,7 @@ test('Wing Pods add a rear bolt at level five and keep their same-band restricti
   const state = start();
   const { x, z } = state.player;
   state.run.weaponLevels.pods = 5;
-  state.enemies = [makeEnemy(state, x - 22, z - 66, 2, 'patrol', 0)];
+  state.enemies = [makeEnemy(state, x - scaleTravel(22), z - scaleTravel(66), 2, 'patrol', 0)];
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 0);
   state.enemies[0].alt = 110;
@@ -203,11 +204,11 @@ test('Ion Wake makes a vertical damage curtain and level five attracts salvage a
   state.tick = 10;
   const { x, z } = state.player;
   state.run.weaponLevels.ion = 5;
-  state.ionWake = [{ x, z: z - 34, alt: 75, until: 100 }, { x, z: z - 60, alt: 145, until: 100 }];
-  const inside = makeEnemy(state, x, z - 49, 1, 'interceptor', 0);
-  const outside = makeEnemy(state, x + 12, z - 49, 1, 'interceptor', 0);
+  state.ionWake = [{ x, z: z - scaleTravel(34), alt: 75, until: 100 }, { x, z: z - scaleTravel(60), alt: 145, until: 100 }];
+  const inside = makeEnemy(state, x, z - scaleTravel(49), 1, 'interceptor', 0);
+  const outside = makeEnemy(state, x + scaleTravel(12), z - scaleTravel(49), 1, 'interceptor', 0);
   state.enemies = [inside, outside];
-  state.pickups.push({ id: 606, x, z: z - 52, alt: 110, xp: 1, born: 0 });
+  state.pickups.push({ id: 606, x, z: z - scaleTravel(52), alt: 110, xp: 1, born: 0 });
   advanceSupportWeapons(state);
   assert.ok(inside.hp < 3);
   assert.equal(outside.hp, 4);
@@ -221,14 +222,14 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   const state = start();
   state.run.weaponLevels.drones = 5;
   const { x, z } = state.player;
-  const contact = makeEnemy(state, x, z + 22.5, 1, 'interceptor', 0);
+  const contact = makeEnemy(state, x, z + scaleTravel(22.5), 1, 'interceptor', 0);
   state.enemies = [contact];
   advanceSupportWeapons(state);
   assert.equal(state.orbitDrones.length, 3);
   assert.ok(state.orbitDrones.some(drone => drone.alt > 117));
   assert.ok(contact.hp < 4);
   assert.ok(state.shots.some(shot => shot.kind === 'drone-bolt'));
-  const bolt = { x, z: z + 32, alt: 110, vx: 0, vz: -900, life: 2, damage: 2, kind: 'hostile',
+  const bolt = { x, z: z + scaleTravel(32), alt: 110, vx: 0, vz: scaleTravel(-900), life: 2, damage: 2, kind: 'hostile',
     volley: 0, nearMiss: false, lockId: null };
   state.shots.push(bolt);
   advanceShots(state, ground);

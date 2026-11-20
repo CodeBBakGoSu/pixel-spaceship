@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { PICKUP_LIMIT } from '../src/data/run-balance.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { advanceShots, fireHostile, hostileCanHit } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -37,7 +38,7 @@ test('neutral roll remembers the last turn and holds heading, altitude and the c
   assert.ok(!state.roll);
 });
 
-test('barrel rolls shift 20 m to the chosen side and return to their entry altitude in 42 ticks', () => {
+test('barrel rolls shift 40 m to the chosen side and return to their entry altitude in 42 ticks', () => {
   for (const side of [-1, 1]) {
     const state = sortie();
     const { x, altitude, yaw } = state.player;
@@ -49,7 +50,7 @@ test('barrel rolls shift 20 m to the chosen side and return to their entry altit
     assert.ok(state.player.altitude > altitude);
     advance(state, 32);
     assert.equal(state.roll.elapsed, 41);
-    assert.ok(Math.abs(state.player.x - x - side * 20) < 1e-8);
+    assert.ok(Math.abs(state.player.x - x - side * 40) < 1e-8);
     assert.ok(Math.abs(state.player.altitude - altitude) < 1e-8);
     assert.equal(state.player.yaw, yaw);
     stepStage(state, {}, sea);
@@ -136,7 +137,7 @@ test('Aegis interception resolves before a parry on the same flight segment', ()
   state.run.evolutions.pods = 'aegis';
   stepStage(state, { roll: true }, sea);
   const { x, z, altitude: alt } = state.player;
-  fireHostile(state, { x, z: z - 27, alt }, 1800);
+  fireHostile(state, { x, z: z - scaleTravel(27), alt }, scaleTravel(1800));
   advanceShots(state, sea, { parry: () => assert.fail('Aegis already absorbed this bolt') });
   assert.equal(state.shots.length, 0);
   assert.equal(state.pickups.length, 0);

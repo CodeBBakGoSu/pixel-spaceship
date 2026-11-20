@@ -1,18 +1,20 @@
+import { scaleTravel } from './speed.ts';
+
 export const ACE = {
   hull: { legacy: 42, survivors: 1200, heatArmorScale: 1.2 },
   phaseHealth: { cover: 0.66, desperate: 0.33 },
   entry: { ticks: 120, bend: 0.23 },
   flight: {
-    clearance: 22, rimInset: 55, turnGain: 2.35, turnDrag: 0.22,
-    interceptSeconds: 0.32, tailDistance: 72, tailRange: 127, tailCos: 0.48,
-    closeRange: 24, breakTicks: 65, warningCooldown: 180,
+    clearance: 22, turnGain: 2.35, breakTurn: 0.22,
+    interceptSeconds: 0.32, tailDistance: scaleTravel(72), tailRange: scaleTravel(127), tailCos: 0.48,
+    closeRange: scaleTravel(24), breakTicks: 65, warningCooldown: 180,
     verticalScale: 0.8, pitchScale: 0.46, bandStepDelay: 90,
   },
-  attack: { startDelay: 82, range: 156, cone: 0.58, leadSeconds: 0.34, bandWindow: 11 },
+  attack: { startDelay: 82, range: scaleTravel(156), cone: 0.58, leadSeconds: 0.34, bandWindow: 11 },
   gun: { warningTicks: 33, speedScale: 1.58 },
   missile: { warningTicks: 52, speedScale: 1.46, turnRate: 0.76, life: 2.45 },
-  roll: { warningTicks: 17, threatSeconds: 0.47, threatMargin: 4, recoverTicks: 95 },
-  cover: { gnats: 8, distance: 38, side: 34, formationTicks: 510 },
+  roll: { warningTicks: 17, threatSeconds: 0.47, threatMargin: scaleTravel(4), recoverTicks: 95 },
+  cover: { gnats: 8, distance: scaleTravel(38), side: scaleTravel(34), formationTicks: 510 },
   defeat: { maxTicks: 125, turnRate: 1.8, fallSpeed: 66, bankRate: 9, pitch: 0.5, trailTicks: 12, blastLife: 0.68, score: 2500 },
   hitRadius: 7,
   burnInterval: 54,

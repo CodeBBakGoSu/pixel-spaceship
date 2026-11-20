@@ -1,10 +1,11 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
 import { skimAltitude, SKIM_BAND } from './bands.ts';
-import { ACE_PILOT, BOT_PROFILES, type BotProfile } from './data/bot-profiles.ts';
-import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
+import { ACE_PILOT, BOT_POLICY, BOT_PROFILES, PILOT_ROUTE, type BotProfile } from './data/bot-profiles.ts';
+import { REAR_ORDNANCE, REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
+import { scaleTravel } from './data/speed.ts';
 import { LANDMARKS } from './reach.ts';
-import { angleTo, BANDS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, inBand, MAX_ALTITUDE, MINE_RADIUS,
+import { angleTo, BANDS, BODY_RADIUS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MAX_ALTITUDE, MINE_RADIUS,
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -53,15 +54,15 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   const rally = state.rally ?? LANDMARKS.atoll;
   if (mode === 'full' && !state.boss && state.tick >= beaconTick(state)
     && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
-    && Math.hypot(rally.x - p.x, rally.z - p.z) > 145) {
+    && Math.hypot(rally.x - p.x, rally.z - p.z) > PILOT_ROUTE.rallyRange) {
     return { ...rally, kind: 'beacon' };
   }
   const enemy = nearest(state.enemies.filter(enemy => !enemy.entry && (skimUse || !enemy.skim)), p.x, p.z);
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
     const needsXp = mode === 'full' && (!!state.run || state.level < 3);
-    const distantEnemy = !enemy || Math.hypot(enemy.x - p.x, enemy.z - p.z) > 120;
-    if (Math.hypot(pickup.x - p.x, pickup.z - p.z) <= (needsXp && distantEnemy ? 260 : 150)) {
+    const distantEnemy = !enemy || Math.hypot(enemy.x - p.x, enemy.z - p.z) > PILOT_ROUTE.clearLaneRange;
+    if (Math.hypot(pickup.x - p.x, pickup.z - p.z) <= (needsXp && distantEnemy ? BOT_POLICY.salvageSightRange : PILOT_ROUTE.pickupRange)) {
       return { ...pickup, kind: 'pickup' };
     }
   }
@@ -79,7 +80,7 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
     const x = threat.x - p.x, z = threat.z - p.z;
     const vx = (threat.vx ?? 0) - ownX, vz = (threat.vz ?? 0) - ownZ;
     const vv = vx * vx + vz * vz;
-    const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, 0.6) : 0;
+    const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, BOT_POLICY.lookaheadMax) : 0;
     if (Math.hypot(x + vx * closest, z + vz * closest) >= radius) return;
     if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
     const floor = ground ? ground(p.x + ownX * closest, p.z + ownZ * closest) + 22 : 55;
@@ -91,27 +92,27 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
   };
   for (const shot of state.shots) {
     if (shot.kind === 'hostile') {
-      const dodge = avoid(shot, mode === 'full' ? 11 : 8);
+      const dodge = avoid(shot, HOSTILE_HIT_RADIUS + PILOT_ROUTE.bulletMargin[mode]);
       if (dodge !== undefined) return dodge;
     }
   }
   if (mode === 'full') {
     for (const mine of state.enemyMines) {
-      const dodge = avoid(mine, MINE_RADIUS + 5);
+      const dodge = avoid(mine, MINE_RADIUS + PILOT_ROUTE.mineMargin);
       if (dodge !== undefined) return dodge;
     }
     for (const effect of state.effects) {
       if (effect.kind !== 'flak') continue;
-      const dodge = avoid(effect, FLAK_RADIUS + 4);
+      const dodge = avoid(effect, FLAK_RADIUS + PILOT_ROUTE.flakMargin);
       if (dodge !== undefined) return dodge;
     }
     for (const enemy of state.enemies) {
       if (enemy.tell?.kind === 'flak' && enemy.tell.until - state.tick <= 45) {
-        const dodge = avoid(enemy.tell, FLAK_RADIUS + 5);
+        const dodge = avoid(enemy.tell, FLAK_RADIUS + PILOT_ROUTE.mineMargin);
         if (dodge !== undefined) return dodge;
       }
       if (enemy.kind !== 'gnat' && !enemy.entry && state.tick > state.bodyGraceUntil) {
-        const dodge = avoid(enemy, 15);
+        const dodge = avoid(enemy, BODY_RADIUS + PILOT_ROUTE.bodyMargin);
         if (dodge !== undefined) return dodge;
       }
     }
@@ -121,10 +122,10 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
 function rearManeuver(state: StageState, target: Route, angle: number, range: number): ManeuverKind | undefined {
   if ((target.kind !== 'enemy' && target.kind !== 'ace') || Math.abs(angle) < Math.PI * 155 / 180) return;
   const { altitude } = state.player;
+  if (range < PILOT_ROUTE.reversalMinRange || range > PILOT_ROUTE.reversalMaxRange) return;
   if (inBand(altitude, target.alt)) {
-    if (range >= 65 && range <= 115 && canManeuver(state, 'j-turn')) return 'j-turn';
+    if (canManeuver(state, 'j-turn')) return 'j-turn';
   }
-  if (range < 65 || range > 115) return;
   const kind = target.alt > altitude ? 'immelmann' : 'split-s';
   if (canManeuver(state, kind) && inBand(exitAltitude(altitude, kind), target.alt)) return kind;
 }
@@ -133,13 +134,14 @@ function hasRearBombTarget(state: StageState): boolean {
   if (!state.bombs || state.tick < state.bombReadyAt) return false;
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   return state.enemies.some(enemy => {
+    if (enemy.entry || !enemy.hp) return false;
     const x = enemy.x - p.x, z = enemy.z - p.z;
     if (x * fx + z * fz >= 0) return false;
-    const dx = x + 14 * fx, dz = z + 14 * fz;
+    const dx = x + scaleTravel(14) * fx, dz = z + scaleTravel(14) * fz;
     const vv = enemy.vx ** 2 + enemy.vz ** 2;
     const time = vv > 0 ? clamp(-(dx * enemy.vx + dz * enemy.vz) / vv, 0, 2) : 0;
     const altitude = p.altitude - Math.max(0, time - 0.45) * 24;
-    return inBand(altitude, enemy.alt) && Math.hypot(dx + time * enemy.vx, dz + time * enemy.vz) <= 16;
+    return inBand(altitude, enemy.alt) && Math.hypot(dx + time * enemy.vx, dz + time * enemy.vz) <= REAR_ORDNANCE.bomb.proximity;
   });
 }
 
@@ -147,11 +149,11 @@ function hasRearFlareTarget(state: StageState): boolean {
   if (!canDropFlare(state, state.tick + 1)) return false;
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   return state.enemies.some(enemy => {
-    if (!enemy.hp || (enemy.burnUntil ?? 0) > state.tick) return false;
+    if (enemy.entry || !enemy.hp || (enemy.burnUntil ?? 0) > state.tick) return false;
     const x = enemy.x - p.x, z = enemy.z - p.z;
     const aft = -x * fx - z * fz, side = x * fz - z * fx;
     const drop = p.altitude - enemy.alt;
-    return aft >= 9 && aft <= 48 && Math.abs(side) <= 6 + aft * 0.24 && drop >= -3 && drop <= 16;
+    return aft >= scaleTravel(9) && aft <= scaleTravel(48) && Math.abs(side) <= scaleTravel(6) + aft * 0.24 && drop >= -3 && drop <= 16;
   });
 }
 
@@ -189,25 +191,26 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   const delta = target.alt - p.altitude;
   const withinCoarse = Math.abs(delta) <= HIT_WINDOW;
   const localSkim = skimAltitude(ground?.(p.x, p.z));
-  const approachSkim = skimUse && target.skim && range < 180;
+  const approachSkim = skimUse && target.skim && range < PILOT_ROUTE.skimApproachRange;
   let climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
   if (approachSkim) climb = p.skim ? 0 : -1;
   else if (p.skim && target.alt > localSkim) climb = Math.max(0.25, climb);
   const extending = target.kind === 'ace' && range < ACE_PILOT.extensionRange && Math.abs(angle) > ACE_PILOT.extensionAngle;
   const acceptingPass = mode === 'full' && !!target.flyby && !state.boundaryWarning && Math.abs(angle) > Math.PI / 6;
-  const turn = extending || acceptingPass ? 0 : target.kind === 'home' && range < 34 ? 0.65 : clamp(angle * 2.35, -1, 1);
+  const turn = extending || acceptingPass ? 0
+    : target.kind === 'home' && range < PILOT_ROUTE.homeTurnRange ? 0.65 : clamp(angle * BOT_POLICY.turnGain, -1, 1);
 
   let view: StageState['view'] = 'overhead';
   if (mode === 'full' && target.kind !== 'home') {
     if (Math.abs(delta) > 12 || acceptingPass) view = 'chase';
-    else if (target.kind === 'ace' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
+    else if (target.kind === 'ace' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < PILOT_ROUTE.cockpitRange)) view = 'cockpit';
   }
   const dodge = state.invulnerability === 0
     ? dodgeClimb(state, mode, climb, ground) ?? (mode === 'full' ? dodgeAceWarning(state, tactics) : undefined) : undefined;
   const maneuver = mode === 'full' && !approachSkim && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
-    && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
-  const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (!!state.run || state.level < 3 || target.kind === 'beacon')));
+    && range > PILOT_ROUTE.extensionMinRange && range < PILOT_ROUTE.reversalMinRange && !state.boundaryWarning && canManeuver(state, 'immelmann');
+  const boost = !acceptingPass && (extend || (range > PILOT_ROUTE.boostRange && Math.abs(angle) < 0.2 && (!!state.run || state.level < 3 || target.kind === 'beacon')));
   return {
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
@@ -219,7 +222,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
 function holdAboveTraffic(state: StageState): StageInput {
   const p = state.player, a = state.arena;
   const dx = a.x - p.x, dz = a.z - p.z;
-  const turn = Math.hypot(dx, dz) > a.radius - 80 ? clamp(angleTo(p.yaw, dx, dz) * 2.35, -1, 1) : 0.58;
+  const turn = Math.hypot(dx, dz) > a.radius - PILOT_ROUTE.patrolMargin ? clamp(angleTo(p.yaw, dx, dz) * BOT_POLICY.turnGain, -1, 1) : 0.58;
   return { turn, climb: clamp((MAX_ALTITUDE - p.altitude) / 4, 0, 1) };
 }
 

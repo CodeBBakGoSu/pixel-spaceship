@@ -107,16 +107,16 @@ test('shot and body overlap only damage the player through the inclusive eight-m
   assert.equal(state.hull, 6);
 });
 
-test('salvage pulls from 42 m and collects inside 8 m, only while inside the altitude window', () => {
+test('salvage pulls from 84 m and collects inside 16 m, only while inside the altitude window', () => {
   const state = stage('?fixture=stack');
   state.enemies = [];
   const { x, z } = state.player;
-  state.pickups = [{ id: 10, x, z: z + 42, alt: 75, xp: 2, born: state.tick }];
+  state.pickups = [{ id: 10, x, z: z + 84, alt: 75, xp: 2, born: state.tick }];
   run(state, 3);
-  assert.equal(state.pickups[0].z, z + 42);
+  assert.equal(state.pickups[0].z, z + 84);
   state.player.altitude = 83;
   run(state, 1);
-  assert.ok(Math.abs(state.pickups[0].z - (z + 42 - (state.speed + 45) / 60)) < 1e-6);
+  assert.ok(Math.abs(state.pickups[0].z - (z + 84 - (state.speed + 90) / 60)) < 1e-6);
   assert.equal(state.pickups[0].pulling, true);
   state.player.altitude = 90;
   const afterPull = state.pickups[0].z;
@@ -124,7 +124,7 @@ test('salvage pulls from 42 m and collects inside 8 m, only while inside the alt
   assert.equal(state.pickups[0].z, afterPull);
   assert.equal(state.pickups[0].pulling, false);
   state.player.altitude = 83;
-  state.pickups[0].z = state.player.z + 7;
+  state.pickups[0].z = state.player.z + 15;
   run(state, 1);
   assert.equal(state.xp, 2);
   assert.equal(state.salvage, 2);
@@ -168,6 +168,10 @@ test('the three draft cards pause active time, apply once and keep three legal c
     assert.equal(state.xp, 2);
     assert.equal(state.salvage, 18);
   }
+});
+
+test('the old Warden fixture opens on the same fighter as the Legacy boss fixture', () => {
+  assert.deepEqual(stage('?fixture=warden'), stage('?fixture=boss'));
 });
 
 test('the legacy Ace fixture rejects cruise bolts, then tracks same-band aim across views', () => {

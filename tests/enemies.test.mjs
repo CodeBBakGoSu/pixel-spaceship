@@ -147,7 +147,7 @@ test('an aft fighter passes a wingtip and sweeps across the nose through a gentl
   for (const turn of [0, 0.07]) {
     const state = fixture('hound'), p = state.player;
     state.twinAt = state.podsAt = Infinity;
-    const fighter = makeEnemy(state, p.x + 24, p.z - 52, 2, 'interceptor', 3);
+    const fighter = makeEnemy(state, p.x + 48, p.z - 104, 2, 'interceptor', 3);
     Object.assign(fighter, { yaw: p.yaw, maneuverAt: Infinity, shotAt: Infinity });
     state.enemies = [fighter];
     let wingtip = false, acrossTheNose = false, priorSide = fighter.x - p.x;
@@ -158,9 +158,9 @@ test('an aft fighter passes a wingtip and sweeps across the nose through a gentl
       const ahead = dx * fx + dz * fz, side = dx * fz - dz * fx;
       assert.equal(fighter.band, 2);
       assert.equal(fighter.alt, 148);
-      assert.ok(Math.hypot(fighter.x - x, fighter.z - z) < 1.5);
-      if (Math.abs(ahead) <= 3) wingtip ||= fighter.flyby?.phase === 'overtake' && side >= 24;
-      if (priorSide > 0 && side <= 0) acrossTheNose ||= fighter.flyby?.phase === 'cross' && ahead >= 48 && ahead <= 100;
+      assert.ok(Math.hypot(fighter.x - x, fighter.z - z) < 3);
+      if (Math.abs(ahead) <= 6) wingtip ||= fighter.flyby?.phase === 'overtake' && side >= 48;
+      if (priorSide > 0 && side <= 0) acrossTheNose ||= fighter.flyby?.phase === 'cross' && ahead >= 96 && ahead <= 200;
       priorSide = side;
     }
     assert.ok(wingtip, `side clearance at turn ${turn}`);
@@ -178,14 +178,14 @@ test('opening patrols arrive far enough out to read before their slower-than-boo
   const firstVolley = Math.min(...engaged.map(enemy => enemy.shotAt));
   for (const enemy of engaged) {
     const range = Math.hypot(enemy.x - state.player.x, enemy.z - state.player.z);
-    assert.ok(range >= 115 && range < 138);
+    assert.ok(range >= 230 && range < 276);
   }
   assert.ok(firstVolley - state.tick >= 82 && firstVolley - state.tick <= 106);
   advance(state, firstVolley - state.tick - 1);
   assert.equal(state.shots.length, 0);
   advance(state, 1);
   assert.ok(state.shots.length > 0 && state.shots.every(shot => shot.kind === 'hostile'
-    && Math.abs(Math.hypot(shot.vx, shot.vz) - 58) < 1e-6));
+    && Math.abs(Math.hypot(shot.vx, shot.vz) - 116) < 1e-6));
 });
 
 test('boost opens a gap from the dedicated tail aircraft without turning them into flybys', () => {
@@ -200,30 +200,30 @@ test('boost opens a gap from the dedicated tail aircraft without turning them in
   for (let i = 0; i < 80; i++) stepStage(state, { boost: true }, ground);
   for (const [index, enemy] of state.enemies.entries()) {
     assert.equal(enemy.flyby, undefined);
-    assert.ok(p.z - enemy.z > before[index] + 25);
+    assert.ok(p.z - enemy.z > before[index] + 50);
   }
 });
 
 test('an airborne straggler re-enters the forward quarter only after staying far aft', () => {
   const state = fixture('hound'), p = state.player;
-  const patrol = makeEnemy(state, p.x + 36, p.z - 225, 2, 'patrol', -2);
+  const patrol = makeEnemy(state, p.x + 72, p.z - 450, 2, 'patrol', -2);
   patrol.hp = 1;
   state.enemies = [patrol];
   for (let i = 0; i < 155; i++) {
     state.tick++;
     relocateStragglers(state, ground);
   }
-  assert.ok(patrol.z < p.z - 200);
+  assert.ok(patrol.z < p.z - 400);
   state.tick++;
   relocateStragglers(state, ground);
-  assert.ok(patrol.entry && Math.hypot(patrol.x - p.x, patrol.z - p.z) >= 640);
+  assert.ok(patrol.entry && Math.hypot(patrol.x - p.x, patrol.z - p.z) >= 1280);
   while (patrol.entry) {
     state.tick++;
     advanceEnemies(state, ground);
   }
   const dx = patrol.x - p.x, dz = patrol.z - p.z, range = Math.hypot(dx, dz);
   assert.ok(dz > 0 && Math.abs(Math.atan2(dx, dz)) <= Math.PI / 3);
-  assert.ok(range >= 175 && range <= 225);
+  assert.ok(range >= 350 && range <= 450);
   assert.equal(patrol.hp, 1);
   assert.equal(patrol.band, 2);
   assert.equal(patrol.alt, 143);
@@ -233,16 +233,16 @@ test('an airborne straggler re-enters the forward quarter only after staying far
 test('the old rim leaves re-entry open while nearby flanking and pursuit contacts stay put', () => {
   const state = fixture('hound'), p = state.player;
   Object.assign(p, { x: 0, z: 455 });
-  const aft = makeEnemy(state, p.x + 20, p.z - 225, 2);
-  const wide = makeEnemy(state, p.x + 335, p.z - 120, 2);
-  const tail = makeEnemy(state, p.x - 10, p.z - 260, 2, 'harrier');
+  const aft = makeEnemy(state, p.x + 40, p.z - 450, 2);
+  const wide = makeEnemy(state, p.x + 670, p.z - 240, 2);
+  const tail = makeEnemy(state, p.x - 20, p.z - 520, 2, 'harrier');
   state.enemies = [aft, wide, tail];
   const positions = state.enemies.map(({ x, z }) => [x, z]);
   for (let i = 0; i < 420; i++) {
     state.tick++;
     relocateStragglers(state, ground);
   }
-  assert.ok(aft.entry?.target.z > p.z + 100);
+  assert.ok(aft.entry?.target.z > p.z + 200);
   assert.deepEqual(state.enemies.slice(1).map(({ x, z }) => [x, z]), positions.slice(1));
 });
 
@@ -260,13 +260,13 @@ test('a far turret transfers to a local ground site ahead and keeps its HP', () 
   const state = fixture('turret');
   const turret = state.enemies[0];
   Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 145 });
-  Object.assign(turret, { farTicks: 155, hp: 2 });
+  Object.assign(turret, { x: state.player.x - 450, z: state.player.z, farTicks: 155, hp: 2 });
   advance(state, 1);
   const { x, z } = state.player;
   assert.ok(turret.entry && turret.alt > 140);
   while (turret.entry && state.phase === 'playing') advance(state, 1);
   assert.equal(turret.entry, undefined);
-  assert.ok(turret.x > 200 && Math.hypot(turret.x - x, turret.z - z) > 175);
+  assert.ok(turret.x > 400 && Math.hypot(turret.x - x, turret.z - z) > 350);
   assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
   assert.equal(turret.skim, true);
   assert.equal(turret.hp, 2);
@@ -326,9 +326,9 @@ test('seeded sorties keep fly-in and combat turns within 3.2 radians per second'
 
 test('a patrol keeps its close steering mode on both sides of the nominal range', () => {
   const state = fixture('hound');
-  const patrol = makeEnemy(state, state.player.x, state.player.z + 20, 1);
+  const patrol = makeEnemy(state, state.player.x, state.player.z + 40, 1);
   state.enemies = [patrol];
-  for (const [range, expected] of [[20, false], [13, false], [9, true], [15, true], [18, false]]) {
+  for (const [range, expected] of [[40, false], [26, false], [18, true], [30, true], [36, false]]) {
     patrol.x = state.player.x;
     patrol.z = state.player.z + range;
     state.tick++;
@@ -341,10 +341,10 @@ test('an enemy holds its terrain escape heading when its requested course clears
   const state = fixture('hound');
   const patrol = makeEnemy(state, 0, 0, 1);
   Object.assign(patrol, { yaw: 0, shotAt: Infinity });
-  Object.assign(state.player, { x: 0, z: 50, yaw: 0 });
+  Object.assign(state.player, { x: 0, z: 100, yaw: 0 });
   state.enemies = [patrol];
 
-  advanceEnemies(state, (x, z) => Math.abs(x) < 3 && z >= 5 ? 110 : 0);
+  advanceEnemies(state, (x, z) => Math.abs(x) < 6 && z >= 10 ? 110 : 0);
   const escape = patrol.terrainTurn;
   assert.ok(escape);
   state.tick++;

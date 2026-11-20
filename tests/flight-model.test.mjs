@@ -81,22 +81,31 @@ test('aligned bank progressively tightens turns while shallow inputs retain fine
   assert.ok(fineGain > 0.9 && fineGain < 1.1);
 });
 
-test('full-stick 180s stay within ten percent of the baseline at cruise and boost', () => {
+test('full-stick 180s take 92 ticks at cruise and 81 ticks under boost', () => {
   for (const boosting of [false, true]) {
-    const rate = boosting ? flight.BOOST_TURN_RATE : flight.TURN_RATE;
-    const baselineTicks = Math.ceil(Math.PI / (rate * STEP));
+    const expected = boosting ? 81 : 92;
     for (const turn of [-1, 1]) {
       let flightState = level;
       let ticks = 0;
-      while (Math.abs(flightState.yaw) < Math.PI && ticks <= baselineTicks * 1.1) {
+      while (Math.abs(flightState.yaw) < Math.PI && ticks <= expected) {
         flightState = steer(flightState, turn, boosting);
         ticks++;
       }
       assert.ok(Math.abs(flightState.yaw) >= Math.PI);
-      assert.ok(Math.abs(ticks / baselineTicks - 1) <= 0.1,
-        `${ticks} ticks vs. the ${baselineTicks}-tick baseline`);
+      assert.equal(ticks, expected);
     }
   }
+});
+
+test('full-bank cruise speed limits the sustained turn radius to 1.4 times the old radius', () => {
+  const stage = createStage(parseStageOptions('?t=0'), () => 35);
+  stage.player.bank = 1.5;
+  stage.player.bankDrive = 1;
+  stepStage(stage, { turn: 1 });
+  assert.ok(Math.abs(stage.speed - 54.6) < 1e-9);
+  const yawRate = stage.player.yaw / STEP;
+  const previousRadius = 39 / yawRate;
+  assert.ok(Math.abs(stage.speed / yawRate / previousRadius - 1.4) < 1e-9);
 });
 
 test('bank over 60 degrees lowers altitude gradually and the offset recovers on roll-out', () => {

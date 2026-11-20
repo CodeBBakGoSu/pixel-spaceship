@@ -1,4 +1,5 @@
 import { CRUISE_SPEED } from './flight.ts';
+import { scaleTravel } from './data/speed.ts';
 import { BANDS, clamp, MAX_ALTITUDE, MIN_ALTITUDE, STEP } from './stage-combat.ts';
 import { fixedBand, skimAltitude } from './bands.ts';
 import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
@@ -9,9 +10,10 @@ export const BODY_GRACE_TICKS = 36;
 const HALF_LOOP_TICKS = 78;
 const ROLL_IN_TICKS = 20;
 const ROLL_OUT_TICKS = 24;
-const HALF_LOOP_TRAVEL = 96;
-const HALF_LOOP_RADIUS = 45;
-const HALF_LOOP_OFFSET = 22;
+const HALF_LOOP_TRAVEL = scaleTravel(96);
+const HALF_LOOP_RADIUS = scaleTravel(45);
+const HALF_LOOP_OFFSET = scaleTravel(22);
+const J_TURN_PATH = { travel: scaleTravel(68), bend: scaleTravel(27), trailOffset: scaleTravel(11), side: scaleTravel(32) };
 export const MANEUVERS = {
   immelmann: { ticks: HALF_LOOP_TICKS + INVERTED_FLIGHT_TICKS + ROLL_OUT_TICKS, cooldown: 240, boost: 0, flipTick: HALF_LOOP_TICKS },
   'split-s': { ticks: ROLL_IN_TICKS + HALF_LOOP_TICKS + INVERTED_FLIGHT_TICKS + ROLL_OUT_TICKS, cooldown: 240, boost: 0,
@@ -116,7 +118,8 @@ function frameAt(m: Maneuver, tick: number): Frame {
       const u = tick / MANEUVERS['j-turn'].ticks, angle = Math.PI * (0.65 * u + 0.35 * ease(u));
       const bend = Math.sin(angle);
       // Carry wide of the pursuit lane, then come back partway so it stays visible on the reversed heading.
-      return { forward: 68 * ease(u) + 27 * bend, lateral: m.side * (11 * (1 - Math.cos(angle)) + 32 * bend ** 2),
+      return { forward: J_TURN_PATH.travel * ease(u) + J_TURN_PATH.bend * bend,
+        lateral: m.side * (J_TURN_PATH.trailOffset * (1 - Math.cos(angle)) + J_TURN_PATH.side * bend ** 2),
         altitude, pitch: 0, roll: m.side * 0.64 * bend, reversed: tick > 0 };
     }
   }
@@ -158,7 +161,7 @@ export function turnExitBurst(state: StageState): number {
 export function formerPursuer(state: StageState, trail: ManeuverTrail | null, enemy: Enemy): boolean {
   if (!trail || !enemy.hp || !trail.pursuers.includes(enemy.id)) return false;
   const p = state.player;
-  return (enemy.x - p.x) * Math.sin(p.yaw) + (enemy.z - p.z) * Math.cos(p.yaw) > 3;
+  return (enemy.x - p.x) * Math.sin(p.yaw) + (enemy.z - p.z) * Math.cos(p.yaw) > scaleTravel(3);
 }
 
 export function maneuverAttitude(maneuver: Maneuver, bank = 0) {

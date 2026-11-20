@@ -1,5 +1,6 @@
-import { advanceBank, advanceBankDrive, advanceBankDrop, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
+import { advanceBank, advanceBankDrive, advanceBankDrop, bankThrustFactor, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
 import { fixedBand, SKIM, skimAltitude } from './bands.ts';
+import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, WORLD_SITES } from './data/world.ts';
 import { isWater } from './world.ts';
 import { advanceRoll, rollAltitude, rollLateralStep } from './roll.ts';
@@ -33,7 +34,7 @@ import { ACE } from './data/ace.ts';
 import { stageAceFixture, stageRosterFixture } from './roster-fixture.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, findRally, isLandmarkId, LANDMARKS, reachedWorldSite, updateWorldSites } from './reach.ts';
 import {
-  acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS,
+  acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, BODY_RADIUS,
   bombCapacity, clamp, dropFlares, dropRearBomb, fireHostile, flareCapacity, HIT_WINDOW, hurtPlayer, inBand,
   MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
   openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
@@ -52,11 +53,16 @@ export const beaconTick = (state: Pick<StageState, 'run'>): number =>
   state.run ? RUN_BOSS_TICK - RUN_BEACON_LEAD_SECONDS * TICKS_PER_SECOND : BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
 const seaLevel: Ground = () => 35;
+const SALVAGE_RANGE = {
+  collect: scaleTravel(8), magnet: scaleTravel(42), pullSpeed: scaleTravel(155),
+  gain: scaleTravel(45), reversalGain: scaleTravel(75), altitudeWeight: scaleTravel(20) ** 2,
+};
 
 export function parseStageOptions(search: string): StageOptions {
   const q = new URLSearchParams(search);
   const v = q.get('view');
-  const fixture = q.get('fixture');
+  const requestedFixture = q.get('fixture');
+  const fixture = requestedFixture === 'warden' ? 'boss' : requestedFixture;
   const mode = q.get('mode');
   // --- S7e lane ---
   const phase = Number(q.get('phase'));
@@ -245,26 +251,27 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
     state.nextWave = WAVES.length;
     stageRosterFixture(state, ground, options.fixtureCue);
   } else if (landmark) {
-    Object.assign(state.player, { x: landmark.x, z: landmark.z - 70, altitude: landmark.alt });
+    Object.assign(state.player, { x: landmark.x, z: landmark.z - scaleTravel(70), altitude: landmark.alt });
   } else if (isNewEnemyKind(fixture)) {
     state.nextWave = WAVES.length;
     const p = state.player;
-    if (fixture === 'skimmer') Object.assign(p, { x: LANDMARKS.strait.x, z: LANDMARKS.strait.z - 48 });
-    if (fixture === 'turret') Object.assign(p, { x: LANDMARKS.ridge.x - 18, z: LANDMARKS.ridge.z - 65, altitude: 130 });
-    const x = fixture === 'turret' ? LANDMARKS.ridge.x : p.x + (fixture === 'hound' ? 0 : 12);
-    const z = p.z + (fixture === 'spotter' ? 90 : fixture === 'turret' ? 65 : 62);
+    if (fixture === 'skimmer') Object.assign(p, { x: LANDMARKS.strait.x, z: LANDMARKS.strait.z + 14 - scaleTravel(62) });
+    if (fixture === 'turret') Object.assign(p, { x: LANDMARKS.ridge.x - scaleTravel(18),
+      z: LANDMARKS.ridge.z - scaleTravel(65), altitude: 130 });
+    const x = fixture === 'turret' ? LANDMARKS.ridge.x : p.x + (fixture === 'skimmer' ? 12 : fixture === 'hound' ? 0 : scaleTravel(12));
+    const z = p.z + scaleTravel(fixture === 'spotter' ? 90 : fixture === 'turret' ? 65 : 62);
     const enemy = makeEnemy(state, x, z, fixtureBands[fixture], fixture);
     placeSkimEnemy(enemy, ground);
     state.enemies.push(enemy);
     if (fixture === 'bomber') addBomberEscort(state, enemy, ground);
   } else if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
-      state.enemies.push(makeEnemy(state, state.player.x, state.player.z + 60, band));
+      state.enemies.push(makeEnemy(state, state.player.x, state.player.z + scaleTravel(60), band));
     }
   } else if (fixture === 'pursuit') {
     const p = state.player;
     for (const [band, lateral, aft] of [[0, -10, 73], [1, -5, 66], [1, 5, 74], [2, 8, 81]] as const) {
-      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band);
+      const enemy = makeEnemy(state, p.x + scaleTravel(lateral), p.z - scaleTravel(aft), band);
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
@@ -276,7 +283,7 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
     for (const [band, lateral, aft, kind] of [
       [1, -6, 22, 'hound'], [1, 7, 29, 'hound'], [0, 52, 80, 'patrol'], [2, 10, 40, 'patrol'],
     ] as const) {
-      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band, kind);
+      const enemy = makeEnemy(state, p.x + scaleTravel(lateral), p.z - scaleTravel(aft), band, kind);
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
@@ -284,18 +291,18 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
     const p = state.player;
     state.nextWave = WAVES.length;
     for (const [lateral, aft] of [[-18, 72], [-8, 76], [2, 82], [10, 88], [20, 94], [30, 100]]) {
-      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, 2);
+      const enemy = makeEnemy(state, p.x + scaleTravel(lateral), p.z - scaleTravel(aft), 2);
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
-    state.enemies.push(makeEnemy(state, p.x - 15, p.z - 101, 0));
+    state.enemies.push(makeEnemy(state, p.x - scaleTravel(15), p.z - scaleTravel(101), 0));
   } else if (fixture === 'flyby') {
     const p = state.player;
-    p.z -= 48;
+    p.z -= scaleTravel(48);
     p.altitude = BANDS[2] - 11;
     state.nextWave = WAVES.length;
     for (const [lateral, aft, band, kind] of [[-26, 53, 2, 'interceptor'], [31, 64, 1, 'patrol']] as const) {
-      const enemy = makeEnemy(state, p.x + lateral, p.z - aft, band, kind);
+      const enemy = makeEnemy(state, p.x + scaleTravel(lateral), p.z - scaleTravel(aft), band, kind);
       enemy.yaw = p.yaw;
       state.enemies.push(enemy);
     }
@@ -303,16 +310,17 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
     const p = state.player;
     state.speed = CRUISE_SPEED;
     state.nextWave = WAVES.length;
-    state.enemies.push(makeEnemy(state, p.x - 17, p.z - 62, 2), makeEnemy(state, p.x + 16, p.z - 74, 0));
-    fireHostile(state, { x: p.x, z: p.z - 48, alt: p.altitude }, 78);
+    state.enemies.push(makeEnemy(state, p.x - scaleTravel(17), p.z - scaleTravel(62), 2),
+      makeEnemy(state, p.x + scaleTravel(16), p.z - scaleTravel(74), 0));
+    fireHostile(state, { x: p.x, z: p.z - scaleTravel(48), alt: p.altitude }, scaleTravel(78));
   } else if (fixture === 'strafe') {
     const p = state.player;
     p.altitude = BANDS[2];
     state.nextWave = WAVES.length;
     state.enemies.push(
-      makeEnemy(state, p.x + 8, p.z + 89, 1),
-      makeEnemy(state, p.x - 60, p.z + 99, 1),
-      makeEnemy(state, p.x - 18, p.z + 83, 0),
+      makeEnemy(state, p.x + scaleTravel(8), p.z + scaleTravel(89), 1),
+      makeEnemy(state, p.x - scaleTravel(60), p.z + scaleTravel(99), 1),
+      makeEnemy(state, p.x - scaleTravel(18), p.z + scaleTravel(83), 0),
     );
   } else if (fixture === 'draft') {
     state.xp = state.salvage = requiredXp(1, !!state.run)!;
@@ -412,14 +420,15 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number, grou
     if (enemy.entry || enemy.kind === 'gnat') continue;
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
-    if (enemy.hp && enemy.kind !== 'turret' && aft > 3 && Math.hypot(dx, dz) <= 190) trail.pursuers.push(enemy.id);
+    if (enemy.hp && enemy.kind !== 'turret' && aft > scaleTravel(3) && Math.hypot(dx, dz) <= scaleTravel(190)) trail.pursuers.push(enemy.id);
     warnHarrier(state, enemy, maneuver, aft, lateral, events);
     if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
-    if (aft >= 34 && aft <= 140) {
-      const lane = clamp(lateral + (enemy.id % 3 - 1) * 3, -28, 28);
-      enemy.course = { target: { x: p.x - fx * 64 + fz * lane, z: p.z - fz * 64 - fx * lane },
-        speed: enemy.kind === 'interceptor' ? 40 : 32, until };
+    if (aft >= scaleTravel(34) && aft <= scaleTravel(140)) {
+      const targetAft = scaleTravel(64);
+      const lane = clamp(lateral + (enemy.id % 3 - 1) * scaleTravel(3), -scaleTravel(28), scaleTravel(28));
+      enemy.course = { target: { x: p.x - fx * targetAft + fz * lane, z: p.z - fz * targetAft - fx * lane },
+        speed: scaleTravel(enemy.kind === 'interceptor' ? 40 : 32), until };
     }
     if (enemy.course) {
       enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
@@ -432,7 +441,7 @@ function reverseHeading(state: StageState, entryYaw: number): void {
   p.yaw = Math.atan2(-fx, -fz);
   for (const enemy of state.enemies) {
     const dx = enemy.x - p.x, dz = enemy.z - p.z;
-    if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= 160) postponeEnemyShot(enemy, state.tick + 25);
+    if (dx * fx + dz * fz < 0 && Math.hypot(dx, dz) <= scaleTravel(160)) postponeEnemyShot(enemy, state.tick + 25);
   }
 }
 
@@ -474,7 +483,7 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
     }
     const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
-    state.speed = thrust * (1 - Math.abs(turn) * 0.25);
+    state.speed = thrust * bankThrustFactor(p.bank, turn);
     const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
     p.x += fx * state.speed * STEP;
     p.z += fz * state.speed * STEP;
@@ -526,7 +535,7 @@ function mergeSalvage(state: StageState): void {
     let closest = pickups[0], distance = Infinity;
     for (const pickup of pickups) {
       const range = (added.x - pickup.x) ** 2 + (added.z - pickup.z) ** 2
-        + (added.alt - pickup.alt) ** 2 * 400;
+        + (added.alt - pickup.alt) ** 2 * SALVAGE_RANGE.altitudeWeight;
       if (range < distance) {
         closest = pickup;
         distance = range;
@@ -585,8 +594,9 @@ function advanceSalvage(state: StageState, ground: Ground): void {
     }
     const dx = p.x - pickup.x, dz = p.z - pickup.z;
     const range = Math.hypot(dx, dz);
-    if (!pickup.collected && range > 8 && (pickup.pulling || range <= 42 * (magnet?.radiusScale ?? 1) * magnetScale)) {
-      const speed = Math.min(155, horizontalSpeed + (pickup.reversal ? 75 : 45));
+    if (!pickup.collected && range > SALVAGE_RANGE.collect
+      && (pickup.pulling || range <= SALVAGE_RANGE.magnet * (magnet?.radiusScale ?? 1) * magnetScale)) {
+      const speed = Math.min(SALVAGE_RANGE.pullSpeed, horizontalSpeed + (pickup.reversal ? SALVAGE_RANGE.reversalGain : SALVAGE_RANGE.gain));
       const pull = Math.min(range, speed * STEP) / range;
       const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
       pickup.pulling = true;
@@ -597,7 +607,7 @@ function advanceSalvage(state: StageState, ground: Ground): void {
         if (pickup.skim) pickup.alt = skimAltitude(floor);
       }
     }
-    if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
+    if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= SALVAGE_RANGE.collect) {
       creditSalvage(state, pickup);
       return false;
     }
@@ -621,16 +631,17 @@ function applyBillReward(state: StageState): void {
 
 // --- S7d lane ---
 export function restoreWorldState(state: StageState, ground: Ground): void {
-  if (state.worldRegion) return;
-  Object.assign(state.arena, ARENA);
-  state.boundaryWarning = false;
-  for (const enemy of state.enemies) {
-    placeSkimEnemy(enemy, ground);
-    const tell = enemy.tell;
-    if (tell?.kind === 'flak') tell.alt = skimAltitude(ground(tell.x, tell.z));
-  }
-  for (const effect of state.effects) {
-    if (effect.kind === 'flak') effect.alt = skimAltitude(ground(effect.x, effect.z));
+  if (!state.worldRegion) {
+    Object.assign(state.arena, ARENA);
+    state.boundaryWarning = false;
+    for (const enemy of state.enemies) {
+      placeSkimEnemy(enemy, ground);
+      const tell = enemy.tell;
+      if (tell?.kind === 'flak') tell.alt = skimAltitude(ground(tell.x, tell.z));
+    }
+    for (const effect of state.effects) {
+      if (effect.kind === 'flak') effect.alt = skimAltitude(ground(effect.x, effect.z));
+    }
   }
   updateWorldSites(state, ground);
 }
@@ -797,7 +808,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.tick > state.bodyGraceUntil) {
     const p = state.player;
     for (const enemy of state.enemies) {
-      if (enemy.hp && !enemy.entry && enemy.kind !== 'gnat' && inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < 7) {
+      if (enemy.hp && !enemy.entry && enemy.kind !== 'gnat' && inBand(enemy.alt, p.altitude)
+        && Math.hypot(enemy.x - p.x, enemy.z - p.z) < BODY_RADIUS) {
         hurtPlayer(state, enemy, events);
         if (!enemy.carrier) enemy.hp = 0;
       }

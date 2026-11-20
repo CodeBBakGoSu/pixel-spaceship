@@ -1,3 +1,5 @@
+import { scaleTravel } from './speed.ts';
+
 export const WEAPON_IDS = ['twin', 'pods', 'seeker', 'rail', 'flak', 'ion', 'drones', 'phoenix', 'bomb-bay', 'arc'] as const;
 export const BUFF_IDS = ['overdrive-coil', 'hull-plating', 'magnet-core', 'band-lens', 'vector-thrusters',
   'flare-bay', 'ordnance-rack', 'fire-control', 'capacitor', 'salvage-beacon'] as const;
@@ -22,54 +24,55 @@ export const WEAPON_DAMAGE_LEVEL = { level: 4, multiplier: 1.15 } as const;
 export const WEAPONS = {
   twin: {
     family: 'ballistic', coverage: 'forward-and-below',
-    tuning: { cooldownTicks: [21, 18, 18, 18, 18], barrels: [2, 2, 4, 4, 4], damage: 1, range: 175, pierceAt: 5 },
+    tuning: { cooldownTicks: [21, 18, 18, 18, 18], barrels: [2, 2, 4, 4, 4], damage: 1, range: scaleTravel(175), pierceAt: 5 },
   },
   pods: {
     family: 'ballistic', coverage: 'same-band',
-    tuning: { cooldownTicks: [43, 36, 36, 36, 36], range: [62, 62, 77.5, 77.5, 77.5], damage: 1, rearBonusAt: 5 },
+    tuning: { cooldownTicks: [43, 36, 36, 36, 36], range: [62, 62, 77.5, 77.5, 77.5].map(scaleTravel), damage: 1, rearBonusAt: 5 },
   },
   seeker: {
     family: 'ordnance', coverage: 'adjacent-homing',
     tuning: { cooldownTicks: [180, 180, 153, 153, 153], count: [3, 4, 4, 4, 4],
-      damage: 0.7, range: 165, speed: 86, verticalSpeed: 34, turnRate: 4.6, radius: [12, 12, 12, 12, 15.6],
+      damage: 0.7, range: scaleTravel(165), speed: scaleTravel(86), verticalSpeed: 34, turnRate: 4.6,
+      radius: [12, 12, 12, 12, 15.6].map(scaleTravel),
       lifeSeconds: 3.2, spread: 0.14 },
   },
   rail: {
     family: 'energy', coverage: 'same-band',
-    tuning: { chargeTicks: 54, cooldownTicks: [144, 144, 115, 115, 115], range: 225,
-      damage: [3, 3.75, 3.75, 3.75, 3.75], window: 3, width: [3, 3, 3, 3, 4.5], lowerBandAt: 5 },
+    tuning: { chargeTicks: 54, cooldownTicks: [144, 144, 115, 115, 115], range: scaleTravel(225),
+      damage: [3, 3.75, 3.75, 3.75, 3.75], window: 3, width: [3, 3, 3, 3, 4.5].map(scaleTravel), lowerBandAt: 5 },
   },
   flak: {
     family: 'ballistic', coverage: 'vertical-blast',
-    tuning: { cooldownTicks: [144, 144, 120, 120, 120], radius: [22, 25.3, 25.3, 25.3, 25.3],
-      range: 90, speed: 150, damage: 2, halfHeight: 18, fragmentsAt: 5, fragments: 6,
-      fragmentDamage: 1, fragmentSpeed: 110, fragmentLifeSeconds: 0.33 },
+    tuning: { cooldownTicks: [144, 144, 120, 120, 120], radius: [22, 25.3, 25.3, 25.3, 25.3].map(scaleTravel),
+      range: scaleTravel(90), speed: scaleTravel(150), damage: 2, halfHeight: 18, fragmentsAt: 5, fragments: 6,
+      fragmentDamage: 1, fragmentSpeed: scaleTravel(110), fragmentLifeSeconds: 0.33 },
   },
   ion: {
     family: 'energy', coverage: 'climb-curtain',
-    tuning: { lifeTicks: [240, 300, 300, 300, 300], width: [5.5, 5.5, 7.15, 7.15, 7.15],
-      sampleTicks: 8, trailOffset: 9, hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
+    tuning: { lifeTicks: [240, 300, 300, 300, 300], width: [5.5, 5.5, 7.15, 7.15, 7.15].map(scaleTravel),
+      sampleTicks: 8, trailOffset: scaleTravel(9), hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
   },
   drones: {
     family: 'energy', coverage: 'tilted-orbit',
-    tuning: { count: [2, 3, 3, 3, 3], radius: [18, 18, 22.5, 22.5, 22.5],
+    tuning: { count: [2, 3, 3, 3, 3], radius: [18, 18, 22.5, 22.5, 22.5].map(scaleTravel),
       tilt: 10, periodTicks: 145, damage: 1, hitRadius: 5, hitCooldownTicks: 24, fireAt: 5, fireCooldownTicks: 72,
-      fireRange: 66, fireSpeed: 220, fireDamage: 1 },
+      fireRange: scaleTravel(66), fireSpeed: scaleTravel(220), fireDamage: 1 },
   },
   phoenix: {
     family: 'ordnance', coverage: 'falling',
     tuning: { cooldownTicks: [240, 204, 204, 204, 204], lifeBonusTicks: [0, 0, 60, 60, 60],
-      burnRadius: 13, spreadAt: 5 },
+      burnRadius: scaleTravel(13), spreadAt: 5 },
   },
   'bomb-bay': {
     family: 'ordnance', coverage: 'falling',
-    tuning: { cooldownTicks: [360, 360, 288, 288, 288], damage: 4, radius: [34, 39.1, 39.1, 39.1, 39.1],
+    tuning: { cooldownTicks: [360, 360, 288, 288, 288], damage: 4, radius: [34, 39.1, 39.1, 39.1, 39.1].map(scaleTravel),
       volley: [1, 1, 1, 1, 2], followUpTicks: 12 },
   },
   arc: {
     family: 'energy', coverage: 'adjacent-chain',
-    tuning: { cooldownTicks: 132, damage: [1.8, 1.8, 2.16, 2.16, 2.16], range: 55, jumpRange: 42,
-      jumps: [2, 3, 3, 3, 5], adjacentScale: 0.6, explosionAt: 5, explosionRadius: 16, explosionScale: 0.6 },
+    tuning: { cooldownTicks: 132, damage: [1.8, 1.8, 2.16, 2.16, 2.16], range: scaleTravel(55), jumpRange: scaleTravel(42),
+      jumps: [2, 3, 3, 3, 5], adjacentScale: 0.6, explosionAt: 5, explosionRadius: scaleTravel(16), explosionScale: 0.6 },
   },
 } as const satisfies Record<WeaponId, WeaponDefinition>;
 

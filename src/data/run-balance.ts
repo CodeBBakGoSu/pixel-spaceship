@@ -1,3 +1,5 @@
+import { scaleTravel } from './speed.ts';
+
 export const LEGACY_BOSS_SECONDS = 105;
 export const LEGACY_END_SECONDS = 180;
 export const PICKUP_LIMIT = 150;
@@ -16,6 +18,17 @@ export const PHASE_CREDIT_BONUS = 25;
 export const BILL_CREDIT_BONUS = 25;
 export const PHASE_NOTICE_TICKS = 210;
 export const WEAPON_FX_LIMIT = 64;
+
+export const PLAYER_PROJECTILES = {
+  boltSpeed: scaleTravel(320), reversalSpeed: scaleTravel(485), strafeSpeed: scaleTravel(230),
+  strafeMinRange: scaleTravel(28), strafeRange: scaleTravel(135),
+} as const;
+
+export const REAR_ORDNANCE = {
+  bomb: { aftOffset: scaleTravel(12), driftSpeed: scaleTravel(8), proximity: scaleTravel(16), clearRadius: scaleTravel(40) },
+  flare: { aftOffset: scaleTravel(8), kick: scaleTravel(70), fanSpacing: scaleTravel(3.4), lateralSpeed: scaleTravel(10) },
+} as const;
+
 export const REPLAY_RISK_HULL = 4;
 export const REPLAY_DRAFT_PRIORITY = [
   'repair', 'hull-plating', 'twin', 'pods', 'band-lens', 'flak', 'seeker', 'rail', 'arc',

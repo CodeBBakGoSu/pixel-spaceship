@@ -10,7 +10,7 @@ import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
-import { FLIGHT_FEEL } from './data/flight-feel.ts';
+import { FLIGHT_CAMERA, FLIGHT_FEEL } from './data/flight-feel.ts';
 import { WING_TRAIL } from './data/flight-world.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
@@ -114,7 +114,6 @@ const RANGED_SHOT_STYLE: Partial<Record<Shot['kind'], readonly [width: number, l
   'drone-bolt': [1.18, 5.2, 0x7ad3ff],
 };
 const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9eecff };
-const REAR_VIEW_FAR = 640;
 const COCKPIT_TRACER_CLEARANCE = 17;
 const MAIN_CAMERA_LAYER = 1;
 const shieldFlash = (tick: number): boolean => Math.floor(tick * 16 / TICKS_PER_SECOND) % 2 === 0;
@@ -146,7 +145,7 @@ export class FlightScene {
   private readonly target = new WebGLRenderTarget(1, 1, { magFilter: NearestFilter, minFilter: NearestFilter });
   private readonly rearTarget = new WebGLRenderTarget(REAR_INSET_WIDTH, REAR_INSET_HEIGHT,
     { magFilter: NearestFilter, minFilter: NearestFilter });
-  private readonly rearCamera = new PerspectiveCamera(52, REAR_VIEW_ASPECT, 0.8, REAR_VIEW_FAR);
+  private readonly rearCamera = new PerspectiveCamera(52, REAR_VIEW_ASPECT, 0.8, FLIGHT_CAMERA.rearFar);
   private readonly rearInset = new Group();
   private readonly rearPlane = new PlaneGeometry(1, 1);
   private readonly rearBezel = new Mesh(this.rearPlane, new MeshBasicMaterial({
@@ -180,8 +179,8 @@ export class FlightScene {
     cloudFlash: 0, trailSegments: 0, wakeMarks: 0, clearance: 0,
   };
   private readonly top = new OrthographicCamera(-1, 1, 1, -1, 0.5, 1200);
-  private readonly chase = new PerspectiveCamera(59, 1, 0.8, 1060);
-  private readonly cockpit = new PerspectiveCamera(60, 1, 0.65, 1060);
+  private readonly chase = new PerspectiveCamera(59, 1, 0.8, FLIGHT_CAMERA.far);
+  private readonly cockpit = new PerspectiveCamera(60, 1, 0.65, FLIGHT_CAMERA.far);
   private camera: Camera = this.top;
   private framing: Framing = { width: 0, height: 0, phone: null, cockpit: null };
   private readonly voxelMaterial = new MeshBasicMaterial({ vertexColors: true });
@@ -450,7 +449,7 @@ export class FlightScene {
     if (view === 'overhead') this.updateWorld(state, 'rear');
     else if (view === 'chase') this.flareVisuals.update(state);
     const forwardFogFar = this.fog.far;
-    this.fog.far = REAR_VIEW_FAR;
+    this.fog.far = FLIGHT_CAMERA.rearFar;
     this.hostileVisuals.setView(this.rearTarget.height);
     this.renderer.setRenderTarget(this.rearTarget);
     this.renderer.render(this.scene, this.rearCamera);
@@ -591,7 +590,8 @@ export class FlightScene {
     } else if (state.view === 'overhead') {
       view.fov = view.setback = view.cameraBank = 0;
       this.fog.far = (phone ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop).fogFar;
-      const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
+      const top = FLIGHT_CAMERA.top;
+      const halfHeight = Math.max(top.minHeight, (phone ? top.phoneHalfWidth : top.desktopHalfWidth) / aspect);
       const center = phone ? phone.shipY / height : 0.57;
       const z = p.z + (center * 2 - 1) * halfHeight;
       this.top.left = -halfHeight * aspect;
@@ -621,9 +621,10 @@ export class FlightScene {
       const field = phone?.playfield;
       const m = state.maneuver;
       const motion = m ? Math.sin(Math.PI * m.elapsed / MANEUVERS[m.kind].ticks) : 0;
-      const retreat = m?.kind === 'immelmann' ? 22 : m?.kind === 'split-s' ? 18 : 29;
+      const chase = FLIGHT_CAMERA.chase;
+      const retreat = m ? chase.maneuverRetreat[m.kind] : 0;
       const lift = m?.kind === 'split-s' ? 11 : m?.kind === 'immelmann' ? 8 : 0;
-      const baseSetback = 46 + Math.max(0, 1 - aspect) * 30;
+      const baseSetback = chase.setback + Math.max(0, 1 - aspect) * chase.portraitSetback;
       view.setback = (feel ? -baseSetback * FLIGHT_FEEL.chaseCloser : 8) * lens;
       view.sink = feel ? FLIGHT_FEEL.chaseSink * lens : 0;
       const setback = baseSetback + motion * retreat + view.setback;
@@ -641,7 +642,7 @@ export class FlightScene {
       const eyeY = p.altitude + shakeVertical;
       const x = eyeX - fx * setback, z = eyeZ - fz * setback;
       const y = chaseEyeHeight(this.ground, x, z, eyeY + elevation);
-      const aimDistance = 105 + setback;
+      const aimDistance = chase.lookAhead + setback;
       let aimAltitude = eyeY + lookHeight;
       if (y > eyeY + elevation) {
         // Keep the ship inside the flight viewport as the camera rises over an obstacle.
@@ -650,7 +651,7 @@ export class FlightScene {
       }
       this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(aimAltitude - y, aimDistance), view.cameraBank, !!phone);
       camera.position.set(x, y, -z);
-      camera.lookAt(eyeX + fx * 105, aimAltitude, -(eyeZ + fz * 105));
+      camera.lookAt(eyeX + fx * chase.lookAhead, aimAltitude, -(eyeZ + fz * chase.lookAhead));
       if (view.cameraBank) camera.rotateZ(view.cameraBank);
       view.yawLag = yaw - followYaw;
       this.camera = camera;

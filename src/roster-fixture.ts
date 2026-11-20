@@ -1,5 +1,6 @@
 import { ACE_PHASES } from './data/ace.ts';
 import { ROSTER } from './data/roster.ts';
+import { scaleTravel } from './data/speed.ts';
 import { beginAceDefeat, makeAce, setAceTell } from './ace.ts';
 import { skimAltitude } from './bands.ts';
 import { CRUISE_SPEED } from './flight.ts';
@@ -20,7 +21,8 @@ export function stageAceFixture(state: StageState, phase: AcePhase, cue: string 
   const p = state.player;
   if (!legacy) stageReviewFlight(state);
   const tail = cue === 'tail';
-  const ace = state.boss = makeAce(state, p.x + (tail ? 8 : -16), p.z + (tail ? -57 : 92));
+  const x = tail ? 8 : -16, z = tail ? -57 : 92;
+  const ace = state.boss = makeAce(state, p.x + (legacy ? scaleTravel(x) : x), p.z + (legacy ? scaleTravel(z) : z));
   ace.phase = phase;
   if (phase === 2) ace.hp = Math.round(ace.maxHp * 0.52);
   if (phase === 3) ace.hp = Math.round(ace.maxHp * 0.24);

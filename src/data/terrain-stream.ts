@@ -1,13 +1,18 @@
+import { scaleTravel } from './speed.ts';
+
 export const TERRAIN_STREAM = {
-  chunkSize: 256,
+  chunkSize: scaleTravel(256),
+  lodStrides: [1, scaleTravel(2), scaleTravel(4)],
   generationBudget: 6,
-  fogNear: 245,
+  fogNear: scaleTravel(245),
+  fogMargin: scaleTravel(110),
   chaseEyeClearance: 12,
-  desktop: { radius: 6, detailRadius: 1, middleRadius: 3, fogFar: 1020 },
-  phone: { radius: 4, detailRadius: 1, middleRadius: 2, fogFar: 740 },
+  desktop: { radius: 6, detailRadius: 1, middleRadius: 3, fogFar: scaleTravel(1020) },
+  phone: { radius: 4, detailRadius: 1, middleRadius: 2, fogFar: scaleTravel(740) },
 } as const;
 
 export const TERRAIN_DECOR = {
+  spacing: scaleTravel(32),
   seedSalt: 0x4a11cb59,
   treeMinAltitude: 42,
   rockMinAltitude: 74,

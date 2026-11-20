@@ -50,7 +50,7 @@ test('opening patrols start outside the local fight, bank and slow into their sc
   const duration = (approach.arriveAt - state.tick) / TICKS_PER_SECOND;
   assert.ok(duration >= 1 && duration <= 2);
   for (const enemy of state.enemies) {
-    assert.ok(planarDistance(enemy, state.player) >= 600);
+    assert.ok(planarDistance(enemy, state.player) >= 1280);
   }
 
   const initialSpeed = Math.hypot(first.vx, first.vz);
@@ -60,7 +60,7 @@ test('opening patrols start outside the local fight, bank and slow into their sc
     tick(state);
     const rotation = Math.atan2(Math.sin(first.yaw - yaw), Math.cos(first.yaw - yaw));
     assert.ok(Math.abs(rotation) <= 3.2 / TICKS_PER_SECOND + 1e-9);
-    assert.ok(planarDistance(first, position) < 65, 'an entering patrol teleported');
+    assert.ok(planarDistance(first, position) < 130, 'an entering patrol teleported');
     assert.ok(first.alt >= ground(first.x, first.z) + 22 - 1e-9);
     bank = Math.max(bank, Math.abs(first.bank));
   }
@@ -221,7 +221,7 @@ test('locked shots pass through the inbound Ace and its own guns stay quiet on e
 test('the Ace enters near Reach through the atoll approach and can be hit on arrival', () => {
   const { state, boss } = incomingAce();
   const approach = boss.entry;
-  assert.ok(approach && planarDistance(boss, state.player) >= 600);
+  assert.ok(approach && planarDistance(boss, state.player) >= 1280);
   assert.equal(approach.arriveAt - approach.startedAt, ACE.entry.ticks);
   assert.deepEqual(approach.target, { x: LANDMARKS.atoll.x, z: LANDMARKS.atoll.z, alt: BANDS[1] });
   while (state.tick < approach.arriveAt) tick(state);

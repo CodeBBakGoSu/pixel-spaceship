@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { cockpitFov, frameCockpit } from '../src/camera.ts';
 import { projectCameraContact } from '../src/contact-projection.ts';
+import { FLIGHT_CAMERA } from '../src/data/flight-feel.ts';
+import { TERRAIN_STREAM } from '../src/data/terrain-stream.ts';
 import * as feel from '../src/flight-feel.ts';
+import { BOOST_SPEED, CRUISE_SPEED } from '../src/flight.ts';
 import { cockpitLayout, desktopLayout, phoneLayout } from '../src/layout.ts';
 import { visibleHazeCutoff } from '../src/post.ts';
 import { frameRearCamera, REAR_VIEW_ASPECT } from '../src/rear-glimpse.ts';
@@ -54,7 +57,7 @@ test('chase yaw crosses the signed angle boundary on the short arc', () => {
 
 test('chase roll eases in and back out while a same-tick phone resize applies the camera cap', () => {
   const motion = new feel.FlightMotion();
-  const stage = { tick: 0, speed: 52, boosting: false, boostTicks: 0 };
+  const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
   const bank = -85 * degree, chaseTarget = bank * 0.4;
   motion.advance(stage, 0, 0, false, false, false);
   stage.tick++;
@@ -76,7 +79,7 @@ test('chase roll eases in and back out while a same-tick phone resize applies th
 test('shake decays at 4.5/s and reduced motion clears both boost and camera movement', () => {
   close(feel.shockEnvelope(1, 0.25), Math.exp(-4.5 * 0.25));
   const motion = new feel.FlightMotion();
-  const stage = { tick: 90, speed: 91, boosting: true, boostTicks: 30 };
+  const stage = { tick: 90, speed: BOOST_SPEED, boosting: true, boostTicks: 30 };
   const original = { ...stage };
   motion.shock('parry', stage.tick);
   motion.advance(stage, 0.6, -1.4, false, false, false);
@@ -94,12 +97,12 @@ test('the zero pitch ladder follows the same far terrain plane beyond 60° bank'
     const cockpit = phone ? phoneLayout(width, height, safe, 'cockpit').cockpit
       : cockpitLayout(width, height, safe, desktopLayout(width, height, safe).objective);
     const aspect = width / height;
-    const camera = new PerspectiveCamera(60, aspect, 0.65, 1060);
+    const camera = new PerspectiveCamera(60, aspect, 0.65, FLIGHT_CAMERA.far);
     const cameraBank = feel.cameraBank(-player.bank, 'cockpit', phone);
     const fov = cockpitFov(aspect, 0, 8);
-    const depth = visibleHazeCutoff(245, terrainFogFar(aspect, fov, 0, cameraBank));
+    const depth = visibleHazeCutoff(TERRAIN_STREAM.fogNear, terrainFogFar(aspect, fov, 0, cameraBank, phone));
     // The near ridge is behind the camera. The far ridge lies beyond opaque haze.
-    const ridgeTerrain = (_x, z) => z <= 0 || z >= 1024 ? 120 : ground();
+    const ridgeTerrain = (_x, z) => z <= 0 || z >= TERRAIN_STREAM.chunkSize * 4 ? 120 : ground();
     const marks = frameCockpit(camera, player, { width, height, cockpit },
       { cameraPitch: 0, cameraBank }, ridgeTerrain, depth, player.yaw, { widening: 8, pullback: 0, shake: 0 });
     const zero = marks.find(mark => mark.angle === 0);

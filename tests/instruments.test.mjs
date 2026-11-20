@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { NAV_MAP_RANGE, RADAR_RANGE } from '../src/data/navigation.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, relativeMark, worldSiteObjective } from '../src/instruments.ts';
 import { createTranslator } from '../src/i18n.ts';
@@ -157,13 +158,14 @@ test('far radar groups share a rim tick outside the original arena', () => {
   const p = state.player;
   p.x = 4515;
   p.z = 0;
-  state.enemies[0].x = p.x - 242;
+  state.enemies[0].x = p.x - RADAR_RANGE - 32;
   state.enemies[0].z = p.z;
-  state.enemies[1].x = p.x - 243;
+  state.enemies[1].x = p.x - RADAR_RANGE - 33;
   state.enemies[1].z = p.z + 6;
   state.enemies[2].x = p.x - 65;
   state.enemies[2].z = p.z;
-  state.pickups.push({ id: 200, x: p.x - 250, z: p.z, alt: 110, xp: 1, born: state.tick });
+  state.pickups.push({ id: 200, x: p.x - RADAR_RANGE - 40, z: p.z, alt: 110, xp: 1, born: state.tick });
+  state.worldSites = [];
   state.tick = 92 * 60;
   const readout = buildRadar(state);
   assert.equal(readout.contacts.length, 1);
@@ -213,7 +215,7 @@ test('the navigation objective gives the nearest unclaimed destination and its c
   const p = state.player;
   state.worldSites = [
     { id: 'claimed', kind: 'xp', x: p.x, z: p.z + 60, alt: 75, claimed: true },
-    { id: 'beacon', kind: 'beacon', x: p.x, z: p.z + 900, alt: 110 },
+    { id: 'beacon', kind: 'beacon', x: p.x, z: p.z + NAV_MAP_RANGE + 132, alt: 110 },
     { id: 'supply', kind: 'supply', x: p.x - 160, z: p.z, alt: 110 },
   ];
   assert.equal(worldSiteObjective(state, createTranslator('en')), 'SUPPLY DROP · 270° · 160 m · ALT 110');

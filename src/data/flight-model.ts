@@ -9,6 +9,8 @@ export const FLIGHT_MODEL = {
   rollOutResponse: 5,
   fullStickYawFloor: 0.66,
   peakYawGain: 1.3,
+  levelTurnDrag: 0.25,
+  deepTurnDrag: 0.475,
   steepBank: Math.PI / 3,
   maxBankDrop: 5.5,
   bankSinkRate: 10,

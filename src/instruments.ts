@@ -1,15 +1,14 @@
 import type { createTranslator } from './i18n.ts';
-import { NAV_MAP_RANGE, RADAR_RANGE } from './data/navigation.ts';
+import { NAV_MAP_RANGE, RADAR_RANGE, TAIL_MIN_CLOSING_SPEED, TAIL_TRACK_RANGE } from './data/navigation.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
 import { LANDMARKS, type LandmarkId, type WorldSite } from './reach.ts';
 import { activeAce, beaconTick } from './stage.ts';
-import { angleTo, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
+import { angleTo, BODY_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, impactTime, inBand, STEP } from './stage-combat.ts';
 import type { Position, StageState } from './stage-types.ts';
 
 export { RADAR_RANGE } from './data/navigation.ts';
 const REAR_WARNING_SECONDS = 0.8;
-const BODY_RADIUS = 7;
 type Translate = ReturnType<typeof createTranslator>;
 type SiteKind = WorldSite['kind'];
 type MapMark = LandmarkId | SiteKind | 'ace' | 'chest';
@@ -470,14 +469,14 @@ export class RearMirrorThreat {
       if (enemy.hp <= 0 || enemy.kind === 'turret' || enemy.kind === 'gnat') continue;
       const dx = enemy.x - player.x, dz = enemy.z - player.z;
       const aft = -(dx * fx + dz * fz), distance = Math.hypot(dx, dz);
-      if (aft <= 0 || distance > 140) continue;
+      if (aft <= 0 || distance > TAIL_TRACK_RANGE) continue;
       const closing = -(dx * (enemy.vx - vx) + dz * (enemy.vz - vz)) / distance;
       if (closing <= 0 && enemy.id !== this.current) continue;
       const lateral = dx * fz - dz * fx, delta = enemy.alt - player.altitude;
       const threat = { id: enemy.id, alt: enemy.alt, distance, lateral,
         side: lateral < -aft * 0.25 ? 'Left' as const : lateral > aft * 0.25 ? 'Right' as const : 'Centre' as const,
         height: delta > HIT_WINDOW ? 'Above' as const : delta < -HIT_WINDOW ? 'Below' as const : 'Level' as const,
-        score: distance / Math.max(5, closing) + Math.abs(delta) * 0.08, closing };
+        score: distance / Math.max(TAIL_MIN_CLOSING_SPEED, closing) + Math.abs(delta) * 0.08, closing };
       if (enemy.id === this.current) current = threat;
       if (closing > 0 && (!best || threat.score < best.score)) best = threat;
     }

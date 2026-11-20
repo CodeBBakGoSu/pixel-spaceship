@@ -5,9 +5,11 @@ import { aegisBlocks } from './data/roster.ts';
 import { BOOST_SPEED } from './flight.ts';
 import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
-import { HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape, type HostileSourceKind } from './data/hostile-fire.ts';
+import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape,
+  MINE_RADIUS, type HostileSourceKind } from './data/hostile-fire.ts';
 import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
-import { HOSTILE_SHOT_LIMIT, PLAYER_SHOT_LIMIT, SURVIVOR_PLAYER_DAMAGE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
+import { HOSTILE_SHOT_LIMIT, PLAYER_PROJECTILES, PLAYER_SHOT_LIMIT, REAR_ORDNANCE, SURVIVOR_PLAYER_DAMAGE,
+  WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
@@ -23,15 +25,14 @@ export const MIN_ALTITUDE = 55;
 export const MAX_ALTITUDE = 165;
 export const VERTICAL_SPEED = 40;
 export const WIPE_DURATION = 0.15;
-export const BOLT_SPEED = 320;
+export const BOLT_SPEED = PLAYER_PROJECTILES.boltSpeed;
 export const SHOT_LIMIT = 192;
 export const MINE_LIMIT = 16;
-export const MINE_RADIUS = 12;
-export const FLAK_RADIUS = 22;
+export { BODY_RADIUS, FLAK_RADIUS, HOSTILE_HIT_RADIUS, MINE_RADIUS } from './data/hostile-fire.ts';
 export const FLAK_LIFE = 0.65;
 export const MAX_BOMBS = 3;
 export const BOMB_RELOAD_TICKS = 450;
-export const BOMB_BLAST_RADIUS = 34;
+export const BOMB_BLAST_RADIUS = WEAPONS['bomb-bay'].tuning.radius[0];
 export const MAX_FLARES = 3;
 export const FLARE_COOLDOWN_TICKS = 36;
 export const FLARE_RELOAD_TICKS = 420;
@@ -39,7 +40,6 @@ export const FLARE_LIFE_TICKS = 120;
 export const FLARE_GRAVITY = 14;
 export const REAR_GLIMPSE_TICKS = 84;
 const REAR_IMPACT_TICKS = 45;
-const FLARE_KICK = 70;
 const FLARE_HIT_RADIUS = 4.5;
 const FLARE_BURN_TICKS = 88;
 const FLARE_BURN_INTERVAL = 27;
@@ -48,29 +48,24 @@ const FLARE_FAN = [-2, -1, 0, 1, 2];
 const BOMB_DROP_TICKS = 24;
 const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = 24;
-const BOMB_PROXIMITY = 16;
-const BOMB_CLEAR_RADIUS = 40;
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-export { HOSTILE_HIT_RADIUS } from './data/hostile-fire.ts';
 const TWIN_CONE = Math.PI / 6;
-const TWIN_RANGE = 175;
 const TWIN_MUZZLE = 6;
-const LOCK_RANGE = 175;
-const POD_RANGE = 62;
+const LOCK_RANGE = WEAPONS.twin.tuning.range;
 const REVERSAL_WINDOW = 120;
 const REVERSAL_CADENCE = 4;
-const REVERSAL_SPEED = 485;
+const REVERSAL_SPEED = PLAYER_PROJECTILES.reversalSpeed;
 const REVERSAL_HITS = 3;
 const REVERSAL_STREAK_TICKS = 21;
 const REVERSAL_SPREAD = [0, -0.055, 0.055, -0.11, 0.11];
 const REVERSAL_MUZZLES = [0, -2.2, 2.2, -4.4, 4.4];
 const REVERSAL_CONFIRM = 60;
 const STRAFE_CADENCE = 33;
-const STRAFE_SPEED = 230;
+const STRAFE_SPEED = PLAYER_PROJECTILES.strafeSpeed;
 const STRAFE_CONE = 38 * Math.PI / 180;
-const STRAFE_MIN_RANGE = 28;
-const STRAFE_RANGE = 135;
+const STRAFE_MIN_RANGE = PLAYER_PROJECTILES.strafeMinRange;
+const STRAFE_RANGE = PLAYER_PROJECTILES.strafeRange;
 const STRAFE_BAND_WINDOW = 12;
 const grazedShots = new WeakSet<Shot>();
 
@@ -159,15 +154,35 @@ export function projectileRoom(state: StageState, kind: WeaponId | 'hostile'): n
     Math.max(0, Math.min(PLAYER_SHOT_LIMIT - (state.shots.length - hostile), WEAPON_PROJECTILE_LIMITS[kind] - weapon));
 }
 
+function interceptSeconds(dx: number, dz: number, dy: number, vx: number, vz: number, speed: number): number {
+  const speedDifference = speed ** 2 - vx ** 2 - vz ** 2;
+  const along = dx * vx + dz * vz;
+  const distanceSquared = dx ** 2 + dz ** 2 + dy ** 2;
+  const discriminant = along ** 2 + speedDifference * distanceSquared;
+  if (discriminant < 0) return Infinity;
+  const closing = Math.sqrt(discriminant) - along;
+  return closing > 0 ? distanceSquared / closing : Infinity;
+}
+
 export function fireHostile(state: StageState, source: Position & { kind?: HostileSourceKind },
   speed: number, spread = 0, events?: CombatEvents): void {
   if (!projectileRoom(state, 'hostile')) return;
   const p = state.player;
-  const yaw = Math.atan2(p.x - source.x, p.z - source.z) + spread;
+  let dx = p.x - source.x, dz = p.z - source.z;
+  if (source.kind === 'hound' || source.kind === 'harrier') {
+    // These pursuers fire from offset tail slots. Lead the current course with unguided bolts.
+    const vx = p.vx ?? Math.sin(p.yaw) * state.speed, vz = p.vz ?? Math.cos(p.yaw) * state.speed;
+    const lead = interceptSeconds(dx, dz, 0, vx, vz, speed);
+    if (lead <= HOSTILE_BOLT_LIFE) {
+      dx += vx * lead;
+      dz += vz * lead;
+    }
+  }
+  const yaw = Math.atan2(dx, dz) + spread;
   const shot: Shot = {
     x: source.x, z: source.z, alt: source.alt, kind: 'hostile',
     vx: Math.sin(yaw) * speed, vz: Math.cos(yaw) * speed,
-    damage: 2, life: 3.75, volley: 0, nearMiss: false, lockId: null,
+    damage: 2, life: HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
   };
   state.shots.push(shot);
   events?.muzzle?.(shot, hostileShape(source.kind), source.x, source.z, source.alt);
@@ -184,7 +199,7 @@ export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern
     const shot: Shot = {
       kind: 'hostile', x: ace.x, z: ace.z, alt: ace.alt,
       vx: Math.sin(yaw + offset) * speed, vz: Math.cos(yaw + offset) * speed,
-      damage: 2, life: guided ? ACE.missile.life : 3.75, volley: 0, nearMiss: false, lockId: null,
+      damage: 2, life: guided ? ACE.missile.life : HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
       ...(guided ? { hostileKind: 'ace-missile' } : {}),
     };
     state.shots.push(shot);
@@ -282,15 +297,8 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: FlightBand, au
   const x = p.x + Math.sin(p.yaw) * TWIN_MUZZLE;
   const z = p.z + Math.cos(p.yaw) * TWIN_MUZZLE;
   const dx = target.x - x, dz = target.z - z, dy = target.alt - p.altitude;
-  // Solve for where a constant-speed bolt and the moving target will meet in 3D.
-  const speedDifference = STRAFE_SPEED ** 2 - target.vx ** 2 - target.vz ** 2;
-  const along = dx * target.vx + dz * target.vz;
-  const distanceSquared = dx ** 2 + dz ** 2 + dy ** 2;
-  const discriminant = along ** 2 + speedDifference * distanceSquared;
-  if (discriminant < 0) return;
-  const closing = Math.sqrt(discriminant) - along;
-  if (closing <= 0) return;
-  const lead = distanceSquared / closing;
+  const lead = interceptSeconds(dx, dz, dy, target.vx, target.vz, STRAFE_SPEED);
+  if (lead === Infinity) return;
   const vy = dy / lead;
   if (!vy) return;
   const window = hitWindow(state, STRAFE_BAND_WINDOW);
@@ -335,10 +343,10 @@ export function acquireAndFire(state: StageState): void {
   const locked = !!state.lock?.ready;
   let twin: Aim | null = aceAligned ? ace : null;
   let wrong: Aim | null = aceVisible && !aceAligned && canCueAltitude(p, ace.alt) ? ace : null;
-  const forwardRange = state.run ? WEAPONS.twin.tuning.range : TWIN_RANGE;
+  const forwardRange = WEAPONS.twin.tuning.range;
   let twinRange: number = twin ? aceRange : forwardRange, wrongRange: number = wrong ? aceRange : forwardRange;
   let left: Enemy | null = null, right: Enemy | null = null, rear: Enemy | null = null;
-  let leftRange: number = podLevel ? WEAPONS.pods.tuning.range[podLevel - 1] : POD_RANGE;
+  let leftRange = WEAPONS.pods.tuning.range[podLevel ? podLevel - 1 : 0];
   let rightRange = leftRange, rearRange = leftRange;
   const reversal = state.reversal;
   const overdrive = reversal && state.tick < reversal.until ? reversal : null;
@@ -444,8 +452,9 @@ export function dropRearBomb(state: StageState): void {
   if (!state.bombs || state.tick < state.bombReadyAt) return;
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  state.rearBombs.push({ x: p.x - fx * 12, z: p.z - fz * 12, alt: p.altitude,
-    vx: -fx * 8, vz: -fz * 8, born: state.tick });
+  const { aftOffset, driftSpeed } = REAR_ORDNANCE.bomb;
+  state.rearBombs.push({ x: p.x - fx * aftOffset, z: p.z - fz * aftOffset, alt: p.altitude,
+    vx: -fx * driftSpeed, vz: -fz * driftSpeed, born: state.tick });
   state.bombs--;
   state.bombReadyAt = state.tick + BOMB_DROP_TICKS;
   state.bombReloadAt ??= state.tick + bombReloadTicks(state);
@@ -460,7 +469,7 @@ function blast(state: StageState, bomb: RearBomb): void {
   const familyScale = bomb.weapon ? familyBonus(state, bomb.weapon)?.radiusScale ?? 1 : 1;
   const radius = (bomb.radius ?? BOMB_BLAST_RADIUS) * (buffTuning(state, 'ordnance-rack')?.radiusScale ?? 1) * familyScale;
   const damage = bomb.damage ?? 4;
-  const clearRadius = Math.max(BOMB_CLEAR_RADIUS, radius);
+  const clearRadius = Math.max(REAR_ORDNANCE.bomb.clearRadius, radius);
   const belowLaunchBand = (target: Position): boolean => target.alt <= (bomb.ceiling ?? Infinity);
   state.effects.push({ kind: 'bomb-blast', x: bomb.x, z: bomb.z, alt: bomb.alt, life: 0.8, radius });
   showRearImpact(state, 'bomb', bomb);
@@ -488,7 +497,8 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   // Keep boosted flares close enough to catch a tail while still inheriting launch momentum.
-  const kick = Math.max(FLARE_KICK, (vx * fx + vz * fz) * 0.89);
+  const { aftOffset, kick: minimumKick, fanSpacing, lateralSpeed } = REAR_ORDNANCE.flare;
+  const kick = Math.max(minimumKick, (vx * fx + vz * fz) * 0.89);
   const vy = clamp(state.climbRate * 0.2 - 7, -12, -6);
   const tuning = WEAPONS.phoenix.tuning;
   const bonus = phoenixLevel ? tuning.lifeBonusTicks[phoenixLevel - 1] : 0;
@@ -504,9 +514,9 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
   } : {};
   for (const side of fan) {
     state.flares.push({
-      x: p.x - fx * 8 + fz * side * 3.4, z: p.z - fz * 8 - fx * side * 3.4, alt: p.altitude - 1,
-      vx: vx - fx * kick + fz * side * 10,
-      vz: vz - fz * kick - fx * side * 10,
+      x: p.x - fx * aftOffset + fz * side * fanSpacing, z: p.z - fz * aftOffset - fx * side * fanSpacing, alt: p.altitude - 1,
+      vx: vx - fx * kick + fz * side * lateralSpeed,
+      vz: vz - fz * kick - fx * side * lateralSpeed,
       vy, born: state.tick, ...ordnance,
     });
   }
@@ -684,7 +694,7 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     const ace = activeAce(state);
     const close = (target: Position): boolean =>
       target.alt <= (bomb.ceiling ?? Infinity) && inBand(target.alt, bomb.alt, hitWindow(state))
-      && nearBomb(bomb, target, BOMB_PROXIMITY);
+      && nearBomb(bomb, target, REAR_ORDNANCE.bomb.proximity);
     if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && !enemy.entry && close(enemy))
       && !(ace && aceVulnerable(ace) && close(ace))) return true;
     blast(state, bomb);
@@ -733,9 +743,12 @@ export function impactTime(origin: Point, dx: number, dz: number, target: Point,
   if (c <= 0) return from;
   const a = dx * dx + dz * dz;
   const b = x * dx + z * dz;
-  const discriminant = b * b - a * c;
-  if (!a || b >= 0 || discriminant < 0) return Infinity;
-  const time = (-b - Math.sqrt(discriminant)) / a;
+  if (!a || b >= 0) return Infinity;
+  const squaredApproach = b * b;
+  const discriminant = squaredApproach - a * c;
+  // A terrain-clipped beam can round slightly below zero when tangent to a target.
+  if (discriminant < -4 * Number.EPSILON * squaredApproach) return Infinity;
+  const time = (-b - Math.sqrt(Math.max(0, discriminant))) / a;
   return time <= to - from ? from + time : Infinity;
 }
 

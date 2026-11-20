@@ -35,8 +35,8 @@ test('a distant pilot gets a local Ace intercept and cover after leaving the ori
   stepStage(state, {}, ground);
   const ace = state.boss;
   const { target, arriveAt } = ace.entry;
-  assert.ok(Math.hypot(target.x - p.x, target.z - p.z) <= 380);
-  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) >= 600);
+  assert.ok(Math.hypot(target.x - p.x, target.z - p.z) <= 760);
+  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) >= 1280);
 
   while (state.tick < arriveAt) {
     state.tick++;
@@ -47,10 +47,10 @@ test('a distant pilot gets a local Ace intercept and cover after leaving the ori
   hurtAce(state, ace, ace.maxHp * 0.36);
   state.tick++;
   advanceAce(state, ground);
-  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) <= 390);
+  assert.ok(Math.hypot(ace.x - p.x, ace.z - p.z) <= 780);
   assert.ok(state.enemies.some(enemy => enemy.kind === 'interceptor'));
   assert.ok(state.enemies.some(enemy => enemy.kind === 'gnat'));
-  assert.ok(state.enemies.every(enemy => Math.hypot(enemy.x - ace.x, enemy.z - ace.z) < 65));
+  assert.ok(state.enemies.every(enemy => Math.hypot(enemy.x - ace.x, enemy.z - ace.z) < 130));
 });
 
 test('Ace health crosses both phase thresholds and only calls cover once', () => {

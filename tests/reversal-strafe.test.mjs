@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scaleTravel } from '../src/data/speed.ts';
 import { MANEUVERS } from '../src/maneuvers.ts';
 import * as combat from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
@@ -137,7 +138,7 @@ test('basic downward strafe fires at two distinct targets on a 0.55 s cadence', 
   assert.equal(strafe.damage, 1);
   assert.equal(strafe.targetBand, 0);
   assert.ok(strafe.vy < 0);
-  assert.ok(Math.abs(Math.hypot(strafe.vx, strafe.vy, strafe.vz) - 230) < 1e-6);
+  assert.ok(Math.abs(Math.hypot(strafe.vx, strafe.vy, strafe.vz) - scaleTravel(230)) < 1e-6);
 
   state.tick += 32;
   combat.acquireAndFire(state);
@@ -157,7 +158,7 @@ test('strafe clamps acquisition to a single lower band and a 38-degree forward l
     [145, 50, 70, 1, true], [145, 63, 70, 1, false], [130, 0, 70, 1, false],
   ]) {
     const state = flight(altitude);
-    contact(state, x, z, band);
+    contact(state, scaleTravel(x), scaleTravel(z), band);
     combat.acquireAndFire(state);
     assert.equal(state.shots.some(shot => shot.kind === 'strafe'), fires, `${altitude} → ${band} at ${x},${z}`);
   }
@@ -165,15 +166,15 @@ test('strafe clamps acquisition to a single lower band and a 38-degree forward l
 
 test('strafe intercepts an approaching craft faster than the bolt and skips a receding craft', () => {
   const state = flight(145);
-  const target = contact(state, 0, 110, 1);
-  target.vz = 300;
+  const target = contact(state, 0, scaleTravel(110), 1);
+  target.vz = scaleTravel(300);
   combat.acquireAndFire(state);
   assert.equal(state.shots.some(shot => shot.kind === 'strafe'), false);
-  target.vz = -300;
+  target.vz = scaleTravel(-300);
   combat.acquireAndFire(state);
   const bolt = state.shots.find(shot => shot.kind === 'strafe');
   assert.ok(bolt && bolt.vy < 0 && bolt.life > 0);
-  assert.ok(Math.abs(Math.hypot(bolt.vx, bolt.vy, bolt.vz) - 230) < 1e-6);
+  assert.ok(Math.abs(Math.hypot(bolt.vx, bolt.vy, bolt.vz) - scaleTravel(230)) < 1e-6);
 });
 
 test('descending strafe catches a contact entering its height window mid-tick', () => {

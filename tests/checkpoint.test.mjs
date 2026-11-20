@@ -51,7 +51,7 @@ test('a pre-Ace 8:00 checkpoint deploys the new fighter while preserving the sor
   assert.deepEqual(restored.run, original.run);
   assert.equal(restored.boss.kind, 'ace');
   const { target } = restored.boss.entry;
-  assert.ok(Math.hypot(target.x - player.x, target.z - player.z) <= 380);
+  assert.ok(Math.hypot(target.x - player.x, target.z - player.z) <= 760);
   assert.equal(restored.boss.band, SKIM_BAND);
   assert.equal(target.alt, 77);
   assert.equal(restored.boss.x, restored.boss.entry.origin.x);
@@ -66,6 +66,23 @@ test('checkpoint decoder ignores stale, incomplete, and corrupt storage', () => 
   delete envelope.state.run.draftRng;
   assert.equal(decodeCheckpoint(JSON.stringify(envelope)), null);
   for (const raw of [null, '{}', 'null', 'bad JSON', '[]']) assert.equal(decodeCheckpoint(raw), null);
+});
+
+test('an old world checkpoint refreshes POI coordinates even in the same logical cell', () => {
+  const before = stateAt(7200);
+  assert.deepEqual([before.worldRegion.x, before.worldRegion.z], [0, -1]);
+  const currentSites = structuredClone(before.worldSites);
+  const first = before.worldSites[0];
+  before.claimedSites = { [first.id]: true };
+  delete before.worldRegion.spacing;
+  first.claimed = true;
+  first.x /= 2;
+  first.z /= 2;
+
+  const restored = decodeCheckpoint(encodeCheckpoint(before), ground);
+  assert.equal(restored.worldRegion.spacing, 1536);
+  assert.deepEqual(restored.worldSites[0], { ...currentSites[0], claimed: true });
+  assert.deepEqual(restored.claimedSites, { [first.id]: true });
 });
 
 test('a v1 checkpoint upgrades skimmer volleys, turret flak and the world when resumed', () => {

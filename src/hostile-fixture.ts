@@ -1,7 +1,9 @@
 import { type HostileShape } from './data/hostile-fire.ts';
 import { HOSTILE_SHOT_LIMIT, PICKUP_LIMIT, PLAYER_SHOT_LIMIT } from './data/run-balance.ts';
+import { scaleTravel } from './data/speed.ts';
+import { TERRAIN_STREAM } from './data/terrain-stream.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
-import { BOOST_SPEED } from './flight.ts';
+import { BOOST_SPEED, CRUISE_SPEED } from './flight.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceShots, BANDS, clamp, MINE_LIMIT, STEP } from './stage-combat.ts';
 import { makeEnemy } from './stage-enemies.ts';
@@ -10,7 +12,8 @@ import { makeAce, setAceTell } from './ace.ts';
 
 const SHAPES = ['orb', 'needle', 'diamond'] as const;
 const KINDS = Object.keys(ENEMY_KINDS).filter((kind): kind is RegularEnemyKind => kind !== 'gnat') as RegularEnemyKind[];
-const POSE = { x: -128, z: -320, yaw: 0, bank: 0, vx: 0, vz: 48 };
+const POSE = { x: -128, z: -320, yaw: 0, bank: 0, vx: 0, vz: CRUISE_SPEED };
+const STRESS_ORIGIN = { x: 6 * TERRAIN_STREAM.chunkSize - 32, z: -5.5 * TERRAIN_STREAM.chunkSize };
 const FIXTURE_TICK = 24_000;
 const STRESS_TICK = 26_640;
 
@@ -26,13 +29,14 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
   const { player: p } = state;
   const pose = (height: number) => {
     Object.assign(p, POSE);
+    if (boostFlight) Object.assign(p, STRESS_ORIGIN);
     p.altitude = height;
   };
   pose(altitude);
-  state.speed = 48;
+  state.speed = CRUISE_SPEED;
 
   const shot = (x: number, z: number, alt: number, vx = 0, vz = -78): Shot => ({
-    x: POSE.x + x, z: POSE.z + z, alt, vx, vz, kind: 'hostile', life: 3.75,
+    x: p.x + x, z: p.z + z, alt, vx: scaleTravel(vx), vz: scaleTravel(vz), kind: 'hostile', life: 3.75,
     damage: 2, volley: 0, nearMiss: false, lockId: null,
   });
 
@@ -81,7 +85,7 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
       const x = p.x + (i % 15 - 7) * 17, z = p.z + 102 + (i * 31 % 120);
       const gnat = makeEnemy(state, x, z, (i % 3) as Band, 'gnat');
       gnat.leaveAt = state.tick + 460;
-      gnat.vz = -32;
+      gnat.vz = scaleTravel(-32);
       state.enemies.push(gnat);
     }
     const friendly = state.shots.length - enemyShots;

@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, MeshBasicMaterial, Object3D, type PerspectiveCamera } from 'three';
 import { CLOUDS, WIND } from './data/flight-world.ts';
+import { scaleTravel } from './data/speed.ts';
 import { CRUISE_SPEED, BOOST_SPEED } from './flight.ts';
 import { BANDS, clamp, STEP } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
@@ -13,7 +14,7 @@ function cloudPatch(arena: Arena, band: number, index: number, count: number = C
   const yaw = angle * 0.32;
   return {
     x: arena.x + Math.sin(angle) * radius, z: arena.z - Math.cos(angle) * radius,
-    altitude: BANDS[band], yaw, cos: Math.cos(yaw), sin: Math.sin(yaw), scale: 0.8 + (index % 5) * 0.10,
+    altitude: BANDS[band], yaw, cos: Math.cos(yaw), sin: Math.sin(yaw), scale: scaleTravel(0.8 + (index % 5) * 0.10),
   };
 }
 
@@ -21,7 +22,7 @@ export const cloudFixturePoint = (arena: Arena) => cloudPatch(arena, 1, CLOUDS.f
 
 function containsCloud(patch: CloudPatch, x: number, z: number, altitude: number): boolean {
   const rise = altitude - patch.altitude, dx = x - patch.x, dz = z - patch.z;
-  if (Math.abs(rise) > 5 || dx * dx + dz * dz > 47 * 47) return false;
+  if (Math.abs(rise) > 5 || dx * dx + dz * dz > CLOUDS.checkRadius ** 2) return false;
   const localX = (dx * patch.cos - dz * patch.sin) / patch.scale;
   const localZ = (dx * patch.sin + dz * patch.cos) / patch.scale;
   for (const block of CLOUDS.blocks) {
@@ -143,7 +144,7 @@ export class FlightAtmosphere {
     this.travel = fixture === 'boost' && this.travel === 0 ? repeat * 0.34 : travel;
     this.wind.material.opacity = 0.25 + 0.38 * rush;
     for (let i = 0; i < count; i++) {
-      const distance = WIND.nearDistance + ((i * 31.43 + repeat - this.travel) % repeat);
+      const distance = WIND.nearDistance + ((i * WIND.spacing + repeat - this.travel) % repeat);
       const along = distance * height, side = i % 2 ? -1 : 1;
       const across = side * (0.65 + (i % 5) * 0.067) * along * camera.aspect;
       const vertical = Math.sin(i * 2.39996) * along * 0.76;
@@ -152,8 +153,8 @@ export class FlightAtmosphere {
       this.pose.quaternion.copy(camera.quaternion);
       this.pose.rotateY(-Math.atan2(across, distance) * 0.56);
       this.pose.rotateX(Math.atan2(vertical, distance) * 0.56);
-      const width = 0.17 + 0.3 * rush;
-      this.pose.scale.set(width, width, WIND.baseLength + (this.enabled ? WIND.boostLength : 10.5) * rush);
+      const width = scaleTravel(0.17 + 0.3 * rush);
+      this.pose.scale.set(width, width, WIND.baseLength + (this.enabled ? WIND.boostLength : WIND.legacyBoostLength) * rush);
       this.pose.updateMatrix();
       this.wind.setMatrixAt(i, this.pose.matrix);
     }

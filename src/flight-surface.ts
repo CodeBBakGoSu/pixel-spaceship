@@ -191,7 +191,7 @@ export class FlightSurface {
         this.center.y += altitudeShift;
         this.forward.copy(this.left).sub(this.right);
         const length = this.forward.length();
-        if (length < 0.04 || length > 28) continue;
+        if (length < 0.04 || length > WING_TRAIL.maxSegmentLength) continue;
         this.forward.multiplyScalar(1 / length);
         if (!orthographic) this.eye.copy(camera.position).sub(this.center);
         this.side.crossVectors(this.forward, this.eye).normalize();
@@ -228,6 +228,7 @@ export class FlightSurface {
   private drawWake(tick: number): void {
     let drawn = 0;
     const cap = FLIGHT_SURFACE.wakeCapacity;
+    const { wakeSpread, wakeSetback, foamLength } = FLIGHT_SURFACE;
     for (let i = 0; i < this.wakeSize; i++) {
       const index = ((this.wakeCursor + cap - 1 - i) % cap) * WAKE_STRIDE;
       const x = this.wakePoints[index], z = this.wakePoints[index + 1], yaw = this.wakePoints[index + 2];
@@ -238,13 +239,14 @@ export class FlightSurface {
       const swatch = Math.min(2, Math.floor(life * 3));
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
       for (let side = -1; side <= 1; side += 2) {
-        const spread = side * (2.2 + 9 * life), back = 6 + 8 * life;
+        const spread = side * (wakeSpread.near + wakeSpread.growth * life);
+        const back = wakeSetback.near + wakeSetback.growth * life;
         const wx = x - sin * back + cos * spread, wz = z - cos * back - sin * spread;
         const height = this.ground(wx, wz);
         const width = (water ? FLIGHT_SURFACE.foamWidth : FLIGHT_SURFACE.dustWidth) * (1 - 0.66 * life);
         this.wakePose.position.set(wx, height + (water ? 0.16 : 0.55 + 4 * life), -wz);
         this.wakePose.rotation.set(water ? -Math.PI / 2 : -0.74, -yaw + side * 0.58, 0, 'YXZ');
-        this.wakePose.scale.set(width, water ? 4.5 + life * 4 : width * 0.71, 1);
+        this.wakePose.scale.set(width, water ? foamLength.near + life * foamLength.growth : width * 0.71, 1);
         this.wakePose.updateMatrix();
         this.wake.setMatrixAt(drawn, this.wakePose.matrix);
         this.wake.setColorAt(drawn++, (water ? this.foamColors : this.dustColors)[swatch]);

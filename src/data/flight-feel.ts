@@ -1,3 +1,20 @@
+import { SPEED_SCALE, scaleTravel } from './speed.ts';
+
+const chaseScale = 1 + (SPEED_SCALE - 1) * 0.4;
+const topScale = 1 + (SPEED_SCALE - 1) * 0.55;
+
+export const FLIGHT_CAMERA = {
+  far: scaleTravel(1060),
+  rearFar: scaleTravel(640),
+  top: { minHeight: 127 * topScale, phoneHalfWidth: 105 * topScale, desktopHalfWidth: 125 * topScale },
+  chase: {
+    setback: 46 * chaseScale,
+    portraitSetback: 30 * chaseScale,
+    lookAhead: scaleTravel(105),
+    maneuverRetreat: { immelmann: 22 * chaseScale, 'split-s': 18 * chaseScale, 'j-turn': 29 * chaseScale },
+  },
+} as const;
+
 export const FLIGHT_FEEL = {
   boostAttackSeconds: 0.25,
   boostReleaseSeconds: 0.5,
@@ -17,7 +34,7 @@ export const FLIGHT_FEEL = {
   shockRate: 91,
   shockVertical: { size: 0.65, rate: 0.79 },
   shockSize: { hit: 0.86, parry: 0.57, explosion: 0.42 },
-  explosionRange: 105,
+  explosionRange: scaleTravel(105),
   burstSize: 0.6,
   rollTrailMinimumIntervals: 4,
 } as const;

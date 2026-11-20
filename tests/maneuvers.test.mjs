@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput } from '../src/autoplay.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import * as moves from '../src/maneuvers.ts';
 import { advanceRearBombs, HIT_WINDOW } from '../src/stage-combat.ts';
 
@@ -107,13 +108,14 @@ test('J-turn snaps its flight heading, traces a displaced U and lets the view ca
   const wrapped = yaw => Math.atan2(Math.sin(yaw), Math.cos(yaw));
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw?.(state))) < 0.001);
   run(state, 10);
-  assert.ok(state.player.x < x - 3 && state.player.z > z + 3);
+  assert.ok(state.player.x < x - 6 && state.player.z > z + 6);
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state))) > 0.1);
   run(state, 15);
-  assert.ok(state.player.z > z + 50);
-  assert.ok(state.player.x < x - 40);
+  assert.ok(state.player.z > z + 100);
+  assert.ok(state.player.x < x - 80);
   run(state, 26);
-  assert.ok(state.player.x < x - 20 && state.player.z > z + 55);
+  assert.ok(Math.abs(state.player.x - x + 44) < 1e-8);
+  assert.ok(Math.abs(state.player.z - z - 136) < 1e-8);
   assert.equal(state.maneuverTrail.points.at(-1).x, state.player.x);
   run(state, 1);
   assert.ok(state.speed > moves.CRUISE_SPEED);
@@ -130,9 +132,9 @@ for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['spli
       run(state, 1);
       maxForward = Math.max(maxForward, state.player.z - start.z);
     }
-    assert.ok(maxForward > 105, `maximum forward travel was ${maxForward} m`);
-    assert.ok(state.player.z > start.z + 90);
-    assert.ok(Math.abs(state.player.x - start.x) >= 18);
+    assert.ok(maxForward > 210, `maximum forward travel was ${maxForward} m`);
+    assert.ok(state.player.z > start.z + 180);
+    assert.ok(Math.abs(state.player.x - start.x) >= 36);
     assert.ok(Math.abs(state.player.yaw) > 3.1);
     const turnZ = state.player.z;
     for (let tick = 0; tick < 150; tick++) {
@@ -142,7 +144,7 @@ for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['spli
       assert.equal(attitude.inverted, true);
       assert.equal(attitude.roll, Math.PI);
     }
-    assert.ok(state.player.z < turnZ - 80);
+    assert.ok(state.player.z < turnZ - 160);
     run(state, 12);
     assert.ok(moves.maneuverAttitude(state.maneuver).roll < Math.PI);
     run(state, 12);
@@ -270,7 +272,7 @@ test('rear bomb coasts at its release altitude and falls after 27 ticks', () => 
   run(state, 1, { bomb: true });
   assert.equal(state.bombs, 2);
   const bomb = state.rearBombs[0];
-  assert.ok(bomb.z < state.player.z - 8);
+  assert.ok(bomb.z < state.player.z - scaleTravel(8));
   assert.equal(bomb.alt, 110);
   const z = bomb.z;
   run(state, 1, { maneuver: 'j-turn' });
@@ -295,7 +297,7 @@ test('falling bomb damage is altitude gated and clears only nearby hostile shots
   }
   state.enemies = targets;
   const hostile = { x: bomb.x, z: bomb.z, alt: 145, vx: 0, vz: 0, kind: 'hostile', life: 2, damage: 2 };
-  const outside = { ...hostile, x: bomb.x + 41 };
+  const outside = { ...hostile, x: bomb.x + scaleTravel(41) };
   state.shots.push(hostile, outside);
   run(state, 1);
   assert.equal(state.rearBombs.length, 0);

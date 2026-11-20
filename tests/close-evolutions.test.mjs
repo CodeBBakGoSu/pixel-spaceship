@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots, openReversal,
@@ -53,7 +54,7 @@ test('Aurora reversal retains its distinct tracers', () => {
 test('Aegis Halo deals same-height contact damage, replaces pod fire and blocks crossing shots', () => {
   const state = start();
   evolve(state, 'pods', 'aegis-halo');
-  const touching = contact(state, 19, 0), otherBand = contact(state, -19, 0, 2);
+  const touching = contact(state, scaleTravel(19), 0), otherBand = contact(state, scaleTravel(-19), 0, 2);
   advanceSupportWeapons(state, sea);
   assert.ok(touching.hp < 4);
   assert.equal(otherBand.hp, 4);
@@ -71,7 +72,7 @@ test('Aegis Halo deals same-height contact damage, replaces pod fire and blocks 
 test('Plasma Ribbon preserves an eight-second wall and pulses in its own band', () => {
   const state = start();
   evolve(state, 'ion', 'plasma-ribbon');
-  const near = contact(state, 0, -9), above = contact(state, 0, -9, 2);
+  const near = contact(state, 0, scaleTravel(-9)), above = contact(state, 0, scaleTravel(-9), 2);
   state.tick = 1;
   advanceSupportWeapons(state, sea);
   assert.equal(state.ionWake[0].until - state.tick, 480);
@@ -89,14 +90,14 @@ test('Collector Swarm adds a fourth drone and draws salvage into drones beyond p
   const state = start();
   evolve(state, 'drones', 'collector-swarm');
   const { x, z } = state.player;
-  const pickup = { id: 42, x, z: z + 33, alt: 110, xp: 1, born: 0 };
+  const pickup = { id: 42, x, z: z + scaleTravel(33), alt: 110, xp: 1, born: 0 };
   state.pickups.push(pickup);
   for (let i = 0; i < 12 && !pickup.collected; i++) {
     state.tick++;
     advanceSupportWeapons(state, sea);
   }
   assert.equal(state.orbitDrones.length, 4);
-  assert.ok(pickup.z < z + 33);
+  assert.ok(pickup.z < z + scaleTravel(33));
   assert.equal(pickup.collected, true);
   stepStage(state, {}, sea);
   assert.equal(state.salvage, 1);
@@ -106,7 +107,7 @@ test('Collector Swarm adds a fourth drone and draws salvage into drones beyond p
 test('Phoenix Rising steers its automatic firebird and preserves manual inventory', () => {
   const state = start();
   evolve(state, 'phoenix', 'phoenix-rising');
-  contact(state, 18, -35);
+  contact(state, scaleTravel(18), scaleTravel(-35));
   const manualCharges = state.flareCharges;
   advanceAutoOrdnance(state, false);
   const flare = state.flares[0];
@@ -150,5 +151,5 @@ test('three ordnance weapons increase the automatic bomb blast radius', () => {
   contact(state, 0, 0);
   advanceRearBombs(state, sea);
   const blast = state.effects.find(effect => effect.kind === 'bomb-blast');
-  assert.ok(Math.abs(blast.radius - 34 * 1.2) < 1e-8);
+  assert.ok(Math.abs(blast.radius - scaleTravel(34) * 1.2) < 1e-8);
 });

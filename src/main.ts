@@ -1419,8 +1419,6 @@ async function start(): Promise<void> {
     if (rosterSheet) primeRosterSheet(state, rosterSheet, ground);
     else if (fidelityFixture) primeFidelityFixture(state, query);
     else primeFlightFixture(state, query, ground, combatEvents);
-    motion.speed = state.speed;
-    motion.climb = state.climbRate;
     cueTime = frameNow;
   }
   if (bulletFixture) {
@@ -1430,6 +1428,8 @@ async function start(): Promise<void> {
     primingBullets = false;
     if (!bulletFixture.stress) cueTime = frameNow;
   }
+  motion.speed = state.speed;
+  motion.climb = state.climbRate;
   requestAnimationFrame(animate);
 }
 

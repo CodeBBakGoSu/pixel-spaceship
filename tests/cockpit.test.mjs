@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { frameCockpit } from '../src/camera.ts';
+import { TERRAIN_STREAM } from '../src/data/terrain-stream.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { buildRadar } from '../src/instruments.ts';
 import { createTranslator, strings } from '../src/i18n.ts';
@@ -106,7 +107,8 @@ test('the inverted cockpit exchanges sky and ground and rotates its horizon thro
 
 test('terrain fog remains positive and continuous through a full cockpit roll at both tiers', () => {
   assert.ok(terrainFogFar(1, 60, 0, 0, true) < terrainFogFar(1, 60));
-  for (const [aspect, fov, mobile, far] of [[1.6, 92, false, 1020], [390 / 844, 78, true, 740]]) {
+  for (const [aspect, fov, mobile] of [[1.6, 92, false], [390 / 844, 78, true]]) {
+    const { fogFar } = mobile ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop;
     for (const pitch of [0, -0.48, 0.58]) {
       const upright = terrainFogFar(aspect, fov, pitch, 0, mobile);
       const inverted = terrainFogFar(aspect, fov, pitch, Math.PI, mobile);
@@ -114,8 +116,8 @@ test('terrain fog remains positive and continuous through a full cockpit roll at
       for (let angle = -180; angle <= 180; angle++) {
         const fog = terrainFogFar(aspect, fov, pitch, angle * Math.PI / 180, mobile);
         const next = terrainFogFar(aspect, fov, pitch, (angle + 1) * Math.PI / 180, mobile);
-        assert.ok(fog > 245 && fog <= far);
-        assert.ok(Math.abs(fog - next) < 20);
+        assert.ok(fog > TERRAIN_STREAM.fogNear && fog <= fogFar);
+        assert.ok(Math.abs(fog - next) < fogFar * 0.023);
       }
     }
   }
@@ -183,12 +185,18 @@ test('the reticle reflects simulation dwell for the instrument track and stays i
   assert.equal(cockpitTarget(track, center, aiming, state.lock).locked, false);
   assert.equal(cockpitTarget(track, { x: aiming.x + 3, y: center.y }, aiming, state.lock), null);
   state.player.altitude = track.alt;
-  state.player.yaw = Math.atan2(track.x - state.player.x, track.z - state.player.z);
-  for (let i = 0; i < 12; i++) stepStage(state);
+  const trackAce = ticks => {
+    for (let i = 0; i < ticks; i++) {
+      const { player, boss } = state;
+      player.yaw = Math.atan2(boss.x - player.x, boss.z - player.z);
+      stepStage(state);
+    }
+  };
+  trackAce(12);
   const inProgress = cockpitTarget(track, center, aiming, state.lock);
   assert.ok(inProgress.progress > 0 && inProgress.progress < 1);
   assert.equal(inProgress.locked, false);
-  for (let i = 0; i < 9; i++) stepStage(state);
+  trackAce(9);
   const acquired = cockpitTarget(track, center, aiming, state.lock);
   assert.equal(acquired.progress, 1);
   assert.equal(acquired.locked, true);

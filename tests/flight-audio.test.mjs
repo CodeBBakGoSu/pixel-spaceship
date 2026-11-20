@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOOST_IGNITION_SPEED } from '../src/flight.ts';
+import { BOOST_IGNITION_SPEED, CRUISE_SPEED } from '../src/flight.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { hasCloseFlyby, mapFlightAudio } from '../src/flight-audio.ts';
 
 test('engine tracks speed, wind grows quadratically and the afterburner follows eased boost', () => {
@@ -40,17 +41,17 @@ test('flight audio maps transient and out-of-range inputs to finite values using
 });
 
 test('flyby follows relative motion crossing closest approach within the latest rendered tick', () => {
-  const player = { x: 0, z: 0, altitude: 110, yaw: 0, vx: 0, vz: 52 };
-  const enemy = { x: 17, z: -1, alt: 110, vx: 0, vz: -48, hp: 2, kind: 'patrol' };
-  const close = candidate => ({ player, speed: 52, enemies: [candidate] });
+  const player = { x: 0, z: 0, altitude: 110, yaw: 0, vx: 0, vz: CRUISE_SPEED };
+  const enemy = { x: scaleTravel(17), z: scaleTravel(-1), alt: 110, vx: 0, vz: scaleTravel(-48), hp: 2, kind: 'patrol' };
+  const close = candidate => ({ player, speed: CRUISE_SPEED, enemies: [candidate] });
   assert.equal(hasCloseFlyby(close(enemy), 1), true);
   assert.equal(hasCloseFlyby(close(enemy), 0), false);
-  assert.equal(hasCloseFlyby(close({ ...enemy, z: 1 }), 1), false);
-  assert.equal(hasCloseFlyby(close({ ...enemy, z: -3 }), 1), false);
-  assert.equal(hasCloseFlyby(close({ ...enemy, z: -3 }), 2), true);
-  assert.equal(hasCloseFlyby(close({ ...enemy, x: 44 }), 1), false);
+  assert.equal(hasCloseFlyby(close({ ...enemy, z: scaleTravel(1) }), 1), false);
+  assert.equal(hasCloseFlyby(close({ ...enemy, z: scaleTravel(-3) }), 1), false);
+  assert.equal(hasCloseFlyby(close({ ...enemy, z: scaleTravel(-3) }), 2), true);
+  assert.equal(hasCloseFlyby(close({ ...enemy, x: scaleTravel(44) }), 1), false);
   assert.equal(hasCloseFlyby(close({ ...enemy, alt: 145 }), 1), false);
-  assert.equal(hasCloseFlyby(close({ ...enemy, vz: 52 }), 1), false);
+  assert.equal(hasCloseFlyby(close({ ...enemy, vz: CRUISE_SPEED }), 1), false);
   assert.equal(hasCloseFlyby(close({ ...enemy, kind: 'turret' }), 1), false);
   assert.equal(hasCloseFlyby(close({ ...enemy, hp: 0 }), 1), false);
 });

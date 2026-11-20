@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
+import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS, openReversal } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
@@ -35,7 +36,7 @@ test('Seeker fires three guided missiles and climbs one band, leaving two-band t
   const outOfBand = contact(state, 0, 64, high);
   advanceRangedWeapons(state, ground);
   assert.deepEqual(state.shots, []);
-  const adjacent = contact(state, 3, 120, mid);
+  const adjacent = contact(state, scaleTravel(3), scaleTravel(120), mid);
   advanceRangedWeapons(state, ground);
   assert.equal(state.shots.length, 3);
   assert.ok(state.shots.every(shot => shot.kind === 'seeker' && shot.targetId === adjacent.id));
@@ -70,7 +71,7 @@ test('Seeker level five carries four larger blasts and triggers one separate loo
   advanceRangedWeapons(state, ground);
   assert.equal(state.shots.length, 8);
   const first = state.shots[0];
-  const splash = contact(state, 14, target.z - 5);
+  const splash = contact(state, scaleTravel(14), target.z - 5);
   Object.assign(first, { x: 0, z: target.z - 5 });
   advanceRangedShot(state, first, ground);
   assert.ok(splash.hp < 12);
@@ -80,7 +81,7 @@ test('Rail charges for 54 ticks, pierces a line, and ends against intervening te
   const state = setup('rail');
   const terrain = (x, z) => z >= 118 && z <= 126 ? 150 : 35;
   const one = contact(state, 0, 45, mid + 3);
-  const two = contact(state, 3, 100);
+  const two = contact(state, scaleTravel(3), 100);
   const wrongHeight = contact(state, 0, 80, mid + 3.01);
   const behindWall = contact(state, 0, 150);
   advanceRangedWeapons(state, terrain);
@@ -100,7 +101,7 @@ test('Rail charges for 54 ticks, pierces a line, and ends against intervening te
 
 test('Rail level five widens and pierces an additional lower band', () => {
   const state = setup('rail', 5, high);
-  const wide = contact(state, 4, 70, high);
+  const wide = contact(state, scaleTravel(4), 70, high);
   const below = contact(state, 0, 75, mid);
   const tooLow = contact(state, 0, 75, low);
   advanceRangedWeapons(state, ground);
@@ -111,9 +112,10 @@ test('Rail level five widens and pierces an additional lower band', () => {
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 2);
 });
 
-test('Flak shell bursts around 90 metres and bridges two bands from their midpoint', () => {
+test('Flak shell bursts at its scaled range and bridges two bands from their midpoint', () => {
   const state = setup('flak', 1, (mid + high) / 2);
-  const targets = BANDS.map(alt => contact(state, 0, 90, alt));
+  const range = scaleTravel(90);
+  const targets = BANDS.map(alt => contact(state, 0, range, alt));
   advanceRangedWeapons(state, ground);
   assert.equal(state.shots[0]?.kind, 'flak-shell');
   projectiles(state, 35);
@@ -121,13 +123,13 @@ test('Flak shell bursts around 90 metres and bridges two bands from their midpoi
   projectiles(state, 1);
   assert.deepEqual(targets.map(enemy => enemy.hp), [12, 10, 10]);
   const burst = state.weaponFx.find(effect => effect.kind === 'flak-blast');
-  assert.ok(Math.abs(burst.from.z - 90) < 1e-9);
-  assert.equal(burst.radius, 22);
+  assert.ok(Math.abs(burst.from.z - range) < 1e-9);
+  assert.equal(burst.radius, scaleTravel(22));
 });
 
 test('Flak level five sends six radial same-altitude fragments', () => {
   const state = setup('flak', 5);
-  contact(state, 0, 89);
+  contact(state, 0, scaleTravel(89));
   advanceRangedWeapons(state, ground);
   projectiles(state, 36);
   assert.equal(state.shots.length, 6);
@@ -137,9 +139,9 @@ test('Flak level five sends six radial same-altitude fragments', () => {
 
 test('Arc starts on the firing band and chains to an adjacent band with 60 percent damage', () => {
   const state = setup('arc');
-  const initial = contact(state, 0, 30);
-  const adjacent = contact(state, 0, 60, high);
-  const twoAway = contact(state, 0, 72, low);
+  const initial = contact(state, 0, scaleTravel(30));
+  const adjacent = contact(state, 0, scaleTravel(60), high);
+  const twoAway = contact(state, 0, scaleTravel(72), low);
   advanceRangedWeapons(state, ground);
   assert.ok(Math.abs(initial.hp - (12 - 1.8)) < 1e-9);
   assert.ok(Math.abs(adjacent.hp - (12 - 1.8 * 0.6)) < 1e-9);
@@ -149,8 +151,8 @@ test('Arc starts on the firing band and chains to an adjacent band with 60 perce
 
 test('Arc level five visits six contacts, then the last link splashes an unvisited neighbour', () => {
   const state = setup('arc', 5);
-  const targets = Array.from({ length: 6 }, (_, i) => contact(state, 0, 30 + i * 33));
-  const splash = contact(state, 15, targets.at(-1).z);
+  const targets = Array.from({ length: 6 }, (_, i) => contact(state, 0, scaleTravel(30 + i * 33)));
+  const splash = contact(state, scaleTravel(15), targets.at(-1).z);
   advanceRangedWeapons(state, ground);
   assert.ok(targets.every(enemy => enemy.hp < 12));
   assert.ok(splash.hp < 12 && splash.hp > targets.at(-1).hp);
@@ -185,7 +187,7 @@ test('an inbound enemy and Ace ignore ranged hits until engagement and lock', ()
 
 test('the normal fixed-step flight path fires and advances a timed shell', () => {
   const state = setup('flak');
-  const target = makeEnemy(state, 0, 90, 1, 'gnat');
+  const target = makeEnemy(state, 0, scaleTravel(90), 1, 'gnat');
   target.hp = 3;
   state.enemies.push(target);
   stepStage(state, {}, ground);

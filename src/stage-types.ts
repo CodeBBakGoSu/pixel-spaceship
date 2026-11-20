@@ -272,7 +272,7 @@ export type StageState = {
   arena: { x: number; z: number; radius: number };
   boundaryWarning: boolean;
   // --- S7d lane ---
-  worldRegion?: Point;
+  worldRegion?: Point & { spacing?: number };
   worldSites?: WorldSite[];
   claimedSites?: Record<string, true>;
   rally?: Position;
