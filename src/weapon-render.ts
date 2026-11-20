@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, Mesh, MeshBasicMaterial, type Object3D } from 'three';
-import { WEAPON_IDS, type WeaponId } from './data/items.ts';
+import { EVOLUTIONS, WEAPON_IDS, type WeaponId } from './data/items.ts';
 import type { RunProgression } from './progression.ts';
 
 // Ship-local meters, with the nose toward -Z. Dark sockets reach into the hull or spar.
@@ -7,6 +7,7 @@ type Block = readonly [x: number, y: number, z: number, width: number, height: n
 const steel = 0xa9b6b8, gunmetal = 0x394a57, lightAlloy = 0xd8e3df;
 const brass = 0xffbd72, green = 0x81ebaf, red = 0xf67867;
 const blue = 0x69bdf4, aqua = 0x64eedc, violet = 0xbba0ff;
+const gold = 0xffcf69, whiteGold = 0xfff3b6;
 
 function paired(blocks: readonly Block[]): Block[] {
   return [...blocks, ...blocks.map(([x, ...rest]): Block => [-x, ...rest])];
@@ -72,6 +73,88 @@ const MOUNTS: Record<WeaponId, readonly Block[]> = {
   ],
 };
 
+// Each upgrade keeps the same hardpoint. Wider casings and bright rails carry the silhouette
+// through the low-resolution scene without adding a pass or a separate glow mesh.
+const EVOLVED_MOUNTS: Record<WeaponId, readonly Block[]> = {
+  twin: paired([
+    [1.68, 0.70, -10.65, 1.91, 1.9, 4.42, gunmetal],
+    [1.24, 0.68, -13.27, 0.82, 0.83, 3.75, lightAlloy],
+    [2.12, 0.68, -13.27, 0.82, 0.83, 3.75, lightAlloy],
+    [1.68, 1.47, -12.91, 0.86, 0.88, 3.92, brass],
+    [1.68, 1.02, -13.57, 1.98, 1.54, 0.76, gold],
+  ]),
+  pods: paired([
+    [9.45, 0.39, 5.11, 3.43, 1.6, 5.22, gunmetal],
+    [10.62, 1.39, 5.05, 1.22, 1.32, 5.32, aqua],
+    [8.31, 1.35, 5.48, 1.02, 1.34, 4.36, blue],
+    [9.48, 2.06, 5.71, 2.67, 0.60, 1.40, gold],
+  ]),
+  seeker: paired([
+    [6.63, 0.48, 2.82, 2.95, 1.54, 5.08, gunmetal],
+    [5.67, 1.48, 2.52, 0.87, 1.13, 3.97, red],
+    [6.63, 1.74, 2.32, 0.98, 1.40, 4.73, brass],
+    [7.59, 1.48, 2.52, 0.87, 1.13, 3.97, red],
+    [6.63, 2.12, 0.44, 1.24, 0.53, 1.52, whiteGold],
+  ]),
+  rail: [
+    [3.37, 0.43, -6.42, 2.71, 1.62, 8.18, gunmetal],
+    [2.45, 1.41, -7.61, 0.73, 1.17, 9.72, lightAlloy],
+    [4.29, 1.41, -7.61, 0.73, 1.17, 9.72, lightAlloy],
+    [3.37, 1.91, -7.07, 1.02, 0.97, 8.72, violet],
+    [3.37, 2.39, -7.68, 0.55, 0.24, 6.96, aqua],
+    [3.37, 1.98, -10.84, 2.71, 0.66, 0.75, gold],
+    [3.37, 1.78, -4.29, 2.68, 0.39, 0.79, gold],
+  ],
+  flak: [
+    [-4.52, 0.47, -0.34, 3.22, 1.53, 3.8, gunmetal],
+    [-4.52, 1.31, -0.2, 2.76, 1.33, 2.81, steel],
+    [-4.52, 1.71, -1.71, 2.95, 1.31, 1.60, gold],
+    [-5.53, 2.21, -0.93, 0.55, 0.74, 2.87, brass],
+    [-4.52, 2.22, -1.10, 0.66, 0.93, 2.55, red],
+    [-3.51, 2.21, -0.93, 0.55, 0.74, 2.87, brass],
+    [-4.52, 1.84, 1.13, 2.14, 0.78, 0.74, red],
+  ],
+  ion: [
+    [0, 1.77, 9.51, 2.95, 1.43, 4.1, gunmetal],
+    [-1.09, 2.67, 10.44, 0.89, 1.21, 4.14, violet],
+    [1.09, 2.67, 10.44, 0.89, 1.21, 4.14, violet],
+    [0, 2.60, 10.76, 1.52, 1.10, 3.60, aqua],
+    [0, 3.14, 11.62, 1.39, 0.35, 2.05, lightAlloy],
+    [0, 3.11, 9.62, 2.98, 0.58, 0.73, gold],
+  ],
+  drones: paired([
+    [7.15, 0.22, 7.05, 2.49, 1.40, 2.81, gunmetal],
+    [6.22, 1.06, 7.43, 0.73, 1.22, 2.72, gold],
+    [8.08, 1.06, 7.43, 0.73, 1.22, 2.72, gold],
+    [7.15, 1.24, 8.38, 1.42, 0.96, 1.36, green],
+  ]),
+  phoenix: [
+    [2.60, 1.11, 8.94, 1.85, 1.38, 3.37, gunmetal],
+    [2.60, 1.90, 9.38, 1.48, 1.08, 2.49, gold],
+    [2.60, 1.97, 11.05, 1.45, 0.90, 2.02, brass],
+    [1.88, 2.26, 10.02, 0.55, 1.32, 2.06, red],
+    [3.32, 2.26, 10.02, 0.55, 1.32, 2.06, red],
+    [2.60, 2.56, 9.88, 0.70, 0.52, 1.89, whiteGold],
+  ],
+  'bomb-bay': [
+    [0, 2.61, 4.42, 3.45, 1.44, 4.78, gunmetal],
+    [0, 3.44, 4.31, 3.26, 0.93, 4.47, steel],
+    [-1.08, 3.99, 4.37, 0.91, 0.83, 3.65, red],
+    [0, 4.17, 4.44, 0.92, 0.79, 4, red],
+    [1.08, 3.99, 4.37, 0.91, 0.83, 3.65, red],
+    [0, 4.20, 5.53, 3.36, 0.52, 0.73, gold],
+    [0, 4.05, 3.13, 3.30, 0.51, 0.73, brass],
+  ],
+  arc: [
+    [4.50, 0.43, -0.10, 2.94, 1.42, 3.98, gunmetal],
+    [4.50, 1.28, 0.18, 2.66, 1.42, 2.47, violet],
+    [3.44, 1.93, -0.67, 0.69, 1.83, 1.83, gold],
+    [5.56, 1.93, -0.67, 0.69, 1.83, 1.83, gold],
+    [4.50, 2.30, -0.98, 0.83, 2.31, 1.09, whiteGold],
+    [4.50, 2.07, 0.60, 2.66, 0.54, 0.73, brass],
+  ],
+};
+
 const UNIT = new BoxGeometry();
 const UNIT_POSITIONS = UNIT.getAttribute('position');
 const FACE_SHADE = [0.72, 0.55, 1, 0.48, 0.8, 0.66];
@@ -100,21 +183,26 @@ function meshBlocks(blocks: readonly Block[]): BufferGeometry {
 }
 
 export class WeaponMounts {
-  private readonly mounts: { id: WeaponId; mesh: Mesh }[];
+  private readonly mounts: { id: WeaponId; mesh: Mesh; normal: BufferGeometry; evolved: BufferGeometry }[];
 
   constructor(ship: Object3D) {
     const material = new MeshBasicMaterial({ vertexColors: true });
     this.mounts = WEAPON_IDS.map(id => {
-      const mesh = new Mesh(meshBlocks(MOUNTS[id]), material);
+      const normal = meshBlocks(MOUNTS[id]);
+      const evolved = meshBlocks(EVOLVED_MOUNTS[id]);
+      const mesh = new Mesh(normal, material);
       mesh.name = `Weapon mount ${id}`;
       mesh.visible = false;
       ship.add(mesh);
-      return { id, mesh };
+      return { id, mesh, normal, evolved };
     });
   }
 
-  update(levels: RunProgression['weaponLevels'] | undefined): void {
-    for (const { id, mesh } of this.mounts) mesh.visible = !!levels?.[id];
+  update(levels: RunProgression['weaponLevels'] | undefined, evolutions?: RunProgression['evolutions']): void {
+    for (const { id, mesh, normal, evolved } of this.mounts) {
+      mesh.visible = !!levels?.[id];
+      if (mesh.visible) mesh.geometry = evolutions?.[id] === EVOLUTIONS[id].id ? evolved : normal;
+    }
   }
 }
 

@@ -2,26 +2,31 @@ import './style.css';
 import { autopilotInput, seekStage } from './autoplay.ts';
 import { updateBillDisplay } from './bill-display.ts';
 import type { Segment } from './camera.ts';
+import { CHECKPOINT_KEY, decodeCheckpoint, encodeCheckpoint } from './checkpoint.ts';
+import { createChestDisplay } from './chest-display.ts';
 import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, reversalCharge, type CockpitMotion } from './cockpit.ts';
-import { BUFF_IDS, CHESTS, DRAFT_RULES, EVOLUTIONS, WEAPON_IDS } from './data/items.ts';
+import { phaseAt } from './data/phases.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
+import { createGearIcon } from './gear-icons.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { createHangarDisplay } from './hangar-display.ts';
 import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay, RADAR_RANGE, RearMirrorThreat, relativeMark,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
+import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
+import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
-import { activeWeakPoint, bossTick, chestEvolutions, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
+import { activeWeakPoint, bossTick, endTick, parseStageOptions, requiredXp, stepStage } from './stage.ts';
 import { bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, inBand, MAX_ALTITUDE, MIN_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { ChestReward, DraftId, Effect, LegacyDraftId, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
+import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -36,8 +41,11 @@ const guideSkip = $<HTMLButtonElement>('#guide-skip');
 const guideBody = $('.guide-body');
 const draftCard = $('#draft-card');
 const chestCard = $('#chest-card');
-const chestAction = $<HTMLButtonElement>('#chest-action');
+const chestDisplay = createChestDisplay(chestCard, action => { pendingChest = action; });
 const draftButtons = [...draftCard.querySelectorAll<HTMLButtonElement>('[data-pick]')];
+const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), evolutionToast = $('#evolution-toast');
+const billCount = $('#bill-count');
+const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const touchLoop = $<HTMLButtonElement>('#touch-loop');
@@ -81,6 +89,8 @@ const storage = {
   getItem: (key: string) => localStorage.getItem(key),
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
 };
+let checkpointData = persistent ? readCheckpointData() : null;
+let interrupted = false, resumeAt = 0;
 let language = initialLanguage(location.search, navigator.language, storage);
 let t = createTranslator(language);
 let launchHeat: Heat = 0, launchDaily = false, pendingRetreat = false;
@@ -119,6 +129,7 @@ let guideOpener: HTMLElement | null = null;
 let menuKey = '';
 let renderedDraft: DraftId[] | null = null;
 let renderedChest: ChestReward[] | null = null;
+let evolutionNotice: { item: Extract<ChestReward, { kind: 'evolution' }>; until: number } | null = null;
 let banishing = false;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
 let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
@@ -162,6 +173,36 @@ function readPilot(): Profile {
 function persistPilot(): void {
   if (!persistent) return;
   try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* Continue with the in-memory pilot. */ }
+}
+
+function readCheckpointData(): string | null {
+  try { return localStorage.getItem(CHECKPOINT_KEY); } catch { return null; }
+}
+
+function writeCheckpointData(next: string | null): boolean {
+  if (!persistent) return false;
+  try {
+    // An older tab must not erase a checkpoint written by another sortie.
+    if (localStorage.getItem(CHECKPOINT_KEY) !== checkpointData) return false;
+    if (next) localStorage.setItem(CHECKPOINT_KEY, next);
+    else localStorage.removeItem(CHECKPOINT_KEY);
+    checkpointData = next;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resumeCheckpoint(): void {
+  if (!scene || state.phase !== 'title') return;
+  const checkpoint = decodeCheckpoint(checkpointData);
+  if (!checkpoint || !writeCheckpointData(null)) return;
+  // Preserve purchases made in the hangar. The sortie keeps the saved in-flight upgrade effects.
+  Object.assign(state, checkpoint, { profile });
+  carry = 0;
+  menuKey = '';
+  layoutFlight();
+  updateMenu();
 }
 
 function renderHangar(): void {
@@ -212,12 +253,13 @@ function setRect(name: string, box: Rect): void {
 
 function layoutFlight(): void {
   layoutView = state.view;
-  phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view) : null;
+  phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
     for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'boost', 'bomb', 'flare', 'view'] as const) setRect(key, phone[key]);
   }
+  if (state.run) layoutSortieHud();
   cockpit = state.view === 'cockpit' ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, safe, hud.objective) : null;
   if (cockpit) {
     setRect('cockpit-message', cockpit.message);
@@ -245,6 +287,30 @@ function layoutFlight(): void {
   root.classList.toggle('phone-portrait', phone?.orientation === 'portrait');
   root.classList.toggle('phone-landscape', phone?.orientation === 'landscape');
   dirty = true;
+}
+
+function layoutSortieHud(): void {
+  const left = hud.hud.x;
+  let slots: Rect, bill: Rect;
+  if (phone?.orientation === 'portrait') {
+    const y = hud.radio.y + hud.radio.height + 4, width = 169;
+    slots = { x: left, y, width, height: 110 };
+    bill = { x: left + width + 6, y, width: hud.hud.width - width - 6, height: 132 };
+  } else if (phone) {
+    const y = hud.objective.y + hud.objective.height + 6;
+    slots = { x: left + (state.view === 'cockpit' ? 58 : 179), y, width: 211, height: 72 };
+    const x = left + hud.objective.width + 8;
+    bill = { x, y: hud.hud.y, width: phone.playfield.width - (x - left), height: 92 };
+  } else {
+    const mapReserve = Math.min(78, hud.radar.width) + 5;
+    const width = 218, x = Math.max(left, hud.radar.x - mapReserve - width - 8), y = hud.hud.y;
+    slots = { x, y, width, height: 126 };
+    const billWidth = 235, billX = Math.max(left, x - billWidth - 9);
+    bill = { x: billX, y: billX < left + 285 ? hud.objective.y + hud.objective.height + 6 : y,
+      width: billWidth, height: 110 };
+  }
+  setRect('sortie-strip', slots);
+  setRect('bill', bill);
 }
 
 function resize(): void {
@@ -328,6 +394,13 @@ function updateRadio(): void {
 
 function updateHud(readout: RadarReadout): void {
   updateBillDisplay(state, t);
+  sortieStrip.hidden = !state.run;
+  billCount.hidden = !state.run;
+  if (state.run) {
+    renderLoadoutHud(loadoutHud, state.run, language);
+    if (!billCount.firstElementChild?.classList.contains('gear-icon')) billCount.prepend(createGearIcon('bill', 14));
+    setText('#bill-count b', `${state.bills.paid}/${state.bills.offered}`);
+  }
   const notice = state.phaseNotice, banner = $('#phase-banner');
   banner.hidden = !notice || state.phase !== 'playing' || state.paused;
   if (notice && !banner.hidden) {
@@ -336,6 +409,8 @@ function updateHud(readout: RadarReadout): void {
       ? ' · ' + (notice.repaired ? t('phase.lullRepair', { hull: notice.repaired }) : t('phase.lull')) : '';
     setText('#phase-banner', context + lull);
   }
+  evolutionToast.hidden = !evolutionNotice || evolutionNotice.until <= state.tick || state.phase !== 'playing' || state.paused;
+  if (evolutionNotice && !evolutionToast.hidden) setText('#evolution-name', t(`item.${evolutionNotice.item.id}.title`));
   if (paintedMaxHull !== state.maxHull) {
     while (hullSegments.length > state.maxHull) hullSegments.pop()?.remove();
     while (hullSegments.length < state.maxHull) {
@@ -388,6 +463,12 @@ function updateHud(readout: RadarReadout): void {
   $('#xp-label').style.setProperty('--xp-fill', `${cost === null ? 100 : 100 * xp / cost}%`);
   const time = Math.max(0, Math.ceil((endTick(state) - state.tick) / TICKS_PER_SECOND));
   setText('#segment-timer', clockText(time));
+  if (state.run) {
+    const eta = Math.ceil((bossTick(state) - state.tick) / TICKS_PER_SECOND);
+    setText('#sortie-phase', t(`phase.${phaseAt(state.tick / TICKS_PER_SECOND).id}`));
+    setText('#warden-countdown', eta > 0 ? t('stageHud.wardenEta', { time: clockText(eta) }) :
+      t('stageHud.timeLeft', { time: clockText(time) }));
+  }
   setText('#score', String(state.score).padStart(6, '0'));
   setText('#salvage', `◆ ${state.salvage}`);
   setText('#objective', objectiveText());
@@ -517,51 +598,6 @@ function resetTouch(): void {
   for (const button of touchControls.querySelectorAll('.held')) button.classList.remove('held');
 }
 
-function updateChestMenu(): void {
-  const chest = CHESTS.find(chest => chest.id === state.chests.offer);
-  const evolving = chest?.kind === 'evolution';
-  const reward = state.chestReveal;
-  const choices = $('#chest-choices'), reels = $('#chest-reels');
-  const candidates = reward ? [] : chestEvolutions(state);
-  setText('#chest-kicker', t(!chest ? 'bill.cache' : evolving ? 'chest.evolution' : 'chest.supply'));
-  setText('#chest-heading', t(reward ? 'chest.rewards' : evolving ? 'chest.evolution' : 'chest.supply'));
-  setText('#chest-detail', reward ? '' : t(candidates.length ? 'chest.pick' : evolving ? 'chest.fallback' : 'chest.supplyCopy'));
-  $('#chest-kicker').hidden = !reward;
-  $('#chest-detail').hidden = !!reward;
-  choices.replaceChildren(...candidates.map(weapon => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = t(`item.${EVOLUTIONS[weapon].id}.title`);
-    button.addEventListener('click', () => { pendingChest = weapon; });
-    return button;
-  }));
-  reels.hidden = !reward;
-  reels.replaceChildren(...(reward ?? []).map((item, i) => {
-    const reel = document.createElement('li'), strip = document.createElement('div');
-    reel.className = item.kind === 'evolution' ? 'chest-reel evolution' : 'chest-reel';
-    strip.className = 'chest-reel-strip';
-    strip.style.setProperty('--reel-order', String(i));
-    for (const glyph of ['◇', '▣', '◆']) {
-      const face = document.createElement('span');
-      face.textContent = glyph;
-      face.setAttribute('aria-hidden', 'true');
-      strip.append(face);
-    }
-    const label = document.createElement('div');
-    label.className = 'chest-reel-label';
-    const title = document.createElement('strong'), level = document.createElement('small');
-    title.textContent = t(`item.${item.id}.title`);
-    level.textContent = item.kind === 'evolution' ? t('chest.evolved') : item.level ? t('chest.level', { level: item.level }) : '';
-    label.append(title, level);
-    strip.append(label);
-    reel.append(strip);
-    return reel;
-  }));
-  chestAction.hidden = candidates.length > 0;
-  chestAction.textContent = t(reward ? 'chest.continue' : 'chest.open');
-  (choices.querySelector('button') ?? chestAction).focus({ preventScroll: true });
-}
-
 function updateMenu(): void {
   const status = !scene ? 'webgl' : guide ? 'guide' : state.paused ? 'paused' : state.phase;
   touchControls.hidden = touchPause.hidden = !touch || status !== 'playing';
@@ -580,9 +616,17 @@ function updateMenu(): void {
   draftCard.hidden = !drafting;
   chestCard.hidden = status !== 'chest';
   gameCard.hidden = !showing || drafting || status === 'guide' || status === 'chest';
-  $('#hangar-panel').hidden = !state.run || !persistent || !(status === 'title' || status === 'paused' || state.summary);
+  gameCard.classList.toggle('debrief', !!state.summary);
+  $('#hangar-panel').hidden = !state.run || !persistent || interrupted || !(status === 'title' || status === 'paused' || state.summary);
   $('#run-summary').hidden = !state.summary;
-  $('#retreat-action').hidden = !state.run || status !== 'paused';
+  $('#retreat-action').hidden = !state.run || status !== 'paused' || interrupted;
+  primary.hidden = status === 'paused' && interrupted;
+  const checkpoint = status === 'title' ? decodeCheckpoint(checkpointData) : null;
+  checkpointPrompt.hidden = !checkpoint;
+  if (checkpoint) {
+    const seconds = checkpoint.tick / TICKS_PER_SECOND;
+    setText('#checkpoint-copy', t('checkpoint.prompt', { phase: t(`phase.${phaseAt(seconds).id}`), time: clockText(seconds) }));
+  }
   if (!$('#hangar-panel').hidden) renderHangar();
   if (showing) {
     resetTouch();
@@ -594,34 +638,11 @@ function updateMenu(): void {
     guideSkip.hidden = guide !== 'launch';
     setText('#guide-primary', t(guide === 'launch' ? 'guide.launch' : 'guide.back'));
   } else if (status === 'chest') {
-    updateChestMenu();
+    chestDisplay.update(state, t);
   } else if (drafting) {
     banishing = false;
     setText('#draft-detail', t('draft.detail', { level: state.level + 1 }));
-    for (const [i, button] of draftButtons.entries()) {
-      const id = state.draft[i];
-      const card = state.run?.cards[i];
-      button.hidden = id === undefined;
-      if (!id) continue;
-      button.dataset.variant = card?.variant ?? 'normal';
-      if (card) {
-        const capped = card.id === 'damage' && card.currentLevel === card.maxLevel;
-        const key = capped ? 'draft.damageCap' : `item.${card.id}` as const;
-        const level = !card.maxLevel ? '' : card.currentLevel === 0
-          ? t('draft.new')
-          : t('draft.levels', { from: card.currentLevel, to: card.nextLevel });
-        const suffix = card.variant === 'normal' ? '' : t(`draft.${card.variant}`);
-        const downside = card.variant === 'risky' ? t('draft.riskCost', { hull: DRAFT_RULES.riskHull }) : '';
-        const title = [card.pairHint ? '★' : '', t(`${key}.title`), level].filter(Boolean).join(' ');
-        const copy = [t(`${key}.copy`), suffix, downside].filter(Boolean).join(' · ');
-        button.querySelector('strong')!.textContent = title;
-        button.querySelector('small')!.textContent = copy;
-      } else {
-        const legacy = id as LegacyDraftId;
-        button.querySelector('strong')!.textContent = t(`draft.${legacy}.title`);
-        button.querySelector('small')!.textContent = t(`draft.${legacy}.copy`);
-      }
-    }
+    draftButtons.forEach((button, index) => renderDraftCard(button, state.run?.cards[index], state, language, index));
     const run = state.run;
     $('#draft-actions').hidden = !run || !(run.rerolls || run.banishes || run.skips);
     setText('#draft-reroll', t('draft.rerolls', { count: run?.rerolls ?? 0 }));
@@ -633,15 +654,16 @@ function updateMenu(): void {
   } else if (showing) {
     const intro = status === 'title' || status === 'paused';
     const webgl = status === 'webgl';
-    $('#card-options').hidden = !(intro || webgl);
+    $('#card-options').hidden = interrupted || !(intro || webgl);
     $('#help-action').hidden = webgl;
     $('#rank-display').hidden = intro || webgl;
     $('#card-kicker').hidden = webgl;
-    $('#card-hint').hidden = webgl;
+    $('#card-hint').hidden = webgl || interrupted;
     if (intro) {
       setText('#card-kicker', t(`menu.${status}.kicker`));
       setText('#card-title', t(`menu.${status}.title`));
-      setText('#card-copy', t(status === 'title' && state.run ? 'menu.survivors.copy' : `menu.${status}.copy`));
+      setText('#card-copy', t(interrupted ? 'checkpoint.interrupted' :
+        status === 'title' && state.run ? 'menu.survivors.copy' : `menu.${status}.copy`));
       setText('#primary-action', t(`menu.${status}.action`));
       setText('#card-hint', t(`menu.${status}.hint`));
       setText('#help-action-label', t(status === 'title' ? 'guide.title' : 'menu.help'));
@@ -652,38 +674,15 @@ function updateMenu(): void {
     } else {
       const outcome = state.phase as Outcome;
       setText('#card-kicker', t('menu.result.kicker'));
-      setText('#card-title', t(`menu.${outcome}.title`));
+      setText('#card-title', t(state.run && outcome === 'timeout' ? 'menu.summary.timeout' : `menu.${outcome}.title`));
       setText('#card-copy', t('menu.result.copy', { hull: state.hull, maxHull: state.maxHull, hits: state.hitsTaken, salvage: state.salvage, score: state.score }));
       setText('#rank-display', t('menu.result.rank', { rank: state.rank ?? '' }));
       setText('#primary-action', t('menu.result.action'));
       setText('#card-hint', t('menu.result.hint'));
-      renderSummary();
+      if (state.summary) renderRunSummary($('#run-summary'), state, language, clockText(Math.floor(state.summary.seconds)));
     }
     if (oldStatus && oldStatus !== 'guide') primary.focus({ preventScroll: true });
   }
-}
-
-function renderSummary(): void {
-  const run = state.run, summary = state.summary;
-  const panel = $('#run-summary');
-  if (!run || !summary) return;
-  const gear = WEAPON_IDS.filter(id => run.weaponLevels[id]).map(id => t(`item.${run.evolutions[id] ?? id}.title`))
-    .concat(BUFF_IDS.filter(id => run.buffLevels[id]).map(id => t(`item.${id}.title`)));
-  const copy = [
-    t('menu.summary.stats', { time: clockText(Math.floor(summary.seconds)), kills: state.kills, levels: state.level - 1,
-      paid: state.bills.paid, offered: state.bills.offered }),
-    t('menu.summary.loadout', { gear: gear.join(' · ') }),
-    state.daily ? t('menu.summary.daily', { seed: state.seed }) : t('menu.summary.credits', { credits: summary.credits }),
-  ];
-  if (summary.wardenCache) copy.push(t('menu.summary.warden'));
-  if (summary.unlocked.length) copy.push(t('menu.summary.unlocked', {
-    gear: summary.unlocked.map(id => t(`item.${id}.title`)).join(' · '),
-  }));
-  panel.replaceChildren(...copy.map(line => {
-    const paragraph = document.createElement('p');
-    paragraph.textContent = line;
-    return paragraph;
-  }));
 }
 
 function openGuide(mode: 'launch' | 'help'): void {
@@ -705,7 +704,7 @@ function closeGuide(launch: boolean): void {
 function action(): void {
   if (!scene) location.reload();
   else if (guide) closeGuide(true);
-  else if (state.paused) pendingPause = true;
+  else if (state.paused && !interrupted) pendingPause = true;
   else if (state.phase === 'title') openGuide('launch');
   else if (state.rank) pendingStart = true;
 }
@@ -718,8 +717,8 @@ function choose(index: number): void {
 }
 
 primary.addEventListener('click', action);
+$('#checkpoint-resume').addEventListener('click', resumeCheckpoint);
 $('#retreat-action').addEventListener('click', () => { pendingRetreat = true; });
-chestAction.addEventListener('click', () => { pendingChest = state.chestReveal ? 'continue' : 'open'; });
 guidePrimary.addEventListener('click', () => closeGuide(true));
 guideSkip.addEventListener('click', () => closeGuide(true));
 $('#help-action').addEventListener('click', () => openGuide('help'));
@@ -731,9 +730,21 @@ $('#draft-banish').addEventListener('click', event => {
 });
 $('#draft-skip').addEventListener('click', () => { pendingDraft = { skip: true }; });
 window.addEventListener('resize', resize);
-window.addEventListener('orientationchange', resize);
+window.addEventListener('orientationchange', () => {
+  if (touch) interruptFlight();
+  resize();
+});
 coarse.addEventListener('change', resize);
-portrait.addEventListener('change', resize);
+portrait.addEventListener('change', () => {
+  if (touch) interruptFlight();
+  resize();
+});
+window.addEventListener('storage', event => {
+  if (event.key !== CHECKPOINT_KEY || !persistent || state.phase !== 'title') return;
+  checkpointData = readCheckpointData();
+  menuKey = '';
+  updateMenu();
+});
 root.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('gesturestart', event => event.preventDefault());
 root.addEventListener('touchmove', event => {
@@ -744,6 +755,10 @@ root.addEventListener('touchmove', event => {
 
 window.addEventListener('keydown', event => {
   const { code } = event;
+  if (interrupted) {
+    if (code === 'Enter' || code === 'Space' || code.startsWith('Arrow')) event.preventDefault();
+    return;
+  }
   keys.add(code);
   if (steeringKeys.has(code)) mouseActive = false;
   if (!event.repeat && event.key === '?' && (guide || state.phase === 'title' || state.paused)) {
@@ -778,7 +793,7 @@ window.addEventListener('keydown', event => {
     if (/^(Digit|Numpad)[123]$/.test(code)) choose(Number(code.slice(-1)) - 1);
     return;
   }
-  if (code === 'KeyP') pendingPause = true;
+  if (code === 'KeyP' && !interrupted) pendingPause = true;
   if (state.phase === 'playing' && !state.paused) {
     if (code === 'KeyV') pendingViews++;
     if (code === 'KeyX' || code === 'KeyK') pendingBomb = true;
@@ -793,12 +808,44 @@ window.addEventListener('keydown', event => {
   if (code === 'KeyR' && state.rank) pendingStart = true;
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
-window.addEventListener('blur', () => {
+function interruptFlight(): void {
   keys.clear();
-  pendingFlare = false;
+  pendingBomb = pendingFlare = false;
   pendingManeuver = undefined;
   resetTouch();
-});
+  resumeAt = 0;
+  if (!persistent || !scene || guide || state.phase !== 'playing' || state.paused) return;
+  interrupted = true;
+  pendingPause = false;
+  carry = 0;
+  stepStage(state, { pause: true }, ground);
+  dirty = true;
+  updateMenu();
+}
+
+function updateAutoResume(now: number): boolean {
+  if (!interrupted) return false;
+  if (document.hidden || !document.hasFocus()) {
+    resumeAt = 0;
+    setText('#card-copy', t('checkpoint.interrupted'));
+    return false;
+  }
+  if (!resumeAt) resumeAt = now + 3000;
+  const seconds = Math.ceil((resumeAt - now) / 1000);
+  if (seconds > 0) {
+    setText('#card-copy', t('checkpoint.countdown', { seconds }));
+    return false;
+  }
+  interrupted = false;
+  resumeAt = 0;
+  keys.clear();
+  stepStage(state, { pause: true }, ground);
+  dirty = true;
+  return true;
+}
+
+window.addEventListener('blur', interruptFlight);
+document.addEventListener('visibilitychange', () => { if (document.hidden) interruptFlight(); });
 
 function steerMouse(event: PointerEvent): void {
   if (event.pointerType === 'touch' || menuKey !== 'playing') return;
@@ -907,11 +954,12 @@ function flightInput(): StageInput {
 }
 
 function advance(): void {
-  if (!scene || guide) return;
+  if (!scene || guide || (persistent && document.hidden)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
+  const launching = pendingStart;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   stepStage(state, {
     ...control,
@@ -936,9 +984,16 @@ function advance(): void {
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
+    if (checkpointData) writeCheckpointData(null);
+  }
+  if (launching && state.phase === 'playing' && previousPhase !== 'playing') {
+    if (checkpointData) writeCheckpointData(null);
+    evolutionNotice = null;
   }
   if (state.tick < before) motion = { speed: 0, climb: 0, turn: 0 };
   if (state.tick > before) {
+    const checkpoint = persistent ? encodeCheckpoint(state) : null;
+    if (checkpoint) writeCheckpointData(checkpoint);
     const ease = (from: number, to: number) => from + (to - from) * 0.19;
     const delta = state.player.yaw - yaw;
     const headingDelta = Math.atan2(Math.sin(delta), Math.cos(delta));
@@ -947,6 +1002,13 @@ function advance(): void {
       climb: ease(motion.climb, state.climbRate),
       turn: !wasFlying || !maneuverAllowsControl(state.maneuver) || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
+  }
+  if (state.chestReveal !== previousReveal) {
+    const item = state.chestReveal?.find(reward => reward.kind === 'evolution');
+    if (item) {
+      evolutionNotice = { item, until: state.tick + 3 * TICKS_PER_SECOND };
+      $('#evolution-icon').replaceChildren(createGearIcon(item.id, 44));
+    }
   }
   if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft || state.chestReveal !== previousReveal) {
     dirty = true;
@@ -1124,7 +1186,8 @@ function animate(now: number): void {
   const elapsed = Math.max(0, (now - previousTime) / 1000);
   previousTime = now;
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
-  carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
+  if (updateAutoResume(now)) carry = 0;
+  else carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
   while (carry >= STEP) {
     const burst = state.reversal?.burstAt;
     advance();

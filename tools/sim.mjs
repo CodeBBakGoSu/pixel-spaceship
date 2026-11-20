@@ -44,10 +44,16 @@ export function parseSimArgs(values) {
 function runSortie(args, profile, seed, ground) {
   const stage = createStage({ ...parseStageOptions('?autoplay=1&mode=survivors'), seed, mobile: args.mobile, heat: args.heat }, ground);
   const pilot = createBot(profile, seed);
-  let inputs = 0;
+  let inputs = 0, peakLiveGnats = 0, gnatCapPressureBeats = 0;
+  const observeSwarm = (live, cap, requestedBeyondRoom) => {
+    const expectedCap = args.mobile ? SWARM_CAPS.mobile : SWARM_CAPS.desktop;
+    if (cap !== expectedCap || live > cap) throw new Error(`Invalid Gnat cap for ${profile}, seed ${seed}`);
+    peakLiveGnats = Math.max(peakLiveGnats, live);
+    if (requestedBeyondRoom) gnatCapPressureBeats++;
+  };
   while (stage.phase === 'playing' || stage.phase === 'draft' || stage.phase === 'chest') {
     if (++inputs > RUN_END_TICK * 2) throw new Error(`Replay did not finish for ${profile}, seed ${seed}`);
-    stepStage(stage, pilot(stage, ground), ground);
+    stepStage(stage, pilot(stage, ground), ground, observeSwarm);
   }
   const clear = stage.phase === 'clear' || stage.phase === 'timeout';
   const seconds = stage.tick / TICKS_PER_SECOND;
@@ -61,6 +67,7 @@ function runSortie(args, profile, seed, ground) {
     buffs: Object.fromEntries(BUFF_IDS.filter(id => stage.run.buffLevels[id]).map(id => [id, stage.run.buffLevels[id]])),
     evolutions: WEAPON_IDS.flatMap(id => stage.run.evolutions[id] ? [stage.run.evolutions[id]] : []),
     chests: stage.chests.opened, billsOffered: stage.bills.offered, billsPaid: stage.bills.paid,
+    peakLiveGnats, gnatCapPressureBeats,
     stateHash: createHash('sha256').update(JSON.stringify(stage)).digest('hex'),
   };
 }
@@ -111,6 +118,8 @@ function summarize(profile, runs) {
     deathPhases: breakdown(runs, 'deathPhase', PHASES.map(phase => phase.id)),
     endHull: breakdown(runs, 'hull', []), medianEndHull: distribution(runs, 'hull').median,
     medianKills: distribution(runs, 'kills').median, medianLevelUps: distribution(runs, 'levelUps').median,
+    peakLiveGnats: runs.reduce((peak, run) => Math.max(peak, run.peakLiveGnats), 0),
+    gnatCapPressureBeats: runs.reduce((count, run) => count + run.gnatCapPressureBeats, 0),
     weapons, evolutions, medianChests: distribution(runs, 'chests').median,
     billsPaidPct: billsOffered ? 100 * billsPaid / billsOffered : null,
   };
@@ -160,6 +169,7 @@ function main(values) {
       [row.survival.p10, row.survival.median, row.survival.p90].map(value => value.toFixed(1)).join('/'),
     'run median s': row.duration.median.toFixed(1), 'end HP median': row.medianEndHull,
     'kills median': row.medianKills, 'level-ups median': row.medianLevelUps, 'Bills %': row.billsPaidPct ?? '–',
+    'peak live Gnats': row.peakLiveGnats, 'cap pressure beats': row.gnatCapPressureBeats,
   })));
   const output = fileURLToPath(new URL('../sim-out', import.meta.url));
   mkdirSync(output, { recursive: true });

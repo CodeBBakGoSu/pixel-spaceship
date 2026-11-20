@@ -19,6 +19,7 @@ import { applyRunPick, availableEvolutions, banishRunCard, createProgression, ev
   rerollRunDraft, rollBonusUpgrade, runXpCost, skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
+import type { SwarmObserver } from './swarm.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
 import { firePacedWarden, makePacedWarden, pacedExposureTick, positionPacedWeakPoints } from './warden.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
@@ -613,7 +614,7 @@ function applyBillReward(state: StageState): void {
 }
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
-export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel): void {
+export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel, observeSwarm?: SwarmObserver): void {
   if (state.phase === 'chest') {
     if (input.chestPick) resolveChest(state, input.chestPick);
     return;
@@ -693,7 +694,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground);
-    advancePhaseSpawns(state, ground);
+    advancePhaseSpawns(state, ground, observeSwarm);
   } else {
     const wave = WAVES[state.nextWave];
     if (wave && state.tick >= wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) {

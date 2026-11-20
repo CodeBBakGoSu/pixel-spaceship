@@ -43,8 +43,14 @@
       <div><span data-i18n="hud.bombs" data-tooltip="hud.bombStock"></span><b id="bombs" class="bombs"></b><i class="bomb-reload" aria-hidden="true"><i id="bomb-reload-bar"></i></i><span id="flare-stock" class="flare-stock"></span></div>
       <div class="status-view"><strong id="view-label"></strong><span id="xp-label"></span><time id="segment-timer"></time></div>
     </div>
-    <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small></div>
+    <div class="scorebox"><span data-i18n="hud.score"></span><strong id="score"></strong><small id="salvage" data-tooltip="hud.salvage"></small>
+      <span id="bill-count" class="bill-count" data-label="menu.summary.bills" data-tooltip="menu.summary.bills" hidden><b></b></span>
+    </div>
   </header>
+  <aside id="sortie-strip" class="sortie-strip" data-label="stageHud.label" hidden>
+    <div class="sortie-clock"><strong id="sortie-phase"></strong><time id="warden-countdown"></time></div>
+    <div id="loadout-hud" class="loadout-hud" hidden></div>
+  </aside>
   <button class="touch-pause" id="touch-pause" type="button" data-label="control.pause" hidden>Ⅱ</button>
   <div id="boss-hud" class="boss-hud" hidden><span data-i18n="speaker.warden"></span><i><i id="boss-health"></i></i></div>
   <section id="radio" class="radio" aria-live="polite" hidden>
@@ -70,6 +76,10 @@
   <samp id="cockpit-delta" class="screen-reader" hidden></samp>
   <div id="view-tag" class="view-tag" hidden></div>
   <div id="phase-banner" class="phase-banner" role="status" hidden></div>
+  <div id="evolution-toast" class="evolution-toast" role="status" hidden>
+    <span id="evolution-icon"></span>
+    <div><strong data-i18n="chest.evolved"></strong><span id="evolution-name"></span></div>
+  </div>
   <section class="game-overlay" id="game-overlay" data-label="aria.menu" hidden>
     <div class="game-card">
       <div class="card-kicker" id="card-kicker"></div>
@@ -77,6 +87,10 @@
       <p id="card-copy"></p>
       <div id="rank-display" class="rank-display" hidden></div>
       <div id="run-summary" class="run-summary" hidden></div>
+      <div id="checkpoint-prompt" class="checkpoint-prompt" hidden>
+        <p id="checkpoint-copy"></p>
+        <button type="button" id="checkpoint-resume" data-i18n="checkpoint.resume"></button>
+      </div>
       <div class="card-actions"><button type="button" id="primary-action"></button></div>
       <button type="button" id="retreat-action" class="help-action" data-i18n="menu.retreat" hidden></button>
       <div class="card-hint" id="card-hint"></div>
@@ -109,7 +123,11 @@
       <p id="chest-detail"></p>
       <div class="chest-choices" id="chest-choices"></div>
       <ul class="chest-reels" id="chest-reels" aria-live="polite" hidden></ul>
-      <div class="card-actions"><button type="button" id="chest-action"></button></div>
+      <ul class="chest-extra" id="chest-extra" hidden></ul>
+      <div class="card-actions">
+        <button type="button" id="chest-action"></button>
+        <button type="button" id="chest-skip" data-i18n="chest.skip" hidden></button>
+      </div>
     </section>
     <section class="guide-card" id="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-heading" hidden>
       <header class="guide-heading"><h2 id="guide-heading" data-i18n="guide.title"></h2></header>

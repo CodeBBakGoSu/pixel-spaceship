@@ -55,7 +55,10 @@ test('swarm caps are independent of the regular enemy cap', () => {
   for (const cap of [50, 80]) {
     const state = waveState(27, cap);
     for (let i = 0; i < cap - 1; i++) state.enemies.push(makeEnemy(state, 0, -200, 1, 'gnat'));
-    spawnAt(state, 45);
+    state.tick = ticks(45);
+    const samples = [];
+    advancePhaseSpawns(state, ground, (...sample) => samples.push(sample));
+    assert.deepEqual(samples, [[cap, cap, true]]);
     assert.equal(gnats(state).length, cap);
     spawnAt(state, 0.5);
     assert.equal(state.enemies.filter(enemy => enemy.kind === 'patrol').length, 2);

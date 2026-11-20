@@ -35,10 +35,17 @@ function packSites(state: StageState, ground: Ground, projected: Point, directio
   }
 }
 
-export function spawnSwarm(state: StageState, phase: RunPhase, members: number, ground: Ground, rng: { rng: number }): void {
+export type SwarmObserver = (live: number, cap: number, requestedBeyondRoom: boolean) => void;
+
+export function spawnSwarm(state: StageState, phase: RunPhase, members: number, ground: Ground,
+  rng: { rng: number }, observe?: SwarmObserver): void {
   const { player, arena } = state;
   let room = state.swarmCap - state.enemies.filter(enemy => enemy.kind === 'gnat' && enemy.hp > 0).length;
-  if (room <= 0) return;
+  const requestedBeyondRoom = members > room;
+  if (room <= 0) {
+    observe?.(state.swarmCap - room, state.swarmCap, requestedBeyondRoom);
+    return;
+  }
   const travel = state.speed * WAVE_FLY_IN_TICKS / TICKS_PER_SECOND;
   const projected = { x: player.x + Math.sin(player.yaw) * travel, z: player.z + Math.cos(player.yaw) * travel };
   keepInsideArena(projected, arena, 20);
@@ -63,4 +70,6 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
       if (--room === 0) break;
     }
   }
+  // All Gnat births happen here. Sample before combat or departures can remove them on this tick.
+  observe?.(state.swarmCap - room, state.swarmCap, requestedBeyondRoom);
 }

@@ -43,6 +43,17 @@ test('landscape phone has usable, separated zones and controls', () => {
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 
+test('survivors HUD reserves space for Bills above or beside the objective', () => {
+  const portrait = phoneLayout(390, 844, { top: 47, right: 0, bottom: 34, left: 0 }, 'cockpit', true);
+  assert.ok(portrait.objective.y >= portrait.radio.y + portrait.radio.height + 132);
+  assert.ok(portrait.cockpit.glass.y > portrait.objective.y + portrait.objective.height);
+  const landscape = phoneLayout(844, 390, { top: 0, right: 44, bottom: 21, left: 44 }, 'overhead', true);
+  const billStart = landscape.objective.x + landscape.objective.width + 8;
+  assert.equal(billStart, landscape.radio.x + landscape.radio.width + 8);
+  assert.ok(landscape.playfield.x + landscape.playfield.width - billStart >= 200);
+  assert.ok(landscape.radar.y > landscape.hud.y + 92);
+});
+
 test('the desktop cockpit widens the canopy above a 166px instrument rack', () => {
   const hud = desktopLayout(1280, 720, insets[0]);
   const cockpit = cockpitLayout(1280, 720, insets[0], hud.objective);

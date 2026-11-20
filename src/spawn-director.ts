@@ -6,7 +6,7 @@ import { BASALT_STACKS, keepInsideArena, LANDMARKS } from './reach.ts';
 import { angleTo, BANDS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { addBomberEscort, beginEnemyFlyIn, bomberWingPosition, makeEnemy, SKIMMER_WATER } from './stage-enemies.ts';
 import { random } from './stage-random.ts';
-import { spawnSwarm } from './swarm.ts';
+import { spawnSwarm, type SwarmObserver } from './swarm.ts';
 import type { Band, Enemy, Ground, Point, StageState } from './stage-types.ts';
 
 type Spawn = { kind: RegularEnemyKind; band: Band | 'flank'; bearing: number; range: number };
@@ -213,7 +213,7 @@ function beatStream(spawn: { rng: number }): { rng: number } {
   return { rng: random(spawn) * 0x1_0000_0000 };
 }
 
-export function advancePhaseSpawns(state: StageState, ground: Ground): void {
+export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwarm?: SwarmObserver): void {
   const phase = phaseAt(state.tick / TICKS_PER_SECOND);
   const from = phase.starts * TICKS_PER_SECOND;
   const until = (phase.ends - phase.lull) * TICKS_PER_SECOND;
@@ -234,7 +234,7 @@ export function advancePhaseSpawns(state: StageState, ground: Ground): void {
   const pack = groupAt(state.tick, from + phase.gnatStart * TICKS_PER_SECOND, until, packs);
   if (pack >= 0) {
     const members = Math.floor(gnatCount * (pack + 1) / packs) - Math.floor(gnatCount * pack / packs);
-    spawnSwarm(state, phase, members, ground, beatStream(state.streams.spawn));
+    spawnSwarm(state, phase, members, ground, beatStream(state.streams.spawn), observeSwarm);
   }
 }
 

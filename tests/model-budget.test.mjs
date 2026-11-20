@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Object3D } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
-import { WEAPON_IDS } from '../src/data/items.ts';
+import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { SHIP_VOXEL_SIZE } from '../src/engine-exhaust.ts';
 import { enemyAirframe, wardenFaces, wardenPalette } from '../src/models.ts';
@@ -94,4 +94,42 @@ test('each weapon mounts one distinct mesh to the existing ship and the four hea
   const fourMounts = costs.sort((a, b) => b - a).slice(0, 4).reduce((total, triangles) => total + triangles, 0);
   const drones = orbitDroneGeometry().index.count / 3 * 4;
   assert.ok(fourMounts + drones <= 432, `mounts ${fourMounts} + drones ${drones}`);
+});
+
+test('all ten evolutions change their attached voxel shapes within the four-mount draw and triangle budget', () => {
+  const ship = new Object3D();
+  const mounts = new WeaponMounts(ship);
+  const costs = new Map();
+  for (const id of WEAPON_IDS) {
+    const levels = Object.freeze({ [id]: 5 });
+    const evolution = Object.freeze({ [id]: EVOLUTIONS[id].id });
+    mounts.update(levels);
+    const original = ship.children.find(mesh => mesh.visible);
+    const base = original.geometry;
+
+    mounts.update(levels, evolution);
+    const visible = ship.children.filter(mesh => mesh.visible);
+    assert.equal(visible.length, 1, id);
+    assert.equal(visible[0], original, id);
+    const evolved = visible[0].geometry;
+    assert.notDeepEqual(evolved.boundingBox, base.boundingBox, `${id} visibly changes its silhouette`);
+    const { min, max } = evolved.boundingBox;
+    assert.ok(min.x >= -12.5 && max.x <= 12.5 && min.z >= -16 && max.z <= 14, id);
+    const triangles = geometry => geometry.index.count / 3;
+    costs.set(id, Math.max(triangles(base), triangles(evolved)));
+
+    mounts.update(levels);
+    assert.equal(original.geometry, base, id);
+    mounts.update(levels, evolution);
+    assert.equal(original.geometry, evolved, id);
+  }
+
+  const heaviest = [...costs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const levels = Object.fromEntries(heaviest.map(([id]) => [id, 5]));
+  const evolutions = Object.fromEntries(heaviest.map(([id]) => [id, EVOLUTIONS[id].id]));
+  mounts.update(levels, evolutions);
+  assert.equal(ship.children.filter(mesh => mesh.visible).length, 4);
+  const attachments = heaviest.reduce((total, [, triangles]) => total + triangles, 0);
+  const drones = orbitDroneGeometry().index.count / 3 * 4;
+  assert.ok(attachments + drones <= 576, `evolved mounts ${attachments} + drones ${drones}`);
 });

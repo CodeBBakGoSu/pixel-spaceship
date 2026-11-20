@@ -31,7 +31,7 @@ The local WOFF2 subset uses Galmuri11 from `galmuri@2.40.3` under the [SIL Open 
 ```sh
 node --experimental-strip-types --input-type=module -e 'import { strings } from "./src/i18n.ts"; process.stdout.write(Object.values(strings.ko).join(""));' > glyphs.txt
 pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
-  --unicodes=U+0020-007E,U+00B0,U+00B7,U+2014,U+2019,U+2160-2162,U+2190-2193,U+2212,U+25A0,U+25AE-25AF,U+25B3,U+25BC-25BD,U+25C2,U+25C6-25C7 \
+  --unicodes=U+0020-007E,U+00B0,U+00B7,U+2014,U+2019,U+2160-2162,U+2190-2193,U+2212,U+25A0,U+25AE-25AF,U+25B3,U+25BC-25BD,U+25C2,U+25C6-25C7,U+2605 \
   --name-IDs=0,1,2,3,4,5,6,13,14 --output-file=src/fonts/galmuri11-subset.woff2
 ```
 

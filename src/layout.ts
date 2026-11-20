@@ -100,13 +100,15 @@ export function cockpitLayout(width: number, height: number, safe: Insets, objec
 }
 
 // CSS pixels; the canvas still covers the entire viewport, including the safe areas.
-export function phoneLayout(width: number, height: number, safe: Insets, view: Segment): PhoneLayout {
+export function phoneLayout(width: number, height: number, safe: Insets, view: Segment, sortieHud = false): PhoneLayout {
   const portrait = height >= width, left = safe.left + 8, right = width - safe.right - 8, top = safe.top + 4;
   const usableWidth = right - left, hudWidth = portrait ? usableWidth : Math.min(340, Math.max(270, usableWidth * 0.4));
   const hud = rect(left, top, hudWidth, 56), boss = rect(left, top + 58, hudWidth, 8);
-  const radio = portrait ? rect(left, top + 70, usableWidth, 58) : rect(left + hudWidth + 8, top, usableWidth - hudWidth - 8, 62);
-  const objectiveY = portrait ? radio.y + radio.height + 4 : top + 70;
-  const objective = rect(left, objectiveY, usableWidth, 22);
+  const billWidth = sortieHud ? Math.min(228, Math.round(usableWidth * 0.28)) + 8 : 0;
+  const radio = portrait ? rect(left, top + 70, usableWidth, 58)
+    : rect(left + hudWidth + 8, top, Math.max(0, usableWidth - hudWidth - 8 - billWidth), 62);
+  const objectiveY = portrait ? radio.y + radio.height + (sortieHud ? 136 : 4) : top + 70;
+  const objective = rect(left, objectiveY, portrait ? usableWidth : usableWidth - billWidth, 22);
   const controlHeight = portrait ? clamp(Math.round(height * 0.19), 146, 170) : clamp(Math.round(height * 0.35), 134, 140);
   const controls = rect(safe.left, height - safe.bottom - controlHeight, width - safe.left - safe.right, controlHeight);
   const bufferWidth = portrait ? 336 : clamp(Math.round(288 * width / height), 256, 768);

@@ -27,6 +27,7 @@ test('three seeds per profile make the same replay hashes and profile reports on
   assert.deepEqual(first.profiles.map(row => row.profile), BOT_PROFILE_IDS);
   assert.equal(first.runs.length, 9);
   assert.equal(first.swarmCap, 80);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bpeakLiveGnats\b/);
   const [skilled, average, weak] = first.profiles;
   assert.ok(skilled.survival.median >= average.survival.median, JSON.stringify(first.profiles));
   assert.ok(average.survival.median >= weak.survival.median, JSON.stringify(first.profiles));
@@ -35,12 +36,14 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(['clear', 'lost', 'timeout'].includes(run.outcome));
     assert.ok(run.ticks > 0 && run.survivalSeconds >= run.seconds);
     assert.equal(run.clear, run.outcome !== 'lost');
+    assert.ok(run.peakLiveGnats > 0 && run.peakLiveGnats <= first.swarmCap);
   }
   for (const row of first.profiles) {
     assert.ok(Math.abs(row.clearRate - row.bossClearRate - row.timeoutRate) < 1e-12);
     assert.equal(Object.values(row.endHull).reduce((sum, count) => sum + count, 0), 3);
     assert.ok(row.billsPaidPct >= 0 && row.billsPaidPct <= 100);
     assert.ok(Object.hasOwn(row.weapons, 'twin'));
+    assert.equal(row.peakLiveGnats, Math.max(...first.runs.filter(run => run.profile === row.profile).map(run => run.peakLiveGnats)));
   }
 });
 

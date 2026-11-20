@@ -531,7 +531,7 @@ export class FlightScene {
     const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
     this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, attitude?.roll ?? (flat ? 0 : -p.bank), 'YXZ');
     this.ship.material.color.setHex(flat && attitude?.inverted ? 0x9ed9ee : 0xffffff);
-    this.weaponMounts.update(state.run?.weaponLevels);
+    this.weaponMounts.update(state.run?.weaponLevels, state.run?.evolutions);
     this.bodyShimmer.visible = this.ship.visible && state.bodyGraceUntil > 0 && state.tick <= state.bodyGraceUntil;
     if (this.bodyShimmer.visible) {
       const pulse = (state.tick % 12) / 12;
