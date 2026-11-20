@@ -131,6 +131,7 @@
 
 .experience:not(.phone-layout) .audio-toggle:not([hidden]) { left: calc(var(--hud-x) + 402px); }
 .alt-ruler .alt-scale { inset-block-start: 17px; }
+.alt-scale small:nth-of-type(4) { top: 100%; }
 .experience[data-view="overhead"] .alt-ruler { display: none; }
 
 .experience.phone-layout .hud .numeric-hud { width: calc(100% - 51px); column-gap: 5px; padding-inline: 5px; }

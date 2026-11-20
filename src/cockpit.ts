@@ -1,4 +1,5 @@
 import { MANEUVERS } from './maneuvers.ts';
+import { SKIM } from './bands.ts';
 import type { Point } from './camera.ts';
 import type { Track } from './instruments.ts';
 import type { Lock, StageState } from './stage-types.ts';
@@ -48,9 +49,10 @@ export function cockpitTarget(track: Pick<Track, 'id' | 'range'>, point: Point, 
   return { point, range: Math.round(track.range), locked: matching?.ready ?? false, progress: matching?.progress ?? 0 };
 }
 
-export function cockpitWarnings(state: Pick<StageState, 'boosting' | 'boost'>, clearance: number, climb: number,
+// --- S7d lane ---
+export function cockpitWarnings(state: Pick<StageState, 'boosting' | 'boost'> & Partial<Pick<StageState, 'player'>>, clearance: number, climb: number,
   result: CockpitWarnings = { terrain: null, boost: null }): CockpitWarnings {
-  result.terrain = clearance > 40 ? null
+  result.terrain = clearance > 40 || (state.player?.skim && clearance >= SKIM.minClearance) ? null
     : clearance <= 26 || (clearance <= 34 && climb < -4) ? 'pullUp' : 'altLow';
   result.boost = !state.boosting || state.boost <= 0 ? null : state.boost <= 0.25 ? 'low' : 'active';
   return result;

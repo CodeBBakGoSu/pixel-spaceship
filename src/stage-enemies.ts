@@ -1,16 +1,16 @@
 import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
+import { SKIM, skimAltitude } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { REGULAR_FIRE_INTERVAL_SCALE } from './data/run-balance.ts';
 import { GNAT } from './data/phases.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { nearestBand } from './maneuvers.ts';
-import { keepInsideArena } from './reach.ts';
 import { angleTo, BANDS, clamp, fireHostile, FLAK_LIFE, inBand, MINE_LIMIT, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import { random } from './stage-random.ts';
 import type { Band, Enemy, Ground, Maneuver, Point, StageState } from './stage-types.ts';
+import { isWater } from './world.ts';
 
-export const SKIMMER_WATER = 39;
 const COAST_TURNS = [0.65, -0.65, 1.3, -1.3, 2.05, -2.05, Math.PI];
 const MAX_TURN = 3.2 * STEP;
 // Ease most of a speed or bank change over the next 0.18 seconds.
@@ -34,13 +34,25 @@ export function makeEnemy(state: StageState, x: number, z: number, band: Band, k
   };
 }
 
-export function bomberWingPosition(state: StageState, bomber: Enemy, ground: Ground, side: number): Point {
+// --- S7d lane ---
+export function placeSkimEnemy(enemy: Enemy, ground: Ground): void {
+  if (enemy.kind !== 'skimmer' && enemy.kind !== 'turret') return;
+  const point = enemy.entry?.target ?? enemy;
+  const floor = ground(point.x, point.z);
+  enemy.skim = true;
+  const clearance = enemy.kind === 'turret' ? SKIM.turretHeight : SKIM.clearance;
+  point.alt = floor + clearance;
+  if (enemy.entry) enemy.entry.clearance = clearance;
+  if (enemy.kind === 'skimmer' && isWater(floor)) enemy.skimWater = true;
+  else delete enemy.skimWater;
+}
+
+export function bomberWingPosition(_state: StageState, bomber: Enemy, ground: Ground, side: number): Point {
   const fx = Math.sin(bomber.yaw), fz = Math.cos(bomber.yaw);
   const point = {
     x: bomber.x + fz * ESCORT_SPAN * side - fx * ESCORT_AFT,
     z: bomber.z - fx * ESCORT_SPAN * side - fz * ESCORT_AFT,
   };
-  keepInsideArena(point, state.arena);
   if (ground(point.x, point.z) + 22 <= bomber.alt) return point;
   return bomber;
 }
@@ -103,7 +115,7 @@ export function beginEnemyFlyIn(state: StageState, enemy: Enemy, ground: Ground,
   const { x, z, alt, kind } = enemy;
   const path = planFlyIn(state, anchor, { x, z, alt }, {
     ticks: WAVE_FLY_IN_TICKS, bend, exitSpeed: kind === 'turret' ? 0 : ENEMY_KINDS[kind].speed,
-    clearance: kind === 'turret' ? 5 : undefined,
+    clearance: kind === 'turret' ? SKIM.turretHeight : enemy.skim ? SKIM.clearance : undefined,
   });
   enemy.entry = path;
   Object.assign(enemy, sampleFlyIn(path, state.tick, ground));
@@ -113,12 +125,9 @@ function rangeMode(active: boolean | undefined, range: number, threshold: number
   return range < threshold + (active === undefined ? 0 : active ? margin : -margin);
 }
 
-function clearAt(state: StageState, enemy: Enemy, ground: Ground, x: number, z: number): boolean {
-  if (enemy.kind === 'skimmer') {
-    return Math.hypot(x - state.arena.x, z - state.arena.z) <= state.arena.radius
-      && ground(x, z) <= SKIMMER_WATER;
-  }
-  return ground(x, z) + 22 <= enemy.alt + 0.01;
+function clearAt(enemy: Enemy, floor: number): boolean {
+  if (enemy.skim) return !enemy.skimWater || isWater(floor);
+  return floor + 22 <= enemy.alt + 0.01;
 }
 
 function steer(state: StageState, enemy: Enemy, ground: Ground, targetYaw: number, targetSpeed: number): void {
@@ -127,8 +136,8 @@ function steer(state: StageState, enemy: Enemy, ground: Ground, targetYaw: numbe
   enemy.flightSpeed = speed;
 
   const lookAhead = enemy.kind === 'skimmer' ? 18 : Math.max(6, speed * 0.38);
-  const clearHeading = (yaw: number) => clearAt(state, enemy, ground,
-    enemy.x + Math.sin(yaw) * lookAhead, enemy.z + Math.cos(yaw) * lookAhead);
+  const clearHeading = (yaw: number) => clearAt(enemy, ground(
+    enemy.x + Math.sin(yaw) * lookAhead, enemy.z + Math.cos(yaw) * lookAhead));
   const held = enemy.terrainTurn;
   if (held && state.tick < held.until) {
     targetYaw = held.yaw;
@@ -152,12 +161,12 @@ function steer(state: StageState, enemy: Enemy, ground: Ground, targetYaw: numbe
   enemy.vz = Math.cos(enemy.yaw) * speed;
 }
 
-function clearFlybyPath(state: StageState, ground: Ground, from: Point, to: Point, altitude: number): boolean {
+function clearFlybyPath(ground: Ground, from: Point, to: Point, altitude: number): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const steps = Math.ceil(Math.hypot(dx, dz) / 16);
   for (let i = 1; i <= steps; i++) {
     const x = from.x + dx * i / steps, z = from.z + dz * i / steps;
-    if (Math.hypot(x - state.arena.x, z - state.arena.z) > state.arena.radius - 12 || ground(x, z) + 22 > altitude) return false;
+    if (ground(x, z) + 22 > altitude) return false;
   }
   return true;
 }
@@ -177,7 +186,7 @@ function planFlyby(state: StageState, enemy: Enemy, ground: Ground, fx: number, 
   const wing = { x: p.x + fx * reach + fz * FLYBY_LANE * side, z: p.z + fz * reach - fx * FLYBY_LANE * side };
   const exit = { x: p.x + fx * (reach + CROSS_TRAVEL) - fz * CROSS_EXIT * side,
     z: p.z + fz * (reach + CROSS_TRAVEL) + fx * CROSS_EXIT * side };
-  if (!clearFlybyPath(state, ground, enemy, wing, enemy.alt) || !clearFlybyPath(state, ground, wing, exit, enemy.alt)) {
+  if (!clearFlybyPath(ground, enemy, wing, enemy.alt) || !clearFlybyPath(ground, wing, exit, enemy.alt)) {
     enemy.flybyAt = state.tick + 30;
     return;
   }
@@ -204,7 +213,7 @@ function moveFlyby(state: StageState, enemy: Enemy, ground: Ground, fx: number, 
   if (pass.phase === 'overtake' && ahead >= CROSS_AHEAD && -dx * fx - dz * fz >= 52 && pass.side * lateral >= 22) {
     const target = { x: p.x + forwardX * (ahead + CROSS_TRAVEL) - forwardZ * CROSS_EXIT * pass.side,
       z: p.z + forwardZ * (ahead + CROSS_TRAVEL) + forwardX * CROSS_EXIT * pass.side };
-    if (!clearFlybyPath(state, ground, enemy, target, enemy.alt)) return finishFlyby(state, enemy);
+    if (!clearFlybyPath(ground, enemy, target, enemy.alt)) return finishFlyby(state, enemy);
     pass = { ...pass, phase: 'cross', target };
   }
 
@@ -220,7 +229,7 @@ function moveFlyby(state: StageState, enemy: Enemy, ground: Ground, fx: number, 
   const turn = clamp(headingDelta(enemy.yaw, wantedYaw), -MAX_TURN, MAX_TURN);
   const yaw = enemy.yaw + turn;
   const look = { x: enemy.x + Math.sin(yaw) * 15, z: enemy.z + Math.cos(yaw) * 15 };
-  if (!clearFlybyPath(state, ground, enemy, look, enemy.alt)) return finishFlyby(state, enemy);
+  if (!clearFlybyPath(ground, enemy, look, enemy.alt)) return finishFlyby(state, enemy);
   if (pass.phase === 'overtake' && Math.abs(ahead) < 16 && pass.side * lateral < 17) return finishFlyby(state, enemy);
   enemy.flightSpeed ??= 34;
   steer(state, enemy, ground, wantedYaw, FLYBY_SPEED);
@@ -318,7 +327,7 @@ function moveBomber(state: StageState, enemy: Enemy, ground: Ground, angle: numb
   enemy.shotAt = state.tick + shotInterval(state, 250);
 }
 
-function moveTurret(state: StageState, enemy: Enemy, angle: number, range: number): void {
+function moveTurret(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number): void {
   enemy.yaw += clamp(headingDelta(enemy.yaw, angle), -MAX_TURN, MAX_TURN);
   if (enemy.tell?.kind === 'flak') {
     const { x, z, alt, until } = enemy.tell;
@@ -329,8 +338,8 @@ function moveTurret(state: StageState, enemy: Enemy, angle: number, range: numbe
   } else if (state.tick >= enemy.shotAt && range <= 175) {
     const p = state.player;
     const target = { x: p.x + Math.sin(p.yaw) * 52, z: p.z + Math.cos(p.yaw) * 52 };
-    keepInsideArena(target, state.arena);
-    enemy.tell = { ...target, alt: BANDS[enemy.band], kind: 'flak', until: state.tick + 84 };
+    const alt = enemy.skim ? skimAltitude(ground(target.x, target.z)) : BANDS[enemy.band];
+    enemy.tell = { ...target, alt, kind: 'flak', until: state.tick + 84 };
   }
 }
 
@@ -355,21 +364,21 @@ function stayWithBomber(state: StageState, enemy: Enemy, ground: Ground): boolea
   return true;
 }
 
-function advancePosition(state: StageState, enemy: Enemy, ground: Ground): void {
+function advancePosition(enemy: Enemy, ground: Ground): void {
   const x = enemy.x + enemy.vx * STEP, z = enemy.z + enemy.vz * STEP;
-  if (!clearAt(state, enemy, ground, x, z)) {
+  const floor = ground(x, z);
+  if (!clearAt(enemy, floor)) {
     enemy.vx = enemy.vz = 0;
     return;
   }
   enemy.x = x;
   enemy.z = z;
-  keepInsideArena(enemy, state.arena);
+  if (enemy.skim) enemy.alt = skimAltitude(floor);
 }
 
 function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
   const x = enemy.x + enemy.vx * STEP, z = enemy.z + enemy.vz * STEP;
   if ((enemy.leaveAt !== undefined && state.tick >= enemy.leaveAt)
-    || (x - state.arena.x) ** 2 + (z - state.arena.z) ** 2 > state.arena.radius ** 2
     || ground(x, z) + GNAT.clearance > enemy.alt) {
     enemy.hp = 0; // The formation left the fight. This is not a kill.
     return;
@@ -401,7 +410,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
     const dx = p.x - enemy.x, dz = p.z - enemy.z, range = Math.hypot(dx, dz);
     const angle = Math.atan2(dx, dz);
     if (enemy.kind === 'turret') {
-      moveTurret(state, enemy, angle, range);
+      moveTurret(state, enemy, ground, angle, range);
       continue;
     }
     if (enemy.course && state.tick >= enemy.course.until) delete enemy.course;
@@ -409,7 +418,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
     if (course && enemy.flyby) finishFlyby(state, enemy);
     if (!course && (enemy.kind === 'patrol' || enemy.kind === 'interceptor' || enemy.kind === 'flanker')
       && moveFlyby(state, enemy, ground, fx, fz, dx, dz)) {
-      advancePosition(state, enemy, ground);
+      advancePosition(enemy, ground);
       const pass = enemy.flyby;
       if (pass?.phase === 'cross' && state.tick >= enemy.shotAt
         && pass.side * (dz * Math.sin(pass.yaw) - dx * Math.cos(pass.yaw)) <= 0) {
@@ -446,7 +455,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
       steer(state, enemy, ground, angle + (enemy.closeRange ? 1.45 : weave),
         trailing ? stats.pursuit * pursuitBoost(state, enemy) : stats.speed);
     }
-    advancePosition(state, enemy, ground);
+    advancePosition(enemy, ground);
     if ((enemy.kind === 'patrol' || enemy.kind === 'interceptor') && range < 185
       && state.tick >= enemy.shotAt && enemy.maneuver?.phase !== 'diving') {
       fireHostile(state, enemy, ENEMY_KINDS[enemy.kind].boltSpeed, 0, events);

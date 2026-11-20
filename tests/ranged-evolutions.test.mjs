@@ -55,14 +55,15 @@ test('Swarm Rack launches twelve rockets for an engaged carrier and fits two vol
 test('Prism Lance charges and strikes along exactly one terrain-clipped ray per band', () => {
   const state = setup('rail', 'prism-lance');
   state.player.altitude = mid + 8;
-  const leading = BANDS.map(alt => contact(state, 0, 69, alt));
+  const altitudes = [...BANDS, 65];
+  const leading = altitudes.map(alt => contact(state, 0, 69, alt));
   const obscuredLow = contact(state, 0, 130, low);
   const flyingIn = contact(state, 0, 65, high);
   flyingIn.entry = {};
   const ridge = (_, z) => z >= 83 && z <= 96 ? 99 : 35;
   advanceRangedWeapons(state, ridge);
   assert.equal(state.railChargeAt, 54);
-  assert.deepEqual(state.weaponFx.filter(fx => fx.kind === 'rail-charge').map(fx => fx.from.alt), BANDS);
+  assert.deepEqual(state.weaponFx.filter(fx => fx.kind === 'rail-charge').map(fx => fx.from.alt), altitudes);
 
   state.tick = state.railChargeAt;
   advanceRangedWeapons(state, ridge);
@@ -70,13 +71,15 @@ test('Prism Lance charges and strikes along exactly one terrain-clipped ray per 
   assert.equal(obscuredLow.hp, 12);
   assert.equal(flyingIn.hp, 12);
   const beams = state.weaponFx.filter(fx => fx.kind === 'rail-beam');
-  assert.deepEqual(beams.map(beam => beam.from.alt), BANDS);
+  assert.deepEqual(beams.map(beam => beam.from.alt), altitudes);
   assert.ok(beams[0].to.z < beams[1].to.z);
 });
 
-test('Skybreaker bursts through all three bands and launches one generation of three secondary shells', () => {
+test('Skybreaker bursts through all four bands and launches one generation of three secondary shells', () => {
   const state = setup('flak', 'skybreaker');
   const stacked = BANDS.map(alt => contact(state, 0, 90, alt));
+  Object.assign(contact(state, 0, 90, 65), { kind: 'skimmer', skim: true });
+  stacked.push(state.enemies.at(-1));
   const wing = contact(state, 32, 99, high);
   const incoming = contact(state, 0, 87, low);
   incoming.entry = {};

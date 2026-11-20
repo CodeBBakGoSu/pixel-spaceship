@@ -1,6 +1,7 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
-import type { LandmarkId } from './reach.ts';
+import type { LandmarkId, WorldSite } from './reach.ts';
+import type { FlightBand } from './bands.ts';
 import type { ChestId, DraftChoiceId, EvolutionId, GearId, WeaponId } from './data/items.ts';
 import type { RunPhase } from './data/phases.ts';
 import type { ChestState } from './chests.ts';
@@ -11,7 +12,7 @@ import type { RangedShotFields } from './ranged-weapons.ts';
 import type { RollKind } from './data/roll.ts';
 
 export type Fixture = 'stack' | 'draft' | 'boss' | 'pursuit' | 'flare' | 'reversal' | 'flyby' | 'rear-threat' | 'strafe'
-  | LandmarkId | NewEnemyKind;
+  | LandmarkId | NewEnemyKind | 'world';
 export type StageOptions = {
   seed: number;
   view: Segment | null;
@@ -25,6 +26,8 @@ export type StageOptions = {
   heat?: number;
   profile?: Profile;
   daily?: boolean;
+  // --- S7d lane ---
+  worldFixture?: Point & { skim: boolean };
 };
 export type LegacyDraftId = 'twin-2' | 'twin-3' | 'pods-2' | 'twin-damage' | 'pods-damage';
 export type DraftId = LegacyDraftId | DraftChoiceId;
@@ -37,6 +40,7 @@ export type Maneuver = {
   altitude: number;
   exitAltitude: number;
   side: -1 | 1;
+  skimExit?: true;
 };
 export type Roll = {
   kind: RollKind;
@@ -127,6 +131,9 @@ export type Enemy = Position & {
     ({ phase: 'overtake' } | { phase: 'cross'; target: Point });
   flybyAt?: number;
   reversalKill?: boolean;
+  // --- S7d lane ---
+  skim?: true;
+  skimWater?: true;
   burnUntil?: number;
   burnNextAt?: number;
   burnDamage?: number;
@@ -135,7 +142,7 @@ export type Enemy = Position & {
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
-export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean };
+export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true };
 type ShotCommon = Position & {
   vx: number;
   vz: number;
@@ -149,14 +156,14 @@ type ShotCommon = Position & {
 };
 export type Shot = ShotCommon & (
   { kind: 'twin' | 'pods' | 'hostile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
-  { kind: 'strafe'; targetBand: Band; vy: number; reversal?: never; reversalTick?: never } |
+  { kind: 'strafe'; targetBand: FlightBand; targetAltitude?: number; vy: number; reversal?: never; reversalTick?: never } |
   { kind: 'drone-bolt'; weapon: 'drones'; reversal?: never; reversalTick?: never } |
   (RangedShotFields & { reversal?: never; reversalTick?: never })
 );
 export type RearBomb = Position & { born: number; vx: number; vz: number; weapon?: 'bomb-bay';
   radius?: number; damage?: number; ceiling?: number; carpet?: true };
 export type Flare = Position & { born: number; vx: number; vz: number; vy: number; weapon?: 'phoenix';
-  lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number; phoenix?: true; sourceBand?: Band };
+  lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number; phoenix?: true; sourceBand?: FlightBand };
 export type WeaponFx = {
   kind: 'rail-charge' | 'rail-beam' | 'arc-link' | 'flak-blast' | 'seeker-blast' | 'arc-blast';
   from: Position;
@@ -245,9 +252,15 @@ export type StageState = {
   viewTag: number;
   arena: { x: number; z: number; radius: number };
   boundaryWarning: boolean;
+  // --- S7d lane ---
+  worldRegion?: Point;
+  worldSites?: WorldSite[];
+  claimedSites?: Record<string, true>;
+  rally?: Position;
   player: {
     x: number; z: number; altitude: number; yaw: number; bank: number;
     bankDrive?: number; bankDrop?: number; lastTurn?: -1 | 1; vx?: number; vz?: number;
+    skim?: 'water' | 'land';
   };
   speed: number;
   climbRate: number;

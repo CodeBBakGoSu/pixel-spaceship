@@ -1,8 +1,8 @@
 import {
-  BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, DataTexture, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
+  BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Fog, Group,
   InstancedBufferAttribute, InstancedMesh, Object3D,
   EdgesGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
-  RepeatWrapping, RingGeometry, Scene, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
+  RingGeometry, Scene, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
   type Camera,
 } from 'three';
 import { droneFaces, dronePalette, shipFaces, shipPalette } from '../proto/shared/models.ts';
@@ -33,24 +33,10 @@ import { activeWeakPoint, BOMB_BLAST_RADIUS, clamp, FLAK_LIFE, FLAK_RADIUS, MINE
   STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import type { ManeuverTrail, Position, Roll, Shot, StageState } from './stage-types.ts';
 import { orbitDroneGeometry, WeaponMounts } from './weapon-render.ts';
-import { terrainFogFar, TERRAIN_HALF_WIDTH, TERRAIN_MESH_STEP, TERRAIN_SIZE, World } from './world.ts';
-
-function makeTerrain(world: World): Mesh {
-  const map = new DataTexture(world.texture, TERRAIN_SIZE, TERRAIN_SIZE);
-  map.colorSpace = SRGBColorSpace;
-  map.magFilter = map.minFilter = NearestFilter;
-  map.wrapS = map.wrapT = RepeatWrapping;
-  map.needsUpdate = true;
-  const size = 2 * TERRAIN_HALF_WIDTH, cells = size / TERRAIN_MESH_STEP;
-  const geometry = new PlaneGeometry(size, size, cells, cells).rotateX(-Math.PI / 2);
-  const { position, uv } = geometry.attributes;
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i), z = -position.getZ(i);
-    position.setY(i, world.height(x, z));
-    uv.setXY(i, x / TERRAIN_SIZE, z / TERRAIN_SIZE);
-  }
-  return new Mesh(geometry, new MeshBasicMaterial({ map }));
-}
+// --- S7d lane ---
+import { TERRAIN_STREAM } from './data/terrain-stream.ts';
+import { chaseEyeHeight, TerrainStream } from './terrain-stream.ts';
+import { terrainFogFar, type World } from './world.ts';
 
 const instanceRanges = new WeakMap<InstancedBufferAttribute, { start: number; count: number }>();
 
@@ -142,8 +128,9 @@ type Framing = {
 export class FlightScene {
   private readonly renderer: WebGLRenderer;
   private readonly world: World;
+  private readonly terrain: TerrainStream;
   private readonly scene = new Scene();
-  private readonly fog = new Fog(0x9cbfcc, 245, 875);
+  private readonly fog = new Fog(0x9cbfcc, TERRAIN_STREAM.fogNear, TERRAIN_STREAM.desktop.fogFar);
   private readonly screen = new Scene();
   private readonly screenCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 2);
   private readonly target = new WebGLRenderTarget(1, 1, { magFilter: NearestFilter, minFilter: NearestFilter });
@@ -244,7 +231,10 @@ export class FlightScene {
     this.renderer.setClearColor(0x081424);
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
-    this.scene.add(makeTerrain(world), this.makeCanopies(arena), this.makeBoundary(arena), this.atmosphere.group);
+    this.scene.add(this.atmosphere.group);
+    // --- S7d lane ---
+    this.terrain = new TerrainStream(world);
+    this.scene.add(this.terrain.group);
     this.scene.add(this.ship, this.drones, this.gnats, this.warden, this.weakPoints, this.pickups, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails, this.pickupTrails, this.weakPointBorder,
@@ -268,41 +258,6 @@ export class FlightScene {
     this.rearInset.visible = false;
     this.rearInset.add(this.rearBezel, this.rearLining, this.rearGlass);
     this.screen.add(this.rearInset);
-  }
-
-  private makeBoundary(arena: StageState['arena']): InstancedMesh {
-    const count = 192;
-    const edge = instances(new BoxGeometry(), count, new MeshBasicMaterial({ color: 0xa99c68 }));
-    for (let i = 0; i < count; i++) {
-      const a = Math.PI * 2 * i / count;
-      const x = arena.x + Math.sin(a) * arena.radius, z = arena.z + Math.cos(a) * arena.radius;
-      this.write(edge, i, x, z, this.world.height(x, z) + 0.38, a, 6, 0.8, 1.25);
-    }
-    upload(edge, count);
-    return edge;
-  }
-
-  private makeCanopies(arena: StageState['arena']): InstancedMesh {
-    const trees = instances(new BoxGeometry(), 1600);
-    const step = 29, reach = arena.radius + 100, cells = Math.ceil(reach / step);
-    let count = 0;
-    canopyRows: for (let row = -cells; row <= cells; row++) for (let col = -cells; col <= cells; col++) {
-      if (Math.hypot(row, col) * step > reach) continue;
-      const hash = Math.imul(row + 47, 374761393) ^ Math.imul(col + 61, 668265263);
-      if ((hash & 15) > 8) continue;
-      const x = arena.x + col * step + ((hash >>> 4) & 7);
-      const z = arena.z + row * step + ((hash >>> 7) & 7);
-      const y = this.world.height(x, z);
-      if (y < 42 || y > 85) continue;
-      const size = 2.8 + ((hash >>> 10) & 3) * 0.6;
-      this.write(trees, count++, x, z, y + size * 0.55, 0, size * 2, size * 1.1, size * 1.7,
-        hash & 1 ? 0x2b623f : 0x3b7149);
-      this.write(trees, count++, x, z, y + size * 1.38, 0, size * 1.2, size * 0.65, size * 1.1,
-        hash & 1 ? 0x477e4e : 0x5f8e55);
-      if (count >= trees.instanceMatrix.count) break canopyRows;
-    }
-    upload(trees, count);
-    return trees;
   }
 
   resize(framing: Framing & { hud: HudLayout }): void {
@@ -330,6 +285,11 @@ export class FlightScene {
 
   get speedFeel(): Readonly<typeof this.flightView> {
     return this.flightView;
+  }
+
+  // --- S7d lane ---
+  get terrainPending(): boolean {
+    return this.terrain.pending;
   }
 
   get cockpitMirror(): Readonly<Rect> | null {
@@ -360,7 +320,7 @@ export class FlightScene {
     this.rearTarget.texture.repeat.x = -crop;
   }
 
-  private drawRearView(state: StageState, rearDanger: boolean, hostileColorsChanged: boolean): void {
+  private drawRearView(state: StageState, rearDanger: boolean, refresh: boolean): void {
     const { tick, view } = state;
     const glimpse = state.phase === 'playing' ? state.rearGlimpse : null;
     const reveal = glimpseWipe(tick, glimpse, this.reducedMotion.matches);
@@ -400,7 +360,7 @@ export class FlightScene {
       lining.setHex(pulse ? 0x357f8c : 0x182e3a);
     }
 
-    if (!hostileColorsChanged && tick >= this.rearTick && tick - this.rearTick < 2) return;
+    if (!refresh && tick >= this.rearTick && tick - this.rearTick < 2) return;
     this.rearTick = tick;
     frameRearCamera(this.rearCamera, state.player, reveal > 0, reveal > 0 ? glimpse?.target : undefined);
     // TOP uses a flattened altitude plane. Rebuild world instances only on rear-feed updates.
@@ -525,7 +485,7 @@ export class FlightScene {
     view.shake = state.view === 'overhead' ? 0 : shake;
     if (state.view === 'overhead') {
       view.fov = view.setback = 0;
-      this.fog.far = 875;
+      this.fog.far = (phone ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop).fogFar;
       const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
       const center = phone ? phone.shipY / height : 0.57;
       const z = p.z + (center * 2 - 1) * halfHeight;
@@ -543,7 +503,7 @@ export class FlightScene {
       const widening = 4 * lens, pullback = 1.4 * lens;
       view.fov = cockpitFov(aspect, pitch, widening);
       view.setback = pullback;
-      this.fog.far = terrainFogFar(aspect, view.fov, pitch, attitude?.cameraBank);
+      this.fog.far = terrainFogFar(aspect, view.fov, pitch, attitude?.cameraBank, !!phone);
       // The last ~5% of terrain contrast blends into the sky under Three's smoothstep fog.
       const visibleDepth = this.fog.near + (this.fog.far - this.fog.near) * 0.865;
       return frameCockpit(this.cockpit, p, this.framing, attitude, this.ground, visibleDepth, yaw,
@@ -562,11 +522,21 @@ export class FlightScene {
       const center = field ? (field.y + field.height * 0.39) / height : 0.43;
       const shift = clamp(center, 0.29, 0.64);
       camera.fov = view.fov = Math.max(60, 2 * Math.atan(Math.tan(16 * Math.PI / 180) / aspect) * 180 / Math.PI) + 10 * lens;
-      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(lookHeight - elevation, 105 + setback));
       camera.setViewOffset(width, height, 0, Math.round(height * (0.5 - shift)), width, height);
       const eyeX = p.x + fz * shake, eyeZ = p.z - fx * shake;
-      camera.position.set(eyeX - fx * setback, p.altitude + elevation, -(eyeZ - fz * setback));
-      camera.lookAt(eyeX + fx * 105, p.altitude + lookHeight, -(eyeZ + fz * 105));
+      // --- S7d lane ---
+      const x = eyeX - fx * setback, z = eyeZ - fz * setback;
+      const y = chaseEyeHeight(this.ground, x, z, p.altitude + elevation);
+      const aimDistance = 105 + setback;
+      let aimAltitude = p.altitude + lookHeight;
+      if (y > p.altitude + elevation) {
+        // Keep the ship inside the flight viewport as the camera rises over an obstacle.
+        const pitchDelta = Math.atan2(p.altitude - y, setback) + Math.atan2(elevation, setback);
+        aimAltitude = y + Math.tan(Math.atan2(lookHeight - elevation, aimDistance) + pitchDelta) * aimDistance;
+      }
+      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(aimAltitude - y, aimDistance), 0, !!phone);
+      camera.position.set(x, y, -z);
+      camera.lookAt(eyeX + fx * 105, aimAltitude, -(eyeZ + fz * 105));
       this.camera = camera;
     }
     this.camera.updateMatrixWorld();
@@ -897,6 +867,10 @@ export class FlightScene {
       pose.inverted = Math.cos(pose.roll) < 0;
       attitude = pose;
     }
+    // --- S7d lane ---
+    const terrainWasPending = this.terrain.pending;
+    const terrainBuilt = this.terrain.update(state.player.x, state.player.z, !!this.framing.phone, state.worldSites);
+    const terrainSettled = (terrainWasPending || terrainBuilt > 0) && !this.terrain.pending;
     const ladder = this.updateCamera(state, attitude, shake);
     this.flightView.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
       state.speed, ticks, reduceMotion);
@@ -906,7 +880,7 @@ export class FlightScene {
     this.hostileVisuals.setView(this.target.height, state.view === 'overhead' ? TOP_FLIGHT + 6 : undefined);
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(this.scene, this.camera);
-    this.drawRearView(state, rearDanger, hostileColorsChanged);
+    this.drawRearView(state, rearDanger, hostileColorsChanged || terrainSettled);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.screen, this.screenCamera);
     return ladder;

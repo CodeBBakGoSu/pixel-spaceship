@@ -10,6 +10,8 @@ export type BotProfile = {
   rollUse: number;
   parryTiming: number;
   rollDodgeQuality: number;
+  // --- S7d lane ---
+  skimUse: number;
   maneuverUse: number;
   altitudeUse: number;
   pickupGreed: number;
@@ -22,16 +24,19 @@ export const BOT_PROFILES = {
   skilled: {
     reactionDelayTicks: 2, aimErrorRad: 0.02, dodgeQuality: 0.98, maneuverUse: 0.98,
     rollUse: 0.84, parryTiming: 0.94, rollDodgeQuality: 0.9,
+    skimUse: 0.75,
     altitudeUse: 0.98, pickupGreed: 1, draftPickQuality: 0.97, chestPick: 0.98, billsHandling: 0.96,
   },
   average: {
     reactionDelayTicks: 9, aimErrorRad: 0.17, dodgeQuality: 0.37, maneuverUse: 0.52,
     rollUse: 0.09, parryTiming: 0.58, rollDodgeQuality: 0.56,
+    skimUse: 0.35,
     altitudeUse: 0.58, pickupGreed: 0.65, draftPickQuality: 0.63, chestPick: 0.65, billsHandling: 0.56,
   },
   weak: {
     reactionDelayTicks: 19, aimErrorRad: 0.43, dodgeQuality: 0.08, maneuverUse: 0.23,
     rollUse: 0.06, parryTiming: 0.2, rollDodgeQuality: 0.28,
+    skimUse: 0.08,
     altitudeUse: 0.24, pickupGreed: 0.36, draftPickQuality: 0.17, chestPick: 0.35, billsHandling: 0.22,
   },
 } as const satisfies Record<BotProfileId, BotProfile>;

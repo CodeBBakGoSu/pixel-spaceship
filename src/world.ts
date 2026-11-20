@@ -1,33 +1,72 @@
-import { ARENA, BASALT_STACKS, LANDMARKS } from './reach.ts';
+import { REACH_LANDMARKS as LANDMARKS, REACH_STACKS as BASALT_STACKS, WORLD_TERRAIN } from './data/world.ts';
+import { TERRAIN_STREAM } from './data/terrain-stream.ts';
 import type { Ground } from './stage-types.ts';
 
-export const TERRAIN_SIZE = 1024;
-export const TERRAIN_HALF_WIDTH = 1920;
-export const TERRAIN_MESH_STEP = 16;
-export const TERRAIN_MIN_ALTITUDE = 35;
-export const TERRAIN_MAX_ALTITUDE = Math.max(...BASALT_STACKS.map(stack => stack.top));
-const MASK = TERRAIN_SIZE - 1;
-const BASE_SIZE = 512;
+export const TERRAIN_SIZE = WORLD_TERRAIN.period;
+export const TERRAIN_MESH_STEP = WORLD_TERRAIN.step;
+export const TERRAIN_MIN_ALTITUDE = WORLD_TERRAIN.seaLevel;
+export const TERRAIN_MAX_ALTITUDE = WORLD_TERRAIN.maxHeight;
+// The camera uses this margin to account for setback and banked frusta.
+const FOG_MARGIN = 110;
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const smooth = (v: number) => v * v * (3 - 2 * v);
 const shoulder = (r: number, start: number) => 1 - smooth(Math.max(0, Math.min(1, (r - start) / (1 - start))));
-const hash = (x: number, y: number) => {
-  let n = Math.imul(x, 374761393) + Math.imul(y, 668265263) + 1442695041;
-  n = Math.imul(n ^ (n >>> 13), 1274126177);
-  return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
-};
 
-function noise(x: number, y: number, scale: number): number {
-  const cells = BASE_SIZE / scale;
-  const gx = x / scale, gy = y / scale;
-  const x0 = Math.floor(gx), y0 = Math.floor(gy);
-  const sx = gx - x0, sy = gy - y0;
-  const tx = sx * sx * (3 - 2 * sx), ty = sy * sy * (3 - 2 * sy);
-  const sample = (a: number, b: number) => hash((a + cells) % cells, (b + cells) % cells);
-  return mix(mix(sample(x0, y0), sample(x0 + 1, y0), tx), mix(sample(x0, y0 + 1), sample(x0 + 1, y0 + 1), tx), ty);
+export function worldHash(seed: number, x: number, z: number): number {
+  let n = Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(seed, 1446999437) + 1442695041;
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return (n ^ (n >>> 16)) >>> 0;
 }
 
-// The mesh has reversed world Z. Use its two triangles for clearance and HUD projection.
+function noise(seed: number, x: number, z: number, scale: number, period: number = TERRAIN_SIZE): number {
+  const mask = period / scale - 1;
+  const gx = x / scale, gz = z / scale;
+  const x0 = Math.floor(gx), z0 = Math.floor(gz);
+  const ax = x0 & mask, bx = (x0 + 1) & mask;
+  const az = z0 & mask, bz = (z0 + 1) & mask;
+  const tx = smooth(gx - x0), tz = smooth(gz - z0);
+  return mix(mix(worldHash(seed, ax, az), worldHash(seed, bx, az), tx),
+    mix(worldHash(seed, ax, bz), worldHash(seed, bx, bz), tx), tz) / 4294967295;
+}
+
+function reachHeight(x: number, z: number): number {
+  const jx = x + 128, jz = z + 128;
+  const coast = noise(0, jx, jz, 256, 512) * 0.55 + noise(0, jx, jz, 128, 512) * 0.45;
+  const detail = noise(0, jx, jz, 64, 512);
+  let height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.32) * 38 + detail * 2;
+  const { ridge, strait, atoll, stacks } = LANDMARKS;
+  const ridgeRange = Math.hypot((x - ridge.x) / 118, (z - ridge.z) / 94);
+  const straitRange = Math.hypot((x - strait.x) / 179, (z - strait.z) / 88);
+  const atollRange = Math.hypot(x - atoll.x, z - atoll.z);
+  if (ridgeRange < 1) return mix(height, 80 + detail * 3, shoulder(ridgeRange, 0.48));
+  if (straitRange < 1) return mix(height, TERRAIN_MIN_ALTITUDE, shoulder(straitRange, 0.58));
+  if (atollRange < 115) {
+    const rim = Math.max(0, 1 - Math.abs(atollRange - 77) / 17);
+    return mix(height, 36 + 5 * rim, shoulder(atollRange / 115, 0.82));
+  }
+  if (Math.abs(x - stacks.x) < 135 && Math.abs(z - stacks.z) < 117) {
+    for (const stack of BASALT_STACKS) {
+      const range = Math.hypot((x - stack.x) / 37, (z - stack.z) / 31);
+      if (range < 1) height = Math.max(height, mix(height, stack.top, shoulder(range, 0.34)));
+    }
+  }
+  return height;
+}
+
+function terrainVertex(seed: number, x: number, z: number): number {
+  const half = TERRAIN_SIZE / 2, mask = TERRAIN_SIZE - 1;
+  const wx = ((x + half) & mask) - half, wz = ((z + half) & mask) - half;
+  const radius = Math.max(Math.abs(wx), Math.abs(wz));
+  if (radius <= WORLD_TERRAIN.reachCore) return reachHeight(wx, wz);
+  const coast = noise(seed, wx, wz, 512) * 0.64 + noise(seed, wx, wz, 256) * 0.36;
+  const detail = noise(seed, wx, wz, 64);
+  const height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.41) * 35 + detail * 2;
+  if (radius >= WORLD_TERRAIN.reachBlend) return height;
+  const blend = shoulder(radius / WORLD_TERRAIN.reachBlend, WORLD_TERRAIN.reachCore / WORLD_TERRAIN.reachBlend);
+  return mix(height, reachHeight(wx, wz), blend);
+}
+
+// Both the mesh and gameplay use the 16 m grid's two triangles at full detail.
 export function terrainSurface(sample: Ground, x: number, z: number): number {
   const step = TERRAIN_MESH_STEP;
   const left = Math.floor(x / step) * step, top = Math.ceil(z / step) * step;
@@ -38,68 +77,60 @@ export function terrainSurface(sample: Ground, x: number, z: number): number {
   return sample(left + step, top - step) * (u + v - 1) + (1 - u) * b + (1 - v) * d;
 }
 
-export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0): number {
-  const forward = 1 / Math.cos(pitch);
-  const slope = Math.abs(Math.tan(pitch)), halfHeight = Math.tan(fov * Math.PI / 360);
-  // At steep bank the vertical frustum adds to the horizontal extent over the terrain.
-  const across = halfHeight * (aspect * Math.abs(Math.cos(bank)) + 1.8 * Math.abs(Math.sin(bank)));
-  // Allow 100 m for camera setback and 170 m for the eye-to-ground height difference.
-  const room = TERRAIN_HALF_WIDTH - ARENA.radius - 100 - 170 * slope;
-  return Math.min(875, room / Math.hypot(forward, across));
+export const isWater = (altitude: number): boolean => altitude <= WORLD_TERRAIN.shallows;
+
+export function groundAt(seed: number, x: number, z: number): number {
+  return terrainSurface((vx, vz) => terrainVertex(seed, vx, vz), x, z);
 }
 
+export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0, mobile = false): number {
+  const forward = 1 / Math.cos(pitch);
+  const slope = Math.abs(Math.tan(pitch)), halfHeight = Math.tan(fov * Math.PI / 360);
+  const across = halfHeight * (aspect * Math.abs(Math.cos(bank)) + 1.8 * Math.abs(Math.sin(bank)));
+  const tier = mobile ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop;
+  const coverage = tier.radius * TERRAIN_STREAM.chunkSize;
+  const room = Math.max(256, coverage - FOG_MARGIN - MAX_CAMERA_CLEARANCE * slope);
+  return Math.min(tier.fogFar, room / Math.hypot(forward, across));
+}
+
+const MAX_CAMERA_CLEARANCE = 170;
+const CACHE_SIZE = 1 << 14;
+
 export class World {
-  private readonly heights = new Float32Array(TERRAIN_SIZE * TERRAIN_SIZE);
-  readonly texture = new Uint8Array(TERRAIN_SIZE * TERRAIN_SIZE * 4);
-  private readonly sample = (x: number, z: number) => this.heights[(z & MASK) * TERRAIN_SIZE + (x & MASK)];
+  private activeSeed: number;
+  private readonly keys = new Int32Array(CACHE_SIZE).fill(-1);
+  private readonly heights = new Float64Array(CACHE_SIZE);
 
-  constructor() {
-    for (let z = 0; z < TERRAIN_SIZE; z++) for (let x = 0; x < TERRAIN_SIZE; x++) {
-      const index = z * TERRAIN_SIZE + x;
-      const jx = (x + 128) % BASE_SIZE, jz = (z + 128) % BASE_SIZE;
-      const coast = noise(jx, jz, 256) * 0.55 + noise(jx, jz, 128) * 0.45;
-      let height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.32) * 38 + noise(jx, jz, 64) * 2;
-
-      let rgb: [number, number, number];
-      if (coast < 0.32) rgb = coast < 0.25 ? [28, 85, 109] : [45, 128, 140];
-      else if (coast < 0.35) rgb = [215, 191, 139];
-      else if (coast < 0.39) rgb = [117, 162, 79];
-      else rgb = noise(jx, (z + 64) % BASE_SIZE, 128) > 0.54 ? [58, 127, 57] : [75, 145, 63];
-      const wx = x < TERRAIN_SIZE / 2 ? x : x - TERRAIN_SIZE;
-      const wz = z < TERRAIN_SIZE / 2 ? z : z - TERRAIN_SIZE;
-      const { ridge, strait, atoll, stacks } = LANDMARKS;
-      const ridgeRange = Math.hypot((wx - ridge.x) / 118, (wz - ridge.z) / 94);
-      const straitRange = Math.hypot((wx - strait.x) / 179, (wz - strait.z) / 88);
-      const atollRange = Math.hypot(wx - atoll.x, wz - atoll.z);
-      if (ridgeRange < 1) {
-        height = mix(height, 80 + noise(jx, jz, 64) * 3, shoulder(ridgeRange, 0.48));
-        if (height > 53) rgb = height > 74 ? [118, 158, 83] : [132, 122, 78];
-      } else if (straitRange < 1) {
-        height = mix(height, TERRAIN_MIN_ALTITUDE, shoulder(straitRange, 0.58));
-        rgb = straitRange < 0.61 ? [31, 115, 139] : straitRange < 0.87 ? [64, 148, 147] : [180, 173, 120];
-      } else if (atollRange < 115) {
-        const rim = Math.max(0, 1 - Math.abs(atollRange - 77) / 17);
-        height = mix(height, 36 + 5 * rim, shoulder(atollRange / 115, 0.82));
-        rgb = atollRange < 65 ? [34, 120, 149] : atollRange < 89 ? [200, 188, 128] : [61, 142, 142];
-      } else if (Math.abs(wx - stacks.x) < 135 && Math.abs(wz - stacks.z) < 117) {
-        for (const stack of BASALT_STACKS) {
-          const range = Math.hypot((wx - stack.x) / 37, (wz - stack.z) / 31);
-          if (range >= 1) continue;
-          height = Math.max(height, mix(height, stack.top, shoulder(range, 0.34)));
-          rgb = height > 81 ? [103, 108, 109] : [83, 99, 97];
-        }
-      }
-      this.heights[index] = height;
-      const dx = x % 4 - 1.5, dz = z % 4 - 1.5;
-      const tree = coast >= 0.37 && hash(Math.floor(x / 4), Math.floor(z / 4)) > 0.82 && dx * dx + dz * dz < 4 ? -25 : 0;
-      const shimmer = coast < 0.32 && hash(x * 3, z * 3) > 0.97 ? 23 : 0;
-      const band = (Math.floor(coast * 28) % 3 - 1) * 4;
-      for (let channel = 0; channel < 3; channel++) this.texture[index * 4 + channel] = rgb[channel] + band + tree + shimmer;
-      this.texture[index * 4 + 3] = 255;
-    }
+  constructor(seed = 1) { this.activeSeed = seed >>> 0; }
+  get seed(): number { return this.activeSeed; }
+  set seed(value: number) {
+    const next = value >>> 0;
+    if (next === this.activeSeed) return;
+    this.activeSeed = next;
+    this.keys.fill(-1);
   }
+
+  // Memoize vertices by their coordinates within the terrain period. Nothing depends on cache order.
+  private readonly sample: Ground = (x, z) => {
+    const width = TERRAIN_SIZE / TERRAIN_MESH_STEP;
+    const vx = (x / TERRAIN_MESH_STEP) & (width - 1), vz = (z / TERRAIN_MESH_STEP) & (width - 1);
+    const key = vz * width + vx;
+    const index = (Math.imul(vx, 73856093) ^ Math.imul(vz, 19349663)) & (CACHE_SIZE - 1);
+    if (this.keys[index] === key) return this.heights[index];
+    this.keys[index] = key;
+    return this.heights[index] = terrainVertex(this.activeSeed, x, z);
+  };
 
   height(x: number, z: number): number {
     return terrainSurface(this.sample, x, z);
+  }
+
+  color(x: number, z: number): number {
+    const height = this.height(x, z);
+    if (isWater(height)) return height < 36.3 ? 0x206481 : 0x358591;
+    if (height < 41.5) return 0xc5b179;
+    if (height < 45) return 0x83a467;
+    if (height < 73) return worldHash(this.seed, Math.floor(x / 32), Math.floor(z / 32)) & 1 ? 0x58834f : 0x4c784a;
+    return height < 88 ? 0x778971 : 0x737d80;
   }
 }

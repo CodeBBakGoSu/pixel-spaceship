@@ -1,32 +1,85 @@
-import type { Point } from './stage-types.ts';
+import { BANDS, skimAltitude } from './bands.ts';
+import { REACH_LANDMARKS, REACH_STACKS, WORLD_AIRSPACE, WORLD_SITES } from './data/world.ts';
+import type { Ground, Point, Position, StageState } from './stage-types.ts';
+import { worldHash } from './world.ts';
 
-export const ARENA = { x: 0, z: 0, radius: 560 };
-export const RIM_WARNING = 60;
-export const RIM_PUSH = 40;
+export const ARENA = WORLD_AIRSPACE;
 export const BEACON_SIGNAL_SECONDS = 92;
-
-export const LANDMARKS = {
-  ridge: { x: -240, z: 96, alt: 110 },
-  strait: { x: -128, z: -320, alt: 75 },
-  stacks: { x: 288, z: 240, alt: 145 },
-  atoll: { x: 160, z: -128, alt: 110 },
-} as const;
+export const LANDMARKS = REACH_LANDMARKS;
+export const BASALT_STACKS = REACH_STACKS;
 
 export type LandmarkId = keyof typeof LANDMARKS;
+export type WorldSite = Position & { id: string; kind: 'beacon' | 'supply' | 'xp'; claimed?: true };
 
 export function isLandmarkId(value: string | null): value is LandmarkId {
   return value !== null && Object.prototype.hasOwnProperty.call(LANDMARKS, value);
 }
 
-export const BASALT_STACKS = [
-  { x: 224, z: 224, top: 104 }, { x: 288, z: 240, top: 112 },
-  { x: 352, z: 208, top: 96 }, { x: 256, z: 304, top: 108 }, { x: 336, z: 288, top: 101 },
-] as const;
+const SITE_KINDS = ['beacon', 'supply', 'xp'] as const;
 
-export function keepInsideArena(point: Point, arena: typeof ARENA, inset = 0): void {
-  const dx = point.x - arena.x, dz = point.z - arena.z;
-  const distance = Math.hypot(dx, dz), limit = arena.radius - inset;
-  if (distance <= limit) return;
-  point.x = arena.x + dx * limit / distance;
-  point.z = arena.z + dz * limit / distance;
+function worldSite(seed: number, cellX: number, cellZ: number, ground: Ground, claimed?: Record<string, true>): WorldSite {
+  const id = `${cellX}:${cellZ}`;
+  const hash = worldHash(seed, cellX, cellZ);
+  const index = worldHash(seed, 0, 0) % SITE_KINDS.length + cellX + cellZ * 2;
+  const kind = SITE_KINDS[(index % SITE_KINDS.length + SITE_KINDS.length) % SITE_KINDS.length];
+  const x = (cellX + 0.24 + (hash & 255) / 512) * WORLD_SITES.spacing;
+  const z = (cellZ + 0.24 + ((hash >>> 8) & 255) / 512) * WORLD_SITES.spacing;
+  const alt = Math.max(kind === 'xp' ? BANDS[0] : BANDS[1], skimAltitude(ground(x, z)));
+  return { id, kind, x, z, alt, ...(claimed?.[id] ? { claimed: true as const } : {}) };
+}
+
+/** Keep the current and adjacent regions visible while remembering rewards across revisits. */
+export function updateWorldSites(state: StageState, ground: Ground): void {
+  const x = Math.floor(state.player.x / WORLD_SITES.spacing);
+  const z = Math.floor(state.player.z / WORLD_SITES.spacing);
+  if (state.worldRegion?.x === x && state.worldRegion.z === z) return;
+  const sites: WorldSite[] = [];
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    sites.push(worldSite(state.seed, x + dx, z + dz, ground, state.claimedSites));
+  }
+  state.worldRegion = { x, z };
+  state.worldSites = sites;
+}
+
+export function reachedWorldSite(state: StageState): WorldSite | undefined {
+  const p = state.player;
+  const site = state.worldSites?.find(site => !site.claimed && site.kind !== 'beacon'
+    && Math.abs(site.alt - p.altitude) <= WORLD_SITES.claimWindow
+    && (site.x - p.x) ** 2 + (site.z - p.z) ** 2 <= WORLD_SITES.claimRadius ** 2);
+  if (site) {
+    (state.claimedSites ??= {})[site.id] = true;
+    site.claimed = true;
+  }
+  return site;
+}
+
+const RALLY_TURNS = [0, 0.8, -0.8, 1.6, -1.6, Math.PI];
+
+function hasClearOrbit(point: Point, ground: Ground): boolean {
+  for (const x of [-45, 0, 45]) for (const z of [-45, 0, 45]) {
+    if (ground(point.x + x, point.z + z) > BANDS[0] - 15) return false;
+  }
+  return true;
+}
+
+export function findRally(state: StageState, ground: Ground): Position {
+  const p = state.player, home = LANDMARKS.atoll;
+  if (Math.hypot(home.x - p.x, home.z - p.z) <= WORLD_SITES.rallyNear) return home;
+  let closest: WorldSite | undefined;
+  let best: number = WORLD_SITES.rallyNear;
+  for (const site of state.worldSites ?? []) {
+    if (site.kind !== 'beacon') continue;
+    const range = Math.hypot(site.x - p.x, site.z - p.z);
+    if (range < 110 || range >= best || !hasClearOrbit(site, ground)) continue;
+    closest = site;
+    best = range;
+  }
+  if (closest) return { x: closest.x, z: closest.z, alt: BANDS[1] };
+  for (const turn of RALLY_TURNS) {
+    const yaw = p.yaw + turn;
+    const x = p.x + Math.sin(yaw) * WORLD_SITES.rallyDistance;
+    const z = p.z + Math.cos(yaw) * WORLD_SITES.rallyDistance;
+    if (hasClearOrbit({ x, z }, ground)) return { x, z, alt: BANDS[1] };
+  }
+  return home;
 }

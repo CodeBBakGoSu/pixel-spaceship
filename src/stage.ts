@@ -1,4 +1,7 @@
 import { advanceBank, advanceBankDrive, advanceBankDrop, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
+import { fixedBand, SKIM, skimAltitude } from './bands.ts';
+import { FLY_IN_WORLD, WORLD_SITES } from './data/world.ts';
+import { isWater } from './world.ts';
 import { advanceRoll, rollAltitude, rollLateralStep } from './roll.ts';
 import { ROLL_TURN_DEADZONE } from './data/roll.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
@@ -6,7 +9,7 @@ import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
-import { addBomberEscort, advanceEnemies, makeEnemy, warnHarrier } from './stage-enemies.ts';
+import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { random, rngStream } from './stage-random.ts';
 import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
@@ -25,14 +28,14 @@ import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
 import { firePacedWarden, makePacedWarden, pacedExposureTick, positionPacedWeakPoints } from './warden.ts';
-import { ARENA, BEACON_SIGNAL_SECONDS, isLandmarkId, keepInsideArena, LANDMARKS, RIM_PUSH, RIM_WARNING } from './reach.ts';
+import { ARENA, BEACON_SIGNAL_SECONDS, findRally, isLandmarkId, LANDMARKS, reachedWorldSite, updateWorldSites } from './reach.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS,
   bombCapacity, clamp, dropFlares, dropRearBomb, fireHostile, flareCapacity, HIT_WINDOW, hurtPlayer, inBand,
   MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
   openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { Band, Boss, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome,
+import type { Band, Boss, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome, Pickup,
   StageInput, StageOptions, StageState } from './stage-types.ts';
 
 export { activeWeakPoint } from './stage-combat.ts';
@@ -57,16 +60,22 @@ export function parseStageOptions(search: string): StageOptions {
   const mode = q.get('mode');
   const seed = q.get('seed') ?? '';
   const time = q.has('t') ? Number(q.get('t')) : NaN;
+  // --- S7d lane ---
+  const fixtureCoordinate = (key: string) => {
+    const value = Number(q.get(key));
+    return Number.isFinite(value) ? clamp(value, -WORLD_SITES.fixtureExtent, WORLD_SITES.fixtureExtent) : 0;
+  };
   return {
     seed: /^-?\d+$/.test(seed) && Number.isSafeInteger(Number(seed)) ? Number(seed) >>> 0 : 1,
     view: v === 'top' ? 'overhead' : v === 'overhead' || v === 'chase' || v === 'cockpit' ? v : null,
     fixture: fixture === 'stack' || fixture === 'draft' || fixture === 'boss' || fixture === 'pursuit' || fixture === 'flare'
-      || fixture === 'reversal' || fixture === 'flyby' || fixture === 'rear-threat' || fixture === 'strafe'
+      || fixture === 'reversal' || fixture === 'flyby' || fixture === 'rear-threat' || fixture === 'strafe' || fixture === 'world'
       || isLandmarkId(fixture) || isNewEnemyKind(fixture) ? fixture : null,
     time: Number.isFinite(time) ? clamp(time, 0, mode === 'survivors' ? RUN_END_SECONDS : LEGACY_END_SECONDS) : null,
     autoplay: q.get('autoplay') === '1',
     touch: q.get('touch') === '1',
     ...(mode === 'survivors' || mode === 'legacy' ? { mode } : {}),
+    ...(fixture === 'world' ? { worldFixture: { x: fixtureCoordinate('x'), z: fixtureCoordinate('z'), skim: q.get('alt') === 'skim' } } : {}),
   };
 }
 
@@ -280,7 +289,7 @@ const fixtureBands: Record<NewEnemyKind, Band> = {
 };
 
 function applyFixture(state: StageState, fixture: StageOptions['fixture'], ground: Ground): void {
-  if (!fixture) return;
+  if (!fixture || fixture === 'world') return;
   const landmark = isLandmarkId(fixture) ? LANDMARKS[fixture] : null;
   const seconds = landmark ? BEACON_SIGNAL_SECONDS : fixture === 'draft' ? 45 : fixture === 'boss' ? 108 : 30;
   state.tick = seconds * TICKS_PER_SECOND;
@@ -295,7 +304,7 @@ function applyFixture(state: StageState, fixture: StageOptions['fixture'], groun
     const x = fixture === 'turret' ? LANDMARKS.ridge.x : p.x + (fixture === 'hound' ? 0 : 12);
     const z = p.z + (fixture === 'spotter' ? 90 : fixture === 'turret' ? 65 : 62);
     const enemy = makeEnemy(state, x, z, fixtureBands[fixture], fixture);
-    if (fixture === 'turret') enemy.alt = ground(x, z) + 5;
+    placeSkimEnemy(enemy, ground);
     state.enemies.push(enemy);
     if (fixture === 'bomber') addBomberEscort(state, enemy, ground);
   } else if (fixture === 'stack') {
@@ -408,6 +417,14 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options.fixture, ground);
+  // --- S7d lane ---
+  if (options.worldFixture) {
+    const { x, z, skim } = options.worldFixture;
+    const floor = ground(x, z);
+    Object.assign(state.player, { x, z, altitude: skim ? skimAltitude(floor) : Math.max(BANDS[1], floor + FLY_IN_WORLD.clearance) });
+    if (skim) state.player.skim = isWater(floor) ? 'water' : 'land';
+  }
+  updateWorldSites(state, ground);
   return state;
 }
 
@@ -427,13 +444,17 @@ function finish(state: StageState, outcome: Outcome): void {
   }
 }
 
-function startManeuver(state: StageState, kind: ManeuverKind, turn: number): void {
+function startManeuver(state: StageState, kind: ManeuverKind, turn: number, ground: Ground): void {
   if (state.run) state.metrics.maneuvers++;
   const p = state.player, spec = MANEUVERS[kind];
+  // --- S7d lane ---
+  const skimExit = kind === 'split-s' && (p.skim || fixedBand(p.altitude) === 0);
   const maneuver: Maneuver = {
     kind, elapsed: 0, yaw: p.yaw,
-    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind), side: turn < 0 ? -1 : 1,
+    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind, ground(p.x, p.z), !!p.skim), side: turn < 0 ? -1 : 1,
+    ...(skimExit ? { skimExit: true as const } : {}),
   };
+  if (kind === 'immelmann') delete p.skim;
   state.maneuver = maneuver;
   const trail = state.maneuverTrail = {
     kind, startTick: state.tick, yaw: p.yaw, side: maneuver.side, exitAltitude: maneuver.exitAltitude,
@@ -460,7 +481,6 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number): voi
         speed: enemy.kind === 'interceptor' ? 40 : 32, until };
     }
     if (enemy.course) {
-      keepInsideArena(enemy.course.target, state.arena);
       enemy.maneuverAt = Math.max(enemy.maneuverAt, until);
     }
   }
@@ -476,7 +496,7 @@ function reverseHeading(state: StageState, entryYaw: number): void {
 }
 
 function fly(state: StageState, input: StageInput, ground: Ground, grace: boolean, controlled: boolean): void {
-  const p = state.player, a = state.arena, maneuver = state.maneuver, roll = state.roll;
+  const p = state.player, maneuver = state.maneuver, roll = state.roll;
   if (!input.boost) state.boostRelease = false;
   const boostHeld = controlled && !grace && !!input.boost && !state.boostRelease;
   const priorBoost = state.boosting;
@@ -484,7 +504,9 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   state.boosting = boostHeld && state.boost > 0;
   state.boostTicks = state.boosting ? (priorBoost ? state.boostTicks + 1 : 1) : 0;
   if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35 * agility) * STEP, 0, 1);
+  const climb = clamp(input.climb ?? 0, -1, 1);
   let altitude: number;
+  let skimOnExit = false;
   if (maneuver && !controlled) {
     const motion = advanceManeuver(maneuver);
     state.speed = motion.speed;
@@ -495,6 +517,7 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     p.z += fz * motion.distance - fx * motion.slide;
     altitude = motion.altitude;
     if (motion.reverse) {
+      skimOnExit = !!maneuver.skimExit;
       reverseHeading(state, maneuver.yaw);
       state.maneuverReadyAt = state.tick + MANEUVERS[maneuver.kind].cooldown;
       if (maneuver.kind !== 'j-turn' && state.maneuverTrail) openReversal(state, state.maneuverTrail.pursuers);
@@ -520,20 +543,28 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       p.z -= fx * lateral;
       altitude = rollAltitude(roll);
     } else {
-      altitude = p.altitude + (p.bankDrop ?? 0) + clamp(input.climb ?? 0, -1, 1) * VERTICAL_SPEED * agility * STEP;
+      altitude = p.altitude + (p.bankDrop ?? 0) + climb * VERTICAL_SPEED * agility * STEP;
     }
   }
-  const dx = p.x - a.x, dz = p.z - a.z;
-  const distance = Math.hypot(dx, dz);
-  state.boundaryWarning = distance > a.radius - RIM_WARNING;
-  if (distance > a.radius - RIM_PUSH) {
-    const inward = maneuver?.kind === 'j-turn' ? 0 : Math.min(96, (distance - a.radius + RIM_PUSH) * 2.2) * STEP;
-    const bound = Math.min(a.radius, distance - inward);
-    p.x = a.x + dx * bound / distance;
-    p.z = a.z + dz * bound / distance;
-  }
+  // --- S7d lane ---
+  state.boundaryWarning = false;
   const prior = p.altitude;
-  const floor = Math.max(MIN_ALTITUDE, ground(p.x, p.z) + 22);
+  const groundHeight = ground(p.x, p.z);
+  const follow = skimAltitude(groundHeight);
+  const descending = controlled && !roll && climb < -SKIM.inputThreshold && altitude <= follow;
+  if (skimOnExit || descending || (p.skim && (!controlled || roll || climb <= SKIM.inputThreshold))) {
+    const clearance = clamp(SKIM.clearance + (roll ? altitude - roll.altitude : 0), SKIM.minClearance, SKIM.maxClearance);
+    p.altitude = groundHeight + clearance;
+    p.skim = isWater(groundHeight) ? 'water' : 'land';
+    if (p.bankDrop) p.bankDrop = 0;
+    state.climbRate = (p.altitude - prior) / STEP;
+    return;
+  }
+  if (p.skim) {
+    delete p.skim;
+    altitude = follow + climb * VERTICAL_SPEED * agility * STEP;
+  }
+  const floor = Math.max(MIN_ALTITUDE, groundHeight + FLY_IN_WORLD.clearance);
   const hold = clamp(altitude, floor, MAX_ALTITUDE);
   if (controlled && !roll) {
     const drop = advanceBankDrop(p.bankDrop ?? 0, p.bank, STEP);
@@ -565,6 +596,24 @@ function mergeSalvage(state: StageState): void {
   }
 }
 
+// --- S7d lane ---
+function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 'skim'>): void {
+  const beacon = buffTuning(state, 'salvage-beacon');
+  const xpScale = state.run ? SURVIVOR_XP_SCALE * billXpScale(state) * state.hangar.xpScale : 1;
+  const adjusted = pickup.xp * (beacon?.xpScale ?? 1) * xpScale + state.xpRemainder;
+  const whole = Math.floor(adjusted + 1e-9);
+  state.xp += whole;
+  state.xpRemainder = Math.max(0, adjusted - whole);
+  state.salvage += pickup.xp;
+  if (state.run) {
+    state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
+    state.metrics.orbs++;
+    noteBillPickup(state, pickup);
+  }
+  const band = pickup.skim || pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
+  state.salvageBands[band] += pickup.xp;
+}
+
 function advanceSalvage(state: StageState, ground: Ground): void {
   const p = state.player;
   for (const enemy of state.enemies) {
@@ -577,20 +626,19 @@ function advanceSalvage(state: StageState, ground: Ground): void {
     state.kills++;
     state.score += xp * 100;
     state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
-      alt: enemy.kind === 'turret' ? Math.max(BANDS[0], ground(enemy.x, enemy.z) + 22) : enemy.alt,
-      xp, born: state.tick, reversal: enemy.reversalKill });
+      alt: enemy.kind === 'turret' ? skimAltitude(ground(enemy.x, enemy.z)) : enemy.alt,
+      ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
   }
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
   const horizontalSpeed = Math.hypot(p.vx ?? 0, p.vz ?? 0);
   const magnet = buffTuning(state, 'magnet-core');
-  const beacon = buffTuning(state, 'salvage-beacon');
-  const magnetScale = state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1;
-  const xpScale = state.run ? SURVIVOR_XP_SCALE * billXpScale(state) * state.hangar.xpScale : 1;
+  const magnetScale = (state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1)
+    * (p.skim ? SKIM.magnetScale : 1);
   state.pickups = state.pickups.filter(pickup => {
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
-    if (!pickup.collected && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
+    if (!pickup.collected && !(p.skim && pickup.skim) && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
       pickup.pulling = false;
       return true;
     }
@@ -601,24 +649,15 @@ function advanceSalvage(state: StageState, ground: Ground): void {
       const pull = Math.min(range, speed * STEP) / range;
       const x = pickup.x + dx * pull, z = pickup.z + dz * pull;
       pickup.pulling = true;
-      if (ground(x, z) < pickup.alt && ground((pickup.x + x) / 2, (pickup.z + z) / 2) < pickup.alt) {
+      const floor = ground(x, z);
+      if (pickup.skim || (floor < pickup.alt && ground((pickup.x + x) / 2, (pickup.z + z) / 2) < pickup.alt)) {
         pickup.x = x;
         pickup.z = z;
+        if (pickup.skim) pickup.alt = skimAltitude(floor);
       }
     }
     if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= 8) {
-      const adjusted = pickup.xp * (beacon?.xpScale ?? 1) * xpScale + state.xpRemainder;
-      const whole = Math.floor(adjusted + 1e-9);
-      state.xp += whole;
-      state.xpRemainder = Math.max(0, adjusted - whole);
-      state.salvage += pickup.xp;
-      if (state.run) {
-        state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
-        state.metrics.orbs++;
-        noteBillPickup(state, pickup);
-      }
-      const band = pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
-      state.salvageBands[band] += pickup.xp;
+      creditSalvage(state, pickup);
       return false;
     }
     return true;
@@ -637,6 +676,36 @@ function applyBillReward(state: StageState): void {
     const cards = Array.from({ length: upgrades ?? chestPicks ?? 0 }, () => grantBonusUpgrade(state, state.streams.bills));
     state.chestReveal = cards.filter((card): card is ChestReward => card !== null);
   }
+}
+
+// --- S7d lane ---
+export function restoreWorldState(state: StageState, ground: Ground): void {
+  if (state.worldRegion) return;
+  Object.assign(state.arena, ARENA);
+  state.boundaryWarning = false;
+  for (const enemy of state.enemies) {
+    placeSkimEnemy(enemy, ground);
+    const tell = enemy.tell;
+    if (tell?.kind === 'flak') tell.alt = skimAltitude(ground(tell.x, tell.z));
+  }
+  for (const effect of state.effects) {
+    if (effect.kind === 'flak') effect.alt = skimAltitude(ground(effect.x, effect.z));
+  }
+  updateWorldSites(state, ground);
+}
+
+function advanceDestinations(state: StageState, ground: Ground): void {
+  if (state.worldRegion) updateWorldSites(state, ground);
+  else restoreWorldState(state, ground);
+  const site = reachedWorldSite(state);
+  if (site?.kind === 'supply') {
+    state.boost = Math.min(1, state.boost + WORLD_SITES.boost);
+    state.bombs = Math.min(bombCapacity(state), state.bombs + WORLD_SITES.reliefBombs);
+    if (state.bombs === bombCapacity(state)) state.bombReloadAt = null;
+  } else if (site?.kind === 'xp') {
+    creditSalvage(state, { alt: site.alt, xp: WORLD_SITES.wellXp });
+  }
+  if (!state.rally && !state.boss && state.tick >= beaconTick(state)) state.rally = findRally(state, ground);
 }
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
@@ -659,6 +728,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       const launch = input.launch;
       delete state.roll;
       delete state.rollReadyAt;
+      // --- S7d lane ---
+      delete state.rally;
+      delete state.claimedSites;
       Object.assign(state, createStage({ ...parseStageOptions(''), seed: launch?.seed ?? state.seed,
         view: state.initialView, time: 0, mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile,
         profile: launch?.profile ?? state.profile, daily: launch?.daily ?? state.daily, heat: launch?.heat ?? state.heat,
@@ -704,11 +776,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   const turn = input.turn ?? 0;
   advanceRoll(state, input.roll ? input.rollTurn ?? turn : undefined, events);
   if (Math.abs(turn) >= ROLL_TURN_DEADZONE) state.player.lastTurn = turn < 0 ? -1 : 1;
-  if (!input.roll && input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? turn);
+  if (!input.roll && input.maneuver && canManeuver(state, input.maneuver)) startManeuver(state, input.maneuver, input.maneuverTurn ?? turn, ground);
   const maneuver = state.maneuver;
   const { x, z } = state.player;
   const controlled = maneuverAllowsControl(maneuver);
   fly(state, input, ground, grace, controlled);
+  advanceDestinations(state, ground);
   if (state.run && state.boosting) state.metrics.boostTicks++;
   const vx = state.player.vx = (state.player.x - x) / STEP;
   const vz = state.player.vz = (state.player.z - z) / STEP;
@@ -718,8 +791,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   if (state.tick === bossTick(state) && !state.boss) {
-    const boss = state.boss = (state.run ? makePacedWarden : makeBoss)(state, LANDMARKS.atoll.x, LANDMARKS.atoll.z);
-    boss.entry = planFlyIn(state, state.arena, { x: boss.x, z: boss.z, alt: boss.alt },
+    const rally = state.rally ?? LANDMARKS.atoll;
+    const boss = state.boss = (state.run ? makePacedWarden : makeBoss)(state, rally.x, rally.z);
+    boss.entry = planFlyIn(state, state.player, { x: boss.x, z: boss.z, alt: boss.alt },
       { ticks: BOSS_FLY_IN_TICKS, bend: 0.23, exitSpeed: 0 });
     trimEscorts(state);
   }

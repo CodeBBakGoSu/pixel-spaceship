@@ -1,5 +1,6 @@
-import type { Band, Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
+import type { Boss, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot, StageState,
   WeakPoint } from './stage-types.ts';
+import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape, type HostileSourceKind } from './data/hostile-fire.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
@@ -13,7 +14,7 @@ import { rollBoltImmune, rollParryActive } from './roll.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
-export const BANDS = [75, 110, 145] as const;
+export { BANDS } from './bands.ts';
 export const HIT_WINDOW = 8;
 export const MIN_ALTITUDE = 55;
 export const MAX_ALTITUDE = 165;
@@ -112,6 +113,7 @@ export function hurtPlayer(state: StageState, source?: Position, events?: Combat
 
 export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credit?: KillCredit): void {
   if (!enemy.hp || enemy.entry) return;
+  if (state.player.skim && enemy.kind === 'turret') damage *= SKIM.groundDamageScale;
   enemy.hp = Math.max(0, enemy.hp - criticalDamage(state, damage));
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
@@ -238,7 +240,13 @@ export function openReversal(state: StageState, pursuers: readonly number[]): vo
   advanceEchoDeadlines(state);
 }
 
-function fireStrafe(state: StageState, target: Enemy, targetBand: Band, aurora: boolean): void {
+// --- S7d lane ---
+function strafeBandMatches(enemy: Enemy, band: FlightBand, altitude: number, window: number): boolean {
+  return band === SKIM_BAND ? contactBand(enemy) === SKIM_BAND && inBand(enemy.alt, altitude, window)
+    : !enemy.skim && inBand(enemy.alt, altitude, window);
+}
+
+function fireStrafe(state: StageState, target: Enemy, targetBand: FlightBand, aurora: boolean): void {
   const p = state.player;
   const x = p.x + Math.sin(p.yaw) * TWIN_MUZZLE;
   const z = p.z + Math.cos(p.yaw) * TWIN_MUZZLE;
@@ -255,11 +263,13 @@ function fireStrafe(state: StageState, target: Enemy, targetBand: Band, aurora: 
   const vy = dy / lead;
   if (!vy) return;
   const window = hitWindow(state, STRAFE_BAND_WINDOW);
-  const life = vy < 0 ? (p.altitude - BANDS[targetBand] + window) / -vy : (BANDS[targetBand] + window - p.altitude) / vy;
+  const targetAltitude = targetBand === SKIM_BAND ? target.alt : bandAltitude(targetBand);
+  const life = vy < 0 ? (p.altitude - targetAltitude + window) / -vy : (targetAltitude + window - p.altitude) / vy;
   if (life <= 0) return;
   const pierce = familyBonus(state, 'twin')?.pierce ?? 0;
   state.shots.push({
     x, z, alt: p.altitude, kind: 'strafe', targetBand,
+    ...(targetBand === SKIM_BAND ? { targetAltitude } : {}),
     vx: dx / lead + target.vx, vz: dz / lead + target.vz, vy,
     damage: weaponDamage(state, 'twin', 1), life,
     volley: ++state.nextVolley, nearMiss: false, lockId: null,
@@ -294,7 +304,7 @@ export function acquireAndFire(state: StageState): void {
   const locked = !!(state.lock?.ready && weak);
   let twin: Aim | null = locked ? weak : null;
   let wrong: Aim | null = weak && weak.exposed && weakRange <= LOCK_RANGE && Math.abs(weakAngle) <= TWIN_CONE
-    && !inBand(p.altitude, weak.alt, weakWindow) ? weak : null;
+    && canCueAltitude(p, weak.alt) && !inBand(p.altitude, weak.alt, weakWindow) ? weak : null;
   const forwardRange = state.run ? WEAPONS.twin.tuning.range : TWIN_RANGE;
   let twinRange: number = forwardRange, wrongRange: number = wrong ? weakRange : forwardRange;
   let left: Enemy | null = null, right: Enemy | null = null, rear: Enemy | null = null;
@@ -304,12 +314,11 @@ export function acquireAndFire(state: StageState): void {
   const overdrive = reversal && state.tick < reversal.until ? reversal : null;
   const reversalReady = overdrive && state.tick >= overdrive.nextShotAt;
   const overdriveTargets: RankedTarget[] = [];
-  const eligibleBand = nearestBand(p.altitude);
+  const eligibleBand = playerBand(p);
   const strafeReady = hasTwin && state.tick >= state.strafeAt;
-  const lowerBand = !strafeReady ? null : aurora
-    ? (eligibleBand > 0 ? eligibleBand - 1 as Band : null)
-    : inBand(p.altitude, BANDS[2]) ? 1 : inBand(p.altitude, BANDS[1]) ? 0 : null;
-  const upperBand = strafeReady && aurora && eligibleBand < 2 ? eligibleBand + 1 as Band : null;
+  const lowerBand = !strafeReady ? null : p.skim ? SKIM_BAND
+    : aurora || inBand(p.altitude, bandAltitude(eligibleBand)) ? adjacentBand(eligibleBand, -1) : null;
+  const upperBand = strafeReady && aurora ? adjacentBand(eligibleBand, 1) : null;
   const lowerTargets: RankedTarget[] = [], upperTargets: RankedTarget[] = [];
   const strafeWindow = hitWindow(state, STRAFE_BAND_WINDOW);
   for (const enemy of state.enemies) {
@@ -322,7 +331,7 @@ export function acquireAndFire(state: StageState): void {
       if (sameBand && !locked && range <= twinRange) {
         twin = enemy;
         twinRange = range;
-      } else if (!sameBand && range < wrongRange) {
+      } else if (!sameBand && range < wrongRange && canCueAltitude(p, enemy.alt)) {
         wrong = enemy;
         wrongRange = range;
       }
@@ -341,8 +350,9 @@ export function acquireAndFire(state: StageState): void {
       }
     }
     if (range < STRAFE_MIN_RANGE || range > STRAFE_RANGE || angle > STRAFE_CONE) continue;
-    if (lowerBand !== null && inBand(enemy.alt, BANDS[lowerBand], strafeWindow)) lowerTargets.push({ enemy, range });
-    if (upperBand !== null && inBand(enemy.alt, BANDS[upperBand], strafeWindow)) upperTargets.push({ enemy, range });
+    if (lowerBand !== null && strafeBandMatches(enemy, lowerBand, lowerBand === SKIM_BAND ? enemy.alt : BANDS[lowerBand], strafeWindow)
+      && (!p.skim || enemy.kind === 'turret')) lowerTargets.push({ enemy, range });
+    if (upperBand !== null && strafeBandMatches(enemy, upperBand, bandAltitude(upperBand), strafeWindow)) upperTargets.push({ enemy, range });
   }
 
   if (!twin && wrong) {
@@ -372,7 +382,7 @@ export function acquireAndFire(state: StageState): void {
   fireStrafes(state, upperTargets, upperBand, aurora);
 }
 
-function fireStrafes(state: StageState, targets: RankedTarget[], band: Band | null, aurora: boolean): void {
+function fireStrafes(state: StageState, targets: RankedTarget[], band: FlightBand | null, aurora: boolean): void {
   if (band === null || !targets.length) return;
   targets.sort((a, b) => a.range - b.range);
   const room = projectileRoom(state, 'twin');
@@ -461,7 +471,7 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
     burnTicks: Math.round((FLARE_BURN_TICKS + bonus) * (firebird ? evolution.burnScale : 1)),
     damage: weaponDamage(state, 'phoenix', 1),
     spread: phoenixLevel >= tuning.spreadAt ? tuning.burnRadius * (familyBonus(state, 'phoenix')?.radiusScale ?? 1) : undefined,
-    ...(firebird ? { phoenix: true as const, sourceBand: nearestBand(p.altitude) } : {}),
+    ...(firebird ? { phoenix: true as const, sourceBand: playerBand(p) } : {}),
   } : {};
   for (const side of fan) {
     state.flares.push({
@@ -530,8 +540,8 @@ function steerFirebird(state: StageState, flare: Flare, point: WeakPoint | null)
   let aim: Enemy | WeakPoint | null = null;
   let best: number = tuning.range ** 2;
   const targetDistance = (candidate: Enemy | WeakPoint): number => {
-    const band = nearestBand(candidate.alt);
-    return candidate.hp && band <= sourceBand && band + 1 >= sourceBand
+    const band = 'offset' in candidate ? contactBand(candidate) : nearestBand(candidate.alt);
+    return candidate.hp && (band === sourceBand || band === adjacentBand(sourceBand, -1))
       ? (candidate.x - flare.x) ** 2 + (candidate.z - flare.z) ** 2 : Infinity;
   };
   if (point && targetDistance(point) < best) {
@@ -726,9 +736,9 @@ export function groundImpact(origin: Position, dx: number, dz: number, ground: G
 }
 
 function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }>, ground: Ground): void {
-  const bandAltitude = BANDS[shot.targetBand];
+  const targetAltitude = shot.targetAltitude ?? bandAltitude(shot.targetBand);
   const bandWindow = hitWindow(state, STRAFE_BAND_WINDOW);
-  const boundary = bandAltitude + Math.sign(shot.vy) * bandWindow;
+  const boundary = targetAltitude + Math.sign(shot.vy) * bandWindow;
   const travel = shot.vy ? Math.min(STEP, (boundary - shot.alt) / shot.vy) : 0;
   if (travel <= 0) {
     shot.life = 0;
@@ -743,7 +753,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
     let first = obstacle;
     let hit: Enemy | null = null;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || !inBand(enemy.alt, bandAltitude, bandWindow)) continue;
+      if (!enemy.hp || enemy.entry || !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow)) continue;
       const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
       if (time < first) {
         first = time;
@@ -769,13 +779,14 @@ function advancePiercingShot(
   const pass = state.reversal?.startTick === shot.reversalTick ? state.reversal : null;
   const boss = shot.lockId === null ? null : state.boss;
   const point = boss && weakPointExposed(boss, state.tick) ? boss.weakPoints[boss.index] : null;
-  const altitude = shot.kind === 'strafe' ? BANDS[shot.targetBand] : shot.alt;
+  const altitude = shot.kind === 'strafe' ? shot.targetAltitude ?? bandAltitude(shot.targetBand) : shot.alt;
   const bandWindow = shot.kind === 'strafe' ? strafeWindow : window;
   let hit = false;
   while (bolt.remaining > 0) {
     let target: Enemy | null = null, first = terrain;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id) || !inBand(altitude, enemy.alt, bandWindow)) continue;
+      if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id)) continue;
+      if (!(shot.kind === 'strafe' ? strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow) : inBand(altitude, enemy.alt, bandWindow))) continue;
       const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
       if (time < first) {
         target = enemy;

@@ -1,5 +1,6 @@
 import { CRUISE_SPEED } from './flight.ts';
 import { BANDS, clamp, MAX_ALTITUDE, MIN_ALTITUDE, STEP } from './stage-combat.ts';
+import { fixedBand, skimAltitude } from './bands.ts';
 import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
 
 export { CRUISE_SPEED } from './flight.ts';
@@ -28,7 +29,7 @@ const ease = (u: number): number => (1 - Math.cos(Math.PI * u)) / 2;
 const mix = (start: number, end: number, u: number): number => start + (end - start) * u;
 
 export function nearestBand(altitude: number): Band {
-  return altitude <= 92.5 ? 0 : altitude <= 127.5 ? 1 : 2;
+  return fixedBand(altitude);
 }
 
 export function chooseManeuver(turn: number, climb: number): ManeuverKind {
@@ -41,10 +42,15 @@ export function maneuverForKey(code: string, turn: number, climb: number): Maneu
   if (code === 'Space') return chooseManeuver(turn, climb);
 }
 
-export function exitAltitude(altitude: number, kind: ManeuverKind): number {
+// --- S7d lane ---
+export function exitAltitude(altitude: number, kind: ManeuverKind, floor?: number, skimming = false): number {
+  if (kind === 'immelmann' && skimming) return BANDS.find(height => height > altitude) ?? MAX_ALTITUDE;
   const band = nearestBand(altitude);
   if (kind === 'immelmann' && band < 2) return BANDS[band + 1];
-  if (kind === 'split-s' && band > 0) return BANDS[band - 1];
+  if (kind === 'split-s') {
+    if (floor !== undefined && (band === 0 || skimming)) return Math.min(altitude, skimAltitude(floor));
+    if (band > 0) return BANDS[band - 1];
+  }
   return altitude;
 }
 

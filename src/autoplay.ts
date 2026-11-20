@@ -1,4 +1,5 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
+import { skimAltitude } from './bands.ts';
 import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
 import { LANDMARKS } from './reach.ts';
@@ -8,7 +9,7 @@ import { beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts'
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 type PilotMode = 'full' | 'top';
-type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby'] };
+type Route = Position & { kind: 'weak' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby']; skim?: true };
 
 function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
   let best: T | null = null, range = Infinity;
@@ -22,7 +23,7 @@ function nearest<T extends Position>(items: T[], x: number, z: number): T | null
   return best;
 }
 
-function routeFor(state: StageState, mode: PilotMode): Route {
+function routeFor(state: StageState, mode: PilotMode, skimUse: boolean): Route {
   const p = state.player, boss = state.boss;
   if (mode === 'top' && boss) {
     const { x, z, alt } = boss.entry?.target ?? boss;
@@ -52,12 +53,14 @@ function routeFor(state: StageState, mode: PilotMode): Route {
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
     if (former) return { ...former, kind: 'enemy' };
   }
+  // --- S7d lane ---
+  const rally = state.rally ?? LANDMARKS.atoll;
   if (mode === 'full' && !boss && state.tick >= beaconTick(state)
     && (state.run || state.level === 3 || state.tick >= 99 * TICKS_PER_SECOND)
-    && Math.hypot(LANDMARKS.atoll.x - p.x, LANDMARKS.atoll.z - p.z) > 145) {
-    return { ...LANDMARKS.atoll, kind: 'beacon' };
+    && Math.hypot(rally.x - p.x, rally.z - p.z) > 145) {
+    return { ...rally, kind: 'beacon' };
   }
-  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry), p.x, p.z);
+  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry && (skimUse || !enemy.skim)), p.x, p.z);
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
     const needsXp = mode === 'full' && (!!state.run || state.level < 3);
@@ -67,6 +70,9 @@ function routeFor(state: StageState, mode: PilotMode): Route {
     }
   }
   if (enemy) return { ...enemy, kind: 'enemy' };
+  if (Math.hypot(p.x - state.arena.x, p.z - state.arena.z) > state.arena.radius) {
+    return { x: p.x, z: p.z, alt: BANDS[1], kind: 'home' };
+  }
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
 
@@ -153,7 +159,7 @@ function hasRearFlareTarget(state: StageState): boolean {
   });
 }
 
-export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground): StageInput {
+export function autopilotInput(state: StageState, mode: PilotMode = 'full', ground?: Ground, skimUse = mode === 'full'): StageInput {
   if (state.phase === 'chest') {
     return { chestPick: state.chestReveal ? 'continue' : chestEvolutions(state)[0] ?? 'open' };
   }
@@ -171,12 +177,17 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   if (state.phase !== 'playing' || state.paused) return {};
   const flare = mode === 'full' && hasRearFlareTarget(state);
   if (!maneuverAllowsControl(state.maneuver)) return { flare };
-  const p = state.player, target = routeFor(state, mode);
+  const p = state.player, target = routeFor(state, mode, skimUse);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
   const delta = target.alt - p.altitude;
   const withinCoarse = Math.abs(delta) <= HIT_WINDOW;
-  const climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
+  // --- S7d lane ---
+  const localSkim = skimAltitude(ground?.(p.x, p.z));
+  const approachSkim = (target.kind === 'enemy' || target.kind === 'pickup') && target.skim && range < 180;
+  let climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
+  if (approachSkim) climb = p.skim ? 0 : -1;
+  else if (p.skim && target.alt > localSkim) climb = Math.max(0.25, climb);
   // Extend after each boss pass. Turning tightly around a stationary target would keep it off the nose.
   const extending = target.kind === 'weak' && range < 72 && Math.abs(angle) > Math.PI * 0.58;
   const acceptingPass = mode === 'full' && !!target.flyby && !state.boundaryWarning && Math.abs(angle) > Math.PI / 6;
@@ -188,7 +199,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
     else if (target.kind === 'weak' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < 115)) view = 'cockpit';
   }
   const dodge = state.invulnerability === 0 ? dodgeClimb(state, mode, climb, ground) : undefined;
-  const maneuver = mode === 'full' && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
+  const maneuver = mode === 'full' && !approachSkim && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > 24 && range < 65 && !state.boundaryWarning && canManeuver(state, 'immelmann');
   const boost = !acceptingPass && (extend || (range > 155 && Math.abs(angle) < 0.2 && (!!state.run || state.level < 3 || target.kind === 'beacon')));

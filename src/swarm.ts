@@ -1,6 +1,5 @@
 import { GNAT, type RunPhase, type SwarmFormation } from './data/phases.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
-import { keepInsideArena } from './reach.ts';
 import { BANDS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { beginEnemyFlyIn, makeEnemy } from './stage-enemies.ts';
 import { random } from './stage-random.ts';
@@ -16,7 +15,7 @@ function offsets(formation: SwarmFormation, members: number, i: number): { side:
 }
 
 // Choose a terrain-safe pack destination before committing any enemies to the wave.
-function packSites(state: StageState, ground: Ground, projected: Point, direction: number,
+function packSites(ground: Ground, projected: Point, direction: number,
   band: Band, formation: SwarmFormation, members: number) {
   const alt = BANDS[band];
   for (const turn of [0, 0.54, -0.54, 1, -1, 1.57, -1.57, Math.PI]) {
@@ -27,8 +26,7 @@ function packSites(state: StageState, ground: Ground, projected: Point, directio
     for (let i = 0; i < members; i++) {
       const { side, depth } = offsets(formation, members, i);
       const target = { x: x + fz * side + fx * depth, z: z - fx * side + fz * depth, alt };
-      if (Math.hypot(target.x - state.arena.x, target.z - state.arena.z) > state.arena.radius - 12
-        || ground(target.x, target.z) + GNAT.clearance > alt) break;
+      if (ground(target.x, target.z) + GNAT.clearance > alt) break;
       sites.push(target);
     }
     if (sites.length === members) return { sites, fx, fz };
@@ -39,7 +37,7 @@ export type SwarmObserver = (live: number, cap: number, requestedBeyondRoom: boo
 
 export function spawnSwarm(state: StageState, phase: RunPhase, members: number, ground: Ground,
   rng: { rng: number }, observe?: SwarmObserver): void {
-  const { player, arena } = state;
+  const { player } = state;
   let room = state.swarmCap - state.enemies.filter(enemy => enemy.kind === 'gnat' && enemy.hp > 0).length;
   const requestedBeyondRoom = members > room;
   if (room <= 0) {
@@ -48,7 +46,6 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
   }
   const travel = state.speed * WAVE_FLY_IN_TICKS / TICKS_PER_SECOND;
   const projected = { x: player.x + Math.sin(player.yaw) * travel, z: player.z + Math.cos(player.yaw) * travel };
-  keepInsideArena(projected, arena, 20);
   const direction = player.yaw + (random(rng) - 0.5) * 0.82;
   const band = phase.bands[Math.floor(random(rng) * phase.bands.length)];
   const formation = phase.formations[Math.floor(random(rng) * phase.formations.length)];
@@ -59,7 +56,7 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
     : [{ band, size: leadSize, direction }];
   for (const pack of packs) {
     if (room <= 0 || pack.size <= 0) break;
-    const layout = packSites(state, ground, projected, pack.direction, pack.band, formation, pack.size);
+    const layout = packSites(ground, projected, pack.direction, pack.band, formation, pack.size);
     if (!layout) continue;
     for (const { x, z } of layout.sites) {
       const gnat = makeEnemy(state, x, z, pack.band, 'gnat');

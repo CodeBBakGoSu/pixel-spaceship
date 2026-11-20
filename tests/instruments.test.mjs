@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions } from '../src/stage.ts';
-import { altitudeDeltaText, buildRadar, relativeMark } from '../src/instruments.ts';
+import { altitudeDeltaText, beaconTrack, buildRadar, relativeMark, worldSiteObjective } from '../src/instruments.ts';
 import { createTranslator } from '../src/i18n.ts';
 import { fireHostile } from '../src/stage-combat.ts';
 
@@ -132,11 +132,11 @@ test('TOP uses a single Warden return, while forward instruments track the expos
   assert.equal(forward.contacts[0].mark, '^');
 });
 
-test('far radar groups share a rim tick and the warning arc points to the nearest boundary', () => {
+test('far radar groups share a rim tick outside the original arena', () => {
   const state = createStage(parseStageOptions('?fixture=stack'));
   const p = state.player;
-  p.x = state.arena.x + 515;
-  p.z = state.arena.z;
+  p.x = 4515;
+  p.z = 0;
   state.enemies[0].x = p.x - 242;
   state.enemies[0].z = p.z;
   state.enemies[1].x = p.x - 243;
@@ -150,5 +150,54 @@ test('far radar groups share a rim tick and the warning arc points to the neares
   assert.equal(readout.rim.filter(tick => tick.kind === 'enemy').length, 1);
   assert.equal(readout.rim.filter(tick => tick.kind === 'salvage').length, 1);
   assert.equal(readout.rim.filter(tick => tick.kind === 'warden').length, 1);
-  assert.ok(Math.abs(readout.boundaryBearing - Math.PI / 2) < 0.001);
+});
+
+test('a Warden signal marks the rally point once the signal starts', () => {
+  const state = createStage(parseStageOptions('?fixture=stack&view=chase'));
+  state.rally = { x: 0, z: -80, alt: 110 };
+  assert.equal(beaconTrack(state), null);
+  state.tick = 92 * 60;
+  state.player.x = state.player.z = state.player.yaw = 0;
+  assert.deepEqual(beaconTrack(state), state.rally);
+  assert.ok(buildRadar(state).rim.some(tick => tick.kind === 'warden' && tick.angle === Math.PI));
+});
+
+test('navigation tracks nearby destinations and marks distant or aft destinations at their bearings', () => {
+  const state = createStage(parseStageOptions('?fixture=stack&view=cockpit'));
+  const p = state.player;
+  p.x = 7100;
+  p.z = -4600;
+  p.yaw = 0;
+  state.worldSites = [
+    { id: 'beacon', kind: 'beacon', x: p.x + 64, z: p.z + 96, alt: 110 },
+    { id: 'drop', kind: 'supply', x: p.x - 45, z: p.z - 44, alt: 75 },
+    { id: 'well', kind: 'xp', x: p.x + 900, z: p.z + 30, alt: 32 },
+    { id: 'claimed', kind: 'supply', x: p.x, z: p.z + 20, alt: 75, claimed: true },
+  ];
+  const cockpit = buildRadar(state);
+  const beacon = cockpit.contacts.find(contact => contact.kind === 'beacon');
+  assert.ok(beacon && beacon.x > 0 && beacon.y < 0);
+  assert.ok(cockpit.rim.some(tick => tick.kind === 'supply' && tick.angle === 5 * Math.PI / 4));
+  assert.ok(cockpit.rim.some(tick => tick.kind === 'xp' && tick.angle === Math.PI / 2));
+  assert.ok(cockpit.contacts.every(contact => contact.kind !== 'supply'));
+  assert.equal(cockpit.salvage, null);
+
+  state.view = 'overhead';
+  const top = buildRadar(state);
+  assert.equal(top.contacts.filter(contact => contact.kind === 'supply').length, 1);
+  assert.ok(top.contacts.find(contact => contact.kind === 'supply').y > 0);
+});
+
+test('the navigation objective gives the nearest unclaimed destination and its claim altitude', () => {
+  const state = createStage(parseStageOptions('?fixture=stack'));
+  const p = state.player;
+  state.worldSites = [
+    { id: 'claimed', kind: 'xp', x: p.x, z: p.z + 60, alt: 75, claimed: true },
+    { id: 'beacon', kind: 'beacon', x: p.x, z: p.z + 900, alt: 110 },
+    { id: 'supply', kind: 'supply', x: p.x - 160, z: p.z, alt: 110 },
+  ];
+  assert.equal(worldSiteObjective(state, createTranslator('en')), 'SUPPLY DROP · 270° · 160 m · ALT 110');
+  assert.equal(worldSiteObjective(state, createTranslator('ko')), '보급품 · 270° · 160 m · 고도 110');
+  state.worldSites[2].claimed = true;
+  assert.equal(worldSiteObjective(state, createTranslator('en')), null);
 });
