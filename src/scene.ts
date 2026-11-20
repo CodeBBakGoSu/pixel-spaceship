@@ -36,6 +36,7 @@ import { enemyAirframe, gnatGeometry, playerAirframe } from './models.ts';
 import { aceAirframe } from './models-roster.ts';
 import { choosePostTier, FlightPost, installSteppedHaze, visibleHazeCutoff } from './post.ts';
 import { RosterVisuals } from './roster-visuals.ts';
+import { ROSTER_SHEET_CAMERA } from './roster-sheet.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
   REAR_INSET_HEIGHT, REAR_INSET_WIDTH, REAR_VIEW_ASPECT } from './rear-glimpse.ts';
 import { rollAltitude, rollAttitude } from './roll.ts';
@@ -575,7 +576,19 @@ export class FlightScene {
     view.shake = state.view === 'overhead' ? 0 : shake;
     view.boost = lens;
     view.sink = view.yawLag = 0;
-    if (state.view === 'overhead') {
+    const review = this.fixture === 'roster-sheet' ? state.boss ?? state.enemies[0] : null;
+    if (review) {
+      const camera = this.chase, { distance, rise, fov } = ROSTER_SHEET_CAMERA;
+      view.fov = camera.fov = fov;
+      view.setback = view.shake = view.cameraBank = 0;
+      camera.setViewOffset(width, height, 0, 0, width, height);
+      const eyeZ = review.z - distance;
+      const eyeY = chaseEyeHeight(this.ground, review.x, eyeZ, review.alt + rise);
+      camera.position.set(review.x, eyeY, -eyeZ);
+      camera.lookAt(review.x, review.alt, -review.z);
+      this.fog.far = terrainFogFar(aspect, camera.fov, Math.atan2(review.alt - eyeY, distance), 0, !!phone);
+      this.camera = camera;
+    } else if (state.view === 'overhead') {
       view.fov = view.setback = view.cameraBank = 0;
       this.fog.far = (phone ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop).fogFar;
       const halfHeight = Math.max(127, (phone ? 105 : 125) / aspect);
@@ -664,7 +677,7 @@ export class FlightScene {
   private updatePlayer(state: StageState, attitude: ReturnType<typeof maneuverAttitude> | null): void {
     const p = state.player, flat = state.view === 'overhead';
     const chase = state.view === 'chase', external = flat || chase;
-    this.ship.visible = external && (state.invulnerability <= 0 || shieldFlash(state.tick));
+    this.ship.visible = this.fixture !== 'roster-sheet' && external && (state.invulnerability <= 0 || shieldFlash(state.tick));
     this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
     const climbPitch = !flat && maneuverAllowsControl(state.maneuver) ? state.climbRate * 0.004 : 0;
@@ -957,12 +970,12 @@ export class FlightScene {
     const terrainSettled = (terrainWasPending || terrainBuilt > 0) && !this.terrain.pending;
     const ladder = this.updateCamera(state, yaw, ignitionShake);
     const view = this.flightView;
-    view.streaks = this.atmosphere.update(this.camera instanceof PerspectiveCamera ? this.camera : null,
+    view.streaks = this.atmosphere.update(this.fixture !== 'roster-sheet' && this.camera instanceof PerspectiveCamera ? this.camera : null,
       state, ticks, reduceMotion, this.boostLens, phone, this.fixture);
     view.cloudFlash = this.atmosphere.cloudFlash;
     this.updatePlayer(state, attitude);
     const surface = this.surface;
-    if (surface) {
+    if (surface && this.fixture !== 'roster-sheet') {
       const plane = state.view === 'overhead' ? TOP_FLIGHT + 1 : undefined;
       surface.update(state, this.ship, this.camera, plane, ticks, this.boostLens, phone, this.fixture);
       view.trailSegments = surface.trailSegments;

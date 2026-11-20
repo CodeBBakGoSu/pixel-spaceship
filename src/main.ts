@@ -31,6 +31,7 @@ import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profi
 import { clockText, NumericHud } from './numeric-hud.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
+import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
@@ -97,10 +98,15 @@ const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
 const worldFixture = query.get('fixture') === 'world';
 const fidelityFixture = query.get('fixture') === 'fidelity';
+const rosterSheet = query.get('fixture') === 'roster-sheet' ? rosterSubject(query.get('kind')) : null;
 const comparisonScale = fidelityFixture && query.get('compare') === String(COMPARISON_DIVISOR) ? COMPARISON_DIVISOR : undefined;
-if (demoBullets || flightFixture || fidelityFixture) {
+if (demoBullets || flightFixture || fidelityFixture || rosterSheet) {
   query.set('mode', 'survivors');
   query.set('t', '0');
+}
+if (rosterSheet) {
+  query.set('view', 'chase');
+  root.classList.add('roster-sheet');
 }
 if (!query.has('mode') && (!query.has('fixture') || worldFixture)) query.set('mode', 'survivors');
 const options = parseStageOptions(query.toString());
@@ -444,6 +450,7 @@ function resize(): void {
 
 function objectiveText(): string {
   const fixture = options.fixture;
+  if (rosterSheet) return t(rosterSheet === 'ace' ? 'speaker.ace' : `enemy.${rosterSheet}`);
   if (fixture === 'flare' && state.tick >= 30 * TICKS_PER_SECOND && state.tick < 40 * TICKS_PER_SECOND) {
     return t('hud.flareDemo', { control: touch ? t('control.flareShort') : 'C' });
   }
@@ -1092,7 +1099,7 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!scene || guide || (persistent && document.hidden)) return;
-  if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || (bulletFixture && !bulletFixture.stress)) return;
+  if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
@@ -1383,7 +1390,7 @@ function animate(now: number): void {
     }
   }
   const timingFlight = state.phase === 'playing' && !state.paused && !document.hidden && !guide
-    && !flightFixture && !fidelityFixture && !freezeRoster && !staticWorldFixture && (!bulletFixture || bulletFixture.stress);
+    && !flightFixture && !fidelityFixture && !freezeRoster && !staticWorldFixture && !rosterSheet && (!bulletFixture || bulletFixture.stress);
   if (scene?.observeRenderFrame(timingFlight ? elapsed * 1000 : null)) {
     refreshRenderQuality();
     dirty = true;
@@ -1407,9 +1414,10 @@ async function start(): Promise<void> {
   applyLanguage();
   previousTime = performance.now();
   // --- S7f lane ---
-  if (flightFixture || fidelityFixture) {
+  if (flightFixture || fidelityFixture || rosterSheet) {
     frameNow = previousTime;
-    if (fidelityFixture) primeFidelityFixture(state, query);
+    if (rosterSheet) primeRosterSheet(state, rosterSheet, ground);
+    else if (fidelityFixture) primeFidelityFixture(state, query);
     else primeFlightFixture(state, query, ground, combatEvents);
     motion.speed = state.speed;
     motion.climb = state.climbRate;

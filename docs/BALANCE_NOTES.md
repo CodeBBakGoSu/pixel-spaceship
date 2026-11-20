@@ -183,3 +183,9 @@ The integrated batch uses Red Kite, seeds 1–100, and Heat 0. Both caps gave id
 The integrated peak was 48 live Gnats. The average clear rate and weak median survival are below target and set the baseline for Stage 7c.
 
 High quality max-load p95 in TOP/CHASE/COCKPIT was 16.7/16.8/16.8 ms at 1920×1080 and 16.7/16.7/16.7 ms in 390×844 emulation. The native RTX 4090 run sampled 300 frames in each view. Desktop COCKPIT averaged 59.6 FPS after two dropped intervals on the warmed repeat. A live remote SKIM run crossed a streamed chunk, climbed out of SKIM, then returned to 30 m clearance.
+
+## Roster silhouette review
+
+Open `?fixture=roster-sheet&kind=hound&lang=en` for a fixed three-quarter CHASE view from 88 m. The `kind` parameter accepts every enemy kind, plus `carrier` and `ace`. Use `lang=ko` for Korean or `touch=1` to force touch layout. The fixture holds the flight tick for comparable captures.
+
+Hound uses tapered copper wings and a bright intake. Flanker has cyan twin booms, Harrier a pale swept frame, Diver navy and gold delta wings, Bomber broad olive wings with separated engines, and Turret a raised octagonal receiver with twin barrels. Their fine variants use the shared 2× voxel grid. The High full stress mix went from 17,852 to 18,026 triangles against a 21,000 cap. Low mobile stress fell from 8,626 to 8,520 against a 10,000 cap. The full replay records match the World merge byte for byte.

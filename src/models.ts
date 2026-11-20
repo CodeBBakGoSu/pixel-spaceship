@@ -60,7 +60,7 @@ export function playerAirframe(detailed: boolean) {
 type Detail = readonly [x: number, y: number, z: number, width: number, length: number, material: number];
 type Airframe = { rows: string[]; palette: number[][]; size: number; details: Detail[] };
 
-// Planforms run from nose to tail. Letters mark the raised canopy and engine blocks.
+// Planforms run from nose to tail. Use 'w' for thin wings, 'C' for canopies and 'A' for raised fairings.
 const enemyAirframes: Record<NewEnemyKind, Airframe> = {
   skimmer: {
     size: 1.26, palette: [[0, 0, 0], [41, 33, 33], [216, 149, 47], [255, 213, 93], [77, 215, 204], [74, 209, 223]],
@@ -76,47 +76,52 @@ const enemyAirframes: Record<NewEnemyKind, Airframe> = {
       'bAbbbbbbbbbbbAb', '.bbbbbbbbbbbbb.'],
   },
   hound: {
-    size: 1.24, palette: [[0, 0, 0], [53, 28, 31], [200, 81, 51], [255, 163, 95], [252, 230, 189]],
-    // Staggered side intakes and three bright exhaust ports.
-    details: [[2, 5, 3, 1, 2, 1], [8, 5, 3, 1, 2, 1], [1, 6, 3, 1, 2, 1], [9, 6, 3, 1, 2, 1], [0, 8, 2, 1, 1, 4], [5, 9, 2, 1, 1, 4], [10, 8, 2, 1, 1, 4]],
-    rows: ['.....C.....', '.....C.....', '....bCb....', '....bCb....', '...bbCbb...', '..bbbbbbb..',
-      '.bbbbbbbbb.', 'bbb.bbb.bbb', 'Ab..bbb..bA', '....bAb....'],
+    size: 1.24, palette: [[0, 0, 0], [41, 49, 53], [229, 103, 54], [252, 173, 79], [163, 220, 233], [255, 229, 146]],
+    // The long orange spine carries short swept wings, shoulder intakes and one broad nozzle.
+    details: [[3, 4, 3, 1, 1, 1], [7, 4, 3, 1, 1, 1], [5, 8, 5, 1, 2, 3], [4, 9, 2, 3, 1, 5]],
+    rows: ['.....b.....', '.....C.....', '....bCb....', '....bbb....', '...AbbbA...',
+      '...wbbbw...', '.wwwbbbwww.', 'wwwwbbbwwww', '..wwbAbww..', '....AAA....'],
   },
   flanker: {
-    size: 1.38, palette: [[0, 0, 0], [22, 48, 53], [46, 161, 155], [141, 237, 222], [210, 244, 201]],
-    // Teal nacelles with raised outboard fins.
-    details: [[0, 4, 4, 1, 3, 3], [12, 4, 4, 1, 3, 3]],
-    rows: ['bbb.......bbb', 'bAb.......bAb', 'bbb...C...bbb', 'bbb..bCb..bbb', 'bbbbbbCbbbbbb',
-      'bbbbbCCCbbbbb', 'bbb..bbb..bbb', 'bbb.......bbb', 'bAb.......bAb'],
+    size: 1.38, palette: [[0, 0, 0], [53, 89, 114], [48, 174, 204], [118, 239, 250], [198, 250, 234], [219, 250, 255]],
+    // A short central fuselage leaves open channels between the cyan engine booms.
+    details: [[2, 3, 3, 1, 1, 1], [10, 3, 3, 1, 1, 1], [2, 6, 5, 1, 2, 3], [10, 6, 5, 1, 2, 3],
+      [1, 8, 2, 2, 1, 5], [10, 8, 2, 2, 1, 5]],
+    rows: ['......b......', '.....bCb.....', '.....bbb.....', '.bb..bbb..bb.', '.bAwwbbbwwAb.',
+      'wwAwwbbbwwAww', '.bA..bbb..Ab.', '.bA..bbb..Ab.', '.bb.......bb.'],
   },
   harrier: {
-    size: 1.36, palette: [[0, 0, 0], [48, 43, 59], [211, 218, 214], [136, 134, 222], [255, 238, 169]],
-    // Pale engine covers and a violet chevron across the spine.
-    details: [[1, 0, 4, 1, 2, 4], [11, 0, 4, 1, 2, 4], [4, 5, 3, 1, 1, 3], [8, 5, 3, 1, 1, 3], [5, 6, 3, 1, 1, 3], [7, 6, 3, 1, 1, 3], [6, 7, 3, 1, 1, 3]],
-    rows: ['Ab...AbA...bA', 'bbb..bCb..bbb', '.bbb.bCb.bbb.', '.bbb.bCb.bbb.', '..bbbbbbbbb..',
-      '..bbbbbbbbb..', '...bbAbAbb...', '....bbbbb....', '.....bbb.....'],
+    size: 1.36, palette: [[0, 0, 0], [76, 70, 102], [207, 213, 230], [151, 130, 233], [140, 198, 213], [233, 200, 255]],
+    // Small canards and the violet chevron break up the pale, pinched fuselage.
+    details: [[5, 3, 3, 1, 1, 1], [7, 3, 3, 1, 1, 1], [2, 5, 2, 2, 1, 3], [9, 5, 2, 2, 1, 3],
+      [4, 6, 3, 1, 1, 3], [8, 6, 3, 1, 1, 3], [6, 7, 5, 1, 2, 3], [5, 8, 2, 3, 1, 5]],
+    rows: ['......b......', '......C......', '....wbCbw....', '.....bbb.....', '..ww.bbb.ww..',
+      '.wwwwbAbwwww.', 'wwwwbbbbbwwww', '....wbAbw....', '.....AAA.....'],
   },
   diver: {
-    size: 1.34, palette: [[0, 0, 0], [33, 43, 55], [105, 128, 155], [249, 181, 78], [255, 224, 132]],
-    // Gold shoulders and a matching underside warning panel.
-    details: [[2, 4, 4, 3, 2, 3], [8, 4, 4, 3, 2, 3], [5, 3, 1, 3, 4, 4]],
-    rows: ['......C......', '.....bCb.....', '....bbCbb....', '..bbbbCbbbb..', 'bbbbbbCbbbbbb',
-      'AbbbbbbbbbbA', '..bbbbbbbbb..', '....bbAbb....', '.....bbb.....'],
+    size: 1.34, palette: [[0, 0, 0], [40, 58, 87], [80, 119, 161], [248, 190, 81], [151, 208, 243], [230, 244, 255]],
+    // Gold leading edges trace a broad arrow with free trailing tips.
+    details: [[5, 3, 3, 1, 1, 1], [7, 3, 3, 1, 1, 1], [3, 3, 2, 2, 1, 3], [8, 3, 2, 2, 1, 3],
+      [2, 4, 2, 2, 1, 3], [9, 4, 2, 2, 1, 3], [1, 5, 2, 2, 1, 3], [10, 5, 2, 2, 1, 3],
+      [0, 6, 2, 2, 1, 3], [11, 6, 2, 2, 1, 3], [5, 8, 2, 3, 1, 5], [6, 7, 5, 1, 2, 3]],
+    rows: ['......b......', '.....bCb.....', '....bbCbb....', '...wwbbbww...', '..wwwbbbwww..',
+      '.wwwwbAbwwww.', 'wwwwbbbbbwwww', 'ww...bAb...ww', '.....AAA.....'],
   },
   bomber: {
-    size: 1.62, palette: [[0, 0, 0], [41, 43, 37], [119, 145, 106], [235, 133, 184], [255, 195, 221]],
-    // Dark engine covers and a pink mine hatch underneath.
-    details: [[1, 6, 4, 3, 2, 1], [15, 6, 4, 3, 2, 1], [8, 5, 1, 3, 3, 3]],
-    rows: ['.......CCCCC.......', '....bbbCCCCCbbb....', '..bbbbbCCCCCbbbbb..', 'bbbbbbbCCCCCbbbbbbb',
-      'bbbAbbbbbbbbbbbAbbb', 'bbbbbbbbbbbbbbbbbbb', 'bbbbb.bbbbbbb.bbbbb', 'bAbbb.bbbbbbb.bbbAb',
-      '..bbb..bbbbb..bbb..'],
+    size: 1.62, palette: [[0, 0, 0], [56, 65, 66], [136, 156, 88], [235, 113, 177], [209, 232, 205], [255, 188, 226]],
+    // Broad olive wings carry twin magenta nacelles and a central mine hatch underneath.
+    details: [[3, 3, 3, 2, 1, 1], [14, 3, 3, 2, 1, 1], [3, 8, 2, 2, 1, 5], [14, 8, 2, 2, 1, 5], [8, 5, 0, 3, 3, 3]],
+    rows: ['........bbb........', '........CCC........', '.......bbbbb.......', '..bbb..bbbbb..bbb..',
+      '.wwAAwwbbbbbwwAAww.', 'wwbAAwwbbbbbwwAAbww', 'wwbAA..bbbbb..AAbww', '..bAA..bbbbb..AAb..',
+      '..bbb...bbb...bbb..'],
   },
   turret: {
-    size: 1.5, palette: [[0, 0, 0], [43, 47, 49], [154, 152, 139], [249, 101, 83], [255, 184, 132]],
-    // Low armor skirt and red gun breeches.
-    details: [[0, 4, 0, 11, 3, 1], [3, 4, 4, 1, 2, 3], [7, 4, 4, 1, 2, 3]],
-    rows: ['...C...C...', '...C...C...', '..bCbbbCb..', '.bbCbAbCbb.', 'bbbbbbbbbbb',
-      'bbbbAbAbbbb', 'bbbbbbbbbbb', '.bbbbbbbbb.'],
+    size: 1.5, palette: [[0, 0, 0], [58, 75, 71], [148, 168, 164], [186, 219, 95], [235, 250, 162]],
+    // Two narrow barrel extensions join the raised receiver on a broad, low platform.
+    details: [[2, 2, 0, 7, 5, 1], [1, 3, 0, 9, 3, 1], [3, 0, 3, 1, 4, 3], [7, 0, 3, 1, 4, 3],
+      [3, 0, 3, 1, 1, 4], [7, 0, 3, 1, 1, 4]],
+    rows: ['...........', '...........', '..wwwwwww..', '.wwbAbAbww.', 'wwwbbCbbwww',
+      'wwwbbbbbwww', '.wwwwwwwww.', '..wwwwwww..'],
   },
 };
 
@@ -124,12 +129,13 @@ function makeRosterModel(kind: NewEnemyKind): VoxelModel {
   const { rows, details } = enemyAirframes[kind];
   const width = rows[0].length, length = rows.length, height = 6;
   const data = new Uint8Array(width * length * height);
+  const edgeTrim = kind === 'skimmer' || kind === 'spotter';
   for (let y = 0; y < length; y++) for (let x = 0; x < width; x++) {
     const cell = rows[y][x];
     if (cell === '.') continue;
-    const edge = !x || x === width - 1 || !y || y === length - 1
-      || rows[y][x - 1] === '.' || rows[y][x + 1] === '.' || rows[y - 1][x] === '.' || rows[y + 1][x] === '.';
-    const tall = cell === 'C' ? 5 : cell === 'A' ? 4 : 3;
+    const edge = edgeTrim && (!x || x === width - 1 || !y || y === length - 1
+      || rows[y][x - 1] === '.' || rows[y][x + 1] === '.' || rows[y - 1][x] === '.' || rows[y + 1][x] === '.');
+    const tall = cell === 'C' ? 5 : cell === 'A' ? 4 : cell === 'w' ? 2 : 3;
     for (let z = 1; z <= tall; z++) {
       data[(z * length + y) * width + x] = cell === 'C' && z >= 4 ? 4 : cell === 'A' && z >= 3 ? 3 : edge ? 1 : 2;
     }
@@ -139,7 +145,9 @@ function makeRosterModel(kind: NewEnemyKind): VoxelModel {
       data[(z * length + y + dy) * width + x + dx] = material;
     }
   }
-  return { width, length, height, pivot: [(width - 1) / 2, (length - 1) / 2, 2], data };
+  // The turret's plinth reaches the ground from its 5 m contact height.
+  const pivotHeight = kind === 'turret' ? 3 : 2;
+  return { width, length, height, pivot: [(width - 1) / 2, (length - 1) / 2, pivotHeight], data };
 }
 
 const DRONE_VOXEL_SIZE = 0.84;
@@ -168,6 +176,12 @@ export function enemyAirframe(kind: RegularEnemyKind, detailed = false) {
     const along = (y + model.pivot[1] + 0.5) / model.length;
     const upper = !sample(x, y, z + 0.5);
     const shoulder = !sample(x + Math.sign(x) * 0.5, y, z);
+
+    if (kind === 'turret') {
+      if (upper && material === 2 && Math.abs(x) > 2 && Math.abs(y - 0.5) < 0.3) return panel;
+      if (upper && material === 3 && y < -2.5) return glint;
+      return material;
+    }
 
     if (material === canopy) {
       if (upper && x < -0.5 && along < 0.68) return glint;
