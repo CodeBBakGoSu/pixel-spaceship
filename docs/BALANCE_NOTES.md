@@ -304,3 +304,39 @@ Chromium 149 with ANGLE Vulkan on an RTX 4090 rendered the live Survivors time s
 | Portrait | 9:00 | 12–26 → 49–69 | 16.67 → 16.67 ms | 16.8 → 16.7 ms |
 
 All six candidate windows averaged 60.00 FPS. Each build's desktop 1:00 launch recovered from one WebGL context loss before warm-up. The measured flight windows recorded zero context losses and zero console or page errors. Raw traces and reports are under the local ignored `sim-out/trail-density/` directory.
+
+
+## Ground AA merge
+
+The twin cannon can now depress onto ground AA from any altitude band when no same-band fighter is in the forward cone, and strafe acquires turrets from every band. Flak still detonates at skim height with the existing hit window. The tell adds a muzzle flash and a lead line; those cues are render-only. The SKIM 1.25× ground-damage bonus is unchanged. Difficulty was left at the post-fix rates: there was no damage or spawn retune after the merge.
+
+The official desktop Heat 0 batch used seeds 1–100 on the merged `renderer-proto` build (`a3b8cf8`, s8-flak plus the density curve from `5dd58c3`). A clear is an Ace defeat or a live 10:00 timeout. Successful runs count as surviving 600 seconds, including when the Ace falls earlier. The density-only figures are from the previous section. Flak-only, before density, cleared 100% / 72% / 20% with a weak median of 518 s.
+
+| Pilot | Clears density-only → merged | Ace wins density-only → merged | Median survival density-only → merged (s) | Median level-ups density-only → merged | Median kills merged | Median end hull merged |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 97% → 100% | 96% → 100% | 600.0 → 600.0 | 30 → 29 | 1093.5 | 13 |
+| Average | 61% → 74% | 52% → 61% | 600.0 → 600.0 | 30 → 30.5 | 1128.5 | 9 |
+| Weak | 9% → 16% | 0% → 0% | 265.0 → 523.6 | 13 → 27 | 900 | 0 |
+
+Average had 13% live timeouts. Weak survival was p10 147.2 / median 523.6 / p90 600.0 s, with 16% live timeouts. Desktop peaked at 72–73 live Gnats with zero cap-pressure beats.
+
+### Replay verification
+
+Seed-1 terminal hashes were regenerated for the combined build and reproduced with fidelity on and off, twice each.
+
+| Mode | Seed-1 hash |
+| --- | --- |
+| Legacy | `12da2045628f47138ffef72b439e8fca4582fc24663cc4cab1ea1c675aba08ae` |
+| Survivors | `a0203b724f1c3866d161333870441d5160d6ed2e5fcb12c47d8f93ff2090097f` |
+
+The Legacy hash matches the flak-only build. Density does not change Legacy. The Survivors hash is new against both the density-only and flak-only goldens.
+
+### Native CHASE performance
+
+Chromium 149 with ANGLE Vulkan on an RTX 4090 rendered a live Survivors time seek at 8:00. The window used seed 2, 180 warm-up frames, and 360 consecutive measured intervals at High quality. Desktop was 1280×800 at DPR 1. The merged production bundle (`index-C-efB6Dm.js`) served from port 5181.
+
+| Layout | Seek | Live contacts | Mean frame time | p95 |
+| --- | ---: | ---: | ---: | ---: |
+| Desktop | 8:00 | 27 | 16.67 ms | 16.7 ms |
+
+The window averaged 60.00 FPS. High stayed active. There were zero context losses and zero console or page errors during the measured flight. Frame p99 and max were 16.8 ms.
