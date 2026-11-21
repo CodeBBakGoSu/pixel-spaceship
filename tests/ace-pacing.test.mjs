@@ -167,6 +167,15 @@ test('the Ace descends into SKIM and follows the changing terrain while turning'
   assert.ok(Math.abs(open.bank) > 0);
 });
 
+test('the Ace keeps its own full-bank cruise speed and vertical band-change rate', () => {
+  const state = stage('?mode=survivors&t=0');
+  const ace = state.boss = makeAce(state, state.player.x - 300, state.player.z, ground);
+  Object.assign(ace, { bank: 1.5, bankDrive: 1, yaw: 0, band: 2, alt: 110 });
+  advanceAce(state, ground);
+  assert.ok(Math.abs(Math.hypot(ace.vx, ace.vz) - 53.508) < 1e-9);
+  assert.ok(Math.abs((ace.alt + ace.bankDrop - 110) * 60 - 32) < 1e-9);
+});
+
 test('Ace defeat spins the craft down before paying the victory cache', () => {
   const state = stage(), ace = state.boss;
   ace.tell = null;

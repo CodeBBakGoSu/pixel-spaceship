@@ -36,7 +36,7 @@ export const BOT_PROFILES = {
     reactionDelayTicks: 9, aimErrorRad: 0.10, dodgeQuality: 0.60, maneuverUse: 0.52,
     rollUse: 0.16, parryTiming: 0.58, rollDodgeQuality: 0.56,
     skimUse: 0.35,
-    altitudeUse: 0.67, pickupGreed: 0.65, draftPickQuality: 0.63, chestPick: 0.65, billsHandling: 0.56,
+    altitudeUse: 0.65, pickupGreed: 0.65, draftPickQuality: 0.63, chestPick: 0.65, billsHandling: 0.56,
     aceLead: 0.52, aceWarningTicks: 9,
   },
   weak: {

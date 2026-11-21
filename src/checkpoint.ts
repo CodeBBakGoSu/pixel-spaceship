@@ -26,6 +26,8 @@ export function decodeCheckpoint(raw: string | null, ground?: Ground): StageStat
       || !state.profile || !state.bills || !state.chests || !state.player || !state.arena
       || ![state.enemies, state.shots, state.pickups, state.effects, state.draft, state.picks].every(Array.isArray)
       || ![state.seed, state.rng, state.player.x, state.player.z, state.player.altitude, state.hull, state.level].every(Number.isFinite)) return null;
+    if (state.player.pitch === undefined) state.player.pitch = 0;
+    else if (!Number.isFinite(state.player.pitch)) return null;
     const oldWorld = !state.worldRegion;
     const terrain: Ground = ground ?? ((x, z) => groundAt(state.seed, x, z));
     restoreWorldState(state, terrain);

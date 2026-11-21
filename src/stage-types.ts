@@ -279,6 +279,8 @@ export type StageState = {
   rally?: Position;
   player: {
     x: number; z: number; altitude: number; yaw: number; bank: number;
+    /** Flight-path angle in radians, positive when climbing. */
+    pitch: number;
     bankDrive?: number; bankDrop?: number; lastTurn?: -1 | 1; vx?: number; vz?: number;
     skim?: 'water' | 'land';
   };

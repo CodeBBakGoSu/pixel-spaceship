@@ -38,10 +38,11 @@ test('the boost lens eases to full in 15 ticks and returns to level in 30 ticks'
 test('bank mapping uses the full cockpit attitude, a partial chase roll and a phone cap', () => {
   const bank = -85 * degree;
   close(feel.cameraBank(bank, 'cockpit', false), bank);
-  close(feel.cameraBank(bank, 'chase', false), bank * 0.4);
+  close(feel.cameraBank(bank, 'chase', false), bank * 0.15);
   for (const view of ['cockpit', 'chase']) {
-    close(feel.cameraBank(bank, view, true), -25 * degree);
-    close(feel.cameraBank(-bank, view, true), 25 * degree);
+    const capped = view === 'cockpit' ? 25 * degree : -bank * 0.15;
+    close(feel.cameraBank(bank, view, true), -capped);
+    close(feel.cameraBank(-bank, view, true), capped);
     close(feel.cameraBank(bank, view, false, true), 0);
   }
   close(feel.cameraBank(2 * Math.PI, 'chase', false, false, true), 0);
@@ -52,13 +53,13 @@ test('chase yaw crosses the signed angle boundary on the short arc', () => {
   const shortCrossing = feel.laggedYaw(179 * degree, -179 * degree, 1 / 60);
   assert.ok(Math.abs(shortCrossing + 179 * degree) < 2 * degree);
   const hardTurn = feel.laggedYaw(0, 1.2, 1 / 60);
-  assert.ok(hardTurn < 1.2 && hardTurn > 1.2 - 12 * degree);
+  assert.ok(hardTurn < 1.2 && hardTurn >= 1.2 - 22 * degree - 1e-9);
 });
 
 test('chase roll eases in and back out while a same-tick phone resize applies the camera cap', () => {
   const motion = new feel.FlightMotion();
   const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
-  const bank = -85 * degree, chaseTarget = bank * 0.4;
+  const bank = -85 * degree, chaseTarget = bank * 0.15;
   motion.advance(stage, 0, 0, false, false, false);
   stage.tick++;
   motion.advance(stage, 0, bank, false, false, false);
@@ -67,10 +68,10 @@ test('chase roll eases in and back out while a same-tick phone resize applies th
   motion.advance(stage, 0, bank, false, false, false);
   close(motion.chaseBank, chaseTarget, 0.001);
   motion.advance(stage, 0, bank, false, true, false);
-  close(motion.chaseBank, -25 * degree);
+  close(motion.chaseBank, chaseTarget, 0.001);
   stage.tick++;
   motion.advance(stage, 0, 0, false, true, false);
-  assert.ok(motion.chaseBank > -25 * degree && motion.chaseBank < 0);
+  assert.ok(motion.chaseBank > chaseTarget && motion.chaseBank < 0);
   stage.tick += 60;
   motion.advance(stage, 0, 0, false, true, false);
   close(motion.chaseBank, 0, 0.001);
@@ -85,7 +86,7 @@ test('shake decays at 4.5/s and reduced motion clears both boost and camera move
   motion.advance(stage, 0.6, -1.4, false, false, false);
   assert.equal(motion.boost, 1);
   assert.ok(Math.hypot(motion.shake, motion.shakeVertical) > 0.02);
-  close(motion.chaseBank, -1.4 * 0.4);
+  close(motion.chaseBank, -1.4 * 0.15);
   motion.advance(stage, 0.6, -1.4, false, false, true);
   assert.deepEqual([motion.boost, motion.shake, motion.shakeVertical, motion.chaseBank], [0, 0, 0, 0]);
   assert.deepEqual(stage, original);
@@ -141,4 +142,38 @@ test('mirrored rear-camera roll presents the same horizon angle as the forward b
   // Account for the target's horizontal flip and the conversion to screen pixels.
   const slope = (left.y - right.y) / ((left.x - right.x) * REAR_VIEW_ASPECT);
   close(slope, Math.tan(bank), 0.03);
+});
+
+test('the simulated pitch tilts the ship and camera while the chase camera carries measured altitude gain', () => {
+  const motion = new feel.FlightMotion();
+  const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
+  const flight = { altitude: 110, pitch: 0, climbRate: 0, controlled: true, turn: 0 };
+  motion.advance(stage, 0, 0, false, false, false, flight);
+  assert.deepEqual([motion.pitch, motion.followAlt, motion.chaseTilt], [0, 110, 0]);
+  flight.pitch = 32 * degree;
+  flight.climbRate = 40;
+  for (let i = 0; i < 60; i++) {
+    stage.tick++;
+    flight.altitude += 40 / 60;
+    motion.advance(stage, 0, 0, false, false, false, flight);
+  }
+  close(motion.pitch, flight.pitch, 0.001);
+  assert.ok(motion.followAlt < flight.altitude - 2 && motion.followAlt > flight.altitude - 15);
+  assert.ok(motion.chaseTilt > 0.1);
+  assert.ok(motion.headY < 0);
+  motion.advance(stage, 0, 0, false, false, true, flight);
+  assert.deepEqual([motion.followAlt, motion.chaseTilt, motion.headX, motion.headY], [flight.altitude, 0, 0, 0]);
+});
+
+test('terrain-follow altitude changes leave a level skim nose and horizon', () => {
+  const motion = new feel.FlightMotion();
+  const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
+  const flight = { altitude: 48, pitch: 0, climbRate: 0, controlled: true, turn: 0 };
+  motion.advance(stage, 0, 0, false, false, false, flight);
+  stage.tick++;
+  flight.altitude += 1;
+  flight.climbRate = 60;
+  motion.advance(stage, 0, 0, false, false, false, flight);
+  assert.deepEqual([motion.pitch, motion.chaseTilt], [0, 0]);
+  assert.ok(motion.followAlt > 48.6 && motion.followAlt < 49);
 });

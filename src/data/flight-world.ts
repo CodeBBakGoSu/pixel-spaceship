@@ -18,7 +18,7 @@ export const CLOUDS = {
   opacity: 0.55,
   extraRadius: 55,
   checkRadius: scaleTravel(47),
-  colors: [0xc5e0e0, 0xd3e5e5, 0xecf4e9],
+  colors: [0xe4eefc, 0xeef4ff, 0xf6f9ff],
   // x, height, z, width, height, depth in the patch's local coordinates.
   blocks: [
     [-13, 0, 0, 19, 2.8, 9],
@@ -68,8 +68,8 @@ export const FLIGHT_SURFACE = {
   dustColors: [0xe6d3a6, 0xc3a97d, 0x8e886c],
   fixture: { turnRate: 2.65, waterClearance: 25, landClearance: 31 },
   shadow: {
-    textureSize: 16, segments: 4, bias: 0.42, color: 0x112134,
-    nearOpacity: 0.62, farOpacity: 0.21, fullSpreadClearance: 150,
-    width: 16, extraWidth: 15, length: 19, extraLength: 14,
+    textureSize: 32, segments: 4, bias: 0.42, color: 0x1b3557,
+    nearOpacity: 0.58, farOpacity: 0.36, fullSpreadClearance: 150,
+    width: 19, extraWidth: 3, length: 16, extraLength: 3,
   },
 } as const;

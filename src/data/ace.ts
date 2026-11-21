@@ -5,7 +5,7 @@ export const ACE = {
   phaseHealth: { cover: 0.66, desperate: 0.33 },
   entry: { ticks: 120, bend: 0.23 },
   flight: {
-    clearance: 22, turnGain: 2.35, breakTurn: 0.22,
+    clearance: 22, turnGain: 2.35, breakTurn: 0.22, deepTurnDrag: 0.475,
     interceptSeconds: 0.32, tailDistance: scaleTravel(72), tailRange: scaleTravel(127), tailCos: 0.48,
     closeRange: scaleTravel(24), breakTicks: 65, warningCooldown: 180,
     verticalScale: 0.8, pitchScale: 0.46, bandStepDelay: 90,

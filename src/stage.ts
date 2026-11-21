@@ -1,4 +1,5 @@
-import { advanceBank, advanceBankDrive, advanceBankDrop, bankThrustFactor, bankYawRate, boostAirspeed, CRUISE_SPEED } from './flight.ts';
+import { advanceBank, advanceBankDrive, advanceBankDrop, advancePitch, bankThrustFactor, bankYawRate, boostAirspeed,
+  CRUISE_SPEED, pitchLimitScale, pitchSpeedFactor, pitchVerticalSpeed } from './flight.ts';
 import { fixedBand, SKIM, skimAltitude } from './bands.ts';
 import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, WORLD_SITES } from './data/world.ts';
@@ -37,7 +38,7 @@ import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, BODY_RADIUS,
   bombCapacity, clamp, dropFlares, dropRearBomb, fireHostile, flareCapacity, HIT_WINDOW, hurtPlayer, inBand,
   MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
-  openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, VERTICAL_SPEED, WIPE_DURATION,
+  openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { AcePhase, Band, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome, Pickup,
   StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -355,7 +356,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
       bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat') },
     view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA }, boundaryWarning: false,
-    player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0 },
+    player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0, pitch: 0 },
     speed: 0, climbRate: 0, hull, maxHull: hull, hitsTaken: 0, rank: null, invulnerability: 0,
     boost: 1, boosting: false, boostTicks: 0, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
     flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
@@ -455,11 +456,12 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   state.boostTicks = state.boosting ? (priorBoost ? state.boostTicks + 1 : 1) : 0;
   if (maneuver?.kind !== 'j-turn') state.boost = clamp(state.boost + (boostHeld ? -0.5 : 0.35 * agility) * STEP, 0, 1);
   const climb = clamp(input.climb ?? 0, -1, 1);
-  let altitude: number;
+  let altitude = p.altitude + (p.bankDrop ?? 0);
   let skimOnExit = false;
   if (maneuver && !controlled) {
     const motion = advanceManeuver(maneuver);
     state.speed = motion.speed;
+    p.pitch = 0;
     p.bank = 0;
     if (p.bankDrive) p.bankDrive = 0;
     const fx = Math.sin(maneuver.yaw), fz = Math.cos(maneuver.yaw);
@@ -482,8 +484,17 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       const yaw = p.yaw + bankYawRate(p.bank, turn, state.boosting) * agility * STEP;
       p.yaw = angleTo(0, Math.sin(yaw), Math.cos(yaw));
     }
+    if (roll || (p.skim && climb <= SKIM.inputThreshold)) {
+      p.pitch = 0;
+    } else {
+      // Round out the commanded angle using the clearance at the start of the tick.
+      const floor = climb < 0 ? Math.max(MIN_ALTITUDE, ground(p.x, p.z) + FLY_IN_WORLD.clearance) : MIN_ALTITUDE;
+      const command = climb * pitchLimitScale(climb, p.altitude, floor, MAX_ALTITUDE);
+      p.pitch = advancePitch(p.pitch, command, STEP);
+    }
     const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
     state.speed = thrust * bankThrustFactor(p.bank, turn);
+    if (!maneuver && !roll) state.speed *= pitchSpeedFactor(p.pitch);
     const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
     p.x += fx * state.speed * STEP;
     p.z += fz * state.speed * STEP;
@@ -492,8 +503,6 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       p.x += fz * lateral;
       p.z -= fx * lateral;
       altitude = rollAltitude(roll);
-    } else {
-      altitude = p.altitude + (p.bankDrop ?? 0) + climb * VERTICAL_SPEED * agility * STEP;
     }
   }
   // --- S7d lane ---
@@ -501,20 +510,23 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   const prior = p.altitude;
   const groundHeight = ground(p.x, p.z);
   const follow = skimAltitude(groundHeight);
+  const floor = Math.max(MIN_ALTITUDE, groundHeight + FLY_IN_WORLD.clearance);
+  if (controlled && !roll) {
+    // The residual pitch can still point at the limit after the stick reverses.
+    const scale = pitchLimitScale(p.pitch, prior, floor, MAX_ALTITUDE);
+    altitude = (p.skim ? follow : altitude) + pitchVerticalSpeed(state.speed, p.pitch, agility) * scale * STEP;
+  }
   const descending = controlled && !roll && climb < -SKIM.inputThreshold && altitude <= follow;
   if (skimOnExit || descending || (p.skim && (!controlled || roll || climb <= SKIM.inputThreshold))) {
     const clearance = clamp(SKIM.clearance + (roll ? altitude - roll.altitude : 0), SKIM.minClearance, SKIM.maxClearance);
     p.altitude = groundHeight + clearance;
     p.skim = isWater(groundHeight) ? 'water' : 'land';
+    p.pitch = 0;
     if (p.bankDrop) p.bankDrop = 0;
     state.climbRate = (p.altitude - prior) / STEP;
     return;
   }
-  if (p.skim) {
-    delete p.skim;
-    altitude = follow + climb * VERTICAL_SPEED * agility * STEP;
-  }
-  const floor = Math.max(MIN_ALTITUDE, groundHeight + FLY_IN_WORLD.clearance);
+  if (p.skim) delete p.skim;
   const hold = clamp(altitude, floor, MAX_ALTITUDE);
   if (controlled && !roll) {
     const drop = advanceBankDrop(p.bankDrop ?? 0, p.bank, STEP);

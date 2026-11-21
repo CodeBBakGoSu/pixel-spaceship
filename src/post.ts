@@ -1,6 +1,6 @@
 import {
-  Camera, LinearFilter, Mesh, NoBlending, PlaneGeometry, Scene, ShaderChunk, ShaderMaterial, Vector2, WebGLRenderTarget,
-  type Material, type Object3D, type Texture, type WebGLRenderer,
+  Camera, LinearFilter, Mesh, MeshBasicMaterial, NoBlending, PlaneGeometry, Scene, ShaderChunk, ShaderMaterial, Vector2, WebGLRenderTarget,
+  type Material, type Object3D, type Texture, type WebGLProgramParametersWithUniforms, type WebGLRenderer,
 } from 'three';
 import { POST } from './data/post.ts';
 
@@ -64,6 +64,14 @@ export function installSteppedHaze(scene: Object3D): void {
   });
 }
 
+/** Opaque palette art writes its full RGB and reserves target alpha for effects laid over it. */
+export class WorldPaletteMaterial extends MeshBasicMaterial {
+  override onBeforeCompile(shader: WebGLProgramParametersWithUniforms): void {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
+      '#include <opaque_fragment>\n gl_FragColor.a = 0.0;');
+  }
+}
+
 const VERTEX = /* glsl */`
   varying vec2 coords;
   void main() {
@@ -77,10 +85,11 @@ const HORIZONTAL = /* glsl */`
   uniform vec2 sourceTexel;
 
   vec3 hot(vec2 at) {
-    vec3 rgb = texture2D(source, at).rgb;
+    vec4 sampleColor = texture2D(source, at);
+    vec3 rgb = sampleColor.rgb;
     float peak = max(max(rgb.r, rgb.g), rgb.b);
     float low = min(min(rgb.r, rgb.g), rgb.b);
-    return rgb * smoothstep(${POST.bloom.peak.join(', ')}, peak) * smoothstep(${POST.bloom.chroma.join(', ')}, peak - low);
+    return rgb * sampleColor.a * smoothstep(${POST.bloom.peak.join(', ')}, peak) * smoothstep(${POST.bloom.chroma.join(', ')}, peak - low);
   }
 
   // Preserve single-pixel tracer cores in both rows and columns of the downsample.
@@ -123,12 +132,13 @@ const COMPOSITE = /* glsl */`
   varying vec2 coords;
 
   void main() {
-    vec3 rgb = texture2D(source, coords).rgb;
+    vec4 base = texture2D(source, coords);
+    vec3 rgb = base.rgb;
     if (bloomAmount > 0.0) rgb += texture2D(bloom, coords).rgb * bloomAmount;
-    if (vivid > 0.0) {
+    if (vivid > 0.0 && base.a > 0.0) {
       float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-      rgb = mix(vec3(luma), rgb, 1.0 + vivid);
-      rgb = (rgb - 0.18) * ${1 + POST.contrast} + 0.18;
+      vec3 graded = mix(vec3(luma), rgb, 1.0 + vivid);
+      rgb = mix(rgb, (graded - 0.18) * ${1 + POST.contrast} + 0.18, base.a);
     }
     if (vignette > 0.0) {
       float radius = length(coords * 2.0 - 1.0);

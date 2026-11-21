@@ -16,10 +16,10 @@ export const TERRAIN_DECOR = {
   seedSalt: 0x4a11cb59,
   treeMinAltitude: 42,
   rockMinAltitude: 74,
-  canopy: [0x295f42, 0x396d47],
-  crown: [0x498052, 0x5d9055],
-  rock: [0x656f71, 0x808878],
-  water: [0x468d9b, 0x529da5],
+  canopy: [0x2a7a36, 0x1c5c2e],
+  crown: [0x469e40, 0x56ae44],
+  rock: [0x76706e, 0x928c86],
+  water: [0x68ccd6, 0x8fdbe8],
 } as const;
 
 export const SITE_MARKERS = {

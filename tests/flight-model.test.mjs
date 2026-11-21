@@ -97,15 +97,15 @@ test('full-stick 180s take 92 ticks at cruise and 81 ticks under boost', () => {
   }
 });
 
-test('full-bank cruise speed limits the sustained turn radius to 1.4 times the old radius', () => {
+test('full-bank cruise retains 78% of its forward speed through a sustained turn', () => {
   const stage = createStage(parseStageOptions('?t=0'), () => 35);
   stage.player.bank = 1.5;
   stage.player.bankDrive = 1;
+  const { x, z } = stage.player;
   stepStage(stage, { turn: 1 });
-  assert.ok(Math.abs(stage.speed - 54.6) < 1e-9);
-  const yawRate = stage.player.yaw / STEP;
-  const previousRadius = 39 / yawRate;
-  assert.ok(Math.abs(stage.speed / yawRate / previousRadius - 1.4) < 1e-9);
+  assert.ok(Math.abs(stage.speed - 81.12) < 1e-9);
+  const distance = Math.hypot(stage.player.x - x, stage.player.z - z);
+  assert.ok(Math.abs(distance - 81.12 * STEP) < 1e-9);
 });
 
 test('bank over 60 degrees lowers altitude gradually and the offset recovers on roll-out', () => {

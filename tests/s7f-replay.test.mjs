@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes from production terrain and the full-view pilot (s8-flak + density).
+// Seed-1 terminal hashes: s8-flak ground AA + s8-forge flight-path model, production terrain, full-view pilot.
 const terminalHashes = {
-  legacy: '12da2045628f47138ffef72b439e8fca4582fc24663cc4cab1ea1c675aba08ae',
-  survivors: 'a0203b724f1c3866d161333870441d5160d6ed2e5fcb12c47d8f93ff2090097f',
+  legacy: '1e56468f160e22267729a33faaa3314c3602e47a3a8b11433da03172d8c48f09',
+  survivors: 'fc7673109e63a171d454edac2bf99c04c322395d44a5d1b64857f91c4b077baa',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);
