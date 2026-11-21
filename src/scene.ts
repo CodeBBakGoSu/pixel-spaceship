@@ -873,7 +873,7 @@ export class FlightScene {
       const strafe = shot.kind === 'strafe', reversal = !!shot.reversal;
       // Keep the closest ends of the boosted tracers out of the pilot's eyeline.
       if (eye && reversal && (shot.x - eye.x) ** 2 + (shot.alt - eye.y) ** 2 + (shot.z + eye.z) ** 2 < COCKPIT_TRACER_CLEARANCE ** 2) continue;
-      const vy = 'vy' in shot ? shot.vy : 0;
+      const vy = shot.vy ?? 0;
       const pitch = flat ? 0 : Math.atan2(vy, Math.hypot(shot.vx, shot.vz));
       const style = RANGED_SHOT_STYLE[shot.kind];
       const width = style?.[0] ?? (reversal ? (eye ? 2.6 : 3.4) : 1.15);

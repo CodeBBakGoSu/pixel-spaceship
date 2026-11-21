@@ -155,6 +155,7 @@ export type Pickup = Position & { id: number; xp: number; born: number; pulling?
 type ShotCommon = Position & {
   vx: number;
   vz: number;
+  vy?: number;
   life: number;
   damage: number;
   volley: number;

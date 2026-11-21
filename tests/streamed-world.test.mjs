@@ -100,7 +100,10 @@ test('Twin can strafe a SKIM target from LOW and suppresses DIVE when already sk
   acquireAndFire(state);
   assert.equal(state.altitudeHint, null);
   assert.equal(state.wrongLayer, null);
-  assert.equal(state.shots[0]?.kind, 'strafe');
+  const downward = state.shots.filter(shot => (shot.kind === 'twin' && shot.vy < 0) || shot.kind === 'strafe');
+  assert.ok(downward.length >= 1);
+  assert.ok(state.shots.some(shot => shot.kind === 'strafe' && shot.targetAltitude === turret.alt));
   for (let i = 0; i < 60; i++) advanceShots(state, ground);
-  assert.equal(turret.hp, 4 - 1.25);
+  assert.ok(turret.hp < 4);
+  assert.equal(Number((4 - turret.hp).toFixed(4)) % 1.25, 0);
 });

@@ -162,7 +162,11 @@ export class RosterVisuals {
       if (tell.kind === 'flak') {
         const start = tell.started ?? tell.until - ROSTER.flak.warningTicks;
         const progress = reducedMotion ? 1 : clamp((state.tick - start) / Math.max(1, tell.until - start), 0, 1);
-        this.marker(tell, flat ? plane + 5 : tell.alt, FLAK_RADIUS * (0.24 + progress * 0.76), flat);
+        const burst = flat ? plane + 5 : tell.alt;
+        const muzzle = flat ? plane + 2 : enemy.alt;
+        this.marker(enemy, muzzle, 4.2 + progress * 2.4, flat);
+        this.tracer(enemy, tell, flat ? plane + 3 : undefined, 7);
+        this.marker(tell, burst, FLAK_RADIUS * (0.24 + progress * 0.76), flat);
         continue;
       }
       if (tell.kind === 'gnat' && ++gnats > gnatMarks) continue;
