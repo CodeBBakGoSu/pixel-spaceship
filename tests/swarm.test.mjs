@@ -15,28 +15,37 @@ const spawnAt = (state, seconds, terrain = ground) => {
   advancePhaseSpawns(state, terrain);
 };
 
-test('phase data fixes the four spawn budgets, boss arrival and hard timeout', () => {
+test('phase boundaries keep the Ace arrival at 8:00 and timeout at 10:00', () => {
   assert.equal(RUN_BOSS_SECONDS, 480);
   assert.equal(RUN_END_SECONDS, 600);
-  assert.deepEqual(PHASES.map(phase => [phase.regularPerMinute, phase.gnatsPerMinute]), [
-    [14, 25], [16, 55], [18, 90], [20, 130], [8, 60],
-  ]);
   for (const [index, second] of [0, 120, 240, 360, 480].entries()) {
     assert.equal(phaseAt(second), PHASES[index]);
     if (index) assert.equal(phaseAt(second - 1 / 60), PHASES[index - 1]);
   }
 });
 
-test('uncapped packs distribute each phase budget across the scheduled ticks', () => {
+test('scheduled air traffic increases in every phase through the Ace fight', () => {
   const state = waveState();
+  let previousRegular = 0, previousGnats = 0, previousPack = 0, previousCap = 0;
   for (const phase of PHASES) {
-    let spawned = 0;
+    let regular = 0, swarm = 0, largestPack = 0;
     for (state.tick = ticks(phase.starts); state.tick < ticks(phase.ends); state.tick++) {
       advancePhaseSpawns(state, ground);
-      spawned += gnats(state).length;
+      const pack = gnats(state).length;
+      swarm += pack;
+      regular += state.enemies.length - pack;
+      largestPack = Math.max(largestPack, pack);
       state.enemies.length = 0;
     }
-    assert.equal(spawned, phase.gnatsPerMinute * 2, phase.id);
+    assert.equal(swarm, phase.gnatsPerMinute * 2, phase.id);
+    assert.ok(regular > previousRegular, `${phase.id} regular traffic`);
+    assert.ok(swarm > previousGnats, `${phase.id} swarm traffic`);
+    assert.ok(largestPack > previousPack, `${phase.id} pack size`);
+    assert.ok(phase.regularCap > previousCap, `${phase.id} regular cap`);
+    previousRegular = regular;
+    previousGnats = swarm;
+    previousPack = largestPack;
+    previousCap = phase.regularCap;
   }
 });
 
@@ -96,12 +105,13 @@ test('phases reserve their final fifteen seconds for the lull', () => {
 
 test('the Ace escort limit trims regulars without removing Gnats', () => {
   const state = waveState();
-  for (let i = 0; i < 24; i++) state.enemies.push(makeEnemy(state, i, 100, 1, 'patrol'));
+  const limit = phaseAt(RUN_BOSS_SECONDS).regularCap;
+  for (let i = 0; i < limit + 4; i++) state.enemies.push(makeEnemy(state, i, 100, 1, 'patrol'));
   for (let i = 0; i < 80; i++) state.enemies.push(makeEnemy(state, i, 140, 1, 'gnat'));
   state.tick = ticks(RUN_BOSS_SECONDS);
   trimEscorts(state);
   assert.equal(gnats(state).length, 80);
-  assert.equal(state.enemies.length, 94);
+  assert.equal(state.enemies.length, 80 + limit);
 });
 
 test('engaged Gnats drift with the pack and retire without attacks or a kill drop', () => {

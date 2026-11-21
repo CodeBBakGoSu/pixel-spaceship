@@ -66,18 +66,18 @@ export const PHASES: readonly RunPhase[] = [
   },
   {
     id: 'siege', starts: 2 * PHASE_SECONDS, ends: 3 * PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 2,
-    regularCap: 24, regularPerMinute: 18, enemies: siege,
-    gnatsPerMinute: 90, gnatStart: 0, packSize: 12, formations: ['line', 'vee', 'ring'], bands: [0, 1, 2], splitBands: true,
+    regularCap: 26, regularPerMinute: 19, enemies: siege,
+    gnatsPerMinute: 120, gnatStart: 0, packSize: 16, formations: ['line', 'vee', 'ring'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'storm', starts: 3 * PHASE_SECONDS, ends: RUN_BOSS_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 3,
-    regularCap: 24, regularPerMinute: 20, enemies: [...siege, harrier],
-    gnatsPerMinute: 130, gnatStart: 0, packSize: 14, formations: ['ring', 'vee', 'line'], bands: [0, 1, 2], splitBands: true,
+    regularCap: 30, regularPerMinute: 23, enemies: [...siege, harrier],
+    gnatsPerMinute: 180, gnatStart: 0, packSize: 18, formations: ['ring', 'vee', 'line'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'ace', starts: RUN_BOSS_SECONDS, ends: RUN_END_SECONDS, lull: 0, hpScale: 1.12 ** 3,
-    regularCap: 14, regularPerMinute: 8, enemies: [patrol, interceptor, harrier],
-    gnatsPerMinute: 60, gnatStart: 0, packSize: 10, formations: ['vee', 'ring'], bands: [0, 1, 2], splitBands: false,
+    regularCap: 34, regularPerMinute: 28, enemies: [patrol, interceptor, harrier],
+    gnatsPerMinute: 250, gnatStart: 0, packSize: 22, formations: ['vee', 'ring'], bands: [0, 1, 2], splitBands: true,
   },
 ];
 

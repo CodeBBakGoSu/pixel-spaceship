@@ -14,7 +14,7 @@ import { FLIGHT_CAMERA, FLIGHT_FEEL } from './data/flight-feel.ts';
 import { WING_TRAIL } from './data/flight-world.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
 import { CHESTS, WEAPONS } from './data/items.ts';
-import { SWARM_CAPS } from './data/phases.ts';
+import { PHASES, SWARM_CAPS } from './data/phases.ts';
 // --- S7f lane ---
 import { DEFAULT_QUALITY, RENDER_QUALITY, type RenderQuality } from './data/render-quality.ts';
 import { renderBuffer } from './layout.ts';
@@ -101,6 +101,7 @@ export function makeChestBatch(): InstancedMesh {
 type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
+const REGULAR_RENDER_CAP = Math.max(ENEMY_KINDS.patrol.cap, ...PHASES.map(phase => phase.regularCap));
 const FLAK_RING_LIMIT = 24;
 const BOMB_VISUAL_LIMIT = 16;
 const WEAPON_LINK_LIMIT = 128;
@@ -194,8 +195,8 @@ export class FlightScene {
   private readonly trailMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0.94, depthWrite: false });
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
-  private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), ENEMY_KINDS.patrol.cap);
-  private readonly enemyTrails = instances(new BoxGeometry(), 48, new MeshBasicMaterial({
+  private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), REGULAR_RENDER_CAP);
+  private readonly enemyTrails = instances(new BoxGeometry(), REGULAR_RENDER_CAP * 2, new MeshBasicMaterial({
     color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
   }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
@@ -206,7 +207,7 @@ export class FlightScene {
   private readonly exhaust = new EngineExhaust(this.ship);
   private readonly flareVisuals = new FlareVisuals();
   // --- S7f lane ---
-  private readonly drones = instances(bakeAirframe(enemyAirframe('patrol')), ENEMY_KINDS.patrol.cap, this.voxelMaterial);
+  private readonly drones = instances(bakeAirframe(enemyAirframe('patrol')), REGULAR_RENDER_CAP, this.voxelMaterial);
   private readonly gnats = makeGnatBatch();
   private readonly airframes = (['interceptor', ...NEW_ENEMY_KINDS, 'aegis'] as const).map(kind => ({
     kind, mesh: instances(bakeAirframe(enemyAirframe(kind)), ENEMY_KINDS[kind].cap, this.voxelMaterial), count: 0,
@@ -225,7 +226,7 @@ export class FlightScene {
   private readonly chestMarkers = makeChestBatch();
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
-  private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), 26,
+  private readonly shadows = instances(new CircleGeometry(1, 10).rotateX(-Math.PI / 2), REGULAR_RENDER_CAP + 2,
     new MeshBasicMaterial({ color: 0x051f21, opacity: 0.31, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   private readonly bombs = instances(new BoxGeometry(), BOMB_VISUAL_LIMIT);
   private readonly mines = instances(new BoxGeometry(), MINE_LIMIT);

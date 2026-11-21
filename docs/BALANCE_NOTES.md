@@ -240,3 +240,67 @@ Native Chromium on the RTX 4090 used ANGLE Vulkan, the High tier, 180 warm-up in
 | 390×844 | 60.0 / 16.7 ms | 60.0 / 16.8 ms | 60.0 / 16.7 ms |
 
 High stayed active for all 1,800 standalone intervals. Desktop COCKPIT dropped two frames. A separate run during four CPU batch simulations switched desktop COCKPIT to Medium and measured a 33.3 ms p95. Twelve safe-area layouts checked both languages at 44 px minimum touch targets with no controls, NAV, or loadout overlap. This verification used browser emulation for phones.
+
+## Swarm density escalation
+
+The first tuning pass increased traffic throughout the run. On 100 desktop seeds, average clears fell from 57% to 49% and weak median survival fell from 266.4 to 177.0 seconds. The final curve keeps the opening budgets through 4:00 and starts the escalation at Siege. Red Kite arrives at 8:00 with the largest Gnat packs, split across two altitude bands. The last phase runs through the 10:00 deadline.
+
+| Phase | Regular spawns/min before → after | Regular cap before → after | Gnats/min before → after | Pack size before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Coast | 14 → 14 | 8 → 8 | 25 → 25 | 6 → 6 |
+| Skirmish | 16 → 16 | 16 → 16 | 55 → 55 | 9 → 9 |
+| Siege | 18 → 19 | 24 → 26 | 90 → 120 | 12 → 16 |
+| Storm | 20 → 23 | 24 → 30 | 130 → 180 | 14 → 18 |
+| Ace | 8 → 28 | 14 → 34 | 60 → 250 | 10 → 22 |
+
+The Gnat caps are 80 on desktop and 50 on phones. The renderer still draws Gnats in a single instanced batch and regular airframes in one batch per kind. The patrol, shadow, entry trail, and pursuit marker pools have space for the larger regular cap. Enemy HP, XP, and pickup tuning retain their prior values.
+
+The baseline is `b8c602d`. Each cap used Heat 0 and seeds 1–100 per profile. A clear is an Ace defeat or a live timeout. Successful runs count as surviving 600 seconds, including when the Ace falls earlier.
+
+| Cap | Pilot | Clears before → after | Ace wins before → after | Median survival before → after (s) | Median level-ups before → after |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Desktop | Skilled | 95% → 97% | 94% → 96% | 600.0 → 600.0 | 26 → 30 |
+| Desktop | Average | 57% → 61% | 50% → 52% | 600.0 → 600.0 | 26 → 30 |
+| Desktop | Weak | 6% → 9% | 0% → 0% | 266.4 → 265.0 | 12.5 → 13 |
+| Phone | Skilled | 95% → 97% | 94% → 94% | 600.0 → 600.0 | 26 → 30 |
+| Phone | Average | 57% → 60% | 50% → 49% | 600.0 → 600.0 | 26 → 30 |
+| Phone | Weak | 6% → 9% | 0% → 0% | 266.4 → 265.0 | 12.5 → 13 |
+
+Desktop reached 73 live Gnats with zero cap-pressure beats. The phone cap reached 50 and limited 1,001 spawn beats across 300 runs. The largest regular-plus-Gnat count in each minute is the maximum observed on a single tick across all three profiles. It includes live approaches and turrets. The Ace is tracked separately. The instrumented counts reproduced every CLI terminal hash on both caps.
+
+| Mission minute | Desktop peak before → after | Phone peak before → after |
+| --- | ---: | ---: |
+| 0–1 | 22 → 22 | 22 → 22 |
+| 1–2 | 27 → 27 | 27 → 27 |
+| 2–3 | 38 → 38 | 38 → 38 |
+| 3–4 | 42 → 42 | 42 → 42 |
+| 4–5 | 42 → 49 | 42 → 49 |
+| 5–6 | 48 → 56 | 48 → 56 |
+| 6–7 | 59 → 79 | 59 → 69 |
+| 7–8 | 63 → 76 | 63 → 68 |
+| 8–9 | 36 → 97 | 36 → 73 |
+| 9–10 | 31 → 99 | 31 → 75 |
+
+### Replay verification
+
+The full-view pilot cleared all 24 mode, cap, and seed combinations using seeds 1, 11, 27, 42, 128, and 2026. Recorded inputs reproduced all 24 terminal hashes. The updated Survivors golden covers the new spawn curve. Legacy terminal hashes match the baseline. Each digest hashes the six terminal hashes in seed order, joined by newlines without a trailing newline.
+
+| Mode | Desktop digest | Phone digest |
+| --- | --- | --- |
+| Legacy | `5a032f314bacbff12fe8a257c3788acfdcab0c1184f4b33a86b8f32e42ae493c` | `40281177fc6926bc74baa7b4ac22e52bf192c4e43f852957c16f96fe52249e13` |
+| Survivors | `78539053dab3c5e7b87f58af2c26a93a67e05bea512a7aeca639983a79fd3b3c` | `4acb1f5c69916cfd2a6aeef674c49c964793455e1f460cf87f49120eac60cd33` |
+
+### Native CHASE performance
+
+Chromium 149 with ANGLE Vulkan on an RTX 4090 rendered the live Survivors time seeks. Each case used at least 132 warm-up frames and 360 consecutive measured intervals at High quality. The 1:00 and 9:00 cases used seed 2 and the 5:00 case used seed 1. Counts are sampled live mission contacts including the active Ace at 9:00. Desktop used 1280×800 at DPR 1 and emulated portrait used 390×844 at DPR 3.
+
+| Layout | Seek | Live contacts before → after | Mean frame time before → after | p95 before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Desktop | 1:00 | 5–13 → 5–13 | 16.67 → 16.67 ms | 16.7 → 16.7 ms |
+| Desktop | 5:00 | 3–18 → 8–25 | 16.67 → 16.67 ms | 16.7 → 16.8 ms |
+| Desktop | 9:00 | 12–26 → 53–78 | 16.67 → 16.67 ms | 16.7 → 16.8 ms |
+| Portrait | 1:00 | 5–13 → 5–13 | 16.67 → 16.67 ms | 16.7 → 16.7 ms |
+| Portrait | 5:00 | 3–18 → 8–25 | 16.67 → 16.67 ms | 16.7 → 16.8 ms |
+| Portrait | 9:00 | 12–26 → 49–69 | 16.67 → 16.67 ms | 16.8 → 16.7 ms |
+
+All six candidate windows averaged 60.00 FPS. Each build's desktop 1:00 launch recovered from one WebGL context loss before warm-up. The measured flight windows recorded zero context losses and zero console or page errors. Raw traces and reports are under the local ignored `sim-out/trail-density/` directory.
