@@ -125,6 +125,7 @@ test('a landmark turret fixes a single-band flak position after a 1.4 s warning'
   const turret = state.enemies[0];
   assert.equal(turret?.kind, 'turret');
   assert.equal(turret.alt, ground(turret.x, turret.z) + 5);
+  state.twinAt = state.podsAt = state.strafeAt = Infinity;
   turret.shotAt = state.tick + 1;
   advance(state, 1);
   assert.equal(turret.tell?.until - state.tick, 84);
