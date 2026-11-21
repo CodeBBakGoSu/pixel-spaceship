@@ -36,13 +36,7 @@ export function shockEnvelope(amplitude: number, age: number): number {
   return age < 0 ? 0 : amplitude * Math.exp(-FLIGHT_FEEL.shockDecay * age);
 }
 
-export type FlightAttitudeSample = { altitude: number; climbRate: number; controlled: boolean; turn: number };
-
-/** The path angle the ship is really flying at, from the sim's climb rate and airspeed. */
-export function pathPitch(climbRate: number, speed: number): number {
-  const limit = FLIGHT_FEEL.pitch.limit;
-  return clamp(Math.atan2(climbRate, Math.max(20, speed)), -limit, limit);
-}
+export type FlightAttitudeSample = { altitude: number; pitch: number; climbRate: number; controlled: boolean; turn: number };
 
 export class FlightMotion {
   boost = 0;
@@ -112,7 +106,7 @@ export class FlightMotion {
 
   private advanceAttitude(flight: FlightAttitudeSample, speed: number, seconds: number, snap: boolean, still: boolean): void {
     const { pitch, chaseAltitude, chaseTilt, head } = FLIGHT_FEEL;
-    const target = flight.controlled ? pathPitch(flight.climbRate, speed) : 0;
+    const target = flight.controlled ? flight.pitch : 0;
     const ease = (rate: number) => 1 - Math.exp(-rate * seconds);
     this.pitch = snap ? target : this.pitch + (target - this.pitch) * ease(pitch.rate);
     if (snap || !Number.isFinite(this.followAlt)) {

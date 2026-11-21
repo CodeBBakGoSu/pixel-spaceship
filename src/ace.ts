@@ -128,7 +128,8 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
   ace.bankDrive = advanceBankDrive(ace.bankDrive, turn, STEP);
   ace.bank = advanceBank(ace.bank, turn, STEP, ace.bankDrive);
   ace.yaw += bankYawRate(ace.bank, turn, ace.boosting) * STEP;
-  const speed = (ace.boosting ? BOOST_SPEED : CRUISE_SPEED) * tuning.speedScale * bankThrustFactor(ace.bank, turn);
+  const thrust = (ace.boosting ? BOOST_SPEED : CRUISE_SPEED) * tuning.speedScale;
+  const speed = thrust * bankThrustFactor(ace.bank, turn, data.deepTurnDrag);
   const sin = Math.sin(ace.yaw), cos = Math.cos(ace.yaw);
   const lateral = ace.roll ? rollLateralStep(ace.roll) : 0;
   const x = ace.x, z = ace.z;

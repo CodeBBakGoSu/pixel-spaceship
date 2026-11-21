@@ -6,10 +6,10 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 
 const ground = () => 35;
-const stateAt = (tick, mode = 'survivors') => {
+const stateAt = (tick, mode = 'survivors', input = {}) => {
   const stage = createStage(parseStageOptions(`?autoplay=1&mode=${mode}&seed=11`), ground);
   stage.tick = tick - 1;
-  stepStage(stage, {}, ground);
+  stepStage(stage, input, ground);
   return stage;
 };
 
@@ -23,7 +23,8 @@ test('checkpoints exist only at nonterminal survivor phase transitions', () => {
 });
 
 test('restoring a phase boundary preserves the deterministic state and the next inputs', () => {
-  const original = stateAt(480 * 60);
+  const original = stateAt(480 * 60, 'survivors', { climb: -1 });
+  assert.ok(original.player.pitch < 0);
   const snapshot = encodeCheckpoint(original);
   const restored = decodeCheckpoint(snapshot);
   assert.equal(JSON.stringify(restored), JSON.stringify(original));
@@ -33,6 +34,18 @@ test('restoring a phase boundary preserves the deterministic state and the next 
     stepStage(restored, input, ground);
   }
   assert.equal(JSON.stringify(restored), JSON.stringify(original));
+});
+
+test('a checkpoint saved before flight-path pitch resumes level', () => {
+  const envelope = JSON.parse(encodeCheckpoint(stateAt(7200)));
+  delete envelope.state.player.pitch;
+  envelope.state.climbRate = 40;
+  const restored = decodeCheckpoint(JSON.stringify(envelope), ground);
+  assert.equal(restored.player.pitch, 0);
+  stepStage(restored, { climb: 1 }, ground);
+  assert.ok(restored.player.pitch > 0 && Number.isFinite(restored.player.altitude));
+  envelope.state.player.pitch = 'invalid';
+  assert.equal(decodeCheckpoint(JSON.stringify(envelope), ground), null);
 });
 
 test('a pre-Ace 8:00 checkpoint deploys the new fighter while preserving the sortie', () => {

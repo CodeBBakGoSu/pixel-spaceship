@@ -221,9 +221,12 @@ test('the inverted flight accepts live steering and climb commands', () => {
   assert.ok(Math.abs(state.player.x - baseline.player.x) > 1);
   assert.ok(state.player.altitude > baseline.player.altitude + 4);
   assert.equal(moves.maneuverAttitude(state.maneuver, state.player.bank).inverted, true);
+  const releaseAltitude = state.player.altitude;
+  run(state, 90);
+  assert.ok(state.player.altitude > releaseAltitude && Math.abs(state.climbRate) < 0.001);
   const beforeRollAltitude = state.player.altitude;
   run(state, moves.MANEUVERS['split-s'].ticks - state.maneuver.elapsed);
-  assert.equal(state.player.altitude, beforeRollAltitude);
+  assert.ok(Math.abs(state.player.altitude - beforeRollAltitude) < 0.001);
 });
 
 function placeContact(state) {

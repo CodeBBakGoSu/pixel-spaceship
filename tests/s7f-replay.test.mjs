@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes from production terrain and the full-view pilot.
+// Stage C flight-path model, seed 1, production terrain and the full-view pilot.
 const terminalHashes = {
-  legacy: '884a862991b6f2e73e2d99e1f25bea66d39cb308c1f9713cf5d254c3e9dd2dc8',
-  survivors: '5c78a969ebf78fad1f5afe1202dc01a9c9e87417a8d3464a101d0cf8e7dfc30a',
+  legacy: '036dcf63c84a25b50ec9f24864a66cbf15c250bf9948072bd1ca267579e4f59b',
+  survivors: 'ef5a0312ec301f5d3b080706bd03289afbe3b2829aaef34d4075501888443e69',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

@@ -144,24 +144,36 @@ test('mirrored rear-camera roll presents the same horizon angle as the forward b
   close(slope, Math.tan(bank), 0.03);
 });
 
-test('climbs pitch the ship, lag the chase camera, tilt it up the sky and sink the pilot head', () => {
+test('the simulated pitch tilts the ship and camera while the chase camera carries measured altitude gain', () => {
   const motion = new feel.FlightMotion();
   const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
-  const flight = { altitude: 110, climbRate: 0, controlled: true, turn: 0 };
+  const flight = { altitude: 110, pitch: 0, climbRate: 0, controlled: true, turn: 0 };
   motion.advance(stage, 0, 0, false, false, false, flight);
   assert.deepEqual([motion.pitch, motion.followAlt, motion.chaseTilt], [0, 110, 0]);
+  flight.pitch = 32 * degree;
   flight.climbRate = 40;
   for (let i = 0; i < 60; i++) {
     stage.tick++;
     flight.altitude += 40 / 60;
     motion.advance(stage, 0, 0, false, false, false, flight);
   }
-  close(motion.pitch, Math.atan2(40, CRUISE_SPEED), 0.01);
+  close(motion.pitch, flight.pitch, 0.001);
   assert.ok(motion.followAlt < flight.altitude - 2 && motion.followAlt > flight.altitude - 15);
   assert.ok(motion.chaseTilt > 0.1);
   assert.ok(motion.headY < 0);
-  close(feel.pathPitch(1e6, CRUISE_SPEED), 40 * degree);
-  close(feel.pathPitch(-1e6, CRUISE_SPEED), -40 * degree);
   motion.advance(stage, 0, 0, false, false, true, flight);
   assert.deepEqual([motion.followAlt, motion.chaseTilt, motion.headX, motion.headY], [flight.altitude, 0, 0, 0]);
+});
+
+test('terrain-follow altitude changes leave a level skim nose and horizon', () => {
+  const motion = new feel.FlightMotion();
+  const stage = { tick: 0, speed: CRUISE_SPEED, boosting: false, boostTicks: 0 };
+  const flight = { altitude: 48, pitch: 0, climbRate: 0, controlled: true, turn: 0 };
+  motion.advance(stage, 0, 0, false, false, false, flight);
+  stage.tick++;
+  flight.altitude += 1;
+  flight.climbRate = 60;
+  motion.advance(stage, 0, 0, false, false, false, flight);
+  assert.deepEqual([motion.pitch, motion.chaseTilt], [0, 0]);
+  assert.ok(motion.followAlt > 48.6 && motion.followAlt < 49);
 });

@@ -16,6 +16,33 @@ export function boostAirspeed(ticks: number): number {
   return BOOST_SPEED + surge * (BOOST_IGNITION_SPEED - BOOST_SPEED);
 }
 
+export function advancePitch(current: number, climb: number, dt: number): number {
+  const { maxClimbPitch, maxDivePitch, pitchRate, pitchResponse } = FLIGHT_MODEL;
+  const target = clamp(climb, -1, 1) * (climb < 0 ? maxDivePitch : maxClimbPitch);
+  const limit = pitchRate * dt;
+  return current + clamp((target - current) * (1 - Math.exp(-pitchResponse * dt)), -limit, limit);
+}
+
+export function pitchLimitScale(direction: number, altitude: number, floor: number, ceiling: number): number {
+  if (direction === 0) return 1;
+  const room = direction < 0 ? altitude - floor : ceiling - altitude;
+  const t = clamp(room / FLIGHT_MODEL.softAltitudeZone, 0, 1);
+  // The slope reaches zero at the outer edge, joining free flight smoothly.
+  return t * (2 - t);
+}
+
+export function pitchVerticalSpeed(speed: number, pitch: number, agility = 1): number {
+  const max = FLIGHT_MODEL.maxVerticalSpeed;
+  return clamp(speed * Math.sin(pitch) * agility, -max, max);
+}
+
+export function pitchSpeedFactor(pitch: number): number {
+  const { maxClimbPitch, maxDivePitch, climbSpeedLoss, diveSpeedGain } = FLIGHT_MODEL;
+  const sine = Math.sin(pitch);
+  return pitch < 0 ? 1 - diveSpeedGain * sine / Math.sin(maxDivePitch)
+    : 1 - climbSpeedLoss * sine / Math.sin(maxClimbPitch);
+}
+
 export function advanceBankDrive(current: number, turn: number, dt: number): number {
   const command = clamp(turn, -1, 1);
   // Roll authority earned in one direction does not carry into the opposite turn.
@@ -50,8 +77,8 @@ export function bankYawRate(bank: number, turn: number, boosting: boolean): numb
   return command * (boosting ? BOOST_TURN_RATE : TURN_RATE) * gain;
 }
 
-export function bankThrustFactor(bank: number, turn: number): number {
-  const { maxBank, levelTurnDrag, deepTurnDrag } = FLIGHT_MODEL;
+export function bankThrustFactor(bank: number, turn: number, deepTurnDrag: number = FLIGHT_MODEL.deepTurnDrag): number {
+  const { maxBank, levelTurnDrag } = FLIGHT_MODEL;
   const progress = clamp(Math.abs(bank) / maxBank, 0, 1);
   const eased = progress ** 2 * (3 - 2 * progress);
   const drag = levelTurnDrag + (deepTurnDrag - levelTurnDrag) * eased;

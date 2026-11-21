@@ -25,7 +25,7 @@ import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { EngineExhaust } from './engine-exhaust.ts';
 import { FlareVisuals } from './flare-visuals.ts';
 import { FlightAtmosphere } from './flight-atmosphere.ts';
-import { cameraBank, FlightMotion, pathPitch } from './flight-feel.ts';
+import { cameraBank, FlightMotion } from './flight-feel.ts';
 import { FlightSurface } from './flight-surface.ts';
 import { HostileVisuals } from './hostile-visuals.ts';
 import type { CockpitLayout, HudLayout, PhoneLayout, Rect } from './layout.ts';
@@ -717,8 +717,8 @@ export class FlightScene {
     this.ship.visible = this.fixture !== 'roster-sheet' && external && (state.invulnerability <= 0 || shieldFlash(state.tick));
     this.ship.position.set(p.x, flat ? TOP_FLIGHT + 3 : p.altitude, -p.z);
     this.ship.scale.setScalar(chase ? 0.9 : 1);
-    const climbPitch = flat || !maneuverAllowsControl(state.maneuver) ? 0
-      : this.feelEnabled ? this.motion.pitch : pathPitch(state.climbRate, state.speed);
+    const climbPitch = flat || state.roll || !maneuverAllowsControl(state.maneuver) ? 0
+      : this.feelEnabled ? this.motion.pitch : p.pitch;
     const bank = attitude?.roll ?? (flat && !this.feelEnabled ? 0 : -p.bank);
     this.flightView.shipBank = bank;
     this.ship.rotation.set((attitude?.pitch ?? 0) + climbPitch, -p.yaw, bank, 'YXZ');
@@ -1018,7 +1018,7 @@ export class FlightScene {
       if (!reduceMotion) this.noteBlasts(state);
       const p = state.player, controlled = !state.roll && maneuverAllowsControl(state.maneuver);
       this.motion.advance(state, yaw, spinning ? this.rollPose.roll : bank, spinning, phone, reduceMotion,
-        { altitude: p.altitude, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
+        { altitude: p.altitude, pitch: p.pitch, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
       if (!attitude) this.cockpitPose.cameraPitch = this.motion.pitch;
       this.boostLens = this.motion.boost;
       rearBank = this.cockpitPose.cameraBank = cameraBank(attitude?.cameraBank ?? bank, 'cockpit', phone, reduceMotion, spinning);

@@ -8,6 +8,7 @@ import { BOOST_SPEED, CRUISE_SPEED } from '../src/flight.ts';
 import { FlightAtmosphere, cloudFixturePoint } from '../src/flight-atmosphere.ts';
 import { FlightMotion } from '../src/flight-feel.ts';
 import { FlightSurface, WingtipRing } from '../src/flight-surface.ts';
+import { maneuverAllowsControl } from '../src/maneuvers.ts';
 import { rollAttitude } from '../src/roll.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
@@ -100,7 +101,7 @@ test('the same replay has equal terminal hashes with flight effects on and off',
       hit: () => motion.shock('hit', state.tick),
       parry: () => motion.shock('parry', state.tick),
     } : undefined;
-    let rendered = 0, wingSegments = 0, windInstances = 0;
+    let rendered = 0, wingSegments = 0, windInstances = 0, maxPitch = 0;
     for (let frame = 0; frame < 11_000 && ['playing', 'draft'].includes(state.phase); frame++) {
       const input = autopilotInput(state, 'full', ground);
       if (state.tick % 420 === 120) {
@@ -110,9 +111,12 @@ test('the same replay has equal terminal hashes with flight effects on and off',
       stepStage(state, input, ground, undefined, events);
       if (!surface || !atmosphere || !motion || frame % 3 !== 0) continue;
       const p = state.player, roll = (state.roll ? rollAttitude(state.roll) : 0) - p.bank;
-      motion.advance(state, p.yaw, roll, !!state.roll, false, false);
+      const controlled = !state.roll && maneuverAllowsControl(state.maneuver);
+      motion.advance(state, p.yaw, roll, !!state.roll, false, false,
+        { altitude: p.altitude, pitch: p.pitch, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
+      maxPitch = Math.max(maxPitch, Math.abs(motion.pitch));
       ship.position.set(p.x, p.altitude, -p.z);
-      ship.rotation.set(-state.climbRate * 0.005, -p.yaw, roll, 'YXZ');
+      ship.rotation.set(controlled ? motion.pitch : 0, -p.yaw, roll, 'YXZ');
       camera.position.set(p.x - Math.sin(p.yaw) * 40, p.altitude + 15, -p.z + Math.cos(p.yaw) * 40);
       camera.lookAt(ship.position);
       camera.updateMatrixWorld();
@@ -122,7 +126,7 @@ test('the same replay has equal terminal hashes with flight effects on and off',
       rendered++;
     }
     assert.ok(['clear', 'lost', 'timeout'].includes(state.phase), state.phase);
-    if (enabled) assert.ok(rendered > 100 && wingSegments > 0 && windInstances > 0);
+    if (enabled) assert.ok(rendered > 100 && wingSegments > 0 && windInstances > 0 && maxPitch > 0);
     return createHash('sha256').update(JSON.stringify(state)).digest('hex');
   }
   assert.equal(replay(true), replay(false));

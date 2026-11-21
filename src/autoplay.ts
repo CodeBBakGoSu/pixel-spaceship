@@ -1,12 +1,16 @@
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
-import { skimAltitude, SKIM_BAND } from './bands.ts';
+import { SKIM, skimAltitude, SKIM_BAND } from './bands.ts';
 import { ACE_PILOT, BOT_POLICY, BOT_PROFILES, PILOT_ROUTE, type BotProfile } from './data/bot-profiles.ts';
+import { FLIGHT_MODEL } from './data/flight-model.ts';
 import { REAR_ORDNANCE, REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
 import { scaleTravel } from './data/speed.ts';
+import { FLY_IN_WORLD, WORLD_TERRAIN } from './data/world.ts';
+import { advancePitch, CRUISE_SPEED, pitchLimitScale, pitchSpeedFactor, pitchVerticalSpeed } from './flight.ts';
+import { buffTuning } from './loadout.ts';
 import { LANDMARKS } from './reach.ts';
 import { angleTo, BANDS, BODY_RADIUS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MAX_ALTITUDE, MINE_RADIUS,
-  TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
+  MIN_ALTITUDE, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
@@ -73,7 +77,31 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
 }
 
-function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: Ground): number | undefined {
+function crossesThreatBand(state: StageState, threatAltitude: number, climb: number, seconds: number,
+  terrain: number, floor: number, agility: number): boolean {
+  const p = state.player;
+  let altitude = p.altitude, pitch = p.pitch;
+  const side = Math.sign(threatAltitude - altitude);
+  const reaches = (height: number) => (threatAltitude - height) * side <= 13;
+  if (reaches(altitude)) return true;
+  const skim = skimAltitude(terrain);
+  if (p.skim && climb <= SKIM.inputThreshold) return reaches(skim);
+  // Hold the observed throttle and bank over the short planar intercept. A reversal can
+  // carry the ship into a threat band before it comes back to its starting altitude.
+  const thrust = (state.speed || CRUISE_SPEED) / pitchSpeedFactor(pitch);
+  const ticks = Math.ceil(seconds * TICKS_PER_SECOND);
+  for (let tick = 0; tick < ticks; tick++) {
+    pitch = advancePitch(pitch, climb * pitchLimitScale(climb, altitude, floor, MAX_ALTITUDE), STEP);
+    const speed = thrust * pitchSpeedFactor(pitch);
+    const rise = pitchVerticalSpeed(speed, pitch, agility) * pitchLimitScale(pitch, altitude, floor, MAX_ALTITUDE);
+    altitude = clamp(altitude + rise * STEP, floor, MAX_ALTITUDE);
+    if (climb < -SKIM.inputThreshold && altitude <= skim) return reaches(skim);
+    if (reaches(altitude)) return true;
+  }
+  return false;
+}
+
+function dodgeClimb(state: StageState, mode: PilotMode, climb: number, agility: number, ground?: Ground): number | undefined {
   const p = state.player;
   const ownX = Math.sin(p.yaw) * state.speed, ownZ = Math.cos(p.yaw) * state.speed;
   const avoid = (threat: Position & { vx?: number; vz?: number }, radius: number): number | undefined => {
@@ -83,9 +111,9 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, ground?: 
     const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, BOT_POLICY.lookaheadMax) : 0;
     if (Math.hypot(x + vx * closest, z + vz * closest) >= radius) return;
     if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
-    const floor = ground ? ground(p.x + ownX * closest, p.z + ownZ * closest) + 22 : 55;
-    const approach = Math.max(floor, p.altitude + climb * VERTICAL_SPEED * Math.max(closest, 0.2));
-    if (Math.min(p.altitude, approach) > threat.alt + 13 || Math.max(p.altitude, approach) < threat.alt - 13) return;
+    const terrain = ground?.(p.x + ownX * closest, p.z + ownZ * closest) ?? WORLD_TERRAIN.seaLevel;
+    const floor = Math.max(MIN_ALTITUDE, terrain + FLY_IN_WORLD.clearance);
+    if (!crossesThreatBand(state, threat.alt, climb, Math.max(closest, 0.2), terrain, floor, agility)) return;
     const up = floor > threat.alt - 12 || threat.alt < 86 || (threat.alt <= 150 && p.altitude >= threat.alt);
     const safe = threat.alt + (up ? 12 : -12);
     return up ? clamp((safe - p.altitude) / 2, 0, 1) : clamp((safe - p.altitude) / 2, -1, 0);
@@ -192,7 +220,10 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   const withinCoarse = Math.abs(delta) <= HIT_WINDOW;
   const localSkim = skimAltitude(ground?.(p.x, p.z));
   const approachSkim = skimUse && target.skim && range < PILOT_ROUTE.skimApproachRange;
-  let climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp(delta / 5, -1, 1);
+  const agility = buffTuning(state, 'vector-thrusters')?.agilityScale ?? 1;
+  // Allow one pitch-response time constant of travel while leveling into the target band.
+  const levelingTravel = pitchVerticalSpeed(state.speed, p.pitch, agility) / FLIGHT_MODEL.pitchResponse;
+  let climb = mode === 'top' ? (withinCoarse ? 0 : Math.sign(delta)) : clamp((delta - levelingTravel) / 5, -1, 1);
   if (approachSkim) climb = p.skim ? 0 : -1;
   else if (p.skim && target.alt > localSkim) climb = Math.max(0.25, climb);
   const extending = target.kind === 'ace' && range < ACE_PILOT.extensionRange && Math.abs(angle) > ACE_PILOT.extensionAngle;
@@ -206,7 +237,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
     else if (target.kind === 'ace' || (target.kind === 'enemy' && Math.abs(angle) < 0.35 && range < PILOT_ROUTE.cockpitRange)) view = 'cockpit';
   }
   const dodge = state.invulnerability === 0
-    ? dodgeClimb(state, mode, climb, ground) ?? (mode === 'full' ? dodgeAceWarning(state, tactics) : undefined) : undefined;
+    ? dodgeClimb(state, mode, climb, agility, ground) ?? (mode === 'full' ? dodgeAceWarning(state, tactics) : undefined) : undefined;
   const maneuver = mode === 'full' && !approachSkim && !acceptingPass && dodge === undefined ? rearManeuver(state, target, angle, range) : undefined;
   const extend = mode === 'full' && !acceptingPass && target.kind === 'enemy' && Math.abs(angle) > Math.PI * 0.86
     && range > PILOT_ROUTE.extensionMinRange && range < PILOT_ROUTE.reversalMinRange && !state.boundaryWarning && canManeuver(state, 'immelmann');
