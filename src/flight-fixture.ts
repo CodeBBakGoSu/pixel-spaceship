@@ -27,6 +27,10 @@ export function primeFlightFixture(state: StageState, query: URLSearchParams, gr
     state.run.weaponSlots = 4;
     state.run.weaponLevels = { twin: 4, seeker: 3, pods: 2 };
     state.run.buffLevels = { capacitor: 2, 'hull-plating': 1 };
+    if (query.get('ion') === '1') {
+      state.run.weaponLevels.ion = 3;
+      primeIonWake(state);
+    }
   }
   if (fixture === 'bank') {
     const bank = Number(query.get('bank') ?? 1.5);
@@ -60,5 +64,20 @@ export function primeFlightFixture(state: StageState, query: URLSearchParams, gr
     stepStage(state, { roll: true, rollTurn: aileron ? 0 : side }, ground, undefined, events);
     for (let i = 0; i < age; i++) stepStage(state, {}, ground);
     if (state.view === 'chase') state.rearGlimpse = { kind: 'flare', since: state.tick - 18, until: state.tick + 60 };
+  }
+}
+
+// Lay a curved Ion Wake behind the fixture player for render review.
+function primeIonWake(state: StageState): void {
+  const { player: p } = state;
+  state.ionWake.length = 0;
+  for (let k = 36; k >= 0; k--) {
+    const back = 18 + k * 14, curve = (k * 14) ** 2 * 0.0006;
+    state.ionWake.push({
+      x: p.x - Math.sin(p.yaw) * back + Math.cos(p.yaw) * curve,
+      z: p.z - Math.cos(p.yaw) * back - Math.sin(p.yaw) * curve,
+      alt: p.altitude - Math.min(12, k * 0.5),
+      until: state.tick + 300 - k * 8,
+    });
   }
 }

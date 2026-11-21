@@ -104,6 +104,9 @@ const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const FLAK_RING_LIMIT = 24;
 const BOMB_VISUAL_LIMIT = 16;
 const WEAPON_LINK_LIMIT = 128;
+// Render-only Ion Wake look: small motes (m), hidden near the chase/cockpit eye so the wake never fills the view.
+const ION_MOTE = { size: 1.6, plasmaSize: 2.1, edgeScale: 0.6, fadeTicks: 84, chaseClearance: 70, cockpitClearance: 110,
+  cockpitScale: 0.7 } as const;
 const WEAPON_RING_LIMIT = 16;
 const FLAK_COLUMN_LIMIT = 8;
 const ORBIT_DRONE_LIMIT = CLOSE_EVOLUTIONS.collector.count;
@@ -712,7 +715,7 @@ export class FlightScene {
     this.exhaust.update(state, this.camera);
   }
 
-  private drawWeaponEffects(state: StageState, flat: boolean, links: number): void {
+  private drawWeaponEffects(state: StageState, view: StageState['view'] | 'rear', flat: boolean, links: number): void {
     const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
     let rings = 0, columns = 0, drones = 0;
     if (state.run?.evolutions.pods) {
@@ -756,22 +759,33 @@ export class FlightScene {
         }
       }
     }
+    // Sparse Ion Wake motes follow the hit path outside the camera clearance.
     const wake = state.ionWake;
     const plasma = !!state.run?.evolutions.ion;
     const width = WEAPONS.ion.tuning.width[(state.run?.weaponLevels.ion ?? 1) - 1]
       * (plasma ? CLOSE_EVOLUTIONS.plasma.widthScale : 1);
-    for (let i = 1; i < wake.length && links < WEAPON_LINK_LIMIT; i++) {
-      const from = wake[i - 1], to = wake[i];
-      const left = Math.min(from.until, to.until) - state.tick;
+    const eye = flat ? null : (view === 'rear' ? this.rearCamera : this.camera).position;
+    const clearance = view === 'chase' ? ION_MOTE.chaseClearance : ION_MOTE.cockpitClearance;
+    const base = (plasma ? ION_MOTE.plasmaSize : ION_MOTE.size) * (eye && view !== 'chase' ? ION_MOTE.cockpitScale : 1);
+    for (let i = 0; i < wake.length && links < WEAPON_LINK_LIMIT; i++) {
+      const mote = wake[i], left = mote.until - state.tick;
       if (left <= 0) continue;
-      const size = width * (0.12 + 0.24 * Math.min(1, left / 84));
-      const height = Math.abs(from.alt - to.alt);
-      if (!flat && height > 1.5) {
-        const dx = to.x - from.x, dz = to.z - from.z;
-        this.write(this.weaponLinks, links++, (from.x + to.x) / 2, (from.z + to.z) / 2, (from.alt + to.alt) / 2,
-          Math.atan2(dx, dz), size, height + size, Math.hypot(dx, dz) + size * 0.4, plasma ? 0xba93ff : 0x43c6b3);
-      } else {
-        this.connect(this.weaponLinks, links++, from, to, size, plasma ? 0xe4bdff : 0x66f5d9, plane);
+      const alt = plane ?? mote.alt;
+      if (eye && (mote.x - eye.x) ** 2 + (alt - eye.y) ** 2 + (mote.z + eye.z) ** 2 < clearance ** 2) continue;
+      const fade = Math.min(1, left / ION_MOTE.fadeTicks), size = base * (0.45 + 0.55 * fade);
+      const lit = ((state.tick >> 2) + i) & 1;
+      const tint = plasma ? lit ? 0xe4bdff : 0xba93ff : lit ? 0x8affe6 : 0x43c6b3;
+      this.write(this.weaponLinks, links++, mote.x, mote.z, alt, 0, size, size, size, tint);
+      // Every other sample marks the wake's hit width with two edge motes.
+      if (i % 2 || links + 2 > WEAPON_LINK_LIMIT) continue;
+      const next = wake[i + 1] ?? wake[i - 1];
+      if (!next) continue;
+      const dx = next.x - mote.x, dz = next.z - mote.z, run = Math.hypot(dx, dz) || 1;
+      const sideX = dz / run * width, sideZ = -dx / run * width, edge = size * ION_MOTE.edgeScale;
+      for (const side of [-1, 1]) {
+        const x = mote.x + side * sideX, z = mote.z + side * sideZ;
+        if (eye && (x - eye.x) ** 2 + (alt - eye.y) ** 2 + (z + eye.z) ** 2 < clearance ** 2) continue;
+        this.write(this.weaponLinks, links++, x, z, alt, 0, edge, edge, edge, tint);
       }
     }
     upload(this.defenseDrones, drones);
@@ -875,7 +889,7 @@ export class FlightScene {
       }
     }
     upload(this.bullets, bullets);
-    this.drawWeaponEffects(state, flat, weaponLinks);
+    this.drawWeaponEffects(state, view, flat, weaponLinks);
 
     let mines = 0;
     for (const mine of state.enemyMines) {
