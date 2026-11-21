@@ -56,7 +56,7 @@ export const overheadZoom = (altitude: number): number => clamp((altitude - 20) 
 
 const instanceRanges = new WeakMap<InstancedBufferAttribute, { start: number; count: number }>();
 
-function instances(geometry: BufferGeometry, capacity: number, material = new MeshBasicMaterial()): InstancedMesh {
+function instances(geometry: BufferGeometry, capacity: number, material = new MeshBasicMaterial()): InstancedMesh<BufferGeometry, MeshBasicMaterial> {
   const mesh = new InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3).setUsage(DynamicDrawUsage);
@@ -233,7 +233,7 @@ export class FlightScene {
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly shadows = instances(new PlaneGeometry(2, 2).rotateX(-Math.PI / 2), REGULAR_RENDER_CAP + 2,
-    new MeshBasicMaterial({ color: SHADOW.color, map: jetShadowTexture(), alphaTest: 0.5, opacity: SHADOW.enemyOpacity,
+    new MeshBasicMaterial({ color: SHADOW.color, map: jetShadowTexture(), opacity: SHADOW.enemyOpacity,
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   private readonly bombs = instances(new BoxGeometry(), BOMB_VISUAL_LIMIT);
   private readonly mines = instances(new BoxGeometry(), MINE_LIMIT);
@@ -260,6 +260,8 @@ export class FlightScene {
     this.quality = new AdaptiveQuality(options.quality ?? DEFAULT_QUALITY);
     this.comparisonScale = options.comparisonScale;
     this.feelEnabled = options.enabled ?? true;
+    // The binary silhouette supplies coverage. Its translucent ink can fall below a 0.5 alpha test.
+    if (!this.feelEnabled) this.shadows.material.alphaTest = 0.5;
     this.fixture = options.fixture ?? null;
     this.atmosphere = new FlightAtmosphere(arena, this.feelEnabled);
     this.surface = this.feelEnabled ? new FlightSurface(this.ground) : null;
@@ -271,7 +273,8 @@ export class FlightScene {
     this.renderer.setClearColor(0x081424);
     this.scene.background = this.fog.color;
     this.scene.fog = this.fog;
-    this.terrain = new TerrainStream(world);
+    this.terrain = new TerrainStream(world, this.feelEnabled);
+    if (this.atmosphere.cloudShadow) this.terrain.lookMaterial?.setCloudShadow(this.atmosphere.cloudShadow);
     this.scene.add(this.terrain.group, this.atmosphere.group);
     if (this.feelEnabled) this.scene.add(makeSky());
     this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.sparks,
@@ -814,6 +817,7 @@ export class FlightScene {
   private updateWorld(state: StageState, view: StageState['view'] | 'rear'): void {
     const p = state.player, flat = view === 'overhead';
     const chase = view === 'chase', external = flat || chase;
+    const castShadows = this.feelEnabled || !flat;
     const trail = activeTrail(state);
     this.drawTrail(state, trail, flat, external);
     const fireTint = Math.floor(state.tick / 6) % 2 ? 0xff9564 : 0xffbf78;
@@ -855,7 +859,7 @@ export class FlightScene {
         }
       }
       if (external && formerPursuer(state, trail, enemy)) this.writePursuitRing(marked++, enemy.x, enemy.z, flat ? TOP_FLIGHT + 3 : enemy.alt);
-      if (!flat && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 7, 5.5, enemy.yaw, enemy.alt);
+      if (castShadows && enemy.kind !== 'turret') this.writeShadow(shadows++, enemy.x, enemy.z, 7, 5.5, enemy.yaw, enemy.alt);
     }
     upload(this.drones, drones);
     upload(this.gnats, gnats);
@@ -865,7 +869,7 @@ export class FlightScene {
 
     // --- S7e lane ---
     const boss = state.boss;
-    if (!flat && boss && !boss.crashed) this.writeShadow(shadows++, boss.x, boss.z, 14, 11, boss.yaw, boss.alt);
+    if (castShadows && boss && !boss.crashed) this.writeShadow(shadows++, boss.x, boss.z, 14, 11, boss.yaw, boss.alt);
     this.rosterVisuals.update(state, flat ? TOP_FLIGHT : undefined, this.reducedMotion.matches);
     upload(this.shadows, shadows);
 
@@ -1027,6 +1031,7 @@ export class FlightScene {
       this.cockpitPose.cameraBank = attitude?.cameraBank ?? 0;
     }
     const terrainWasPending = this.terrain.pending;
+    if (this.terrain.lookMaterial) this.terrain.lookMaterial.time.value = state.tick * STEP;
     const terrainBuilt = this.terrain.update(state.player.x, state.player.z, phone, state.worldSites);
     const terrainSettled = (terrainWasPending || terrainBuilt > 0) && !this.terrain.pending;
     // Overhead: lower flight zooms in on the ground, higher flight takes in more of it.

@@ -33,7 +33,8 @@ const FRAGMENT = /* glsl */`
     float band = floor(level) + step((bayer(gl_FragCoord.xy) + 0.5) / 16.0, fract(level));
     float f = band / (bands - 1.0);
     vec3 color = f < 0.5 ? mix(horizon, middle, f * 2.0) : mix(middle, zenith, f * 2.0 - 1.0);
-    gl_FragColor = vec4(color, 1.0);
+    // Match the ground's horizon palette in the composite, including through the rear mirror.
+    gl_FragColor = vec4(color, 0.0);
   }
 `;
 

@@ -28,11 +28,11 @@ function noise(seed: number, x: number, z: number, scale: number, period: number
     mix(worldHash(seed, ax, bz), worldHash(seed, bx, bz), tx), tz) / 4294967295;
 }
 
-function reachHeight(x: number, z: number): number {
+function reachHeight(x: number, z: number, raw = false): number {
   const jx = x + 128, jz = z + 128;
   const coast = noise(0, jx, jz, 256, 512) * 0.55 + noise(0, jx, jz, 128, 512) * 0.45;
   const detail = noise(0, jx, jz, 64, 512);
-  let height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.32) * 38 + detail * 2;
+  let height = TERRAIN_MIN_ALTITUDE + (raw ? coast - 0.32 : Math.max(0, coast - 0.32)) * 38 + detail * 2;
   const { ridge, strait, atoll, stacks } = LANDMARKS;
   const ridgeRange = Math.hypot((x - ridge.x) / 118, (z - ridge.z) / 94);
   const straitRange = Math.hypot((x - strait.x) / 179, (z - strait.z) / 88);
@@ -52,17 +52,17 @@ function reachHeight(x: number, z: number): number {
   return height;
 }
 
-function terrainVertex(seed: number, x: number, z: number): number {
+function terrainVertex(seed: number, x: number, z: number, raw = false): number {
   const half = TERRAIN_SIZE / 2, mask = TERRAIN_SIZE - 1;
   const wx = ((x + half) & mask) - half, wz = ((z + half) & mask) - half;
   const radius = Math.max(Math.abs(wx), Math.abs(wz));
-  if (radius <= WORLD_TERRAIN.reachCore) return reachHeight(wx, wz);
+  if (radius <= WORLD_TERRAIN.reachCore) return reachHeight(wx, wz, raw);
   const coast = noise(seed, wx, wz, 512) * 0.64 + noise(seed, wx, wz, 256) * 0.36;
   const detail = noise(seed, wx, wz, 64);
-  const height = TERRAIN_MIN_ALTITUDE + Math.max(0, coast - 0.41) * 35 + detail * 2;
+  const height = TERRAIN_MIN_ALTITUDE + (raw ? coast - 0.41 : Math.max(0, coast - 0.41)) * 35 + detail * 2;
   if (radius >= WORLD_TERRAIN.reachBlend) return height;
   const blend = shoulder(radius / WORLD_TERRAIN.reachBlend, WORLD_TERRAIN.reachCore / WORLD_TERRAIN.reachBlend);
-  return mix(height, reachHeight(wx, wz), blend);
+  return mix(height, reachHeight(wx, wz, raw), blend);
 }
 
 // Both the mesh and gameplay use the 16 m grid's two triangles at full detail.
@@ -127,6 +127,16 @@ export class World {
 
   height(x: number, z: number): number {
     return terrainSurface(this.sample, x, z);
+  }
+
+  private readonly rawFloor: Ground = (x, z) => terrainVertex(this.activeSeed, x, z, true);
+
+  /** Render-only depth field. Ease the unclamped floor into the shore of raised landmarks. */
+  seabed(x: number, z: number): number {
+    const surface = this.height(x, z);
+    if (surface >= WORLD_TERRAIN.shallows) return surface;
+    const floor = terrainSurface(this.rawFloor, x, z);
+    return mix(surface, floor, Math.min(1, WORLD_TERRAIN.shallows - surface));
   }
 
   color(x: number, z: number): number {

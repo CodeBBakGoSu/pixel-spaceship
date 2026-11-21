@@ -4,9 +4,10 @@ import { scaleTravel } from './data/speed.ts';
 import { CRUISE_SPEED, BOOST_SPEED } from './flight.ts';
 import { BANDS, clamp, STEP } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
+import { makeVoxelClouds, type CloudShadow } from './voxel-clouds.ts';
 
 type Arena = StageState['arena'];
-type CloudPatch = ReturnType<typeof cloudPatch>;
+export type CloudPatch = ReturnType<typeof cloudPatch>;
 
 function cloudPatch(arena: Arena, band: number, index: number, count: number = CLOUDS.patchesPerBand) {
   const angle = (index + band * 0.4) * 2.39996;
@@ -34,6 +35,7 @@ function containsCloud(patch: CloudPatch, x: number, z: number, altitude: number
 
 export class FlightAtmosphere {
   readonly group = new Group();
+  readonly cloudShadow: CloudShadow | null;
   readonly wind = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial({
     color: 0xc1e6e5, transparent: true, opacity: 0.48, depthWrite: false,
   }), WIND.capacity);
@@ -49,35 +51,21 @@ export class FlightAtmosphere {
 
   constructor(arena: Arena, enabled = true) {
     this.enabled = enabled;
-    this.group.add(enabled ? this.makeClouds(arena) : this.makeLegacyClouds(arena), this.wind);
+    if (enabled) {
+      for (let band = 0; band < BANDS.length; band++) for (let i = 0; i < CLOUDS.patchesPerBand; i++) {
+        this.patches.push(cloudPatch(arena, band, i));
+      }
+      const { clouds, shadow } = makeVoxelClouds(arena, this.patches);
+      this.group.add(clouds);
+      this.cloudShadow = shadow;
+    } else {
+      this.group.add(this.makeLegacyClouds(arena));
+      this.cloudShadow = null;
+    }
+    this.group.add(this.wind);
     this.wind.instanceMatrix.setUsage(DynamicDrawUsage);
     this.wind.frustumCulled = false;
     this.wind.count = 0;
-  }
-
-  private makeClouds(arena: Arena): InstancedMesh {
-    const clouds = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial({
-      transparent: true, opacity: CLOUDS.opacity, depthWrite: false,
-    }), BANDS.length * CLOUDS.patchesPerBand * CLOUDS.blocks.length);
-    clouds.name = 'Altitude-band cloud patches';
-    const tint = new Color();
-    let meshIndex = 0;
-    for (let band = 0; band < BANDS.length; band++) for (let i = 0; i < CLOUDS.patchesPerBand; i++) {
-      const patch = cloudPatch(arena, band, i);
-      this.patches.push(patch);
-      this.pose.rotation.set(0, -patch.yaw, 0);
-      for (let block = 0; block < CLOUDS.blocks.length; block++) {
-        const [dx, dy, dz, width, height, depth] = CLOUDS.blocks[block];
-        const { cos, sin, scale } = patch;
-        this.pose.position.set(patch.x + scale * (dx * cos + dz * sin), patch.altitude + dy,
-          -patch.z + scale * (dx * sin - dz * cos));
-        this.pose.scale.set(width * scale, height, depth * scale);
-        this.pose.updateMatrix();
-        clouds.setMatrixAt(meshIndex, this.pose.matrix);
-        clouds.setColorAt(meshIndex++, tint.setHex(CLOUDS.colors[band]).multiplyScalar(0.86 + 0.035 * block));
-      }
-    }
-    return clouds;
   }
 
   private makeLegacyClouds(arena: Arena): InstancedMesh {

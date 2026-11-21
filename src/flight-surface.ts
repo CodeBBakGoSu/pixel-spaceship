@@ -1,6 +1,6 @@
 import {
   Color, DoubleSide, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  Object3D, PlaneGeometry, Vector3, type BufferAttribute, type Camera, type InstancedBufferAttribute, type OrthographicCamera,
+  Object3D, PlaneGeometry, Vector3, Vector4, type BufferAttribute, type Camera, type InstancedBufferAttribute, type OrthographicCamera,
 } from 'three';
 import { FLIGHT_SURFACE, WING_TRAIL } from './data/flight-world.ts';
 import { jetShadowTexture, shadowOffset } from './shadow-shape.ts';
@@ -55,6 +55,24 @@ function makeDynamicQuads(name: string, count: number, opacity: number): Instanc
   return mesh;
 }
 
+function wingtipRibbons(): InstancedMesh<PlaneGeometry, MeshBasicMaterial> {
+  const mesh = makeDynamicQuads('Wingtip ribbons', 2 * (WING_TRAIL.capacity - 1), WING_TRAIL.opacity);
+  const viewport = new Vector4();
+  mesh.onBeforeRender = renderer => { renderer.getCurrentViewport(viewport); };
+  mesh.material.onBeforeCompile = shader => {
+    shader.uniforms.trailViewport = { value: viewport };
+    shader.vertexShader = ('uniform vec4 trailViewport;\n' + shader.vertexShader).replace('#include <project_vertex>', `
+      #include <project_vertex>
+      // Cap each end independently so a ribbon crossing the chase eye stays a thin line.
+      vec4 center = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(0.0, position.y, 0.0, 1.0);
+      vec2 edge = gl_Position.xy / max(gl_Position.w, 0.001) - center.xy / max(center.w, 0.001);
+      float widthPx = length(edge * trailViewport.zw);
+      gl_Position = center;
+      gl_Position.xy += edge * min(1.0, 2.8 / max(widthPx, 0.001)) * max(center.w, 0.0);`);
+  };
+  return mesh;
+}
+
 function upload(attribute: InstancedBufferAttribute, range: { start: number; count: number }, count: number): void {
   attribute.clearUpdateRanges();
   range.count = count * attribute.itemSize;
@@ -68,7 +86,7 @@ function shadowBlob(): Mesh<PlaneGeometry, MeshBasicMaterial> {
   const geometry = new PlaneGeometry(1, 1, segments, segments).rotateX(-Math.PI / 2);
   (geometry.getAttribute('position') as BufferAttribute).setUsage(DynamicDrawUsage);
   const mesh = new Mesh(geometry, new MeshBasicMaterial({
-    map: texture, color, depthWrite: false, transparent: true, alphaTest: 0.5,
+    map: texture, color, depthWrite: false, transparent: true,
   }));
   mesh.name = 'Ship ground shadow';
   mesh.frustumCulled = false;
@@ -82,7 +100,7 @@ export class FlightSurface {
   clearance = Infinity;
   private readonly ground: Ground;
   private readonly trail = new WingtipRing();
-  private readonly ribbons = makeDynamicQuads('Wingtip ribbons', 2 * (WING_TRAIL.capacity - 1), WING_TRAIL.opacity);
+  private readonly ribbons = wingtipRibbons();
   private readonly wake = makeDynamicQuads('Foam and dust', FLIGHT_SURFACE.wakeCapacity * 4, FLIGHT_SURFACE.wakeOpacity);
   private readonly shadow = shadowBlob();
   private readonly trailColors = WING_TRAIL.colors.map(hex => new Color(hex));
