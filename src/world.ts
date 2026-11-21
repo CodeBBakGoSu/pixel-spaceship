@@ -1,3 +1,4 @@
+import { GROUND_COLORS } from './data/palette.ts';
 import { REACH_LANDMARKS as LANDMARKS, REACH_STACKS as BASALT_STACKS, WORLD_TERRAIN } from './data/world.ts';
 import { TERRAIN_STREAM } from './data/terrain-stream.ts';
 import type { Ground } from './stage-types.ts';
@@ -81,14 +82,19 @@ export function groundAt(seed: number, x: number, z: number): number {
   return terrainSurface((vx, vz) => terrainVertex(seed, vx, vz), x, z);
 }
 
-export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0, mobile = false): number {
+/** Higher up sees further: the haze starts later and the horizon recedes (render-only). */
+export function altitudeHaze(altitude: number): number {
+  return Math.min(1, Math.max(0, (altitude - 75) / 90));
+}
+
+export function terrainFogFar(aspect: number, fov: number, pitch = 0, bank = 0, mobile = false, altitude = 0): number {
   const forward = 1 / Math.cos(pitch);
   const slope = Math.abs(Math.tan(pitch)), halfHeight = Math.tan(fov * Math.PI / 360);
   const across = halfHeight * (aspect * Math.abs(Math.cos(bank)) + 1.8 * Math.abs(Math.sin(bank)));
   const tier = mobile ? TERRAIN_STREAM.phone : TERRAIN_STREAM.desktop;
   const coverage = tier.radius * TERRAIN_STREAM.chunkSize;
   const room = Math.max(TERRAIN_STREAM.chunkSize, coverage - TERRAIN_STREAM.fogMargin - MAX_CAMERA_CLEARANCE * slope);
-  return Math.min(tier.fogFar, room / Math.hypot(forward, across));
+  return Math.min(tier.fogFar * (1 + 0.3 * altitudeHaze(altitude)), room / Math.hypot(forward, across));
 }
 
 const MAX_CAMERA_CLEARANCE = 170;
@@ -124,11 +130,11 @@ export class World {
   }
 
   color(x: number, z: number): number {
-    const height = this.height(x, z);
-    if (isWater(height)) return height < 36.3 ? 0x206481 : 0x358591;
-    if (height < 41.5) return 0xc5b179;
-    if (height < 45) return 0x83a467;
-    if (height < 73) return worldHash(this.seed, Math.floor(x / 32), Math.floor(z / 32)) & 1 ? 0x58834f : 0x4c784a;
-    return height < 88 ? 0x778971 : 0x737d80;
+    const height = this.height(x, z), c = GROUND_COLORS;
+    if (isWater(height)) return height < 36.3 ? c.deep : c.shallow;
+    if (height < 41.5) return c.sand;
+    if (height < 45) return c.meadow;
+    if (height < 73) return c.grass[worldHash(this.seed, Math.floor(x / 32), Math.floor(z / 32)) & 1];
+    return height < 88 ? c.hill : c.rock;
   }
 }

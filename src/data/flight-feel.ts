@@ -24,10 +24,10 @@ export const FLIGHT_FEEL = {
   cockpitWidening: 8,
   chaseCloser: 0.16,
   chaseSink: 3,
-  chaseBankScale: 0.4,
+  chaseBankScale: 0.15,
   chaseBankRate: 8,
-  chaseYawRate: 10,
-  chaseYawLimit: 10 * Math.PI / 180,
+  chaseYawRate: 4.5,
+  chaseYawLimit: 22 * Math.PI / 180,
   phoneBankLimit: 25 * Math.PI / 180,
   tremble: { size: 0.17, sizeVertical: 0.56, rate: 31, rateVertical: 47, speedLimit: 1.2 },
   shockDecay: 4.5,
@@ -37,4 +37,9 @@ export const FLIGHT_FEEL = {
   explosionRange: scaleTravel(105),
   burstSize: 0.6,
   rollTrailMinimumIntervals: 4,
+  // Climb and dive presentation. Render-only: these read the sim, never write it.
+  pitch: { rate: 14, limit: 40 * Math.PI / 180 },
+  chaseAltitude: { carry: 0.4, steepCarry: 0.3, catchUp: 2.5, maneuverCatchUp: 12 },
+  chaseTilt: { scale: 0.55, drop: 0.8, aim: 0.9 },
+  head: { stiffness: 64, damping: 11, climbSink: 0.35, boostSink: 0.2, turnLean: 0.6, limit: 0.8 },
 } as const;

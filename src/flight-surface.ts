@@ -1,8 +1,9 @@
 import {
-  Color, DataTexture, DoubleSide, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  NearestFilter, Object3D, PlaneGeometry, Vector3, type BufferAttribute, type Camera, type InstancedBufferAttribute, type OrthographicCamera,
+  Color, DoubleSide, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
+  Object3D, PlaneGeometry, Vector3, type BufferAttribute, type Camera, type InstancedBufferAttribute, type OrthographicCamera,
 } from 'three';
 import { FLIGHT_SURFACE, WING_TRAIL } from './data/flight-world.ts';
+import { jetShadowTexture, shadowOffset } from './shadow-shape.ts';
 import { CRUISE_SPEED } from './flight.ts';
 import { clamp, STEP } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
@@ -62,21 +63,12 @@ function upload(attribute: InstancedBufferAttribute, range: { start: number; cou
 }
 
 function shadowBlob(): Mesh<PlaneGeometry, MeshBasicMaterial> {
-  const { textureSize, segments, color } = FLIGHT_SURFACE.shadow;
-  const pixels = new Uint8Array(textureSize * textureSize * 4);
-  for (let y = 0; y < textureSize; y++) for (let x = 0; x < textureSize; x++) {
-    const radius = Math.hypot(x + 0.5 - textureSize / 2, y + 0.5 - textureSize / 2) * 2 / textureSize;
-    const index = (y * textureSize + x) * 4;
-    pixels[index] = pixels[index + 1] = pixels[index + 2] = 255;
-    pixels[index + 3] = Math.round(Math.max(0, 1 - radius ** 1.8) * 7) * 36;
-  }
-  const texture = new DataTexture(pixels, textureSize, textureSize);
-  texture.magFilter = texture.minFilter = NearestFilter;
-  texture.needsUpdate = true;
+  const { segments, color } = FLIGHT_SURFACE.shadow;
+  const texture = jetShadowTexture();
   const geometry = new PlaneGeometry(1, 1, segments, segments).rotateX(-Math.PI / 2);
   (geometry.getAttribute('position') as BufferAttribute).setUsage(DynamicDrawUsage);
   const mesh = new Mesh(geometry, new MeshBasicMaterial({
-    map: texture, color, depthWrite: false, transparent: true,
+    map: texture, color, depthWrite: false, transparent: true, alphaTest: 0.5,
   }));
   mesh.name = 'Ship ground shadow';
   mesh.frustumCulled = false;
@@ -290,7 +282,8 @@ export class FlightSurface {
       this.storeWake(p.x, p.z, p.yaw, tick);
     }
     this.lastTick = tick;
-    this.drawShadow(p.x, p.z, p.yaw, ground);
+    const cast = shadowOffset(this.clearance), sx = p.x + cast.x, sz = p.z + cast.z;
+    this.drawShadow(sx, sz, p.yaw, this.ground(sx, sz));
     this.drawRibbons(tick, camera, externalShift, interval, phone);
     this.drawWake(tick);
   }

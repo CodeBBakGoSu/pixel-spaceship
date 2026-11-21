@@ -9,7 +9,7 @@ export type Point = { x: number; y: number };
 export type Line = { from: Point; to: Point };
 export type PitchMark = { angle: number; left: Line[]; right: Line[] };
 type CockpitFraming = { width: number; height: number; cockpit: CockpitLayout | null };
-type CockpitAttitude = { cameraPitch: number; cameraBank: number };
+type CockpitAttitude = { cameraPitch: number; cameraBank: number; fovPitch?: number };
 type CockpitLens = { widening: number; pullback: number; shake: number; shakeVertical?: number };
 
 const WORLD_UP = new Vector3(0, 1, 0);
@@ -32,7 +32,7 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   const bankCos = Math.cos(bank), visualPitch = pitch * bankCos;
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
-  camera.fov = cockpitFov(width / height, pitch, lens?.widening);
+  camera.fov = cockpitFov(width / height, attitude?.fovPitch ?? pitch, lens?.widening);
   let shift = clamp(center, 0.29, 0.64);
   if (cockpit && Math.abs(visualPitch) > 0.001) {
     const { y, height: glassHeight } = cockpit.aiming;

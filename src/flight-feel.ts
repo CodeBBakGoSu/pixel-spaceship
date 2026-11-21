@@ -36,8 +36,26 @@ export function shockEnvelope(amplitude: number, age: number): number {
   return age < 0 ? 0 : amplitude * Math.exp(-FLIGHT_FEEL.shockDecay * age);
 }
 
+export type FlightAttitudeSample = { altitude: number; climbRate: number; controlled: boolean; turn: number };
+
+/** The path angle the ship is really flying at, from the sim's climb rate and airspeed. */
+export function pathPitch(climbRate: number, speed: number): number {
+  const limit = FLIGHT_FEEL.pitch.limit;
+  return clamp(Math.atan2(climbRate, Math.max(20, speed)), -limit, limit);
+}
+
 export class FlightMotion {
   boost = 0;
+  /** Smoothed path angle, rad (nose up positive). */
+  pitch = 0;
+  /** Altitude the chase camera follows: it lags a climb or dive so the ship moves in the frame. */
+  followAlt = NaN;
+  /** How far the chase camera looks up the sky (positive) or down at the ground, rad. */
+  chaseTilt = 0;
+  headX = 0;
+  headY = 0;
+  private headVX = 0;
+  private headVY = 0;
   chaseYaw = 0;
   chaseBank = 0;
   shake = 0;
@@ -54,7 +72,8 @@ export class FlightMotion {
     this.shockAt = tick;
   }
 
-  advance(state: FlightSample, yaw: number, roll: number, spinning: boolean, phone: boolean, reducedMotion: boolean): void {
+  advance(state: FlightSample, yaw: number, roll: number, spinning: boolean, phone: boolean, reducedMotion: boolean,
+    flight?: FlightAttitudeSample): void {
     const { tick, boosting, boostTicks, speed } = state;
     const delta = tick - this.lastTick;
     const snap = this.lastTick < 0 || delta < 0;
@@ -66,6 +85,7 @@ export class FlightMotion {
     const bank = snap || reducedMotion ? targetBank : targetBank + (this.chaseBank - targetBank)
       * Math.exp(-FLIGHT_FEEL.chaseBankRate * seconds);
     this.chaseBank = phone ? clamp(bank, -limit, limit) : bank;
+    if (flight) this.advanceAttitude(flight, speed, seconds, snap || reducedMotion, reducedMotion);
 
     if (reducedMotion) {
       this.boost = this.boostFrom = this.shake = this.shakeVertical = this.shockAmplitude = 0;
@@ -88,6 +108,37 @@ export class FlightMotion {
     this.shake = trembleSize * Math.sin(time * tremble.rate) + shock * Math.cos(phase);
     this.shakeVertical = tremble.sizeVertical * trembleSize * Math.sin(time * tremble.rateVertical)
       + shockVertical.size * shock * Math.sin(phase * shockVertical.rate);
+  }
+
+  private advanceAttitude(flight: FlightAttitudeSample, speed: number, seconds: number, snap: boolean, still: boolean): void {
+    const { pitch, chaseAltitude, chaseTilt, head } = FLIGHT_FEEL;
+    const target = flight.controlled ? pathPitch(flight.climbRate, speed) : 0;
+    const ease = (rate: number) => 1 - Math.exp(-rate * seconds);
+    this.pitch = snap ? target : this.pitch + (target - this.pitch) * ease(pitch.rate);
+    if (snap || !Number.isFinite(this.followAlt)) {
+      this.followAlt = flight.altitude;
+    } else {
+      // Carry most of the climb at once, then close the remaining gap: the ship drifts up or down the frame.
+      const steep = clamp(Math.abs(flight.climbRate) * 1.5 / Math.max(20, speed), 0, 1);
+      const carry = flight.controlled ? chaseAltitude.carry + chaseAltitude.steepCarry * steep : 1;
+      this.followAlt += flight.climbRate * seconds * carry;
+      this.followAlt += (flight.altitude - this.followAlt)
+        * ease(flight.controlled ? chaseAltitude.catchUp : chaseAltitude.maneuverCatchUp);
+    }
+    this.chaseTilt = still ? 0 : chaseTilt.scale * Math.sin(this.pitch);
+    if (still || snap) {
+      this.headX = this.headY = this.headVX = this.headVY = 0;
+      return;
+    }
+    // The pilot's head rides a soft spring: it sinks in a climb and under thrust, lifts in a dive, leans into turns.
+    const lift = clamp(this.pitch / pitch.limit, -1, 1);
+    const goalX = clamp(flight.turn, -1, 1) * head.turnLean;
+    const goalY = -lift * head.climbSink - this.boost * head.boostSink;
+    const step = Math.min(seconds, 0.05);
+    this.headVX += ((goalX - this.headX) * head.stiffness - this.headVX * head.damping) * step;
+    this.headVY += ((goalY - this.headY) * head.stiffness - this.headVY * head.damping) * step;
+    this.headX = clamp(this.headX + this.headVX * step, -head.limit, head.limit);
+    this.headY = clamp(this.headY + this.headVY * step, -head.limit, head.limit);
   }
 
   private shockAtTick(tick: number): number {
