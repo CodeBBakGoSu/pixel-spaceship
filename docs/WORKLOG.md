@@ -20,6 +20,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
+- Weapon levels v2 on `devin/1795407698-aster-weapon-levels`: render-visible rank mechanics and Lv7 cap for ten Survivors weapons; draft, evolution gates, combat effects and tests.
+- State: in progress. No XP, spawn/density, or Stage C flight rates; balance tuning deferred.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795406694-aster-growth → renderer-proto (`a36ff13`; merge `3da3980`)
 - Survivors weapon ranks raise damage and grow Twin Cannon from two bolts to a wider, piercing six-bolt volley. Draft cards show the gain before selection; flight confirms the selected upgrade.
 - Verification: `npm test` 513/513, build OK, desktop Chrome passed. Survivors replay goldens updated on the Stage C base (legacy unchanged). 100 seeds per pilot: skilled/average/weak clears 100%/73%/41%; median level-ups 29/30/28, before horde changes.
