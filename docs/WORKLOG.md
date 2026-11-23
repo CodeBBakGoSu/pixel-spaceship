@@ -23,9 +23,14 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 23:05 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (`264b23a`; Bomb Bay `e104198`; renderer-proto `69f81c8`, `f544ee2`, `7d883ad`)
+- UI session report for `264b23a`: Chrome keyboard/mouse weak-left and neutral C, Shift+Space, W/S+Space, twin-only no-rear-fire, inert X/K, and Phoenix auto-fire fixture passed; forced-touch Roll/Loop passed. Bomb Bay auto-fire passed at `e104198`; combat code is unchanged since.
+- [Final UI recording](https://app.devin.ai/sessions/7f15ccc7bd4c4b0ea3c7555fd75b88a2?testRecording=9b4b7f3e-18ba-4e5e-b6c3-ee6367b6e79b). Checks used checkpoints/fixtures and forced touch; no physical mobile or natural-unlock playthrough.
+- Merged docs-only renderer-proto updates, preserving additive worklog/history. Focused progression/evolutions/chests/stage tests passed 48/48 and build passed on `264b23a`; no rerun after docs-only integration. `git diff --check` passed. State: done; final UI evidence recorded.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `e104198`; review `4666747118`)
 - Draft refills revalidate kept cards as well as new offers, replacing Flare Bay/Ordnance Rack when their unowned Phoenix/Bomb Bay is banished; an owned paired weapon keeps its valid buff. Replacements remain unique.
-- Verification: focused progression/evolutions/chest/stage tests 48/48; `npm run build` passed (119 modules). State: done; awaiting UI verification.
+- Verification: focused progression/evolutions/chest/stage tests 48/48; `npm run build` passed (119 modules). State: done; UI evidence recorded in the latest entry.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`8824cfc`; merged `2e9770d`, `cc77357`)
 - C normalizes nonzero combined steering to its sign and uses the remembered/default sign when neutral; stepStage regressions cover weak opposite input and neutral C. Shift+Space ailerons and W/S+Space selectors remain unchanged; the global roll threshold is untouched.
@@ -35,6 +40,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
 - Merged latest `renderer-proto` into the PR branch, preserving its three wiki docs and in-progress planning-bot entry; resolved only the additive worklog overlap.
 - Verification: focused regressions 57/57 and build passed; post-merge `npm test` 578/578 and `npm run build` passed (119 modules, 2.93 s). State: done locally; not pushed.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
+- Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
+- Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
+- State: done (direct push to `renderer-proto`; no PR or `main`).
+
+### 2026-11-23 22:56 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
+- [Ace 회피 후보 검증](wiki/HISTORY.md#ace-dodge): PR #7의 `1a0a5b2`에서 확인한 브라우저 조작과 자동 시간 제어 경계를 구분했다. PR은 열려 있고 개발판 병합·배포는 하지 않았다.
+- State: in progress. HTML 최종본 게시 확인 전까지 기존 기획 문서는 유지한다.
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
 - [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
