@@ -71,7 +71,6 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
     if (!layout) continue;
     for (const { x, z } of layout.sites) {
       const gnat = makeEnemy(state, x, z, pack.band, 'gnat');
-      gnat.leaveAt = state.tick + WAVE_FLY_IN_TICKS + GNAT.lifeSeconds * TICKS_PER_SECOND;
       const anchor = formation === 'encircle' ? projected
         : { x: x + layout.fx * GNAT.range, z: z + layout.fz * GNAT.range };
       beginEnemyFlyIn(state, gnat, ground, anchor, 0.16);

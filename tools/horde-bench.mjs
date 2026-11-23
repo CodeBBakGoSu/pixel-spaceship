@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { autopilotInput } from '../src/autoplay.ts';
+import { SWARM_CAPS } from '../src/data/phases.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -9,12 +10,10 @@ const samples = [];
 for (let run = 0; run < 7; run++) {
   const state = createStage(parseStageOptions('?autoplay=1&mode=survivors&seed=1'), ground);
   state.tick = 540 * 60;
-  state.swarmCap = 240;
   state.hull = state.maxHull = 100000;
-  for (let i = 0; i < 240; i++) {
-    const angle = i * Math.PI * 2 / 240;
+  for (let i = 0; i < SWARM_CAPS.desktop; i++) {
+    const angle = i * Math.PI * 2 / SWARM_CAPS.desktop;
     const enemy = makeEnemy(state, Math.sin(angle) * 300, Math.cos(angle) * 300, i % 3, 'gnat');
-    enemy.leaveAt = state.tick + 1200;
     state.enemies.push(enemy);
   }
   const start = performance.now();
@@ -22,4 +21,4 @@ for (let run = 0; run < 7; run++) {
   samples.push((performance.now() - start) / 120);
 }
 samples.sort((a, b) => a - b);
-console.log(`t=540s, 240 initial gnats, flat terrain, pilot+sim: median ${samples[3].toFixed(3)} ms/tick (7 x 120 ticks)`);
+console.log(`t=540s, ${SWARM_CAPS.desktop} initial gnats, flat terrain, pilot+sim: median ${samples[3].toFixed(3)} ms/tick (7 x 120 ticks)`);

@@ -3,6 +3,7 @@ import { SKIM, skimAltitude } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { REGULAR_FIRE_INTERVAL_SCALE } from './data/run-balance.ts';
 import { GNAT } from './data/phases.ts';
+import { SPAWN_WORLD } from './data/world.ts';
 import { ROSTER } from './data/roster.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
@@ -476,6 +477,50 @@ function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
   }
 }
 
+function maintainGnats(state: StageState, ground: Ground): void {
+  const p = state.player;
+  const yaw = Math.hypot(p.vx ?? 0, p.vz ?? 0) > 1 ? Math.atan2(p.vx!, p.vz!) : p.yaw;
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
+  let live = 0;
+  for (const enemy of state.enemies) if (enemy.kind === 'gnat' && enemy.hp > 0) live++;
+  if (live > state.swarmCap) {
+    const rank = (enemy: Enemy) => {
+      const dx = enemy.x - p.x, dz = enemy.z - p.z;
+      return { distance: dx * dx + dz * dz, behind: dx * fx + dz * fz < 0 };
+    };
+    const ordered = state.enemies.filter(enemy => enemy.kind === 'gnat' && enemy.hp > 0)
+      .map(enemy => ({ enemy, ...rank(enemy) }));
+    ordered.sort((a, b) => Number(b.distance > GNAT.range ** 2) - Number(a.distance > GNAT.range ** 2)
+      || Number(b.behind) - Number(a.behind) || b.distance - a.distance || b.enemy.id - a.enemy.id);
+    for (let i = 0; i < live - state.swarmCap; i++) {
+      ordered[i].enemy.hp = 0;
+      ordered[i].enemy.shotDown = false;
+    }
+  }
+  for (const enemy of state.enemies) {
+    if (enemy.kind !== 'gnat' || !enemy.hp || enemy.entry || enemy.leaveAt !== undefined
+      || (enemy.x - p.x) ** 2 + (enemy.z - p.z) ** 2 <= SPAWN_WORLD.recycleDistance ** 2) continue;
+    enemy.farTicks = (enemy.farTicks ?? 0) + 1;
+    if (enemy.farTicks > 1 && enemy.farTicks % TICKS_PER_SECOND !== 0) continue;
+    const altitude = BANDS[enemy.band];
+    for (let i = 0; i < 12; i++) {
+      const bearing = yaw + (((enemy.id * 0.61803398875 + i / 12) % 1) - 0.5) * 2.1;
+      const range = SPAWN_WORLD.recycleDistance * (i < 6 ? 0.8 : 0.65);
+      const x = p.x + Math.sin(bearing) * range, z = p.z + Math.cos(bearing) * range;
+      if (ground(x, z) + GNAT.clearance > altitude) continue;
+      enemy.x = x;
+      enemy.z = z;
+      enemy.alt = altitude;
+      enemy.vx = -Math.sin(bearing) * GNAT.speed;
+      enemy.vz = -Math.cos(bearing) * GNAT.speed;
+      enemy.yaw = Math.atan2(enemy.vx, enemy.vz);
+      enemy.farTicks = 0;
+      delete enemy.tell;
+      break;
+    }
+  }
+}
+
 export function spawnEscortGnats(state: StageState, source: Position & { band: Band }, ground: Ground,
   members: number, observeSwarm?: SwarmObserver): void {
   const live = state.enemies.reduce((count, enemy) => count + Number(enemy.kind === 'gnat' && enemy.hp > 0), 0);
@@ -502,6 +547,7 @@ export function spawnEscortGnats(state: StageState, source: Position & { band: B
 }
 
 export function advanceEnemies(state: StageState, ground: Ground, events?: CombatEvents, observeSwarm?: SwarmObserver): void {
+  maintainGnats(state, ground);
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const count = state.enemies.length;
   let swarmHeard = false;

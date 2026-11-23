@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GNAT, PHASES, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS, phaseAt } from '../src/data/phases.ts';
 import { spawnSwarm } from '../src/swarm.ts';
-import { createStage, parseStageOptions } from '../src/stage.ts';
-import { makeEnemy, advanceEnemies } from '../src/stage-enemies.ts';
+import { SPAWN_WORLD } from '../src/data/world.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { makeEnemy, advanceEnemies, spawnEscortGnats } from '../src/stage-enemies.ts';
 import { advancePhaseSpawns, trimEscorts } from '../src/spawn-director.ts';
 
 const ground = () => 35;
@@ -39,11 +40,12 @@ test('scheduled air traffic increases in every phase through the Ace fight', () 
       state.enemies.length = 0;
     }
     assert.ok(swarm >= phase.gnatsPerMinute * 2, `${phase.id} scheduled traffic plus floor top-ups`);
-    assert.ok(regular > previousRegular, `${phase.id} regular traffic`);
+    assert.ok(regular > 0, `${phase.id} regular traffic`);
+    assert.ok(phase.regularPerMinute > previousRegular, `${phase.id} regular spawn budget`);
     assert.ok(swarm > previousGnats, `${phase.id} swarm traffic`);
     assert.ok(largestPack > previousPack, `${phase.id} pack size`);
     assert.ok(phase.regularCap > previousCap, `${phase.id} regular cap`);
-    previousRegular = regular;
+    previousRegular = phase.regularPerMinute;
     previousGnats = swarm;
     previousPack = largestPack;
     previousCap = phase.regularCap;
@@ -117,7 +119,7 @@ test('the Ace escort limit trims regulars without removing Gnats', () => {
   assert.equal(state.enemies.length, state.swarmCap + limit);
 });
 
-test('engaged Gnats drift with the pack and retire without attacks or a kill drop', () => {
+test('engaged wave Gnats pursue indefinitely without attacks', () => {
   const state = waveState();
   spawnAt(state, PHASES[0].gnatStart);
   const [gnat] = gnats(state);
@@ -132,10 +134,84 @@ test('engaged Gnats drift with the pack and retire without attacks or a kill dro
   assert.equal(gnat.alt, target.alt);
   state.tick += ticks(30);
   advanceEnemies(state, ground);
-  assert.equal(gnat.hp, 0);
+  assert.equal(gnat.leaveAt, undefined);
+  assert.equal(gnat.hp, 1);
   assert.equal(gnat.shotDown, false);
   assert.deepEqual(state.shots, []);
   assert.deepEqual(state.pickups, []);
+});
+
+test('horde capacity and floors preserve the original regular traffic', () => {
+  assert.deepEqual(SWARM_CAPS, { desktop: 200, mobile: 120 });
+  assert.deepEqual(PHASES.map(phase => phase.regularCap), [8, 16, 26, 30, 34]);
+  assert.deepEqual(PHASES.map(phase => phase.regularPerMinute), [14, 16, 19, 23, 28]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatFloor), [22, 44, 84, 130, 166]);
+});
+
+test('distant wave Gnats recycle ahead of travel, terrain-safe in the same band without RNG', () => {
+  const state = waveState();
+  Object.assign(state.player, { x: 0, z: 0, yaw: 0, vx: 100, vz: 0 });
+  const enemy = makeEnemy(state, -SPAWN_WORLD.recycleDistance * 2, 0, 1, 'gnat');
+  state.enemies.push(enemy);
+  const copy = structuredClone(state);
+  const rng = JSON.stringify(state.streams);
+  const terrain = (x, z) => z < 0 ? 1000 : 35;
+  advanceEnemies(state, terrain);
+  advanceEnemies(copy, terrain);
+  assert.deepEqual(state, copy);
+  assert.equal(JSON.stringify(state.streams), rng);
+  assert.ok(enemy.x > 0, 'ahead of velocity, not the ship heading');
+  assert.ok(enemy.z >= 0, 'unsafe sites skipped');
+  assert.ok(Math.hypot(enemy.x, enemy.z) < SPAWN_WORLD.recycleDistance);
+  assert.equal(enemy.band, 1);
+  assert.ok(terrain(enemy.x, enemy.z) + GNAT.clearance <= enemy.alt);
+  assert.equal(enemy.hp, 1);
+  assert.equal(enemy.leaveAt, undefined);
+});
+
+test('failed recycling retains a living Gnat and retries rather than placing it in terrain', () => {
+  const state = waveState();
+  const enemy = makeEnemy(state, -SPAWN_WORLD.recycleDistance * 2, 0, 1, 'gnat');
+  state.enemies.push(enemy);
+  const start = { x: enemy.x, z: enemy.z };
+  advanceEnemies(state, x => x < -1000 ? 35 : 1000);
+  assert.equal(enemy.hp, 1);
+  assert.deepEqual({ x: enemy.x, z: enemy.z }, start);
+  state.tick += ticks(1);
+  for (let i = 0; i < 60; i++) advanceEnemies(state, ground);
+  assert.ok(Math.hypot(enemy.x, enemy.z) < SPAWN_WORLD.recycleDistance);
+  const empty = waveState();
+  advanceEnemies(empty, ground);
+  assert.deepEqual(empty.enemies, []);
+});
+
+test('over-cap cleanup removes distant and behind Gnats first without kills or XP', () => {
+  const state = waveState();
+  state.tick = 601;
+  state.swarmCap = 2;
+  state.run.weaponLevels = {};
+  const near = makeEnemy(state, 0, 50, 1, 'gnat');
+  const ahead = makeEnemy(state, 0, SPAWN_WORLD.recycleDistance * 2, 1, 'gnat');
+  const behind = makeEnemy(state, 0, -SPAWN_WORLD.recycleDistance * 2, 1, 'gnat');
+  const middle = makeEnemy(state, 0, 200, 1, 'gnat');
+  state.enemies.push(near, ahead, behind, middle);
+  stepStage(state, {}, ground);
+  assert.deepEqual(gnats(state).map(enemy => enemy.id), [near.id, middle.id]);
+  assert.equal(state.kills, 0);
+  assert.equal(state.xp, 0);
+  assert.deepEqual(state.pickups, []);
+});
+
+test('bomber escort Gnats retain their expiry instead of recycling', () => {
+  const state = waveState();
+  spawnEscortGnats(state, { x: 0, z: 0, alt: 125, band: 1 }, ground, 3);
+  const [enemy] = gnats(state);
+  assert.ok(enemy.leaveAt > state.tick);
+  state.tick = enemy.leaveAt;
+  enemy.x = SPAWN_WORLD.recycleDistance * 2;
+  advanceEnemies(state, ground);
+  assert.equal(enemy.hp, 0);
+  assert.equal(enemy.shotDown, false);
 });
 
 test('encirclement spreads one pack around the projected pilot and skips unsafe bearings', () => {

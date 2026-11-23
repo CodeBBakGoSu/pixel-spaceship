@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes: horde caps, encirclement and fly-in pursuit, production terrain, full-view pilot.
+// Seed-1 terminal hashes: persistent recycling hordes and weapon rank growth, production terrain, full-view pilot.
 const terminalHashes = {
-  legacy: '99ceb9d711974517ada3b63dee361023844d22ecd1dc9b7555fa642bd6020df2',
-  survivors: '843a76c2218cf374bc7137d5e3e1faa2acebe45cfed4c2911ffc66124bb89c3b',
+  legacy: 'cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903',
+  survivors: '3aaa6f5fc421a0528155fe368ba7cec6e3869db6c03a6abac1b29e42ec988c7b',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);
