@@ -55,6 +55,10 @@ v1 시점(3분 스크립트, 레벨 1~3, 드래프트 5종)의 진단은 더 이
 - **변종 통합 전 기준 시뮬:** `9d677b5`(변종 통합 전 후보), Heat 0, 데스크톱 seed 1–100/profile. skilled / 보통(average) / weak 순: clear 100%/75%/26%, Ace kill 99%/72%/2%, median kills 3,677.5/3,591/3,373.5, median peak Gnats 각 200. 보통(average) 프로필의 격추 중앙값 3,591은 기존 3,500 상한보다 91 높습니다. 이 표는 `d4e4911` 변종 통합 이후 결과가 아니며 렌더 FPS/현재 level-up 중앙값을 측정하지 않습니다.
 - **성능 증거:** 기존 RTX 4090 결과와 모바일 에뮬 결과는 80/50 Gnat cap 시절 자료입니다. 피해 숫자 fixture의 VM SwiftShader는 High→Low auto-fallback 상태에서 36.44 fps를 측정했습니다. 현재 200/120 cap의 실제 PC/실제 폰 FPS는 미검증입니다.
 
+| 시뮬 스냅샷 | 변종 작업 브랜치 결과 |
+|---|---|
+| `82c19c6` feature branch (skilled / average / weak; `d4e4911` 통합 빌드 재실행 아님) | clear(타임아웃 포함) 100%/78%/24%; Ace kill 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 각 200 |
+
 **상태 해석:** §4.4·§4.7 및 §5.2의 수치는 설계 목표/placeholder입니다. 구현되었다는 사실만으로 목표를 달성한 것은 아닙니다. 변종 통합 전 기준 `9d677b5`의 100시드 결과에서 보통(average) 프로필의 격추 중앙값이 기존 상한보다 높았고, 페이즈별 중앙 라이브 접촉 수는 측정되지 않았으므로 기존 기획 목표와 tuning ownership을 유지합니다. 우선순위는 `SURVIVORS_PLAN.md` §3이 기준입니다.
 
 ---
