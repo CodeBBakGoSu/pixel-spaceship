@@ -18,9 +18,10 @@ type PilotMode = 'full' | 'top';
 type Route = Position & { kind: 'ace' | 'enemy' | 'pickup' | 'beacon' | 'home'; flyby?: Enemy['flyby']; skim?: true };
 type AceTactics = Pick<BotProfile, 'aceLead' | 'aceWarningTicks'>;
 
-function nearest<T extends Position>(items: T[], x: number, z: number): T | null {
+function nearest<T extends Position>(items: T[], x: number, z: number, accepts?: (item: T) => boolean): T | null {
   let best: T | null = null, range = Infinity;
   for (const item of items) {
+    if (accepts && !accepts(item)) continue;
     const distance = (item.x - x) ** 2 + (item.z - z) ** 2;
     if (distance < range) {
       best = item;
@@ -42,7 +43,7 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   if (mode === 'full' && state.run) {
     const chest = nearest(state.chests.drops, p.x, p.z);
     if (chest) return { ...chest, kind: 'pickup' };
-    const carrier = nearest(state.enemies.filter(enemy => enemy.carrier && !enemy.entry && enemy.hp > 0), p.x, p.z);
+    const carrier = nearest(state.enemies, p.x, p.z, enemy => !!enemy.carrier && !enemy.entry && enemy.hp > 0);
     if (carrier) return { ...carrier, kind: 'enemy' };
     if (state.bills.active?.id === 'high-recovery') {
       const salvage = nearest(state.pickups.filter(pickup => pickup.alt >= (BANDS[1] + BANDS[2]) / 2), p.x, p.z);
@@ -51,8 +52,8 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   }
   const pass = state.reversal;
   if (mode === 'full' && pass && state.tick < pass.until) {
-    const former = nearest(state.enemies.filter(enemy => enemy.hp && inBand(enemy.alt, p.altitude) && pass.pursuers.includes(enemy.id)
-      && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6), p.x, p.z);
+    const former = nearest(state.enemies, p.x, p.z, enemy => !!enemy.hp && inBand(enemy.alt, p.altitude) && pass.pursuers.includes(enemy.id)
+      && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6);
     if (former) return { ...former, kind: 'enemy' };
   }
   const rally = state.rally ?? LANDMARKS.atoll;
@@ -61,7 +62,7 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
     && Math.hypot(rally.x - p.x, rally.z - p.z) > PILOT_ROUTE.rallyRange) {
     return { ...rally, kind: 'beacon' };
   }
-  const enemy = nearest(state.enemies.filter(enemy => !enemy.entry && (skimUse || !enemy.skim)), p.x, p.z);
+  const enemy = nearest(state.enemies, p.x, p.z, enemy => !enemy.entry && (skimUse || !enemy.skim));
   const pickup = nearest(state.pickups, p.x, p.z);
   if (pickup) {
     const needsXp = mode === 'full' && (!!state.run || state.level < 3);

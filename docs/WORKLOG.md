@@ -12,13 +12,26 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- Working branch: `renderer-proto` (pushed to origin). `main` is behind at `801ff22` (OG preview image) and is what the public site shows.
-- Tests: `npm test` 508 pass at `8265c4e`. Build OK.
-- 100-seed sims at `8265c4e`: skilled 100% clear, average 59%, weak 27%.
+- Candidate: integrated code at `9d677b5` on `devin/1795400000-survivors-horde` includes `renderer-proto` `7446be4` and passed owner UI verification. The public site remains on `main` at `801ff22`; this work did not deploy it.
+- Tests: integrated candidate `npm test` **556/556 pass**; `npm run build` passes (`✓ built in 1.42s`).
+- Integrated desktop Heat 0 seeds 1–100: skilled/average/weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each; `docs/BALANCE_NOTES.md` has the table.
 - Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
 - Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
 
 ## Log
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795400000-survivors-horde → renderer-proto candidate
+- Merged upstream `7446be4` into the horde task branch, preserving weapon Lv7/Ace pursuit and its regression tests alongside the horde. Seed-1 combined hashes: Legacy `cfe30dd…f3903`, Survivors `d0b796f…ce255a`.
+- Verification: six Ace replays (seeds 1/11/27/42/128/2026) pass; `npm test` 556/556; build `✓ built in 1.42s`; 100-seed integrated results are in `docs/BALANCE_NOTES.md`.
+- Final owner UI QA on integrated `9d677b5`: desktop **1,326 frames**, live **148–200**, **2,670 recycles**, zero render mismatches/over-cap; touch **806 frames**, live **108–120**, zero mismatches. Manual Twin Lv6→7 upgrade confirmed **6 bolts**, **3 pierce**, **1.3 scale**. Real-hardware FPS remains unverified; the public site was not changed. State: UI gate passed, candidate ready to land.
+
+### 2026-11-23 · 데븐 봇 · devin/1795400000-survivors-horde → renderer-proto
+- Commits: `49aff78`, `c5c477b`, upstream merge `3820811`, recycling `41e4504`, escort lifetime `51e3a72`, aft re-entry `9c3694f`.
+- Gnat caps 200/120, phase floors with deterministic top-ups, homing/encircle packs, persistent wave Gnats recycled ahead in their band, silent over-cap cleanup. Aft Gnats beyond 0.6 × range for 1 s re-enter through off-screen fly-ins; regular traffic and 12 s bomber escort lifetime stay original. Protected altitude/recovery mechanics, orb merge and shot budgets unchanged.
+- Verification: `npm test` 524/524, `npm run build` OK; 100 desktop Heat 0 seeds per pilot against growth baseline `1f1eb4b`: clears 100%/69%/51%, median kills 3,680.5/3,637.5/3,420.5, median peak Gnats 200 for each. Seed-1 replay hashes were rebaselined for deterministic aft re-entry.
+- Owner browser verification on `b4611ba`: **1,543 frames**, desktop **165–200** live Gnats, zero render-count mismatches or over-cap frames; touch **107–120**, recycling and recurring formations observed. Hardware/real-phone FPS remain unverified (VM software GPU).
+- State: horde implementation complete on the task branch; integrated-candidate validation is recorded above. Push to `renderer-proto` awaits UI verification. 밸런스 봇 owns tuning.
+- Headless forward-contact median/minimum at t=540–570, seed 1, average pilot after browser-style seek: **21/0 → 35/15** versus `540735e` (±60°, 1.5 × Gnat range). Cockpit red polygons are the Ace crossing the 0.65 near plane; the same mesh crosses in upstream `1f1eb4b` with unchanged Ace/camera/render code. Investigated only; no fix.
 
 ### 2026-11-23 (KST) · 데븐 봇 · renderer-proto · weapon levels v2 integration
 - Independently verified the balance handoff (`bc1f3fe`) for [PR #3](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/3): Ace replays 1/11/27/42/128/2026 all clear; `npm test` 545/545; `npm run build` passes.
@@ -106,10 +119,6 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - Commit `8e10887`: SURVIVORS_PLAN v2 (build order 1–9, density/XP/Lv7 targets, Gnat variants) + WEAPONS_BUFFS_PLAN v2 (current state at 211e757, weapon level v2 table to Lv7, phase status).
 - Verify: `npm test` 512 pass, `npm run build` ok.
 - State: done (기획 봇), merged into renderer-proto.
-
-### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
-- Vampire Survivors-style hordes: far more enemies on screen (swarm caps, gnat/regular spawn rates, horde behavior) and keeping 60 fps with them, on branch `devin/1795400000-survivors-horde`. Files: `src/data/phases.ts`, `src/swarm.ts`, `src/spawn-director.ts`, gnat movement in `src/stage-enemies.ts`, enemy instancing in `src/scene.ts`/`src/roster-visuals.ts`, related tests, golden hashes.
-- State: in progress (데븐 봇). Not touching Stage C leftovers (recovery score thresholds, weapon climb/descent rates).
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/stage-c-followups → renderer-proto (`23e7b0a`; claims `f86de1f`, `6612520`; base `6bea116`)
 - Recovery scoring uses fixedBand (midpoints 100/152.5 m; SKIM → LOW); boundary tests added. Bomber launch assertion now allows only one constant-derived descent tick; streamed-world climb asserts MID after a derived extension (108.777 m at 60 ticks, reaches MID at 80). Phoenix firebird vertical rate scales 28→42 m/s with ascent/descent/no-target tests.

@@ -358,6 +358,41 @@ Survival rose for the average and weak pilots, because the wider gaps spread out
 ### Replay verification
 
 The seed-1 golden hashes were rebaselined once for the changed flight paths: Legacy `d90af0cd…48ef2`, Survivors `21778f28…0b33`. Two runs reproduced both hashes.
+## Survivors horde (placeholders)
+
+- Gnat caps: desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile uses `floor(desktop floor × swarmCap / 200)`.
+- Scheduled Gnats per minute: **70/160/320/480/600**; pack sizes: **10/18/28/36/40**. Coast begins at **20 s**; later phases begin immediately. Floor top-ups add at most one pack per second after the start beat, outside lulls, limited by the deficit and remaining capacity.
+- Regular caps stay **8/16/26/30/34**, with original regular rates **14/16/19/23/28 per minute**. Siege/Storm/Ace include a terrain-safe encircle formation around the projected pilot position.
+- Wave/floor Gnats have no expiry. Beyond `SPAWN_WORLD.recycleDistance`, they relocate ahead as before. Aft Gnats beyond **0.6 × `GNAT.range`** also recycle after **60 consecutive ticks**; returning ahead or inside the margin resets the timer. Aft re-entry starts off-screen using the existing 1.5 s fly-in, converging on terrain-safe sites at **1.15–1.35 × `GNAT.range`**, spread across ±60° ahead of travel in the same band. Unsafe searches retry once per second. Bomber escort Gnats retain their original **12 s** lifetime.
+- Over-cap cleanup prioritizes distant (outside `GNAT.range`), then behind, then farthest Gnats, with descending ID as the final tie-break. Cleanup gives no kill or XP. Orb merging at 150 and shot budgets are unchanged.
+
+The 100-seed desktop comparison uses Heat 0, seeds 1–100 per profile, against `origin/renderer-proto` at `1f1eb4b` (growth included). Clear includes a living timeout; Ace kill means boss clear. Peak is the median of each run's peak live Gnats, not the maximum across the batch. Per-phase median live contacts are not recorded by the sim.
+
+| Profile | Clear before → after | Median kills before → after | Median peak Gnats before → after | Ace kill before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Skilled | 100% → 100% | 1,057.5 → 3,680.5 | 61 → 200 | 100% → 100% |
+| Average | 73% → 69% | 1,085.5 → 3,637.5 | 61 → 200 | 66% → 56% |
+| Weak | 41% → 51% | 1,003.5 → 3,420.5 | 60 → 200 | 0% → 0% |
+
+Forward visibility check: production terrain, seed 1, browser-style `seekStage(t=540)` followed by 30 s of the average pilot. Relative to `540735e`, median live Gnats inside the travel-forward ±60° cone and 1.5 × `GNAT.range` increased **21 → 35**; minimum **0 → 15** (1,800 simulation samples each). This is a headless contact proxy, not a renderer-frustum or FPS measurement; `node --experimental-strip-types tools/horde-visibility.mjs` reproduces it.
+
+The table includes the restored 12 s escort lifetime (`51e3a72`) and aft re-entry (`9c3694f`). Earlier batches produced median kills around **3,700–4,050**; this post-re-entry batch produced **3,420.5–3,680.5**, around/slightly above the planning target **2,500–3,500**.
+
+Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These are placeholders; **밸런스 봇** owns tuning. Do not lower density to tune shooting threat.
+
+### Integrated candidate: renderer-proto `7446be4` + horde
+
+Desktop, Heat 0, seeds 1–100 for each profile, after integrating the weapon Lv7/Ace work with the horde branch. This is a current-candidate snapshot, not a newly measured before/after comparison; the comparison above remains against the earlier `1f1eb4b` growth baseline. Clear includes an Ace kill or live timeout; Ace kill is boss clear.
+
+| Profile | Clear | Ace kill | Timeout | Median kills | Median peak live Gnats |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 100% | 99% | 1% | 3,677.5 | 200 |
+| Average | 75% | 72% | 3% | 3,591 | 200 |
+| Weak | 26% | 2% | 24% | 3,373.5 | 200 |
+
+Kills remain around or above the **2,500–3,500** planning target; density settings remain placeholders and **밸런스 봇** owns tuning. This sim does not measure rendered FPS.
+
+Integrated seed-1 hashes: Legacy `cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903`; Survivors `d0b796fa7db18d5bae954113cdc9d0683f6e80b3babbc6f2b63f066a31ce255a`.
 
 ## Stage C sim-pilot Ace pursuit
 

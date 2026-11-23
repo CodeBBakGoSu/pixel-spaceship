@@ -43,10 +43,11 @@ function hitTarget(state: StageState, target: Target, damage: number, weapon: We
   else hurtEnemy(state, target, damage, { weapon }, source);
 }
 
-function candidates(state: StageState): Target[] {
-  const targets: Target[] = state.enemies.filter(engaged);
+function candidates(state: StageState, accepts?: (target: Target) => boolean): Target[] {
+  const targets: Target[] = [];
+  for (const enemy of state.enemies) if (engaged(enemy) && (!accepts || accepts(enemy))) targets.push(enemy);
   const ace = lockedAce(state);
-  if (ace) targets.push(ace);
+  if (ace && (!accepts || accepts(ace))) targets.push(ace);
   return targets;
 }
 
@@ -68,7 +69,7 @@ function fireSeekers(state: StageState, source: Position, level: number): boolea
   const room = Math.min(projectileRoom(state, 'seeker'), count);
   if (!room || (rack && room < count)) return false;
   const band = playerBand(state.player), yaw = state.player.yaw;
-  const contacts = candidates(state).filter(target =>
+  const contacts = candidates(state, target =>
     range2(source, target) <= seeker.range ** 2 && bandDistance(contactBand(target), band) <= 1);
   if (!contacts.length) return false;
   const priority = (target: Target): number => target.kind === 'ace' ? 2 : rack && target.carrier ? 1 : 0;

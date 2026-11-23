@@ -1,4 +1,4 @@
-import { phaseAt, type RegularSpawn } from './data/phases.ts';
+import { phaseAt, SWARM_CAPS, type RegularSpawn } from './data/phases.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { scaleTravel } from './data/speed.ts';
 import { SPAWN_WORLD } from './data/world.ts';
@@ -134,11 +134,16 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
   const rotation = (random(rng) - 0.5) * 0.24;
   const mirror = random(rng) < 0.5 ? -1 : 1;
   const cap = waveContactLimit(state, wave);
-  let occupied = state.run ? enemies.filter(enemy => enemy.kind !== 'gnat').length : enemies.length;
+  const counts = new Map<string, number>();
+  let occupied = 0;
+  for (const enemy of enemies) {
+    counts.set(enemy.kind, (counts.get(enemy.kind) ?? 0) + 1);
+    if (!state.run || enemy.kind !== 'gnat') occupied++;
+  }
   for (const member of wave.members) {
     const { kind } = member;
     const slots = kind === 'bomber' ? SPAWN_WORLD.bomberFormationSize : 1;
-    if (occupied + slots > cap || enemies.filter(enemy => enemy.kind === kind).length >= ENEMY_KINDS[kind].cap) continue;
+    if (occupied + slots > cap || (counts.get(kind) ?? 0) >= ENEMY_KINDS[kind].cap) continue;
     const band = member.band === 'flank' ? random(rng) < 0.5 ? 0 : 2 : member.band;
     const offset = (random(rng) - 0.5) * (kind === 'patrol' || kind === 'interceptor' ? 12 : 8);
     const yaw = p.yaw + member.bearing * mirror + rotation;
@@ -154,6 +159,7 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
     if (kind === 'bomber') addBomberEscort(state, enemy, ground);
     for (let i = first; i < enemies.length; i++) {
       const incoming = enemies[i];
+      counts.set(incoming.kind, (counts.get(incoming.kind) ?? 0) + 1);
       incoming.hp = Math.round(incoming.hp * hpScale) * heatArmor;
       incoming.shotAt += WAVE_FLY_IN_TICKS;
       incoming.maneuverAt += WAVE_FLY_IN_TICKS;
@@ -212,6 +218,15 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
   if (pack >= 0) {
     const members = Math.floor(gnatCount * (pack + 1) / packs) - Math.floor(gnatCount * pack / packs);
     spawnSwarm(state, phase, members, ground, beatStream(state.streams.spawn), observeSwarm);
+  }
+  if (state.tick >= from + phase.gnatStart * TICKS_PER_SECOND && state.tick < until
+    && state.tick % TICKS_PER_SECOND === 0) {
+    const rng = beatStream(state.streams.spawn);
+    const floor = Math.floor(phase.gnatFloor * state.swarmCap / SWARM_CAPS.desktop);
+    let live = 0;
+    for (const enemy of state.enemies) if (enemy.kind === 'gnat' && enemy.hp > 0) live++;
+    const members = Math.min(phase.packSize, floor - live, state.swarmCap - live);
+    if (members > 0) spawnSwarm(state, phase, members, ground, rng, observeSwarm);
   }
 }
 

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { autopilotInput } from '../src/autoplay.ts';
+import { SWARM_CAPS } from '../src/data/phases.ts';
 import { fireHostile } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, requiredXp, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
@@ -13,14 +14,14 @@ const hash = state => createHash('sha256').update(JSON.stringify(state)).digest(
 
 test('the phase sortie starts with one weapon, 3+3 slots and a fixed mobile cap', () => {
   const state = start('touch=1&seed=7');
-  assert.equal(state.swarmCap, 50);
+  assert.equal(state.swarmCap, SWARM_CAPS.mobile);
   assert.deepEqual(state.run.weaponLevels, { twin: 1 });
   assert.deepEqual([state.run.weaponSlots, state.run.buffSlots], [3, 3]);
   assert.equal(requiredXp(1, true), 16);
   assert.equal(requiredXp(27, true), 79);
   state.phase = 'lost';
   stepStage(state, { start: true }, ground);
-  assert.equal(state.swarmCap, 50);
+  assert.equal(state.swarmCap, SWARM_CAPS.mobile);
   assert.deepEqual(state.run.weaponLevels, { twin: 1 });
   assert.equal(state.tick, 0);
 });

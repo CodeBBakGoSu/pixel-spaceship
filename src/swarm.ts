@@ -18,6 +18,16 @@ function offsets(formation: SwarmFormation, members: number, i: number): { side:
 function packSites(ground: Ground, projected: Point, direction: number,
   band: Band, formation: SwarmFormation, members: number) {
   const alt = BANDS[band];
+  if (formation === 'encircle') {
+    const sites = [];
+    for (let i = 0; i < members; i++) {
+      const yaw = direction + 2 * Math.PI * i / members;
+      const target = { x: projected.x + Math.sin(yaw) * GNAT.range,
+        z: projected.z + Math.cos(yaw) * GNAT.range, alt };
+      if (ground(target.x, target.z) + GNAT.clearance <= alt) sites.push(target);
+    }
+    return { sites, fx: 0, fz: 0 };
+  }
   for (const turn of [0, 0.54, -0.54, 1, -1, 1.57, -1.57, Math.PI]) {
     const yaw = direction + turn;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -38,7 +48,8 @@ export type SwarmObserver = (live: number, cap: number, requestedBeyondRoom: boo
 export function spawnSwarm(state: StageState, phase: RunPhase, members: number, ground: Ground,
   rng: { rng: number }, observe?: SwarmObserver): void {
   const { player } = state;
-  let room = state.swarmCap - state.enemies.filter(enemy => enemy.kind === 'gnat' && enemy.hp > 0).length;
+  let room = state.swarmCap;
+  for (const enemy of state.enemies) if (enemy.kind === 'gnat' && enemy.hp > 0) room--;
   const requestedBeyondRoom = members > room;
   if (room <= 0) {
     observe?.(state.swarmCap - room, state.swarmCap, requestedBeyondRoom);
@@ -51,17 +62,17 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
   const formation = phase.formations[Math.floor(random(rng) * phase.formations.length)];
   const leadSize = phase.splitBands ? Math.ceil(members / 2) : members;
   const followBand: Band = band === 1 ? (random(rng) < 0.5 ? 0 : 2) : 1;
-  const packs = phase.splitBands
+  const packs = phase.splitBands && formation !== 'encircle'
     ? [{ band, size: leadSize, direction: direction - 0.26 }, { band: followBand, size: members - leadSize, direction: direction + 0.26 }]
-    : [{ band, size: leadSize, direction }];
+    : [{ band, size: members, direction }];
   for (const pack of packs) {
     if (room <= 0 || pack.size <= 0) break;
     const layout = packSites(ground, projected, pack.direction, pack.band, formation, pack.size);
     if (!layout) continue;
     for (const { x, z } of layout.sites) {
       const gnat = makeEnemy(state, x, z, pack.band, 'gnat');
-      gnat.leaveAt = state.tick + WAVE_FLY_IN_TICKS + GNAT.lifeSeconds * TICKS_PER_SECOND;
-      const anchor = { x: x + layout.fx * GNAT.range, z: z + layout.fz * GNAT.range };
+      const anchor = formation === 'encircle' ? projected
+        : { x: x + layout.fx * GNAT.range, z: z + layout.fz * GNAT.range };
       beginEnemyFlyIn(state, gnat, ground, anchor, 0.16);
       state.enemies.push(gnat);
       if (--room === 0) break;

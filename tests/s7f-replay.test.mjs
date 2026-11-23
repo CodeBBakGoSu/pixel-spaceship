@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes: production terrain, full-view pilot (Survivors includes weapon rank growth).
+// Seed-1 terminal hashes: persistent recycling hordes and Lv7 weapon rank growth, production terrain, full-view pilot.
 const terminalHashes = {
-  legacy: '08be00a7bd57e95555ebdc92f6d27322071f10fcb60db0d7823520fede976da8',
-  survivors: '317fe8c5120dbbdccf6652f3959ecb70026745044fa6fba558ebb95d81ecf45d',
+  legacy: 'cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903',
+  survivors: 'd0b796fa7db18d5bae954113cdc9d0683f6e80b3babbc6f2b63f066a31ce255a',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);
