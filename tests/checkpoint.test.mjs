@@ -4,6 +4,7 @@ import { decodeCheckpoint, encodeCheckpoint } from '../src/checkpoint.ts';
 import { SKIM_BAND } from '../src/bands.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
+import { advanceSupportWeapons } from '../src/support-weapons.ts';
 
 const ground = () => 35;
 const stateAt = (tick, mode = 'survivors', input = {}) => {
@@ -46,6 +47,28 @@ test('a checkpoint saved before flight-path pitch resumes level', () => {
   assert.ok(restored.player.pitch > 0 && Number.isFinite(restored.player.altitude));
   envelope.state.player.pitch = 'invalid';
   assert.equal(decodeCheckpoint(JSON.stringify(envelope), ground), null);
+});
+
+test('a v1 checkpoint with scalar Ion cooldowns preserves immunity and resumes hitting both targets', () => {
+  const before = stateAt(480 * 60);
+  before.run.weaponLevels = { ion: 1 };
+  const { x, z, altitude: alt } = before.player;
+  const readyAt = before.tick + 2;
+  const contact = { x, z: z - 18, alt };
+  const enemy = makeEnemy(before, contact.x, contact.z, 1, 'patrol');
+  Object.assign(enemy, contact, { ionReadyAt: readyAt });
+  before.enemies = [enemy];
+  delete before.boss.entry;
+  Object.assign(before.boss, contact, { ionReadyAt: readyAt });
+  before.ionWake = [{ ...contact, until: readyAt + 200 }];
+  const restored = decodeCheckpoint(encodeCheckpoint(before), ground);
+  advanceSupportWeapons(restored, ground);
+  assert.equal(restored.enemies[0].hp, enemy.hp);
+  assert.equal(restored.boss.hp, before.boss.hp);
+  restored.tick = readyAt;
+  advanceSupportWeapons(restored, ground);
+  assert.ok(restored.enemies[0].hp < enemy.hp);
+  assert.ok(restored.boss.hp < before.boss.hp);
 });
 
 test('a pre-Ace 8:00 checkpoint deploys the new fighter while preserving the sortie', () => {

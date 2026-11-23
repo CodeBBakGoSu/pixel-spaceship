@@ -142,7 +142,7 @@ export type Enemy = Position & {
   burnNextAt?: number;
   burnDamage?: number;
   burnCredit?: KillCredit;
-  ionReadyAt?: number;
+  ionReadyAt?: [number, number, number];
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
@@ -162,6 +162,7 @@ type ShotCommon = Position & {
   nearMiss: boolean;
   lockId: number | null;
   aurora?: true;
+  tracerScale?: number;
   pierce?: { remaining: number; hits: number[] };
 };
 export type Shot = ShotCommon & (
@@ -171,15 +172,18 @@ export type Shot = ShotCommon & (
   (RangedShotFields & { reversal?: never; reversalTick?: never })
 );
 export type RearBomb = Position & { born: number; vx: number; vz: number; weapon?: 'bomb-bay';
-  radius?: number; damage?: number; ceiling?: number; carpet?: true };
+  radius?: number; damage?: number; ceiling?: number; carpet?: true; groundFire?: true };
 export type Flare = Position & { born: number; vx: number; vz: number; vy: number; weapon?: 'phoenix';
   lifeTicks?: number; burnTicks?: number; damage?: number; spread?: number; phoenix?: true; sourceBand?: FlightBand };
 export type WeaponFx = {
-  kind: 'rail-charge' | 'rail-beam' | 'arc-link' | 'flak-blast' | 'seeker-blast' | 'arc-blast';
+  kind: 'rail-charge' | 'rail-beam' | 'rail-glow' | 'arc-link' | 'flak-blast' | 'seeker-blast' | 'arc-blast' | 'flare-spread' | 'ground-fire';
   from: Position;
   to?: Position;
   radius?: number;
   halfHeight?: number;
+  damage?: number;
+  hits?: number[];
+  ceiling?: number;
   until: number;
 };
 export type RearGlimpse = { kind: 'bomb' | 'flare'; since: number; until: number; target?: Position };
@@ -227,7 +231,7 @@ export type Ace = Position & {
   burnUntil?: number;
   burnNextAt?: number;
   burnDamage?: number;
-  ionReadyAt?: number;
+  ionReadyAt?: [number, number, number];
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
@@ -257,11 +261,13 @@ export type StageState = {
   heat: number;
   weaponFireAt: Partial<Record<WeaponId, number>>;
   railChargeAt: number | null;
+  railRepeatAt?: number;
   seekerEchoAt: number;
   weaponFx: WeaponFx[];
-  ionWake: (Position & { until: number })[];
+  ionWake: (Position & { until: number; lane?: number })[];
   orbitDrones: (Position & { yaw: number })[];
   nextBayDrop: number | null;
+  bayDropsLeft?: number;
   nextId: number;
   nextVolley: number;
   tick: number;

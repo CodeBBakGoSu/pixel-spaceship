@@ -1,4 +1,4 @@
-import { BUFFS, DRAFT_RULES, FAMILIES, WEAPON_IDS, WEAPONS, weaponRankDamage, type BuffId, type WeaponId } from './data/items.ts';
+import { BUFFS, DRAFT_RULES, FAMILIES, WEAPON_IDS, WEAPONS, type BuffId, type WeaponId } from './data/items.ts';
 import { ECHO_RATE_BONUS } from './data/run-balance.ts';
 import { HIT_WINDOW } from './stage-combat.ts';
 import { random } from './stage-random.ts';
@@ -10,10 +10,14 @@ export function buffTuning<K extends BuffId>(state: StageState, id: K): typeof B
   return levels[level - 1];
 }
 
+function weaponRankScale(state: StageState, weapon: WeaponId, key: 'damageScale' | 'cooldownScale'): number {
+  const rank = state.run?.weaponLevels[weapon] ?? 0;
+  return WEAPONS[weapon].tuning[key][rank - 1] ?? 1;
+}
+
 export function weaponDamage(state: StageState, weapon: WeaponId, base: number): number {
   if (!state.run) return base;
-  const level = state.run.weaponLevels[weapon] ?? 1;
-  return base * weaponRankDamage(level) * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade)
+  return base * weaponRankScale(state, weapon, 'damageScale') * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade)
     * (familyBonus(state, weapon)?.damageScale ?? 1);
 }
 
@@ -47,7 +51,8 @@ function echoInterval(state: StageState, ticks: number): number {
 }
 
 export function weaponCooldown(state: StageState, weapon: WeaponId, base: number): number {
-  const ticks = base * (buffTuning(state, 'capacitor')?.cooldownScale ?? 1) * (familyBonus(state, weapon)?.cooldownScale ?? 1);
+  const ticks = base * weaponRankScale(state, weapon, 'cooldownScale')
+    * (buffTuning(state, 'capacitor')?.cooldownScale ?? 1) * (familyBonus(state, weapon)?.cooldownScale ?? 1);
   return Math.max(1, Math.round(weapon === 'twin' ? ticks : echoInterval(state, ticks)));
 }
 

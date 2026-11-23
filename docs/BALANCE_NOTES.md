@@ -358,7 +358,6 @@ Survival rose for the average and weak pilots, because the wider gaps spread out
 ### Replay verification
 
 The seed-1 golden hashes were rebaselined once for the changed flight paths: Legacy `d90af0cd…48ef2`, Survivors `21778f28…0b33`. Two runs reproduced both hashes.
-
 ## Survivors horde (placeholders)
 
 - Gnat caps: desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile uses `floor(desktop floor × swarmCap / 200)`.
@@ -380,3 +379,35 @@ Forward visibility check: production terrain, seed 1, browser-style `seekStage(t
 The table includes the restored 12 s escort lifetime (`51e3a72`) and aft re-entry (`9c3694f`). Earlier batches produced median kills around **3,700–4,050**; this post-re-entry batch produced **3,420.5–3,680.5**, around/slightly above the planning target **2,500–3,500**.
 
 Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These are placeholders; **밸런스 봇** owns tuning. Do not lower density to tune shooting threat.
+
+### Integrated candidate: renderer-proto `7446be4` + horde
+
+Desktop, Heat 0, seeds 1–100 for each profile, after integrating the weapon Lv7/Ace work with the horde branch. This is a current-candidate snapshot, not a newly measured before/after comparison; the comparison above remains against the earlier `1f1eb4b` growth baseline. Clear includes an Ace kill or live timeout; Ace kill is boss clear.
+
+| Profile | Clear | Ace kill | Timeout | Median kills | Median peak live Gnats |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skilled | 100% | 99% | 1% | 3,677.5 | 200 |
+| Average | 75% | 72% | 3% | 3,591 | 200 |
+| Weak | 26% | 2% | 24% | 3,373.5 | 200 |
+
+Kills remain around or above the **2,500–3,500** planning target; density settings remain placeholders and **밸런스 봇** owns tuning. This sim does not measure rendered FPS.
+
+Integrated seed-1 hashes: Legacy `cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903`; Survivors `d0b796fa7db18d5bae954113cdc9d0683f6e80b3babbc6f2b63f066a31ce255a`.
+
+## Stage C sim-pilot Ace pursuit
+
+The 22 m dodge-floor explanation was rejected. The dodge predictor's clearance is not a flight clamp: all 22 average timeout replays matched their CLI hashes, and 20 descended below 22 m while the Ace was assigned SKIM and damaged it there. One timeout replay recorded both aircraft at 14 m clearance while the Ace took damage. The actual pursuit defect was the boss-fight gate in `src/bot.ts`: a failed altitude scout roll discarded the autopilot's pursuit/dodge climb for the whole scout window. Before player growth, Stage C reduced average altitude eligibility from 86.46% to 74.33%, while angle/range eligibility (60.84% → 61.19%) and Ace vulnerability (93.18% → 93.29%) stayed effectively unchanged.
+
+The fix passes pursuit/dodge climb through unchanged. Altitude rolls still control discretionary band exploration and SKIM preferences; reaction delay, aim error, dodge quality and maneuver use remain profile-specific. A profile-scaled attenuation trial did not improve average Ace kills and was discarded. No Ace tuning was needed to reach the average 75% always-pursue reference; Seeker remains at 34 m/s.
+
+Desktop Heat 0, seeds 1–100 per profile, compare `1f1eb4b` (player growth) with the pursuit fix `f40bcd5`, based on `e46b813` (render-only feedback). A clear includes an Ace kill or a live 600 s timeout.
+
+| Profile | Clear before → after | Ace kill | Timeout | End HP median | Kills median | Level-ups median |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| Skilled | 100% → 100% | 100% → 100% | 0% → 0% | 12 → 12.5 | 1057.5 → 1059.5 | 29 → 29 |
+| Average | 73% → 76% | 66% → 75% | 7% → 1% | 5 → 9 | 1085.5 → 1046.5 | 30 → 29 |
+| Weak | 41% → 23% | 0% → 0% | 41% → 23% | 0 → 0 | 1003.5 → 961.5 | 28 → 28 |
+
+Average active-fight alignment improves 41.92% → 48.97%, altitude eligibility 75.18% → 86.81%, and Ace HP damage/sec 13.13 → 15.41. All 100 instrumented final states match the CLI hashes. Weak still kills no Aces and loses more runs when actively pursuing instead of holding altitude; its live-timeout rate falls 41% → 23%. This is an explicit tradeoff, not a survival buff, and no unrelated balance compensation was added.
+
+Verification: 524 tests pass, build passes, and each 100-seed sim exits 0. Six bot regressions were added; existing tests and golden replay hashes are unchanged because the golden pilots use `autopilotInput` directly.

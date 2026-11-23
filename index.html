@@ -107,7 +107,11 @@
   <div id="maneuver-cue" class="maneuver-cue" role="status" hidden>
     <strong id="maneuver-name"></strong><span id="maneuver-detail"></span>
   </div>
-  <div id="reversal-cue" class="reversal-cue" role="status" hidden></div>
+  <div class="combat-feedback-line">
+    <div id="reversal-cue" class="reversal-cue" role="status" hidden></div>
+    <div id="kill-counter" class="kill-counter" hidden></div>
+  </div>
+  <canvas id="damage-feedback" aria-hidden="true"></canvas>
   <div id="scene-cue" class="scene-cue" aria-hidden="true" hidden></div>
   <div id="rear-bomb-marker" class="rear-bomb-marker" aria-hidden="true" hidden>◆↓</div>
   <div id="rear-danger-cue" class="rear-danger-cue" role="status" hidden><span id="rear-position" aria-hidden="true">▼</span><span id="rear-danger-action"></span></div>
@@ -145,6 +149,7 @@
         </label>
         <!-- --- S7f lane --- -->
         <div class="render-quality-settings">
+          <label><input id="damage-numbers" type="checkbox" checked /> <span id="damage-numbers-label">Damage numbers</span></label>
           <label for="render-quality" data-i18n="quality.label"></label>
           <select id="render-quality">
             <option value="high" data-i18n="quality.high"></option>

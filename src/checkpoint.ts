@@ -9,6 +9,11 @@ export const CHECKPOINT_KEY = 'aster-wing.checkpoint.v1';
 const VERSION = 1;
 const phaseStarts = new Set(PHASES.slice(1).map(phase => phase.starts * TICKS_PER_SECOND));
 
+function migrateIonCooldown(target: { ionReadyAt?: number | [number, number, number] }): void {
+  const readyAt = target.ionReadyAt;
+  if (typeof readyAt === 'number') target.ionReadyAt = [readyAt, readyAt, readyAt];
+}
+
 export function encodeCheckpoint(state: StageState): string | null {
   const active = state.phase === 'playing' || state.phase === 'draft' || state.phase === 'chest';
   if (!state.run || state.summary || !active || !phaseStarts.has(state.tick)) return null;
@@ -28,6 +33,8 @@ export function decodeCheckpoint(raw: string | null, ground?: Ground): StageStat
       || ![state.seed, state.rng, state.player.x, state.player.z, state.player.altitude, state.hull, state.level].every(Number.isFinite)) return null;
     if (state.player.pitch === undefined) state.player.pitch = 0;
     else if (!Number.isFinite(state.player.pitch)) return null;
+    for (const enemy of state.enemies) migrateIonCooldown(enemy);
+    if (state.boss?.kind === 'ace') migrateIonCooldown(state.boss);
     const oldWorld = !state.worldRegion;
     const terrain: Ground = ground ?? ((x, z) => groundAt(state.seed, x, z));
     restoreWorldState(state, terrain);

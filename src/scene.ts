@@ -6,6 +6,8 @@ import {
   type BufferGeometry, type Camera,
 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { batchBursts, gnatBursts } from './combat-feedback.ts';
+import { COMBAT_FEEDBACK } from './data/combat-feedback.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
@@ -91,8 +93,8 @@ function airframeLod(mesh: Mesh, bakeDetailed: () => BufferGeometry) {
   return { mesh, bakeDetailed, coarse: mesh.geometry, detailed: undefined as BufferGeometry | undefined };
 }
 
-export function makeGnatBatch(detailed = false): InstancedMesh {
-  const mesh = instances(gnatGeometry(detailed), SWARM_CAPS.desktop, new MeshBasicMaterial({ vertexColors: true }));
+export function makeGnatBatch(detailed = false, capacity: number = SWARM_CAPS.desktop): InstancedMesh {
+  const mesh = instances(gnatGeometry(detailed), capacity, new MeshBasicMaterial({ vertexColors: true }));
   mesh.name = 'Gnat swarm';
   return mesh;
 }
@@ -115,7 +117,7 @@ const ION_MOTE = { size: 1.6, plasmaSize: 2.1, edgeScale: 0.6, fadeTicks: 84, ch
   cockpitScale: 0.7 } as const;
 const WEAPON_RING_LIMIT = 16;
 const FLAK_COLUMN_LIMIT = 8;
-const ORBIT_DRONE_LIMIT = CLOSE_EVOLUTIONS.collector.count;
+const ORBIT_DRONE_LIMIT = Math.max(CLOSE_EVOLUTIONS.collector.count, ...WEAPONS.drones.tuning.count);
 const RANGED_SHOT_STYLE: Partial<Record<Shot['kind'], readonly [width: number, length: number, color: number]>> = {
   seeker: [1.8, 5.8, 0xffd18c],
   'flak-shell': [2.25, 3.2, 0xff965b],
@@ -232,6 +234,7 @@ export class FlightScene {
   private readonly chestMarkers = makeChestBatch();
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
+  private readonly gnatBatch = { x: 0, z: 0, alt: 0, life: 0, count: 0 };
   private readonly shadows = instances(new PlaneGeometry(2, 2).rotateX(-Math.PI / 2), REGULAR_RENDER_CAP + 2,
     new MeshBasicMaterial({ color: SHADOW.color, map: jetShadowTexture(), opacity: SHADOW.enemyOpacity,
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
@@ -256,6 +259,11 @@ export class FlightScene {
   private readonly hostileVisuals = new HostileVisuals(this.ground);
 
   constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena'], options: FlightRenderOptions = {}) {
+    if (options.fixture === 'damage') {
+      this.gnats.geometry.dispose();
+      this.gnats = makeGnatBatch(false, 200);
+      this.airframeLods[2] = airframeLod(this.gnats, () => gnatGeometry(true));
+    }
     this.world = world;
     this.quality = new AdaptiveQuality(options.quality ?? DEFAULT_QUALITY);
     this.comparisonScale = options.comparisonScale;
@@ -763,13 +771,14 @@ export class FlightScene {
             this.connect(this.weaponLinks, links++, this.arcMiddle, to, 1.8 * fade, 0xffed9a, plane);
           } else this.connect(this.weaponLinks, links++, from, to, 1.8 * fade, 0xffed9a, plane);
         } else {
-          const charge = fx.kind === 'rail-charge';
-          const width = charge ? 0.64 : Math.min(2.2, (fx.radius ?? 3) * 0.5) * (0.45 + fade * 0.55);
-          this.connect(this.weaponLinks, links++, from, to, width, charge ? 0x79baff : 0xbbfaff, plane);
+          const charge = fx.kind === 'rail-charge', glow = fx.kind === 'rail-glow';
+          const width = charge ? 0.64 : (fx.radius ?? 3) * (glow ? 0.22 : 0.5) * (0.45 + fade * 0.55);
+          this.connect(this.weaponLinks, links++, from, to, width, charge ? 0x79baff : glow ? 0x477fb2 : 0xbbfaff, plane);
         }
       } else if (fx.radius) {
-        const tint = fx.kind === 'flak-blast' ? 0xffa363 : fx.kind === 'arc-blast' ? 0xffdf72 : 0xffb69b;
-        const radius = fx.radius * (1 - 0.31 * Math.min(1, left / 20));
+        const tint = fx.kind === 'flak-blast' ? 0xffa363 : fx.kind === 'arc-blast' ? 0xffdf72
+          : fx.kind === 'ground-fire' ? 0xff692c : fx.kind === 'flare-spread' ? 0xffb546 : 0xffb69b;
+        const radius = fx.kind === 'ground-fire' ? fx.radius : fx.radius * (1 - 0.31 * Math.min(1, left / 20));
         if (rings < WEAPON_RING_LIMIT) {
           this.write(this.weaponRings, rings++, from.x, from.z, plane ?? from.alt, 0, radius, 1, radius, tint);
         }
@@ -787,8 +796,12 @@ export class FlightScene {
     const eye = flat ? null : (view === 'rear' ? this.rearCamera : this.camera).position;
     const clearance = view === 'chase' ? ION_MOTE.chaseClearance : ION_MOTE.cockpitClearance;
     const base = (plasma ? ION_MOTE.plasmaSize : ION_MOTE.size) * (eye && view !== 'chase' ? ION_MOTE.cockpitScale : 1);
-    for (let i = 0; i < wake.length && links < WEAPON_LINK_LIMIT; i++) {
+    const nextInLane: (typeof wake)[number][] = [];
+    const dense = wake.some(mote => mote.lane !== undefined);
+    for (let i = wake.length - 1; i >= 0 && links < WEAPON_LINK_LIMIT; i--) {
       const mote = wake[i], left = mote.until - state.tick;
+      const lane = mote.lane ?? 0, next = nextInLane[lane];
+      nextInLane[lane] = mote;
       if (left <= 0) continue;
       const alt = plane ?? mote.alt;
       if (eye && (mote.x - eye.x) ** 2 + (alt - eye.y) ** 2 + (mote.z + eye.z) ** 2 < clearance ** 2) continue;
@@ -797,8 +810,7 @@ export class FlightScene {
       const tint = plasma ? lit ? 0xe4bdff : 0xba93ff : lit ? 0x8affe6 : 0x43c6b3;
       this.write(this.weaponLinks, links++, mote.x, mote.z, alt, 0, size, size, size, tint);
       // Every other sample marks the wake's hit width with two edge motes.
-      if (i % 2 || links + 2 > WEAPON_LINK_LIMIT) continue;
-      const next = wake[i + 1] ?? wake[i - 1];
+      if (i % (dense ? 5 : 2) || links + 2 > WEAPON_LINK_LIMIT) continue;
       if (!next) continue;
       const dx = next.x - mote.x, dz = next.z - mote.z, run = Math.hypot(dx, dz) || 1;
       const sideX = dz / run * width, sideZ = -dx / run * width, edge = size * ION_MOTE.edgeScale;
@@ -897,10 +909,13 @@ export class FlightScene {
       const vy = shot.vy ?? 0;
       const pitch = flat ? 0 : Math.atan2(vy, Math.hypot(shot.vx, shot.vz));
       const style = RANGED_SHOT_STYLE[shot.kind];
-      const width = style?.[0] ?? (reversal ? (eye ? 2.6 : 3.4) : 1.15);
-      const length = style?.[1] ?? (reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2);
+      const size = shot.tracerScale ?? 1;
+      const width = (style?.[0] ?? (reversal ? (eye ? 2.6 : 3.4) : 1.15)) * size;
+      const length = (style?.[1] ?? (reversal ? (eye ? 12 : 15.5) : strafe ? 9 : 7.2)) * size;
       const tint = shot.aurora ? reversal ? 0x89ffea : 0xbd96ff
-        : style?.[2] ?? (reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods' ? 0x73ffb4 : 0xf6ffad);
+        : style?.[2] ?? (reversal ? 0xbaffff : strafe ? 0xffb45c : shot.kind === 'pods'
+          ? shot.pierce ? 0x7cdfff : 0x73ffb4
+          : shot.pierce ? 0xffb65d : 0xf6ffad);
       this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         width, width, length, tint, 0, pitch);
       if (shot.kind === 'seeker' && weaponLinks < WEAPON_LINK_LIMIT) {
@@ -931,7 +946,17 @@ export class FlightScene {
       }
     }
     upload(this.bombs, bombs);
+    const batchedGnats = batchBursts(state.effects, effect => gnatBursts.has(effect), this.gnatBatch);
+    if (batchedGnats) {
+      const batch = this.gnatBatch;
+      for (let i = 0; i < COMBAT_FEEDBACK.batchParticles && sparks < 240; i++) {
+        const angle = i * 2.4, reach = 4 + (0.42 - batch.life) * 65;
+        this.write(this.sparks, sparks++, batch.x + Math.sin(angle) * reach, batch.z + Math.cos(angle) * reach,
+          flat ? TOP_FLIGHT + 7 : batch.alt + Math.cos(angle) * reach, angle, 3, 3, 7, 0xffd780);
+      }
+    }
     for (const effect of state.effects) {
+      if (batchedGnats && gnatBursts.has(effect)) continue;
       if (effect.kind === 'miss') {
         if (!flat && sparks < 240) {
           const age = 0.55 - effect.life, scale = effect.life / 0.55;

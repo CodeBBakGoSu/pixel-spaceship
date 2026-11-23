@@ -163,7 +163,7 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     const useManeuvers = random(rng) < profile.maneuverUse;
     held = {
       turn: base.turn === undefined ? undefined : clamp(base.turn + aimOffset * BOT_POLICY.turnGain, -1, 1),
-      climb: state.boss && !seeksAltitude ? 0 : base.climb,
+      climb: base.climb,
       boost: base.boost && useManeuvers,
     };
     const rollTurn = rollDirection(state, profile, rollRng);

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
+import { weaponDamage } from '../src/loadout.ts';
+import { ROLLS } from '../src/data/roll.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS, openReversal, STEP } from '../src/stage-combat.ts';
@@ -71,21 +73,21 @@ test('Seeker can line up a close target on an adjacent band', () => {
   assert.ok(adjacent.hp < 12);
 });
 
-test('Seeker level five carries four larger blasts and triggers one separate loop volley', () => {
+test('Seeker level five carries six larger blasts and triggers one separate loop volley', () => {
   const state = setup('seeker', 5);
   const target = contact(state, 0, 120);
   advanceRangedWeapons(state, ground);
-  assert.equal(state.shots.length, 4);
+  assert.equal(state.shots.length, 6);
   assert.ok(state.shots.every(shot => shot.radius === WEAPONS.seeker.tuning.radius[4]));
-  assert.equal(state.weaponFireAt.seeker, 153);
+  assert.equal(state.weaponFireAt.seeker, 180);
   state.tick = 20;
   state.maneuverTrail = { kind: 'immelmann', startTick: 1 };
   openReversal(state, []);
   advanceRangedWeapons(state, ground);
-  assert.equal(state.shots.length, 8);
+  assert.equal(state.shots.length, 12);
   state.tick++;
   advanceRangedWeapons(state, ground);
-  assert.equal(state.shots.length, 8);
+  assert.equal(state.shots.length, 12);
   const first = state.shots[0];
   const splash = contact(state, scaleTravel(14), target.z - 5);
   Object.assign(first, { x: 0, z: target.z - 5 });
@@ -115,17 +117,16 @@ test('Rail charges for 54 ticks, pierces a line, and ends against intervening te
   assert.equal(state.weaponFireAt.rail, 54 + 144);
 });
 
-test('Rail level five widens and pierces an additional lower band', () => {
-  const state = setup('rail', 5, high);
-  const wide = contact(state, scaleTravel(4), 70, high);
-  const below = contact(state, 0, 75, mid);
-  const tooLow = contact(state, 0, 75, low);
+test('Rail level five fires wider beams in its own and the adjacent bands', () => {
+  const state = setup('rail', 5, mid);
+  const wide = contact(state, scaleTravel(4), 70, mid);
+  const below = contact(state, 0, 75, low);
+  const above = contact(state, 0, 75, high);
   advanceRangedWeapons(state, ground);
   state.tick = 54;
   advanceRangedWeapons(state, ground);
-  for (const target of [wide, below]) assert.ok(Math.abs(target.hp - (12 - 3.75 * 1.42)) < 1e-9);
-  assert.equal(tooLow.hp, 12);
-  assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 2);
+  for (const target of [wide, below, above]) assert.equal(target.hp, 12 - weaponDamage(state, 'rail', WEAPONS.rail.tuning.damage));
+  assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 3);
 });
 
 test('Flak shell bursts at its scaled range and bridges two bands from their midpoint', () => {
@@ -143,14 +144,14 @@ test('Flak shell bursts at its scaled range and bridges two bands from their mid
   assert.equal(burst.radius, scaleTravel(22));
 });
 
-test('Flak level five sends six radial same-altitude fragments', () => {
-  const state = setup('flak', 5);
+test('Flak level seven sends twelve radial same-altitude fragments per shell', () => {
+  const state = setup('flak', 7);
   contact(state, 0, scaleTravel(89));
   advanceRangedWeapons(state, ground);
   projectiles(state, 36);
-  assert.equal(state.shots.length, 6);
+  assert.equal(state.shots.length, 36);
   assert.ok(state.shots.every(shot => shot.kind === 'flak-shard' && shot.alt === mid));
-  assert.equal(new Set(state.shots.map(shot => Math.atan2(shot.vx, shot.vz))).size, 6);
+  assert.equal(new Set(state.shots.map(shot => Math.atan2(shot.vx, shot.vz))).size, 12);
 });
 
 test('Arc starts on the firing band and chains to an adjacent band with 60 percent damage', () => {
@@ -199,6 +200,25 @@ test('an inbound enemy and Ace ignore ranged hits until engagement and lock', ()
   state.lock = { id: ace.id, progress: 1, ready: true };
   advanceRangedWeapons(state, ground);
   assert.equal(ace.hp, 9);
+});
+
+test('Rail afterglow can still damage a locked Ace after barrel-roll immunity expires', () => {
+  const state = setup('rail', 7);
+  const ace = state.boss = makeAce(state, 0, 78);
+  ace.roll = { kind: 'barrel', side: 1, elapsed: 0, altitude: mid };
+  state.lock = { id: ace.id, progress: 1, ready: true };
+  state.railChargeAt = 0;
+  advanceRangedWeapons(state, ground);
+  state.tick = 1;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 0);
+  state.tick = 2;
+  ace.roll.elapsed = ROLLS.barrel.iframeTicks;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 1);
+  state.tick = 3;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 1);
 });
 
 test('the normal fixed-step flight path fires and advances a timed shell', () => {

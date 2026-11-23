@@ -1,6 +1,7 @@
 import { advanceBank, advanceBankDrive, advanceBankDrop, advancePitch, bankThrustFactor, bankYawRate, boostAirspeed,
   CRUISE_SPEED, pitchLimitScale, pitchSpeedFactor, pitchVerticalSpeed } from './flight.ts';
 import { fixedBand, SKIM, skimAltitude } from './bands.ts';
+import { gnatBursts } from './combat-feedback.ts';
 import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, WORLD_SITES } from './data/world.ts';
 import { isWater } from './world.ts';
@@ -593,6 +594,7 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
       alt: enemy.kind === 'turret' ? skimAltitude(ground(enemy.x, enemy.z)) : enemy.alt,
       ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
+    if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
     events?.destroyed?.(enemy.kind, !!enemy.carrier);
   }
   if (state.run) mergeSalvage(state);
