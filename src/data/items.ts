@@ -19,71 +19,74 @@ type WeaponDefinition = {
   tuning: Record<string, number | readonly number[]>;
 };
 
-export const WEAPON_RANK_DAMAGE = [1, 1.08, 1.16, 1.30, 1.42] as const;
-
-export function weaponRankDamage(level: number): number {
-  return WEAPON_RANK_DAMAGE[level - 1] ?? 1;
-}
-
 export const TWIN_VOLLEYS = {
   2: [-2.2, 2.2],
+  3: [-3.4, 0, 3.4],
   4: [-4.2, -1.6, 1.6, 4.2],
-  6: [-4.2, -1.6, 1.6, 4.2, -7, 7],
+  5: [-5.4, -2.7, 0, 2.7, 5.4],
+  6: [-6, -3.6, -1.2, 1.2, 3.6, 6],
 } as const;
-export const TWIN_WING_SHOT_SPREAD = 0.16;
 
 export const WEAPONS = {
   twin: {
     family: 'ballistic', coverage: 'forward-and-below',
-    tuning: { cooldownTicks: [21, 18, 18, 18, 18], barrels: [2, 2, 4, 4, 6], damage: 1, range: scaleTravel(175), pierceAt: 5 },
+    tuning: { cooldownTicks: 21, barrels: [2, 3, 3, 4, 4, 5, 6], damage: 1, range: scaleTravel(175),
+      pierce: [0, 0, 1, 1, 1, 1, 2], tracerScale: [1, 1, 1, 1, 1.3, 1.3, 1.3], fanDegrees: [0, 0, 0, 0, 0, 6, 6] },
   },
   pods: {
     family: 'ballistic', coverage: 'same-band',
-    tuning: { cooldownTicks: [43, 36, 36, 36, 36], range: [62, 62, 77.5, 77.5, 77.5].map(scaleTravel), damage: 1, rearBonusAt: 5 },
+    tuning: { cooldownTicks: 43, range: [62, 62, 77.5, 77.5, 77.5, 77.5, 95].map(scaleTravel), damage: 1,
+      flank: [1, 2, 2, 2, 3, 3, 3], rear: [0, 0, 0, 1, 1, 1, 2], pierce: [0, 0, 0, 0, 0, 1, 1] },
   },
   seeker: {
     family: 'ordnance', coverage: 'adjacent-homing',
-    tuning: { cooldownTicks: [180, 180, 153, 153, 153], count: [3, 4, 4, 4, 4],
+    tuning: { cooldownTicks: 180, count: [3, 4, 4, 5, 6, 6, 8],
       damage: 0.7, range: scaleTravel(165), speed: scaleTravel(86), verticalSpeed: 34, turnRate: 4.6,
-      radius: [12, 12, 12, 12, 15.6].map(scaleTravel),
+      radius: [12, 12, 15.6, 15.6, 15.6, 19.2, 19.2].map(scaleTravel),
       lifeSeconds: 3.2, spread: 0.14 },
   },
   rail: {
     family: 'energy', coverage: 'same-band',
-    tuning: { chargeTicks: 54, cooldownTicks: [144, 144, 115, 115, 115], range: scaleTravel(225),
-      damage: [3, 3.75, 3.75, 3.75, 3.75], window: 3, width: [3, 3, 3, 3, 4.5].map(scaleTravel), lowerBandAt: 5 },
+    tuning: { chargeTicks: 54, cooldownTicks: 144, range: [225, 225, 225, 281.25, 281.25, 281.25, 281.25].map(scaleTravel),
+      damage: 3, window: 3, width: [3, 4.5, 4.5, 4.5, 4.5, 4.5, 6].map(scaleTravel),
+      lowerBandAt: 3, upperBandAt: 5, repeatAt: 6, repeatTicks: 18,
+      lingerAt: 7, lingerTicks: 30, lingerDamageScale: 0.25 },
   },
   flak: {
     family: 'ballistic', coverage: 'vertical-blast',
-    tuning: { cooldownTicks: [144, 144, 120, 120, 120], radius: [22, 25.3, 25.3, 25.3, 25.3].map(scaleTravel),
-      range: scaleTravel(90), speed: scaleTravel(150), damage: 2, halfHeight: 28, fragmentsAt: 5, fragments: 6,
+    tuning: { cooldownTicks: 144, radius: [22, 25.3, 25.3, 25.3, 28.6, 28.6, 28.6].map(scaleTravel),
+      range: scaleTravel(90), speed: scaleTravel(150), damage: 2, halfHeight: 28,
+      count: [1, 1, 2, 2, 2, 3, 3], fragments: [0, 0, 0, 6, 6, 6, 12], spread: 0.16,
       fragmentDamage: 1, fragmentSpeed: scaleTravel(110), fragmentLifeSeconds: 0.33 },
   },
   ion: {
     family: 'energy', coverage: 'climb-curtain',
-    tuning: { lifeTicks: [240, 300, 300, 300, 300], width: [5.5, 5.5, 7.15, 7.15, 7.15].map(scaleTravel),
-      sampleTicks: 8, trailOffset: scaleTravel(9), hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
+    tuning: { lifeTicks: [240, 300, 300, 300, 300, 300, 300], width: [5.5, 5.5, 7.15, 7.15, 7.15, 8.8, 8.8].map(scaleTravel),
+      count: [1, 1, 1, 2, 2, 2, 3], laneOffset: scaleTravel(6), sampleTicks: 8,
+      trailOffset: scaleTravel(9), hitCooldownTicks: 30, damage: 1, salvageAt: 5 },
   },
   drones: {
     family: 'energy', coverage: 'tilted-orbit',
-    tuning: { count: [2, 3, 3, 3, 3], radius: [18, 18, 22.5, 22.5, 22.5].map(scaleTravel),
+    tuning: { count: [2, 3, 3, 4, 4, 5, 6], radius: [18, 18, 22.5, 22.5, 22.5, 22.5, 22.5].map(scaleTravel),
+      doubleOrbitAt: 7, innerScale: 0.72,
       tilt: 10, periodTicks: 145, damage: 1, hitRadius: 5, hitCooldownTicks: 24, fireAt: 5, fireCooldownTicks: 72,
       fireRange: scaleTravel(66), fireSpeed: scaleTravel(220), fireDamage: 1 },
   },
   phoenix: {
     family: 'ordnance', coverage: 'falling',
-    tuning: { cooldownTicks: [240, 204, 204, 204, 204], lifeBonusTicks: [0, 0, 60, 60, 60],
-      burnRadius: scaleTravel(13), spreadAt: 5 },
+    tuning: { cooldownTicks: 240, lifeBonusTicks: [0, 60, 60, 60, 60, 60, 60],
+      count: [1, 1, 2, 2, 3, 3, 4], burnRadius: [0, 0, 0, 13, 13, 19.5, 19.5].map(scaleTravel) },
   },
   'bomb-bay': {
     family: 'ordnance', coverage: 'falling',
-    tuning: { cooldownTicks: [360, 360, 288, 288, 288], damage: 4, radius: [34, 39.1, 39.1, 39.1, 39.1].map(scaleTravel),
-      volley: [1, 1, 1, 1, 2], followUpTicks: 12 },
+    tuning: { cooldownTicks: 360, damage: 4, radius: [34, 39.1, 39.1, 44.2, 44.2, 44.2, 44.2].map(scaleTravel),
+      volley: [1, 1, 2, 2, 3, 3, 4], followUpTicks: 12, fireAt: 6, fireTicks: 90, fireDamageScale: 0.25 },
   },
   arc: {
     family: 'energy', coverage: 'adjacent-chain',
-    tuning: { cooldownTicks: 132, damage: [1.8, 1.8, 2.16, 2.16, 2.16], range: scaleTravel(55), jumpRange: scaleTravel(42),
-      jumps: [2, 3, 3, 3, 5], adjacentScale: 0.6, explosionAt: 5, explosionRadius: scaleTravel(16), explosionScale: 0.6 },
+    tuning: { cooldownTicks: 132, damage: 1.8, range: scaleTravel(55), jumpRange: scaleTravel(42),
+      jumps: [2, 3, 4, 4, 5, 5, 7], branchesAt: 6, adjacentScale: 0.6,
+      explosionAt: 4, explosionRadius: scaleTravel(16), explosionScale: 0.6 },
   },
 } as const satisfies Record<WeaponId, WeaponDefinition>;
 
@@ -179,7 +182,7 @@ export const BILLS = [
 export const STARTER_SHIP = { id: 'hawk', weapon: 'twin' } as const satisfies { id: string; weapon: WeaponId };
 export const DRAFT_RULES = {
   cardCount: 3, baseSlots: 3, maxSlots: 4, weaponUnlockTick: 4 * 60 * 60, buffUnlockRank: 3,
-  maxWeaponLevel: 5, maxBuffLevel: 3, rerolls: 1, maxRerolls: 3, maxBanishes: 2, maxSkips: 2,
+  maxWeaponLevel: 7, maxBuffLevel: 3, rerolls: 1, maxRerolls: 3, maxBanishes: 2, maxSkips: 2,
   overchargedChance: 0.08, riskyChance: 0.15, riskHull: 1, repairHull: 2,
   damagePerUpgrade: 0.05, maxDamageUpgrades: 3, creditReward: 25, cappedDamageCredit: 15,
   xpBase: 14, xpPerLevel: 2.4,

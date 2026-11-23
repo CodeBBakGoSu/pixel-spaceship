@@ -14,7 +14,7 @@ const [low, mid, high] = BANDS;
 function setup(weapon, evolution) {
   const state = createStage(parseStageOptions('?mode=survivors&t=0&seed=23'), ground);
   Object.assign(state.player, { x: 0, z: 0, altitude: mid, yaw: 0 });
-  state.run.weaponLevels = { [weapon]: 5 };
+  state.run.weaponLevels = { [weapon]: 7 };
   state.run.evolutions = { [weapon]: evolution };
   return state;
 }
@@ -145,7 +145,7 @@ test('three Ordnance weapons extend a missile explosion by twenty percent', () =
   contact(state, 0, 86);
   advanceRangedWeapons(state, ground);
   assert.ok(state.shots.length > 0);
-  assert.ok(state.shots.every(shot => Math.abs(shot.radius - scaleTravel(15.6) * 1.2) < 1e-9));
+  assert.ok(state.shots.every(shot => Math.abs(shot.radius - scaleTravel(19.2) * 1.2) < 1e-9));
 });
 
 test('three Ballistic weapons let a flak fragment penetrate two contacts once apiece', () => {
@@ -162,7 +162,7 @@ test('three Ballistic weapons let a flak fragment penetrate two contacts once ap
   const second = contact(state, shard.x, shard.z + scaleTravel(16));
   const third = contact(state, shard.x, shard.z + scaleTravel(27));
   projectiles(state, 18);
-  const damage = 1.42 * 1.3;
+  const damage = 1.3;
   assert.ok(Math.abs(first.hp - (12 - damage)) < 1e-9);
   assert.ok(Math.abs(second.hp - (12 - damage)) < 1e-9);
   assert.equal(third.hp, 12);
