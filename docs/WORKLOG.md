@@ -22,7 +22,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; documentation commit ref to be recorded in following log commit)
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; docs commit `82b5b8a`)
 - Updated both plans for the `d4e4911` baseline: #6 variants are integrated, #7 swarm/XP-magnet work is started but unmerged, pre-variant simulation and feature-branch visual evidence are labeled separately, and the all-weapon screenshot acceptance remains unverified. Clarified the fixed swarm schedule without changing chest/Bill timing.
 - The variant recording was supplied as feature-branch evidence; it was not personally watched for this update and is not integration validation. The measured SwiftShader sample is 36.44 fps; actual current PC/phone performance remains unverified.
 - Verification: `npm test` exit 0 — `# tests 561`, `# pass 561`, `# fail 0`; `npm run build` exit 0 — `✓ 118 modules transformed.`, `✓ built in 1.51s`; `git diff --check` exit 0. State: in progress, awaiting review before landing on `renderer-proto`.
