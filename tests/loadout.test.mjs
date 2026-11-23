@@ -281,6 +281,23 @@ test('Bomb Bay double-drops at level five, detonates below launch band and leave
   assert.equal(high.hp, 4);
 });
 
+test('Bomb Bay dropped from SKIM still hits ground turrets below it', () => {
+  const state = start();
+  state.tick = 40;
+  Object.assign(state.player, { altitude: 49, skim: 'water' });
+  state.run.weaponLevels['bomb-bay'] = 1;
+  advanceAutoOrdnance(state, false);
+  const [bomb] = state.rearBombs;
+  const turret = Object.assign(makeEnemy(state, bomb.x, bomb.z, 0, 'turret', 0), { alt: 40, entry: 0 });
+  state.enemies = [turret];
+  for (let i = 0; i < 90 && state.rearBombs.length; i++) {
+    state.tick++;
+    advanceRearBombs(state, ground);
+  }
+  assert.equal(state.rearBombs.length, 0);
+  assert.ok(turret.hp < 4);
+});
+
 test('headless Heat raises regular armor while leaving the seeded formation unchanged', () => {
   const base = start();
   const hot = createStage({ ...parseStageOptions('?mode=survivors&t=0'), heat: 5 }, ground);

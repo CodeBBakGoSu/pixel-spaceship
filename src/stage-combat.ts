@@ -733,13 +733,15 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
   const tuning = WEAPONS['bomb-bay'].tuning;
   const { count, spacing } = CLOSE_EVOLUTIONS.carpet;
   if (carpet && state.rearBombs.filter(bomb => bomb.weapon === 'bomb-bay').length > count) return;
-  const { x, z, altitude: alt, yaw } = state.player;
+  const { x, z, altitude: alt, yaw, skim } = state.player;
+  // From SKIM the launch band sits only a few metres above ground turrets.
+  const ceiling = alt - (skim ? SKIM.minClearance - SKIM.turretHeight : (BANDS[1] - BANDS[0]) / 2);
   const bombs = carpet ? count : 1;
   const dx = carpet ? Math.sin(yaw) * spacing : 0, dz = carpet ? Math.cos(yaw) * spacing : 0;
   const damage = weaponDamage(state, 'bomb-bay', tuning.damage);
   for (let i = 0; i < bombs; i++) {
     state.rearBombs.push({ x: x - dx * i, z: z - dz * i, alt, vx: 0, vz: 0, born: state.tick, weapon: 'bomb-bay',
-      radius: tuning.radius[bay - 1], damage, ceiling: alt - (BANDS[1] - BANDS[0]) / 2,
+      radius: tuning.radius[bay - 1], damage, ceiling,
       ...(carpet ? { carpet: true } : {}) });
   }
   if (followUp) {
