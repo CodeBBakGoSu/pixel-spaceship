@@ -62,6 +62,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Twin's missed IDs 8/9/10 stayed outside the ±30° forward cone throughout, despite same-band altitude and range within 350; they crossed alive at ticks 234/227/220. Seeker fired one 5-shot volley at tick 1, retargeted at tick 67 (6→7, 4→3), tick 69 (7→9), and tick 70 (3→1), then killed all 10 by tick 116. These are actual production-path splash observations, distinct from the balance bot's zero-splash experiment.
 - Unchanged comparator remained Twin/Pods/Seeker 7/6/10 before and after tracing. P0 remains failed/incomplete due to the unmet strict forward-role criterion; no tuning, source, or fixture changes. Detailed tick evidence: `/home/ubuntu/weapon-role-coast-line-trace-ko.md`; diagnostic script: `/home/ubuntu/weapon-role-trace.mjs`.
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795427585-p0-weapon-roles (Seeker volley candidate; validation pending)
+- Base non-rack ordinary Seeker volleys now concentrate on the nearest eligible ordinary target and do not retarget an ordinary projectile after its original target becomes dead/ineligible. Swarm-rack and Ace behavior, damage/rate/splash tuning, and comparison fixtures are unchanged.
+- Validation pending: production-path regressions, evolution checks, full suite, and build are deferred to the next handoff. This candidate is not P0 acceptance; no play/UI validation has been done.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795426562-learn-weapons-through-play (base `2564e31`)
 - P0: 무기 10종의 강점·한계만 남기고 시연·추천 조합·식별 시험을 삭제했다. 같은 입력에서 전방 격추·측면 침입·Ace 실피해를 비교해 차이가 부족한 무기만 고친다.
 - 검증: 테스트 576/576, 프로덕션 빌드, 문서 링크·역할표 및 diff 검사 통과. P1·P2 사양과 게임 코드는 그대로다. 무기 성능 비교는 후속 검수이며 이번에 실측하지 않았다.

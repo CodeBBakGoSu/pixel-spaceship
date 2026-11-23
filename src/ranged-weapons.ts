@@ -79,7 +79,7 @@ function fireSeekers(state: StageState, source: Position, level: number): boolea
   const damage = weaponDamage(state, 'seeker', seeker.damage);
   const radius = seeker.radius[level - 1] * (familyBonus(state, 'seeker')?.radiusScale ?? 1);
   for (let i = 0; i < room; i++) {
-    const target = preferred ?? contacts[i % contacts.length];
+    const target = preferred ?? (rack ? contacts[i % contacts.length] : contacts[0]);
     const side = (i % 2 ? 1 : -1) * MUZZLE_SPAN;
     const x = source.x + Math.cos(yaw) * side, z = source.z - Math.sin(yaw) * side;
     const aim = Math.atan2(target.x - x, target.z - z) + (i - (room - 1) / 2) * seeker.spread;
@@ -332,6 +332,7 @@ function seekerContact(state: StageState, shot: Extract<RangedShot, { kind: 'see
       elite = priority;
     }
   }
+  if (!shot.rack && shot.lockId === null) return null;
   shot.targetId = next?.id ?? null;
   shot.lockId = null;
   return next;
