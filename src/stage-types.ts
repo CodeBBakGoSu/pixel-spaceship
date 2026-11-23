@@ -3,7 +3,7 @@ import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId, WorldSite } from './reach.ts';
 import type { FlightBand } from './bands.ts';
 import type { ChestId, DraftChoiceId, EvolutionId, GearId, WeaponId } from './data/items.ts';
-import type { GnatVariant, RunPhase } from './data/phases.ts';
+import type { GnatVariant, RunPhase, SwarmEventKind } from './data/phases.ts';
 import type { ChestState } from './chests.ts';
 import type { BillState } from './bills.ts';
 import type { Profile, RunMetrics, hangarLoadout } from './meta.ts';
@@ -118,6 +118,7 @@ export type Enemy = Position & {
   offset: number;
   entry?: FlyIn;
   leaveAt?: number;
+  eventFlight?: Point;
   carrier?: ChestId;
   killCredit?: KillCredit;
   maneuverAt: number;
@@ -152,7 +153,8 @@ export type EnemyTell = { until: number; started?: number } & (
   { kind: 'gun' | 'strafe' | 'tail' | 'mine' | 'aegis' | 'carrier' | 'gnat' } |
   (Position & { kind: 'flak' })
 );
-export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true };
+export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true;
+  recovery?: { until: number; sourceAlt: number } };
 type ShotCommon = Position & {
   vx: number;
   vz: number;
@@ -253,6 +255,7 @@ export type StageState = {
   ejectorUsed: boolean;
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;
+  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'recovery'; until: number };
   bills: BillState;
   lastHitTick: number;
   chests: ChestState;
