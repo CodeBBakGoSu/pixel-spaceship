@@ -1484,8 +1484,8 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
     kind: shot.reversal ? 'reversal' : shot.kind, x: shot.x, z: shot.z, alt: shot.alt, vx: shot.vx, vz: shot.vz,
     vy: shot.kind === 'strafe' ? shot.vy : 0,
   })),
-  enemyContacts: state.enemies.map(({ id, kind, x, z, alt, hp, burnUntil, flyby }) => (
-    { id, kind, x, z, alt, hp, burnUntil, flyby: flyby?.phase ?? null, flybySide: flyby?.side }
+  enemyContacts: state.enemies.map(({ id, kind, gnatVariant, x, z, alt, hp, burnUntil, flyby }) => (
+    { id, kind, gnatVariant, x, z, alt, hp, burnUntil, flyby: flyby?.phase ?? null, flybySide: flyby?.side }
   )),
   mineCount: state.enemyMines.length,
   bossHp: state.boss?.hp ?? null,

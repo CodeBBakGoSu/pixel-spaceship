@@ -11,11 +11,11 @@ import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
-import { ENEMY_KINDS, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
+import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { rngStream } from './stage-random.ts';
-import { RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
+import { GNAT, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
   REGULAR_SALVAGE_MULTIPLIER, RUN_BEACON_LEAD_SECONDS, SURVIVOR_START_HULL, SURVIVOR_XP_SCALE, WEAPON_FX_LIMIT } from './data/run-balance.ts';
 import { HEAT_TIERS } from './data/meta.ts';
@@ -584,7 +584,8 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
   for (const enemy of state.enemies) {
     if (!enemy.shotDown) continue;
     const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
-    const xp = chest ? chest.carrierXp : ENEMY_KINDS[enemy.kind].xp * (state.run && enemy.kind !== 'gnat' ? REGULAR_SALVAGE_MULTIPLIER : 1);
+    const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
+      : ENEMY_KINDS[enemy.kind].xp * (state.run ? REGULAR_SALVAGE_MULTIPLIER : 1);
     if (chest) dropCarrierChest(state, enemy, ground);
     noteSortieKill(state, enemy);
     if (state.run) noteBillKill(state, enemy);
@@ -826,9 +827,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.tick > state.bodyGraceUntil) {
     const p = state.player;
     for (const enemy of state.enemies) {
-      if (enemy.hp && !enemy.entry && enemy.kind !== 'gnat' && inBand(enemy.alt, p.altitude)
+      if (enemy.hp && !enemy.entry && isBodyHazard(enemy) && inBand(enemy.alt, p.altitude)
         && Math.hypot(enemy.x - p.x, enemy.z - p.z) < BODY_RADIUS) {
-        hurtPlayer(state, enemy, events);
+        hurtPlayer(state, enemy, events, enemy.gnatVariant === 'sting' ? GNAT.sting.contactDamage : undefined);
         if (!enemy.carrier) enemy.hp = 0;
       }
     }

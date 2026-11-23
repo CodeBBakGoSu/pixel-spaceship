@@ -108,6 +108,10 @@ export function makeChestBatch(): InstancedMesh {
 type Projection = { x: number; y: number };
 const TOP_FLIGHT = 152;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
+const GNAT_LIVERY = {
+  armored: { width: 1.75, height: 2.25, length: 1.25, tints: [0x6485aa, 0x778198, 0x886e80] },
+  sting: { width: 0.66, height: 1.12, length: 1.75, tints: [0xff5896, 0xff4c64, 0xff663f] },
+} as const;
 const REGULAR_RENDER_CAP = Math.max(ENEMY_KINDS.patrol.cap, ...PHASES.map(phase => phase.regularCap));
 const FLAK_RING_LIMIT = 24;
 const BOMB_VISUAL_LIMIT = 16;
@@ -840,10 +844,11 @@ export class FlightScene {
     for (const enemy of state.enemies) {
       if (enemy.kind === 'gnat') {
         if (gnats < state.swarmCap) {
+          const livery = enemy.gnatVariant && GNAT_LIVERY[enemy.gnatVariant];
           const tint = (enemy.burnUntil ?? 0) > state.tick ? fireTint
-            : flat ? GNAT_BAND_TINTS[enemy.band] : 0xffb289;
+            : livery ? livery.tints[flat ? enemy.band : 1] : flat ? GNAT_BAND_TINTS[enemy.band] : 0xffb289;
           this.write(this.gnats, gnats++, enemy.x, enemy.z, flat ? TOP_FLIGHT - 1 : enemy.alt,
-            enemy.yaw, 1, 1, 1, tint, flat ? 0 : enemy.bank);
+            enemy.yaw, livery?.width ?? 1, livery?.height ?? 1, livery?.length ?? 1, tint, flat ? 0 : enemy.bank);
         }
         continue;
       }

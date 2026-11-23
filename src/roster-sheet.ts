@@ -2,15 +2,15 @@ import { makeAce } from './ace.ts';
 import { CRUISE_SPEED } from './flight.ts';
 import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { LANDMARKS } from './reach.ts';
-import { makeEnemy, placeSkimEnemy } from './stage-enemies.ts';
+import { makeEnemy, makeGnat, placeSkimEnemy } from './stage-enemies.ts';
 import type { Ground, StageState } from './stage-types.ts';
 
-type RosterSubject = EnemyKind | 'ace' | 'carrier';
+type RosterSubject = EnemyKind | 'ace' | 'carrier' | 'gnat-variants';
 
 export const ROSTER_SHEET_CAMERA = { distance: 88, rise: 21, fov: 58 } as const;
 
 export function rosterSubject(kind: string | null): RosterSubject {
-  if (kind === 'ace' || kind === 'carrier') return kind;
+  if (kind === 'ace' || kind === 'carrier' || kind === 'gnat-variants') return kind;
   return kind && Object.prototype.hasOwnProperty.call(ENEMY_KINDS, kind) ? kind as EnemyKind : 'hound';
 }
 
@@ -24,6 +24,14 @@ export function primeRosterSheet(state: StageState, kind: RosterSubject, ground:
   state.enemies.length = 0;
   state.worldSites = [];
   const yaw = -2.42;
+  if (kind === 'gnat-variants') {
+    for (const [side, variant] of [[0, undefined], [-20, 'armored'], [20, 'sting']] as const) {
+      const gnat = makeGnat(state, x + side, z, 1, variant);
+      gnat.yaw = yaw;
+      state.enemies.push(gnat);
+    }
+    return;
+  }
   if (kind === 'ace') {
     state.boss = makeAce(state, x, z, ground);
     state.boss.yaw = yaw;

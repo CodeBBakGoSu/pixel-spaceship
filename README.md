@@ -45,6 +45,7 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 - `?fixture=ace&phase=1` shows the Ace's gun run. Set `phase=2` for missile lock or `phase=3` for the roll warning and afterburner. Add `cue=tail` to open the rear feed, `cue=rolling` to see the active roll, or `cue=down` to see the defeat spiral. The short legacy Ace fixture is still available as `?fixture=boss`.
 - `?fixture=roster` shows the enemy lineup and tells. Use `cue=spotter`, `cue=flak`, `cue=aegis` or another enemy name to isolate it. Use `cue=carrier` for an elite's Gnat launch warning. Ace and roster fixtures hold a fixed pose by default. Add `live=1` to resume the simulation.
 - `?fixture=roster-sheet&kind=hound` frames a single enemy at an 88 m distance in CHASE. Set `kind` to any enemy name, `carrier` or `ace`.
+- `?fixture=roster-sheet&kind=gnat-variants` compares Armored (broad slate hull), standard and Sting (narrow red dart), left to right.
 - `?fixture=bullets&stress=1&flight=boost` keeps the Ace, 24 regular enemies, a capped Gnat swarm, and capped projectile pools active while crossing tiles at 182 m/s. Use `?fixture=boost` for a fixed boost pose.
 - `?fixture=pursuit` starts in CHASE at 0:30 with four pursuers behind at three heights.
 - `?fixture=reversal` puts a high-band pack behind you for **W + Space**. `?fixture=flyby` stages two overtakes on a straight course. `?fixture=rear-threat` demonstrates a closing bolt. `?fixture=strafe` puts targets one and two bands below you.

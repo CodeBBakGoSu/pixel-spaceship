@@ -2,7 +2,7 @@ import { ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
 import { SKIM, skimAltitude } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { REGULAR_FIRE_INTERVAL_SCALE } from './data/run-balance.ts';
-import { GNAT } from './data/phases.ts';
+import { GNAT, gnatVariantAt, phaseAt, type GnatVariant } from './data/phases.ts';
 import { SPAWN_WORLD } from './data/world.ts';
 import { ROSTER } from './data/roster.ts';
 import { planFlyIn, sampleFlyIn, WAVE_FLY_IN_TICKS } from './fly-in.ts';
@@ -57,6 +57,13 @@ export function makeEnemy(state: StageState, x: number, z: number, band: Band, k
     band, offset, shotAt: state.tick + shotInterval(state, spec.firstShot),
     maneuverAt: state.tick + (kind === 'harrier' ? 0 : 102), maneuver: null, hitUntil: 0, shotDown: false,
   };
+}
+
+export function makeGnat(state: StageState, x: number, z: number, band: Band, variant?: GnatVariant): Enemy {
+  const enemy = makeEnemy(state, x, z, band, 'gnat');
+  if (variant) enemy.gnatVariant = variant;
+  if (variant === 'armored') enemy.hp = GNAT.armored.hp;
+  return enemy;
 }
 
 // --- S7d lane ---
@@ -458,6 +465,14 @@ function advancePosition(enemy: Enemy, ground: Ground): void {
 }
 
 function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
+  const pursuing = enemy.gnatVariant === 'sting' && inBand(enemy.alt, state.player.altitude);
+  if (pursuing) {
+    const dx = state.player.x - enemy.x, dz = state.player.z - enemy.z;
+    const scale = GNAT.speed / (Math.hypot(dx, dz) || 1);
+    enemy.vx = dx * scale;
+    enemy.vz = dz * scale;
+    enemy.yaw = Math.atan2(dx, dz);
+  }
   const x = enemy.x + enemy.vx * STEP, z = enemy.z + enemy.vz * STEP;
   if ((enemy.leaveAt !== undefined && state.tick >= enemy.leaveAt)
     || ground(x, z) + GNAT.clearance > enemy.alt) {
@@ -466,6 +481,7 @@ function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
   }
   enemy.x = x;
   enemy.z = z;
+  if (pursuing) return;
   const dx = state.player.x - x, dz = state.player.z - z;
   const distance = Math.hypot(dx, dz);
   if (distance > GNAT.spacing && (enemy.vx || enemy.vz)) {
@@ -536,6 +552,8 @@ export function spawnEscortGnats(state: StageState, source: Position & { band: B
   const live = state.enemies.reduce((count, enemy) => count + Number(enemy.kind === 'gnat' && enemy.hp > 0), 0);
   const room = state.swarmCap - live;
   const aim = Math.atan2(state.player.x - source.x, state.player.z - source.z);
+  const phase = state.run && phaseAt(state.tick / TICKS_PER_SECOND);
+  const escortRng = { rng: state.seed ^ state.nextId };
   let spawned = 0;
   for (let i = 0; i < members && spawned < room; i++) {
     const yaw = aim + (2 * (i + 0.5) / members - 1) * ROSTER.gnat.escortHalfFan;
@@ -543,7 +561,8 @@ export function spawnEscortGnats(state: StageState, source: Position & { band: B
     const radius = GNAT.spacing * ROSTER.gnat.escortSpacing;
     const spot = { x: source.x + fx * radius, z: source.z + fz * radius };
     if (ground(spot.x, spot.z) + GNAT.clearance > source.alt) continue;
-    const gnat = makeEnemy(state, spot.x, spot.z, source.band, 'gnat');
+    const variant = phase ? gnatVariantAt(phase, random(escortRng)) : undefined;
+    const gnat = makeGnat(state, spot.x, spot.z, source.band, variant);
     gnat.alt = source.alt;
     gnat.leaveAt = state.tick + GNAT.lifeSeconds * TICKS_PER_SECOND;
     gnat.vx = fx * GNAT.speed;

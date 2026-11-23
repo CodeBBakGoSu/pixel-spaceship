@@ -1,3 +1,4 @@
+import { isBodyHazard } from './enemy-kinds.ts';
 import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
 import { SKIM, skimAltitude, SKIM_BAND } from './bands.ts';
 import { ACE_PILOT, BOT_POLICY, BOT_PROFILES, PILOT_ROUTE, type BotProfile } from './data/bot-profiles.ts';
@@ -140,7 +141,7 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, agility: 
         const dodge = avoid(enemy.tell, FLAK_RADIUS + PILOT_ROUTE.mineMargin);
         if (dodge !== undefined) return dodge;
       }
-      if (enemy.kind !== 'gnat' && !enemy.entry && state.tick > state.bodyGraceUntil) {
+      if (isBodyHazard(enemy) && !enemy.entry && state.tick > state.bodyGraceUntil) {
         const dodge = avoid(enemy, BODY_RADIUS + PILOT_ROUTE.bodyMargin);
         if (dodge !== undefined) return dodge;
       }

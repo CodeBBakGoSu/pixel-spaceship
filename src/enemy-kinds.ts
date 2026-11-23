@@ -1,6 +1,7 @@
 import { GNAT, SWARM_CAPS } from './data/phases.ts';
 import { ROSTER } from './data/roster.ts';
 import { scaleTravel } from './data/speed.ts';
+import type { Enemy } from './stage-types.ts';
 
 export const ENEMY_KINDS = {
   patrol: { hp: 2, xp: 1, cap: 24, firstShot: 86, speed: scaleTravel(22), pursuit: scaleTravel(32), boltSpeed: scaleTravel(58) },
@@ -18,6 +19,7 @@ export const ENEMY_KINDS = {
 } as const;
 
 export type EnemyKind = keyof typeof ENEMY_KINDS;
+export const isBodyHazard = (enemy: Enemy): boolean => enemy.kind !== 'gnat' || enemy.gnatVariant === 'sting';
 export type RegularEnemyKind = Exclude<EnemyKind, 'gnat'>;
 export type NewEnemyKind = Exclude<RegularEnemyKind, 'patrol' | 'interceptor' | 'aegis'>;
 
