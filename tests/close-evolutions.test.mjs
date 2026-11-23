@@ -12,7 +12,7 @@ const sea = () => 35;
 const start = () => createStage(parseStageOptions('?mode=survivors&t=0'), sea);
 
 function evolve(state, weapon, id) {
-  state.run.weaponLevels[weapon] = 5;
+  state.run.weaponLevels[weapon] = 7;
   (state.run.evolutions ??= {})[weapon] = id;
 }
 
@@ -86,7 +86,7 @@ test('Plasma Ribbon preserves an eight-second wall and pulses in its own band', 
   assert.ok(near.hp < 4 - damage);
 });
 
-test('Collector Swarm adds a fourth drone and draws salvage into drones beyond pilot pickup range', () => {
+test('Collector Swarm retains its six drones and draws salvage beyond pilot pickup range', () => {
   const state = start();
   evolve(state, 'drones', 'collector-swarm');
   const { x, z } = state.player;
@@ -96,7 +96,7 @@ test('Collector Swarm adds a fourth drone and draws salvage into drones beyond p
     state.tick++;
     advanceSupportWeapons(state, sea);
   }
-  assert.equal(state.orbitDrones.length, 4);
+  assert.equal(state.orbitDrones.length, 6);
   assert.ok(pickup.z < z + scaleTravel(33));
   assert.equal(pickup.collected, true);
   stepStage(state, {}, sea);

@@ -1,4 +1,4 @@
-import { BUFFS, DRAFT_RULES, FAMILIES, WEAPON_IDS, WEAPONS, weaponRankDamage, type BuffId, type WeaponId } from './data/items.ts';
+import { BUFFS, DRAFT_RULES, FAMILIES, WEAPON_IDS, WEAPONS, type BuffId, type WeaponId } from './data/items.ts';
 import { ECHO_RATE_BONUS } from './data/run-balance.ts';
 import { HIT_WINDOW } from './stage-combat.ts';
 import { random } from './stage-random.ts';
@@ -12,8 +12,7 @@ export function buffTuning<K extends BuffId>(state: StageState, id: K): typeof B
 
 export function weaponDamage(state: StageState, weapon: WeaponId, base: number): number {
   if (!state.run) return base;
-  const level = state.run.weaponLevels[weapon] ?? 1;
-  return base * weaponRankDamage(level) * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade)
+  return base * (1 + state.run.damageUpgrades * DRAFT_RULES.damagePerUpgrade)
     * (familyBonus(state, weapon)?.damageScale ?? 1);
 }
 

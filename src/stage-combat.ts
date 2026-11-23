@@ -11,7 +11,7 @@ import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIU
 import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_PROJECTILES, PLAYER_SHOT_LIMIT, REAR_ORDNANCE, SURVIVOR_PLAYER_DAMAGE,
   WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
-import { TWIN_VOLLEYS, TWIN_WING_SHOT_SPREAD, WEAPONS, type WeaponId } from './data/items.ts';
+import { TWIN_VOLLEYS, WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
@@ -229,9 +229,15 @@ function fireFriendly(
   const lead = target ? Math.hypot(target.x - p.x, target.z - p.z) / BOLT_SPEED : 0;
   const vy = target && isGroundAa(target) && lead > 0 ? (target.alt - p.altitude) / lead : 0;
   const volley = ++state.nextVolley;
-  const upgraded = lockId === null && kind === 'twin' && state.run?.weaponLevels.twin === WEAPONS.twin.tuning.pierceAt;
-  const pierce = Number(upgraded) + (familyBonus(state, kind)?.pierce ?? 0);
+  const level = state.run?.weaponLevels[kind] ?? 1;
+  const pierce = (lockId === null ? WEAPONS[kind].tuning.pierce[level - 1] : 0)
+    + (familyBonus(state, kind)?.pierce ?? 0);
   const aurora = kind === 'twin' && !!state.run?.evolutions.twin;
+  const fan = kind === 'twin' ? WEAPONS.twin.tuning.fanDegrees[level - 1] * Math.PI / 180 : 0;
+  const tracerScale = kind === 'twin' ? WEAPONS.twin.tuning.tracerScale[level - 1] : 1;
+  const maxOffset = Math.max(...offsets.map(Math.abs));
+  const podLife = kind === 'pods' && state.run
+    ? Math.max(0.27, (WEAPONS.pods.tuning.range[level - 1] + HIT_RADIUS) / BOLT_SPEED) : 0.27;
   let room = projectileRoom(state, kind);
   for (let i = 0; i < offsets.length; i++) {
     if (room-- <= 0) break;
@@ -240,19 +246,25 @@ function fireFriendly(
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
     const aim = target
-      ? Math.atan2(target.x + (target.vx ?? 0) * lead - x, target.z + (target.vz ?? 0) * lead - z)
+      ? Math.atan2(target.x + (target.vx ?? 0) * lead - (fan ? p.x + forwardX * muzzle : x),
+        target.z + (target.vz ?? 0) * lead - (fan ? p.z + forwardZ * muzzle : z))
       : p.yaw;
-    const wingSpread = kind === 'twin' && i >= TWIN_VOLLEYS[4].length ? Math.sign(side) * TWIN_WING_SHOT_SPREAD : 0;
+    const wingSpread = fan && maxOffset ? side / maxOffset * fan : 0;
     const yaw = aim + wingSpread + (aurora ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
       damage: weaponDamage(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
-      life: kind === 'twin' ? 0.68 : 0.27, volley, nearMiss: false, lockId,
+      life: kind === 'twin' ? 0.68 : podLife, volley, nearMiss: false, lockId,
       ...(vy ? { vy } : {}),
+      ...(tracerScale !== 1 ? { tracerScale } : {}),
       ...(pierce ? { pierce: { remaining: pierce + 1, hits: [] } } : {}),
       ...(aurora ? { aurora: true } : {}),
     });
   }
+}
+
+function podOffsets(count: number, center: number): number[] {
+  return Array.from({ length: count }, (_, i) => center + (i - (count - 1) / 2) * 3.5);
 }
 
 type RankedTarget = { enemy: Enemy; range: number };
@@ -397,7 +409,7 @@ export function acquireAndFire(state: StageState): void {
         right = enemy;
         rightRange = range;
       }
-      if (podLevel === WEAPONS.pods.tuning.rearBonusAt && angle >= Math.PI * 0.65 && range < rearRange) {
+      if (podLevel && WEAPONS.pods.tuning.rear[podLevel - 1] && angle >= Math.PI * 0.65 && range < rearRange) {
         rear = enemy;
         rearRange = range;
       }
@@ -421,15 +433,16 @@ export function acquireAndFire(state: StageState): void {
   if (primary) {
     const barrels = twinLevel ? WEAPONS.twin.tuning.barrels[twinLevel - 1] : state.twinRank === 3 ? 4 : 2;
     fireFriendly(state, 'twin', TWIN_VOLLEYS[barrels], primary, locked && ace ? ace.id : null);
-    const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks[twinLevel - 1] : state.twinRank === 1 ? 21 : 13;
+    const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks : state.twinRank === 1 ? 21 : 13;
     state.twinAt = state.tick + weaponCooldown(state, 'twin', cadence);
   }
   if (overdrive && reversalReady) fireOverdrive(state, overdrive, overdriveTargets);
   if (state.tick >= state.podsAt && (left || right || rear)) {
-    if (left) fireFriendly(state, 'pods', [-6], left, null);
-    if (right) fireFriendly(state, 'pods', [6], right, null);
-    if (rear) fireFriendly(state, 'pods', [0], rear, null);
-    const cadence = podLevel ? WEAPONS.pods.tuning.cooldownTicks[podLevel - 1] : state.podRank === 1 ? 43 : 25;
+    const flank = WEAPONS.pods.tuning.flank[Math.max(1, podLevel ?? 1) - 1];
+    if (left) fireFriendly(state, 'pods', podOffsets(flank, -6), left, null);
+    if (right) fireFriendly(state, 'pods', podOffsets(flank, 6), right, null);
+    if (rear && podLevel) fireFriendly(state, 'pods', podOffsets(WEAPONS.pods.tuning.rear[podLevel - 1], 0), rear, null);
+    const cadence = podLevel ? WEAPONS.pods.tuning.cooldownTicks : state.podRank === 1 ? 43 : 25;
     state.podsAt = state.tick + weaponCooldown(state, 'pods', cadence);
   }
   fireStrafes(state, lowerTargets, lowerBand ?? (lowerTargets.length ? SKIM_BAND : null), aurora);
@@ -525,7 +538,7 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
     lifeTicks: firebird ? evolution.lifeTicks : FLARE_LIFE_TICKS + bonus,
     burnTicks: Math.round((FLARE_BURN_TICKS + bonus) * (firebird ? evolution.burnScale : 1)),
     damage: weaponDamage(state, 'phoenix', 1),
-    spread: phoenixLevel >= tuning.spreadAt ? tuning.burnRadius * (familyBonus(state, 'phoenix')?.radiusScale ?? 1) : undefined,
+    spread: tuning.burnRadius[phoenixLevel - 1] * (familyBonus(state, 'phoenix')?.radiusScale ?? 1) || undefined,
     ...(firebird ? { phoenix: true as const, sourceBand: playerBand(p) } : {}),
   } : {};
   for (const side of fan) {
@@ -560,6 +573,8 @@ function setBurn(state: StageState, target: Enemy | Ace, interval: number, flare
 function ignite(state: StageState, target: Enemy | Ace, interval: number, flare: Flare, credit?: KillCredit): void {
   setBurn(state, target, interval, flare, credit);
   if (flare.spread) {
+    state.weaponFx.push({ kind: 'flare-spread', from: { x: target.x, z: target.z, alt: target.alt },
+      radius: flare.spread, until: state.tick + 24 });
     const window = hitWindow(state);
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || enemy.id === target.id || !inBand(target.alt, enemy.alt, window)) continue;
@@ -699,6 +714,21 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     state.bombs = Math.min(capacity, state.bombs + 1);
     state.bombReloadAt = state.bombs < capacity ? state.tick + bombReloadTicks(state) : null;
   }
+  for (const fx of state.weaponFx) {
+    if (fx.kind !== 'ground-fire' || state.tick >= fx.until || !fx.hits || !fx.damage || !fx.radius) continue;
+    const within = (target: Position) => target.alt <= (fx.ceiling ?? Infinity)
+      && inBand(target.alt, fx.from.alt, hitWindow(state)) && Math.hypot(target.x - fx.from.x, target.z - fx.from.z) <= fx.radius!;
+    for (const enemy of state.enemies) {
+      if (!enemy.hp || enemy.entry || fx.hits.includes(enemy.id) || !within(enemy)) continue;
+      fx.hits.push(enemy.id);
+      hurtEnemy(state, enemy, fx.damage, rearWeaponCredit(state, enemy, 'bomb-bay'));
+    }
+    const ace = activeAce(state);
+    if (ace && aceVulnerable(ace) && !fx.hits.includes(ace.id) && within(ace)) {
+      fx.hits.push(ace.id);
+      hurtAce(state, ace, fx.damage);
+    }
+  }
   if (!state.rearBombs.length) return;
   state.rearBombs = state.rearBombs.filter(bomb => {
     const age = state.tick - bomb.born;
@@ -714,6 +744,14 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     if (bomb.alt > impactHeight && !state.enemies.some(enemy => enemy.hp && !enemy.entry && close(enemy))
       && !(ace && aceVulnerable(ace) && close(ace))) return true;
     blast(state, bomb);
+    if (bomb.groundFire) {
+      const tuning = WEAPONS['bomb-bay'].tuning;
+      const radius = bomb.radius! * (familyBonus(state, 'bomb-bay')?.radiusScale ?? 1)
+        * (buffTuning(state, 'ordnance-rack')?.radiusScale ?? 1);
+      state.weaponFx.push({ kind: 'ground-fire', from: { x: bomb.x, z: bomb.z, alt: impactHeight },
+        radius, ceiling: bomb.ceiling, until: state.tick + tuning.fireTicks,
+        damage: bomb.damage! * tuning.fireDamageScale, hits: [] });
+    }
     return false;
   });
 }
@@ -723,8 +761,11 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
   if (!run) return;
   const phoenix = run.weaponLevels.phoenix ?? 0;
   if (phoenix && (reversed || state.tick >= (state.weaponFireAt.phoenix ?? 0))) {
-    launchFlares(state, state.player.vx ?? 0, state.player.vz ?? 0, [0], phoenix);
-    state.weaponFireAt.phoenix = state.tick + weaponCooldown(state, 'phoenix', WEAPONS.phoenix.tuning.cooldownTicks[phoenix - 1]);
+    const tuning = WEAPONS.phoenix.tuning;
+    const count = run.evolutions.phoenix ? 1 : tuning.count[phoenix - 1];
+    const fan = Array.from({ length: count }, (_, i) => i - (count - 1) / 2);
+    launchFlares(state, state.player.vx ?? 0, state.player.vz ?? 0, fan, phoenix);
+    state.weaponFireAt.phoenix = state.tick + weaponCooldown(state, 'phoenix', tuning.cooldownTicks);
   }
   const bay = run.weaponLevels['bomb-bay'] ?? 0;
   if (!bay) return;
@@ -744,14 +785,11 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
   for (let i = 0; i < bombs; i++) {
     state.rearBombs.push({ x: x - dx * i, z: z - dz * i, alt, vx: 0, vz: 0, born: state.tick, weapon: 'bomb-bay',
       radius: tuning.radius[bay - 1], damage, ceiling,
-      ...(carpet ? { carpet: true } : {}) });
+      ...(carpet ? { carpet: true } : bay >= tuning.fireAt ? { groundFire: true } : {}) });
   }
-  if (followUp) {
-    state.nextBayDrop = null;
-  } else {
-    state.weaponFireAt['bomb-bay'] = state.tick + weaponCooldown(state, 'bomb-bay', tuning.cooldownTicks[bay - 1]);
-    if (!carpet && tuning.volley[bay - 1] > 1) state.nextBayDrop = state.tick + tuning.followUpTicks;
-  }
+  if (!followUp) state.weaponFireAt['bomb-bay'] = state.tick + weaponCooldown(state, 'bomb-bay', tuning.cooldownTicks);
+  state.bayDropsLeft = carpet ? 0 : Math.max(0, (followUp ? state.bayDropsLeft ?? 1 : tuning.volley[bay - 1]) - 1);
+  state.nextBayDrop = state.bayDropsLeft ? state.tick + tuning.followUpTicks : null;
 }
 
 // Sweep the thin per-tick segment so fast bolts cannot skip a contact.

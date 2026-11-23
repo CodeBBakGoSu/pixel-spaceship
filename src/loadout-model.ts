@@ -1,4 +1,4 @@
-import { DRAFT_RULES, EVOLUTIONS, FAMILIES, WEAPON_IDS, WEAPONS, weaponRankDamage, type BuffId, type DraftChoiceId, type EvolutionId,
+import { DRAFT_RULES, EVOLUTIONS, FAMILIES, WEAPON_IDS, WEAPONS, type BuffId, type DraftChoiceId, type EvolutionId,
   type FamilyId, type GearId, type WeaponId } from './data/items.ts';
 import { createTranslator, type Language } from './i18n.ts';
 import { isBuffId, isWeaponId, type DraftCard, type RunProgression } from './progression.ts';
@@ -83,21 +83,88 @@ export function levelPips(level: number, nextLevel: number, maxLevel: number): L
 }
 
 function weaponGrowth(id: WeaponId, current: number, next: number, t: Translator): string {
-  const from = Math.max(1, current);
-  if (from === next) return '';
-  const tuning: Partial<Record<'damage' | 'cooldownTicks', number | readonly number[]>> = WEAPONS[id].tuning;
-  const damage = (level: number) => weaponRankDamage(level) *
-    (typeof tuning.damage === 'number' ? tuning.damage : tuning.damage?.[level - 1] ?? 1);
-  const percent = Math.round((damage(next) / damage(from) - 1) * 100);
-  const gains = percent ? [t('loadout.bonus.damage', { percent })] : [];
-  const cooldown = tuning.cooldownTicks;
-  if (typeof cooldown !== 'number' && cooldown && cooldown[next - 1] < cooldown[from - 1]) {
-    gains.push(t('loadout.bonus.cooldown', { percent: Math.round((1 - cooldown[next - 1] / cooldown[from - 1]) * 100) }));
-  }
-  if (id === 'twin') {
-    const { barrels, pierceAt } = WEAPONS.twin.tuning;
-    if (barrels[next - 1] !== barrels[from - 1]) gains.push(t('draft.growth.volley', { count: barrels[next - 1] }));
-    if (from < pierceAt && next >= pierceAt) gains.push(t('loadout.bonus.pierce', { count: 1 }));
+  const from = Math.max(1, current) - 1, to = next - 1;
+  const gains: string[] = [];
+  const add = (key: Parameters<Translator>[0], value?: number) =>
+    gains.push(t(key, { count: value ?? 0 }));
+  const change = (values: readonly number[], key: Parameters<Translator>[0], format = (n: number) => n) => {
+    if (values[from] !== values[to]) add(key, format(values[to]));
+  };
+  const at = (rank: number, key: Parameters<Translator>[0], value?: number) => {
+    if (from + 1 < rank && next >= rank) add(key, value);
+  };
+  const meters = Math.round, seconds = (n: number) => n / 60;
+  switch (id) {
+    case 'twin': {
+      const { barrels, pierce, tracerScale, fanDegrees } = WEAPONS.twin.tuning;
+      change(barrels, 'draft.growth.volley');
+      change(tracerScale, 'draft.growth.tracer', n => Math.round((n - 1) * 100));
+      change(fanDegrees, 'draft.growth.fan');
+      if (pierce[to] > pierce[from]) add('loadout.bonus.pierce', pierce[to] - pierce[from]);
+      break;
+    }
+    case 'pods': {
+      const { flank, rear, range, pierce } = WEAPONS.pods.tuning;
+      change(flank, 'draft.growth.flank');
+      change(rear, 'draft.growth.rear');
+      change(range, 'draft.growth.range', meters);
+      if (pierce[to] > pierce[from]) add('loadout.bonus.pierce', pierce[to] - pierce[from]);
+      break;
+    }
+    case 'seeker':
+      change(WEAPONS.seeker.tuning.count, 'draft.growth.volley');
+      change(WEAPONS.seeker.tuning.radius, 'draft.growth.radius', meters);
+      break;
+    case 'rail': {
+      const r = WEAPONS.rail.tuning;
+      change(r.width, 'draft.growth.width', n => Math.round(n / r.width[0] * 100));
+      change(r.range, 'draft.growth.range', meters);
+      at(r.lowerBandAt, 'draft.growth.lower');
+      at(r.upperBandAt, 'draft.growth.upper');
+      at(r.repeatAt, 'draft.growth.repeat', seconds(r.repeatTicks));
+      at(r.lingerAt, 'draft.growth.linger', seconds(r.lingerTicks));
+      break;
+    }
+    case 'flak':
+      change(WEAPONS.flak.tuning.count, 'draft.growth.volley');
+      change(WEAPONS.flak.tuning.radius, 'draft.growth.radius', meters);
+      change(WEAPONS.flak.tuning.fragments, 'draft.growth.fragments');
+      break;
+    case 'ion': {
+      const i = WEAPONS.ion.tuning;
+      change(i.lifeTicks, 'draft.growth.lifetime', seconds);
+      change(i.width, 'draft.growth.width', n => Math.round(n / i.width[0] * 100));
+      change(i.count, 'draft.growth.trails');
+      at(i.salvageAt, 'draft.growth.salvage');
+      break;
+    }
+    case 'drones': {
+      const d = WEAPONS.drones.tuning;
+      change(d.count, 'draft.growth.drones');
+      change(d.radius, 'draft.growth.orbit', meters);
+      at(d.fireAt, 'draft.growth.droneFire');
+      at(d.doubleOrbitAt, 'draft.growth.doubleOrbit');
+      break;
+    }
+    case 'phoenix':
+      change(WEAPONS.phoenix.tuning.lifeBonusTicks, 'draft.growth.flareLife', seconds);
+      change(WEAPONS.phoenix.tuning.count, 'draft.growth.volley');
+      change(WEAPONS.phoenix.tuning.burnRadius, 'draft.growth.fireSpread', meters);
+      break;
+    case 'bomb-bay': {
+      const b = WEAPONS['bomb-bay'].tuning;
+      change(b.radius, 'draft.growth.radius', meters);
+      change(b.volley, 'draft.growth.bombs');
+      at(b.fireAt, 'draft.growth.groundFire', seconds(b.fireTicks));
+      break;
+    }
+    case 'arc': {
+      const a = WEAPONS.arc.tuning;
+      change(a.jumps, 'draft.growth.jumps');
+      at(a.explosionAt, 'draft.growth.endpoint');
+      at(a.branchesAt, 'draft.growth.branches');
+      break;
+    }
   }
   return gains.join(' · ');
 }

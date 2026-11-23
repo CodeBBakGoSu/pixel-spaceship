@@ -60,7 +60,7 @@ test('three unique cards, at least one weapon on the first deal, and one legal p
   assert.equal(applyRunPick(run, 'rail'), null);
   const twin = modal(cards, card => card.id === 'twin');
   assert.equal(twin.currentLevel, 1);
-  assert.equal(twin.maxLevel, 5);
+  assert.equal(twin.maxLevel, 7);
   assert.deepEqual(applyRunPick(run, twin.id), twin);
   assert.equal(run.weaponLevels.twin, twin.nextLevel);
   assert.equal(applyRunPick(run, twin.id), null);
@@ -68,7 +68,7 @@ test('three unique cards, at least one weapon on the first deal, and one legal p
 
 test('full slots offer upgrades only for owned gear and flag the missing half of a recipe', () => {
   const run = createProgression(116, fullPool);
-  run.weaponLevels = { twin: 1, pods: 5, seeker: 5 };
+  run.weaponLevels = { twin: 1, pods: 7, seeker: 7 };
   run.buffLevels = { 'hull-plating': 3, 'magnet-core': 3, 'fire-control': 3 };
   const cards = openRunDraft(run);
   assert.deepEqual(cards.map(card => card.id).sort(), ['damage', 'repair', 'twin']);
@@ -80,7 +80,7 @@ test('full slots offer upgrades only for owned gear and flag the missing half of
 
 test('sealed pool falls back to all three legal overflow choices at max damage', () => {
   const run = createProgression(22, { weapons: ['twin'], buffs: [] });
-  run.weaponLevels.twin = 5;
+  run.weaponLevels.twin = 7;
   for (let i = 0; i < DRAFT_RULES.maxDamageUpgrades; i++) {
     assert.deepEqual(openRunDraft(run).map(card => card.id), ['repair', 'damage', 'credits']);
     assert.ok(applyRunPick(run, 'damage'));

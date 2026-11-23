@@ -40,7 +40,7 @@ export const WEAPON_PROJECTILE_LIMITS = {
   pods: 24,
   seeker: 24,
   rail: 0,
-  flak: 24,
+  flak: 40,
   ion: 0,
   drones: 16,
   phoenix: 0,

@@ -176,7 +176,7 @@ test('Ordnance Rack expands manual stores, recharge and blast reach', () => {
 });
 
 test('Twin Cannon grows at every rank and the final fan hits flank contacts', () => {
-  for (const [i, damage] of [1, 1.08, 1.16, 1.30, 1.42].entries()) {
+  for (const [i, barrels] of [2, 3, 3, 4, 4, 5, 6].entries()) {
     const state = start();
     const { x, z } = state.player;
     state.run.weaponLevels.twin = i + 1;
@@ -186,28 +186,29 @@ test('Twin Cannon grows at every rank and the final fan hits flank contacts', ()
     state.enemies = [center, left, right];
     for (const enemy of state.enemies) enemy.hp = 12;
     acquireAndFire(state);
-    assert.equal(state.shots.length, [2, 2, 4, 4, 6][i]);
-    assert.equal(state.twinAt, i === 0 ? 21 : 18);
-    assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.damage === damage));
-    if (i === 4) assert.ok(state.shots.every(shot => shot.pierce?.remaining === 2));
+    assert.equal(state.shots.length, barrels);
+    assert.equal(state.twinAt, 21);
+    assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.damage === 1
+      && (shot.tracerScale ?? 1) === (i < 4 ? 1 : 1.3)
+      && (shot.pierce?.remaining ?? 1) === (i < 2 ? 1 : i < 6 ? 2 : 3)));
     for (let tick = 0; tick < 15; tick++) advanceShots(state, ground);
     assert.ok(center.hp < 12);
-    assert.equal(left.hp, i === 4 ? 12 - damage : 12);
-    assert.equal(right.hp, i === 4 ? 12 - damage : 12);
+    assert.equal(left.hp < 12, i >= 5);
+    assert.equal(right.hp < 12, i >= 5);
   }
 });
 
-test('Wing Pods add a rear bolt at level five and keep their same-band restriction', () => {
+test('Wing Pods add rear bolts starting at level four and keep their same-band restriction', () => {
   const state = start();
   const { x, z } = state.player;
-  state.run.weaponLevels.pods = 5;
+  state.run.weaponLevels.pods = 4;
   state.enemies = [makeEnemy(state, x - scaleTravel(22), z - scaleTravel(66), 2, 'patrol', 0)];
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 0);
   state.enemies[0].alt = 125;
   acquireAndFire(state);
-  assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 2);
-  assert.equal(state.podsAt, 36);
+  assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 3);
+  assert.equal(state.podsAt, 43);
 });
 
 test('Ion Wake makes a vertical damage curtain and level five attracts salvage along it', () => {
@@ -221,7 +222,7 @@ test('Ion Wake makes a vertical damage curtain and level five attracts salvage a
   state.enemies = [inside, outside];
   state.pickups.push({ id: 606, x, z: z - scaleTravel(52), alt: 125, xp: 1, born: 0 });
   advanceSupportWeapons(state);
-  assert.ok(inside.hp < 3);
+  assert.ok(inside.hp < 4);
   assert.equal(outside.hp, 4);
   assert.equal(state.pickups[0].pulling, true);
   const hp = inside.hp;
@@ -236,7 +237,7 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   const contact = makeEnemy(state, x, z + scaleTravel(22.5), 1, 'interceptor', 0);
   state.enemies = [contact];
   advanceSupportWeapons(state);
-  assert.equal(state.orbitDrones.length, 3);
+  assert.equal(state.orbitDrones.length, 4);
   assert.ok(state.orbitDrones.some(drone => drone.alt > 117));
   assert.ok(contact.hp < 4);
   assert.ok(state.shots.some(shot => shot.kind === 'drone-bolt'));
@@ -248,30 +249,30 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   assert.equal(state.hull, state.maxHull);
 });
 
-test('Phoenix Flares drop one automatic flare and spread at level five without spending a manual charge', () => {
+test('Phoenix Flares drop three automatic flares with spreading fire without spending a manual charge', () => {
   const state = start();
   state.tick = 100;
   state.run.weaponLevels.phoenix = 5;
   advanceAutoOrdnance(state, false);
   assert.equal(state.flareCharges, 3);
-  assert.equal(state.flares.length, 1);
-  assert.equal(state.flares[0].lifeTicks, 180);
-  const { x, z } = state.flares[0];
+  assert.equal(state.flares.length, 3);
+  assert.equal(state.flares[1].lifeTicks, 180);
+  const { x, z } = state.flares[1];
   const first = makeEnemy(state, x, z, 1, 'interceptor', 0);
   const neighbor = makeEnemy(state, x + 9, z, 1, 'interceptor', 0);
   const above = makeEnemy(state, x, z, 2, 'interceptor', 0);
   state.enemies = [first, neighbor, above];
   advanceFlares(state, ground);
-  assert.ok(first.hp < 3);
+  assert.ok(first.hp < 4);
   assert.equal(neighbor.burnUntil, first.burnUntil);
   assert.equal(above.burnUntil, undefined);
 });
 
-test('Bomb Bay double-drops at level five, detonates below launch band and leaves manual stock intact', () => {
+test('Bomb Bay double-drops at level three, detonates below launch band and leaves manual stock intact', () => {
   const state = start();
   state.tick = 40;
   state.player.altitude = 180;
-  state.run.weaponLevels['bomb-bay'] = 5;
+  state.run.weaponLevels['bomb-bay'] = 3;
   advanceAutoOrdnance(state, false);
   state.tick = state.nextBayDrop;
   advanceAutoOrdnance(state, false);
