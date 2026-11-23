@@ -4,7 +4,8 @@ export { ROLL_CHORD_MS } from './data/roll.ts';
 export type SpaceAction = 'roll' | 'reversal';
 
 export function barrelRollForKey(code: string, turn: number, lastTurn = 1): number | undefined {
-  return code === 'KeyC' ? turn || lastTurn : undefined;
+  if (code !== 'KeyC') return undefined;
+  return Math.sign(turn) || Math.sign(lastTurn) || 1;
 }
 
 /** Resolves physical key timing before a single deterministic flight input is queued. */

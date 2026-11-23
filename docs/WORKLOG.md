@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `4c0284a`)
+- C normalizes nonzero combined steering to its sign and uses the remembered/default sign when neutral; stepStage regressions cover weak opposite input and neutral C. Shift+Space ailerons and W/S+Space selectors remain unchanged; the global roll threshold is untouched.
+- Verification: focused flight/chord, roll, stage, and maneuver tests 65/65; `npm run build` passed (119 modules, 1.88 s). State: done locally; not pushed.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`eb21d00`, merge `d8d34fd`; renderer-proto `a77502d`)
 - PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
 - Merged latest `renderer-proto` into the PR branch, preserving its three wiki docs and in-progress planning-bot entry; resolved only the additive worklog overlap.

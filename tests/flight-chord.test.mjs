@@ -43,7 +43,7 @@ test('only C requests a dedicated barrel roll, even with the stick centered', ()
 });
 
 test('C follows weak current mouse steering opposite the remembered direction', () => {
-  for (const turn of [-0.15, -0.18, -0.2]) {
-    assert.equal(barrelRollForKey('KeyC', turn, 1), turn);
+  for (const turn of [-0.15, -0.18, -0.20]) {
+    assert.equal(barrelRollForKey('KeyC', turn, 1), -1);
   }
 });

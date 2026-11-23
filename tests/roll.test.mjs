@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { PICKUP_LIMIT } from '../src/data/run-balance.ts';
 import { scaleTravel } from '../src/data/speed.ts';
+import { barrelRollForKey } from '../src/flight-chord.ts';
 import { advanceShots, fireHostile, hostileCanHit } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -36,6 +37,32 @@ test('neutral roll remembers the last turn and holds heading, altitude and the c
   assert.ok(Math.abs((state.player.x - x) * Math.cos(yaw) - (state.player.z - z) * Math.sin(yaw)) < 1e-8);
   stepStage(state, {}, sea);
   assert.ok(!state.roll);
+});
+
+test('C normalizes weak opposite steering into a barrel roll through stepStage', () => {
+  for (const turn of [-0.15, -0.18, -0.20]) {
+    const state = sortie();
+    state.tick = 4349;
+    state.rollReadyAt = 4349;
+    state.player.lastTurn = 1;
+    const rollTurn = barrelRollForKey('KeyC', turn, state.player.lastTurn);
+    stepStage(state, { turn, roll: rollTurn !== undefined, rollTurn }, sea);
+    assert.equal(state.tick, 4350);
+    assert.equal(state.roll?.kind, 'barrel', `turn ${turn}`);
+    assert.equal(state.roll?.side, -1, `turn ${turn}`);
+  }
+});
+
+test('neutral C falls back to the remembered direction and still barrels through stepStage', () => {
+  const state = sortie();
+  state.tick = 4349;
+  state.rollReadyAt = 4349;
+  state.player.lastTurn = -1;
+  const rollTurn = barrelRollForKey('KeyC', 0, state.player.lastTurn);
+  stepStage(state, { roll: rollTurn !== undefined, rollTurn }, sea);
+  assert.equal(state.tick, 4350);
+  assert.equal(state.roll?.kind, 'barrel');
+  assert.equal(state.roll?.side, -1);
 });
 
 test('barrel rolls shift 40 m to the chosen side and return to their entry altitude in 42 ticks', () => {
