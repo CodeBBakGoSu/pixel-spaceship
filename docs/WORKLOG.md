@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `69f81c8`; commit: this change)
+- Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
+- Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
+- State: done (direct push to `renderer-proto`; no PR or `main`).
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
 - [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
 - [P1 상자 연출 검증](wiki/HISTORY.md#p1-96bd079)은 밸런스 봇이 확인한 `96bd079`에 한정한다. 다른 후보의 플레이 녹화와 분리했다.

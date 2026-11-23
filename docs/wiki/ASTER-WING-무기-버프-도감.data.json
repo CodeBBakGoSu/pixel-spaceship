@@ -1,0 +1,1789 @@
+{
+  "records": {
+    "twin": {
+      "id": "twin",
+      "type": "w",
+      "code": "W01",
+      "name": "쌍발 기관포",
+      "en": "Twin Cannon",
+      "copy": "전방의 같은 고도 또는 한 밴드 아래 적을 쏩니다.",
+      "w": "twin",
+      "b": "overdrive-coil",
+      "e": "aurora-gatling",
+      "family": "탄도",
+      "tag": "기수 정면",
+      "note": "기수를 맞춘 적에게 집중 사격한다. 옆에서 파고드는 적을 잡으려면 기수를 돌려야 한다.",
+      "unlock": "호크 출격 시 Lv1 장착",
+      "start": true,
+      "levels": [
+        {
+          "한 번에 발사": "2발",
+          "추가 관통": "0회",
+          "탄 퍼짐": "평행",
+          "탄 궤적 크기": "×1"
+        },
+        {
+          "한 번에 발사": "3발",
+          "추가 관통": "0회",
+          "탄 퍼짐": "평행",
+          "탄 궤적 크기": "×1"
+        },
+        {
+          "한 번에 발사": "3발",
+          "추가 관통": "1회",
+          "탄 퍼짐": "평행",
+          "탄 궤적 크기": "×1"
+        },
+        {
+          "한 번에 발사": "4발",
+          "추가 관통": "1회",
+          "탄 퍼짐": "평행",
+          "탄 궤적 크기": "×1"
+        },
+        {
+          "한 번에 발사": "4발",
+          "추가 관통": "1회",
+          "탄 퍼짐": "평행",
+          "탄 궤적 크기": "×1.3"
+        },
+        {
+          "한 번에 발사": "5발",
+          "추가 관통": "1회",
+          "탄 퍼짐": "±6°",
+          "탄 궤적 크기": "×1.3"
+        },
+        {
+          "한 번에 발사": "6발",
+          "추가 관통": "2회",
+          "탄 퍼짐": "±6°",
+          "탄 궤적 크기": "×1.3"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABWUlEQVR42mNkYGBgMHVL/c8wAOD0rtmMLKZuqf9PhZzEkGz800UPN/xnwSbKU/aJgYEhg6Y2l7bNYGBgYGBgQpfQ6vzDwMDAwCAnzEVTGgaY0C1/9PYbg5wwF01prA7gKftEF8uxhgAswRHjcpqFACHDGRgYGL5c1CWo7stFXdJDAAYIuZhH/zJexyKrITYEWAiFAAMDA4N/TBHD0pQfcHXRczgYNi7pQ1GHSw0hRxAMAXwAm4/QAVVCAOYjfIbjUjP0Q0BOmIth45I+his3rjMcOHWTYfeuQ1jjFpsaqoQALh8SE1JUKweIMZzY4MdbDsA0YaMJqcOXBvCpZ2IYYDDqgFEHsOCTnLJoA5x94NRNBgYGBgZXNzsGVzc7rOpxqcmJCyDPAbt3HcIqvlRvDlbx6EspwywKcAFyfEqWA2AVyrDMBfUsZaPlAGoagPXVaBXUuADjQHfPAQI9w/KKPCaeAAAAAElFTkSuQmCC"
+    },
+    "overdrive-coil": {
+      "id": "overdrive-coil",
+      "type": "b",
+      "code": "B01",
+      "name": "과부하 코일",
+      "en": "Overdrive Coil",
+      "copy": "기동 오버드라이브 시간과 에코 위력을 높입니다.",
+      "w": "twin",
+      "b": "overdrive-coil",
+      "e": "aurora-gatling",
+      "family": "탄도",
+      "tag": "기동 강화",
+      "note": "기동 오버드라이브 시간과 에코 위력을 높입니다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "반전 사격 시간": "2.5 초",
+          "다른 무기 에코 가속": "+50%"
+        },
+        {
+          "반전 사격 시간": "3 초",
+          "다른 무기 에코 가속": "+60%"
+        },
+        {
+          "반전 사격 시간": "3.5 초",
+          "다른 무기 에코 가속": "+70%"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABw0lEQVR42sVXv0vDQBT+Um4qpaDdC85SKkIn6VRosQ4VHO1aKI6CgpOdjDg4Czr6D3QpKBQKoZMglv4BgrPaJbjGwSReL+8laX40H4S7knf3vvu+e49GA4Bas2chA7w832ui1uxZB4dHAIBxu4XG6GmdHCzhzMbtlju+7mylnvns6g4AkJOTO9h9e0e5lAeA1EYHOQAe2T8b2/j4+kG5lF9pBBA6bokAAFf2qMnNWcV9guJJAlTysCcyZxWPx37rZQh1kRzU6Z4CAIaPt6HkBIBCde7O/daTCnAyqSeSR+r0FCIp4MCcnPhsbfxPF3WYk7r78/iBPpy8v+AUkIOMm2sydV3fW6aixm0OklFgf1QkCZg6T6hQnaPTTUgB0oINg3fFtkK2IJYClAWq/GS8ZEEsBVQL/G7+XxkW7TJMqwoWvBVy7MpVINd3kAWUFcbFFMCUrQJqfxGmibBVoFihxskWcAhFgG9EfBNSLYhFIKgReaQnLIhFIKgRce/TtcC5/YT0a7HAld+nQlK1wNSXm876LViAlT4xC/rfA1vmaH+9+/Y49FFJRLn9SSKHjHApzrMlkLkCnjvgfKulJTUHLevP819hlHxp8XNq3gAAAABJRU5ErkJggg=="
+    },
+    "aurora-gatling": {
+      "id": "aurora-gatling",
+      "type": "e",
+      "code": "E01",
+      "name": "오로라 개틀링",
+      "en": "Aurora Gatling",
+      "copy": "부채꼴이 넓어지고 인접한 위쪽 밴드에도 사격한다. 같은 고도와 한 밴드 아래만 보던 기본형보다 수직 범위가 넓다.",
+      "w": "twin",
+      "b": "overdrive-coil",
+      "e": "aurora-gatling",
+      "family": "탄도",
+      "tag": "기수 정면",
+      "note": "부채꼴이 넓어지고 인접한 위쪽 밴드에도 사격한다. 같은 고도와 한 밴드 아래만 보던 기본형보다 수직 범위가 넓다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABqElEQVR42t1XMUvDQBT+UipIKS4dupT+g1pQ6S9wFd0jKuLoUrfkB6TgUBdHEZVmt6Otg3QsKtQK6lgRoUi3IoJDHOydl+SSJtdcqn5LyMfLvXffy3v3TgEAQ81aAKAZJVT0Npzw4v0QZC3d7CuKoWYtrZzDNFA5eEGSvi1eAzdLAID08kC68+FlBgCQ0IzSNzNyTpDPpKQ+AUAr55Dg5SmfSeF58C7tyU0BkV22c2cQCZGdA5jIjoUtAJ7xsFNwfTzsFFz2Qe3Yf2CsAgCQLnbpIjRdI47lg9jxFFCs3oqFt1fXP7C6vgdz54MaqkezACDM1WtV2/q0DNkq4EUYJXyrgCcT2Q2LSbjAVRCXAgC8FajXqrh/fMBV+wnNRovmUJQL3QcIjueLrp2IcKH7gCz5ffuAs46jBNsZfQOIG78/gO27TqTc31NANlyHEYvDs/NInOxurHnOhMmK3obXVNxstLi8uXXK5dWTzdBT8dRTkBT5KOxOhQMgB8v/rILbz/FVIPVmtD8HLMzwLybSnY+mZdtIRupSltQ2XPR+GhF7PY8butlXvgAr25wj6FvEHwAAAABJRU5ErkJggg=="
+    },
+    "pods": {
+      "id": "pods",
+      "type": "w",
+      "code": "W02",
+      "name": "윙 포드",
+      "en": "Wing Pods",
+      "copy": "같은 고도의 가까운 측면과 후방을 사격합니다.",
+      "w": "pods",
+      "b": "hull-plating",
+      "e": "aegis-halo",
+      "family": "탄도",
+      "tag": "측면 · 후방",
+      "note": "기수를 돌리지 않아도 양옆의 가까운 표적을 쏜다. 같은 고도의 적만 탐색하므로 먼 정면 표적은 남는다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "좌·우 각각": "1발",
+          "추가 후방탄": "0발",
+          "탐색 거리": "124 m",
+          "추가 관통": "0회"
+        },
+        {
+          "좌·우 각각": "2발",
+          "추가 후방탄": "0발",
+          "탐색 거리": "124 m",
+          "추가 관통": "0회"
+        },
+        {
+          "좌·우 각각": "2발",
+          "추가 후방탄": "0발",
+          "탐색 거리": "155 m",
+          "추가 관통": "0회"
+        },
+        {
+          "좌·우 각각": "2발",
+          "추가 후방탄": "1발",
+          "탐색 거리": "155 m",
+          "추가 관통": "0회"
+        },
+        {
+          "좌·우 각각": "3발",
+          "추가 후방탄": "1발",
+          "탐색 거리": "155 m",
+          "추가 관통": "0회"
+        },
+        {
+          "좌·우 각각": "3발",
+          "추가 후방탄": "1발",
+          "탐색 거리": "155 m",
+          "추가 관통": "1회"
+        },
+        {
+          "좌·우 각각": "3발",
+          "추가 후방탄": "2발",
+          "탐색 거리": "190 m",
+          "추가 관통": "1회"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABsElEQVR42mNkYGBgMHVL/c8wAOD0rtmMLKZuqf9PhZzEkGz800UPN/xnwSbKU/aJgYEhg6Y2l7bNYGBgYGBgQpfQ6vzDwMDAwCAnzEVTGgaY0C1/9PYbg5wwF01prA7gKftEF8uxhgAswZHjE6qFAKmGMTAwMExZtIFhyqINlIcADJBrCDmOp0oIOJipU+x4vCGAz1HIgNRoICoEGBgYGL5c1MXpiCmLNhAVDV8u6pIXAtjEYZb4xxQxMDAwMNgs38dQc/cpAwMDA1wMl09xibMQowjGh1ni6maHtXiFyW9c0ochhysaWPAp4tG/DDcY2dLduw7hdAS6Q3j0L+NNA3hDANni3bsOkVzhIDuEqBBADu4vB7IYGBh+MDAw7GKInsOB1YIjkU4MB07dhEcLuiOXpvyAMFKyGHgcpqGYjzUREgvwBT+pgAWXxOGuDgRHqIEsw1HMYODDqoaJYYDBgDuAhRTFsPwNSwOwBMjAwMCQExeANQdQJQQ2LulDKVzQLcPnWLJDwHMbH8XBS4wZLOQaTkwoDIlEOHIdUM9SNhoFqLkA1lejVVDjAowD3T0HAM7+xlBVsO/jAAAAAElFTkSuQmCC"
+    },
+    "hull-plating": {
+      "id": "hull-plating",
+      "type": "b",
+      "code": "B02",
+      "name": "장갑판",
+      "en": "Hull Plating",
+      "copy": "레벨마다 최대 선체를 늘리고 선체를 1칸 수리합니다.",
+      "w": "pods",
+      "b": "hull-plating",
+      "e": "aegis-halo",
+      "family": "탄도",
+      "tag": "선체 보강",
+      "note": "레벨마다 최대 선체를 늘리고 선체를 1칸 수리합니다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "최대 선체": "+1칸",
+          "새 레벨당 수리": "1칸"
+        },
+        {
+          "최대 선체": "+2칸",
+          "새 레벨당 수리": "1칸"
+        },
+        {
+          "최대 선체": "+3칸",
+          "새 레벨당 수리": "1칸"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABo0lEQVR42sWXsUsCUQCHP4+bXF2ahKYGISLQMQJJQZeg0QgHHRoaa2loif6BhgIdIvRPKMgQmk+IEBoEIWhqqLXVhnry7rx79+7uXf6Wp/K473s/33twGYBipT1jCRkNOhm7WGnP6rt7AAxrVcr3D//pMLPFp2GtOh+fN1ZTJx9fXANgyXCRzZc38rksQGqjiAUs1P5ZLvD+9U0+l01lXBAA5rWnDfdtIGjlgJFR1YAtf/FOKhTrRjbc6+guUMIl4Dfp8KidCH512fFdnFYDItultUDA6XlHSyR2AwBPziTx3xB6ClSTTETrFARNMhEjDTQ/DrRg/fWudgNae8AlkR+A0+Nm5VYLHLY4O/IecHpQ2qfp/LbxSEsJjnQK5BtMmT8JgD5d7T3g93xL9yIB3LU7PZeInMa4BcB0En58rbArVCkhRBRw8YxYAioJr0hj3IoM1xIIkpDbEOCocG0BlYQM36lsRYJHElBJCLjf70YFgiRkeJTVxxLwSiSBxxbwayIOPJGADI0LTyyQBH5mn5gRSJqlC9jedzXTEVUHJbPs1/MfzWh5QjIGV0EAAAAASUVORK5CYII="
+    },
+    "aegis-halo": {
+      "id": "aegis-halo",
+      "type": "e",
+      "code": "E02",
+      "name": "이지스 헤일로",
+      "en": "Aegis Halo",
+      "copy": "측면 사격 대신 기체 둘레에 보호 고리를 만든다. 고리에 닿은 적탄을 지우고 같은 고도의 적에게 접촉 피해를 준다.",
+      "w": "pods",
+      "b": "hull-plating",
+      "e": "aegis-halo",
+      "family": "탄도",
+      "tag": "측면 · 후방",
+      "note": "측면 사격 대신 기체 둘레에 보호 고리를 만든다. 고리에 닿은 적탄을 지우고 같은 고도의 적에게 접촉 피해를 준다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACuUlEQVR42sVXPYgTQRh9CbE5QuBMcc1xkConGASVNJsNQdxAAv60EhEbO5sTLDae1WkWFLRJZyPBkPbOYoMXCXIxzaFCsLI4wgUVDgmBsFxjEYtkJrOzM/uDib5myczme2+++d43syEAqJTWJgCgV9IwyofgIRt3g59Y5fpJKFQprU30rXX8DxgvvyNCf136BHy+DACIXh0undx6HwcAhPVKejoyIyfYiK8s9QkA+tY6wqJ92oivYDA8XdpTuAUk7X7+zD6tUR/R1YRj3K+ISJCVA0CzOLana3DdMVYwY77IHQLc/kRIVEOh77/u7eCoB9w1HtuCNtGdCcFiMtAsjilx9MJX+n61BscYAFg9hQoRiWAxd4EkAzw5W8W5dFLoGiJINRQ0i2NHXKkL/JDzQaaZ2HWQuIlgXRCW1QALnnwwPEW1tuuwr0wEP2/bAlENkGpXDcVGToLcuP0AAJBptLF99AMA6JhIBMkCa1VPF/DjLImWzwrbK5nfe/NCSMYvUuoCUWCWtLV/AC2fxcdbVwAAHw6/uQoRLcZXBkrPNVRrO5SU4On2PVuQXDqJXDqJR09eCYUALekiwyKF1qhPq7+1f+BKnmm0kWm06Rw/T6AaCqxR39kHRC9HVxPo6N1AxysrRISO3qVnhqeAvwG/DaI68C2g/rDlScCCFGUQLDwDQRGRTRTM2PRUO6s50qnls7ZzgKz+/OY5hwOsXgodvYuCGRPyhCbH1yb49VN4D5SdgqT/syJY8vmpmKIFyAugd0K363bBjFE3kGAsSAPiG5EXufhW7LEVqqHA6qVoJu7fuSm/8fog96wBYT0wlw03kKx5kfsWwAYjQtgOxzctP8SBBciCW/W3KJiJ4P778tvbBUv9MnoWAy6ecXfB0shnRWpzAfHlwjFLtQ3vjueNiP08/9co109CfwCotgnmtZcrkQAAAABJRU5ErkJggg=="
+    },
+    "seeker": {
+      "id": "seeker",
+      "type": "w",
+      "code": "W03",
+      "name": "추적 미사일",
+      "en": "Seeker Missiles",
+      "copy": "위아래 한 밴드까지 적을 추적합니다.",
+      "w": "seeker",
+      "b": "fire-control",
+      "e": "swarm-rack",
+      "family": "병기",
+      "tag": "인접 고도 추적",
+      "note": "가까운 적들을 나눠 추적하지만 조준 고정한 에이스가 범위 안에 있으면 일제 사격을 모은다. 탄이 표적까지 날아갈 시간이 필요하다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "일제 사격": "3발",
+          "폭발 반경": "24 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "4발",
+          "폭발 반경": "24 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "4발",
+          "폭발 반경": "31.2 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "5발",
+          "폭발 반경": "31.2 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "6발",
+          "폭발 반경": "31.2 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "6발",
+          "폭발 반경": "38.4 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        },
+        {
+          "일제 사격": "8발",
+          "폭발 반경": "38.4 m",
+          "탐색 거리": "330 m",
+          "추적 고도": "인접 1밴드까지"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABcUlEQVR42sWXPUvDQACG34RsTfsbpJNC0alLfkDnDs4iSqFDV7OJiODQuYMgivQXOLjo1KlgXANJl1L/Qptulrj0SmjucpfmPt7lSAL3vPfk2wKAdqeXwkB+vp4tp93ppcH5d+7g/d9QR4fUoe11/SWAvlLyzeMTAMDeP3D6sAEANOs1pSOJvQ+fr9Zo1mtKR2oB119qgVMNkAtOB5xpAIASWOJ5fAMkMlc4X60RxhF1cUoNAEDieQjjCEdX17vt7PzKDBDY4vVlB6fNr8QAD84y4MgwAABhHGEBUOHudKrOAIFPghkmwQxvfb8QLvUayMKzISVocGkGWPCilXMNkBIiYxF8cNHlzscsIBoRuEhsme/4svBKBS7PbivDc8+BUvn8xcDvVrZ2kIFk2Nh+tkFfAfJmkwkXPgUEHsYR3OMTqR+nQgZaW2hLMpxbYDR+z5XQWuDQW8vYg6hM7j7GZgsYN5C7Dcm/mirVrFimf8//Aae9/ccK+liEAAAAAElFTkSuQmCC"
+    },
+    "fire-control": {
+      "id": "fire-control",
+      "type": "b",
+      "code": "B08",
+      "name": "사격통제",
+      "en": "Fire Control",
+      "copy": "더 빨리 조준하고 일정 확률로 치명타를 냅니다.",
+      "w": "seeker",
+      "b": "fire-control",
+      "e": "swarm-rack",
+      "family": "병기",
+      "tag": "조준 · 치명타",
+      "note": "더 빨리 조준하고 일정 확률로 치명타를 냅니다.",
+      "unlock": "조준 고정으로 적을 총 20기 격추하세요.",
+      "start": false,
+      "levels": [
+        {
+          "에이스 조준 고정 시간": "−15%",
+          "치명타 확률": "5%",
+          "치명타 피해": "×2"
+        },
+        {
+          "에이스 조준 고정 시간": "−30%",
+          "치명타 확률": "10%",
+          "치명타 피해": "×2"
+        },
+        {
+          "에이스 조준 고정 시간": "−45%",
+          "치명타 확률": "15%",
+          "치명타 피해": "×2"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABxklEQVR42s1XsU7DMBB9qbK1/YfQmZAKqUskJqRWlKUSc8d+Alm7MeQLkNjgBxgQCKSuXZBQTfbST0AizGW66OrYiU0awlucuPbdy7t3TuMAwGA426IBvL7cOO5gONueTy4AAIvxCKePz3/JYevS1WI8ysa3/kHtmS+vrgEALZ6ccLz6QK/bBoDaRkILQE72z5NDrL++0eu2axlzBABkstsmnyRTaxJKAqrkAIyfpLICchAASIVfGJxDlywVvrkC8qJOkCiDEymZvIpsJ0gKFXBtZQSASTLdCcLv7/07qzK4JjJyw1ESnly+pzWVPFCWXOUB/ntRdxh5QMWYJ6f51dP7DnlZocoKyDLTvBcH8OIAALJrmQSpVqSAa6MAT76JRO589+IA60ho91mfA7pWI6RhiDQMc0TKWlSrAC2S24y7m2qugxcH6J8dKVtU9oeSgGqR3GpU+85ymdu7iURWHnmfCi00DPc3mzaRyFSQ521hpABvKZXU/FpXtr2UQGVObriidZUJ8CPWhKTJ01t7QEdCfhvuzYSp8LP/BLo2Lau1LoZRCYo2mqIsRuPnQGME5g+3+yFga7r/exTTt1pdUuvgNP15/gPDDuYHRPCp8QAAAABJRU5ErkJggg=="
+    },
+    "swarm-rack": {
+      "id": "swarm-rack",
+      "type": "e",
+      "code": "E03",
+      "name": "군집 로켓",
+      "en": "Swarm Rack",
+      "copy": "12발을 한꺼번에 발사한다. 조준 고정한 에이스를 먼저 노리고, 없으면 범위 안의 상자 수송기를 우선한다.",
+      "w": "seeker",
+      "b": "fire-control",
+      "e": "swarm-rack",
+      "family": "병기",
+      "tag": "인접 고도 추적",
+      "note": "12발을 한꺼번에 발사한다. 조준 고정한 에이스를 먼저 노리고, 없으면 범위 안의 상자 수송기를 우선한다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACJ0lEQVR42sVXv0vDQBT+EroZuzgIwUFcnNRBccjcpYJQJwdBxC4KHexSaEEHhxZc/AsqLh38ByqCg5ND0UEIJF2kBQkU6VIjuNVBL1zT3N1Lf+i3hDva+9573/eSdxoAlPfm+wBQLG+iUmogDNG+DJSzSrWOppX35vvF/AL+A5XLNySC1foT8LwBADBS3amT+/dzAAC9WN782fklZ1ianZnqEwCK+QXoUTotzc7g9eOT/AQQ+/dMAp0tjFQXRqqL1Z2v2If5lhUrCB76uJnbrhP7/8IA4pD7lgXbdbB4mA2qQJVl7Ar4loXWVTUgDyehkmUggKALiBWQkTOoZBF2gYrcdh0hufH4qJRF2gWqCtiug4dGEw+NJq6PCpHkMlnG8gAj58GCUJFHncsjoapAFDmfue06aAFCWXjv8GtSBWTkuf2MUhaWFG9K8nsAAIlcJAszYdiUYeiiPhZBRB7OnNKukQHwOFg7jUWe28/EIh8y4RDu2sgVMgNbKnKVKckV8C+SMAo90nDBk6tMSQqAkd9u9Uiy8OQyU5Ik4DNP15O43eohXU9KZaGYUgSt397u492TzoEsiChZKKaUzoSUcZtVIsoTo5ALP0YyQ7IgqqZJNiUFpAB4T2Q9D1XTDAIRmZKKxCgzfdbzAABV08RNuoucl8Go0DEGdk/8IJjYOFumd8FUbkaWBZw3aV0wcfKXleG7IevLieO31AM45l5E/PX8r1GqdbRvfNlRNaI3//IAAAAASUVORK5CYII="
+    },
+    "rail": {
+      "id": "rail",
+      "type": "w",
+      "code": "W04",
+      "name": "레일 랜스",
+      "en": "Rail Lance",
+      "copy": "좁은 광선을 충전해 일렬로 선 적을 관통합니다.",
+      "w": "rail",
+      "b": "band-lens",
+      "e": "prism-lance",
+      "family": "에너지",
+      "tag": "전방 관통",
+      "note": "충전이 끝나는 순간 직선 위의 적을 한꺼번에 뚫는다. 고도선이 늘어도 옆으로 벗어난 적은 맞지 않는다.",
+      "unlock": "한 출격에서 에이스를 5번 맞히세요.",
+      "start": false,
+      "levels": [
+        {
+          "관통 높이": "현재",
+          "사거리": "450 m",
+          "광선 폭 배율": "×1",
+          "연사": "1회",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재",
+          "사거리": "450 m",
+          "광선 폭 배율": "×1.5",
+          "연사": "1회",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재와 아래",
+          "사거리": "450 m",
+          "광선 폭 배율": "×1.5",
+          "연사": "1회",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재와 아래",
+          "사거리": "562.5 m",
+          "광선 폭 배율": "×1.5",
+          "연사": "1회",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재와 아래·위",
+          "사거리": "562.5 m",
+          "광선 폭 배율": "×1.5",
+          "연사": "1회",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재와 아래·위",
+          "사거리": "562.5 m",
+          "광선 폭 배율": "×1.5",
+          "연사": "2회 · 0.3초 간격",
+          "피해 잔상": "없음",
+          "충전 시간": "0.9 초"
+        },
+        {
+          "관통 높이": "현재와 아래·위",
+          "사거리": "562.5 m",
+          "광선 폭 배율": "×2",
+          "연사": "2회 · 0.3초 간격",
+          "피해 잔상": "0.5초",
+          "충전 시간": "0.9 초"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABYklEQVR42mNkYGBgMHVL/c8wAOD0rtmMLKZuqf9PhZzEkGz800UPN/xnwSbKU/aJgYEhg6Y2l7bNYGBgYGBgQpcQmSjAwMDAwMAhLYeXRgeE1OPSz4Ru+Y+njxg4pOXw0gwMDAwC9VMZjC7cZzC6cJ9BoH4qUfqQ9WM4gKfsE9GGwMAhedRQIFU/3AGwBEeOD9CjgewQINcHVAkBSnxAjiMoCoG1z+7jtBwmR9MQCJZSxOkAmNyApQFiPTGaBkbTAE4HwBxBDI0vDZCin4WYqnPKog0Mu3cdYmBgYGCI68rFGQ1rn91neL7nIlztxiV9BM1mIrUeJyYNkAKYGAYYjDpgwB3AQqqGKYs2MDAwMDDU3H3KYPcQU5zmDoBlMQZlZYZ767dhiLu62dHWATBgf/cu/aIgJy4AzvaPKSJaLU1CgJjSjRiw18udgWHD2tFsiIgCWF+N2mCvlzteecaB7p4DAKGMxqfwqkvJAAAAAElFTkSuQmCC"
+    },
+    "band-lens": {
+      "id": "band-lens",
+      "type": "b",
+      "code": "B04",
+      "name": "대역 렌즈",
+      "en": "Band Lens",
+      "copy": "무기가 명중할 수 있는 고도 범위를 넓힙니다.",
+      "w": "rail",
+      "b": "band-lens",
+      "e": "prism-lance",
+      "family": "에너지",
+      "tag": "고도 조준",
+      "note": "무기가 명중할 수 있는 고도 범위를 넓힙니다.",
+      "unlock": "한 출격에서 저고도, 중고도, 고고도 적을 모두 격추하세요.",
+      "start": false,
+      "levels": [
+        {
+          "기본 명중 고도차": "±9 m",
+          "레일 명중 고도차": "±3.7 m"
+        },
+        {
+          "기본 명중 고도차": "±10 m",
+          "레일 명중 고도차": "±4.4 m"
+        },
+        {
+          "기본 명중 고도차": "±11 m",
+          "레일 명중 고도차": "±5.1 m"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABjElEQVR42u2XMUvDQBiG34QbMrh2CgT6A4Ih0NlBaKCFWnDVsX9AEH+BQpbOgmO7Cu0iKPQXCCGl4Boo1MGuDt3iIBfOSy65NLkG0W+5BL67770n9/LlNADodEcxGojXlweNdLqjuD88BwAseh5On54PqSEm9GnR85IxcNrKK1/f3QMAdLY4DTeMYJgWACgbaegAUtjf+ifYbdYwTEvJmBIAIMGuungmgUPtPJcAgFRSnaOIAGFf2OJnF1e1nvr5dCxPoExoN1vpXGkChmlhPh0XLjhcXSYiZvakML/UGRCRKEsoa3NSBHabNT6Xdmqho+PVj92zNGb2RDhH5AKS5wK2IC9ShJzPp4JEVtRlMPEi94nSBNwwAjDA43tUzX/bAdwwQuC0M0WQoh3eflSr72n56xPRxMBpA0u7emsuWENHw0GKEnhbiWwIQGjDvQXwluKLsSKoLfPm/K5PINMNY/+7D8R+qzBf1FsqE4j9lhoCMt2wjmj8DPxdAfQu8v8JCH9XU4Va+FPb9PX8C3I4USMaWCMoAAAAAElFTkSuQmCC"
+    },
+    "prism-lance": {
+      "id": "prism-lance",
+      "type": "e",
+      "code": "E04",
+      "name": "프리즘 랜스",
+      "en": "Prism Lance",
+      "copy": "저고도·중고도·고고도에 지면 근접(SKIM)까지 더해 네 높이에 관통 광선을 동시에 쏜다. 광선은 여전히 기수 정면으로 나간다.",
+      "w": "rail",
+      "b": "band-lens",
+      "e": "prism-lance",
+      "family": "에너지",
+      "tag": "전방 관통",
+      "note": "저고도·중고도·고고도에 지면 근접(SKIM)까지 더해 네 높이에 관통 광선을 동시에 쏜다. 광선은 여전히 기수 정면으로 나간다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACiklEQVR42sVXP2gTURz+7sjQYoaGBCtpqByds8TSMS7RYkEsZBFq6mDAITrE7ZJCoZgEOujSDEK6tBZcinEpVJ0ylggR53g0eIGqoYvQbOcQ3927vPfuLn/9lvfu3Xvv+37/3t2TAKC4MW8AgFpcQSl3hn6Ixp3gZa/c0YUkFTfmDTUbwf9A6fUP+MynW3XgyzIAwJ/oTJz8z+cgAEBWiyu9kX/kBDMLi45tP9zm89ar2QhkXpxmFhbR1VsAgK7eMp/p8bntMmINDbGGhrntMneeqKVDIJMHf6IDf6KD0ONr6OotVDIaKhmNK4KgdtMunEe2/i3FGEPDx7OcEAMw++mywlgg8hxNDsBsq9FDZr3MsyBdVpjNKxmNa4HIA4SUoBo95OaQLLLASYQTeO9pcsYDZhVwYpguK4yQ47ZmC1H/O9rlPHLHKuBlLYk/wWXBTpq/bvWTYcWVXFgFoizmiSA4veoJ2n+6xljuZpRrDjiJCOQt0ocveyKO2xpSwR2b9W7ngLAKnEQE8tb81Vng3ZYVmssCkAruOJIP7YGu3jKTjJCfXrGJSLzh5SQc2APJsGKLPw+BfC8Zh/IAXceilhYhIveyD/coFmHvoIpPH2sAgM3d50iGFVs46Lyg5354+8p1b3nQ7zix8MmbExt5Mqw4emdsAmiszsImZhiMJAAACj9HWz+ygFFh+xhNG2o2Al8pd4ZB/or3DqoAgK2mjvg5Oz78X7FHkBLD0hK+vz9hxu/cjQ+0n29Y991uNscSBk8Cnm2um/0Hj154njsRD3g53bwgHqrjHm5AMs7vG/jVnsptiEasoaH2e5l/MZn4texrlK0CclcbN+KhOjtmWH2Jvp5PG7mjC+kv13K8wIbe878AAAAASUVORK5CYII="
+    },
+    "flak": {
+      "id": "flak",
+      "type": "w",
+      "code": "W05",
+      "name": "대공 파열포",
+      "en": "Flak Burst",
+      "copy": "전방에 세로로 긴 파편 폭발을 일으킵니다.",
+      "w": "flak",
+      "b": "capacitor",
+      "e": "skybreaker",
+      "family": "탄도",
+      "tag": "전방 공중 폭발",
+      "note": "예상 폭발 지점에 편대가 모이면 세로로 긴 폭발에 함께 맞는다. 기체 바로 옆은 폭발 중심에서 멀다.",
+      "unlock": "5초 안에 서로 다른 고도 3곳에서 적을 격추하세요.",
+      "start": false,
+      "levels": [
+        {
+          "동시 포탄": "1발",
+          "폭발 반경": "44 m",
+          "포탄당 파편": "0발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "1발",
+          "폭발 반경": "50.6 m",
+          "포탄당 파편": "0발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "2발",
+          "폭발 반경": "50.6 m",
+          "포탄당 파편": "0발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "2발",
+          "폭발 반경": "50.6 m",
+          "포탄당 파편": "6발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "2발",
+          "폭발 반경": "57.2 m",
+          "포탄당 파편": "6발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "3발",
+          "폭발 반경": "57.2 m",
+          "포탄당 파편": "6발",
+          "세로 명중 범위": "±28 m"
+        },
+        {
+          "동시 포탄": "3발",
+          "폭발 반경": "57.2 m",
+          "포탄당 파편": "12발",
+          "세로 명중 범위": "±28 m"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABk0lEQVR42tWXIU8DQRCFv25ONQ2mvnh8g8NxuNYga5ugSTjbYEioQJNgEPwBBILi6gDFT6Ae0xBUkyLKhe10dm9vWzh4SXPJ7M28N292t7kaQDvtz6kAz6OrWtJO+/Onw8eVxdPZ8Dc0zBMt2simwNGPMp+cXQJg5MLO+QyAVrMe9MwR+r7MM5J88vZBq1kPegK8D7cASuetCGhk01JFNAdi8oy94XyKizqJzTMhRVw2+xwIzTNFNubj0Yq5xOfki9PEeg64RNgdanEXuXQgKbORbBESdtxHHuWAphyAg+3vn0BonVIOLKH/YinvLETcvwY1E+SAPVM5c61jOy73hDyShQ7ImcZAy88vO6cAueG8RScdrwAtXzap/hmtzForas16CV9xF7lW30R7LEW4RBUgWWvQkaTRAuwbznX5aO/5YGLJbVItHnqKTCx5EUJFmNBiMQjJi9qE3d4x++keANdAtzcG4PbmonQtQ8WIPoYPo/FGBPxPB2JmLTFIMu7Yrd6BvzOC/Ftt0xgkmXe9VvXn+SfqMJbWENvuKQAAAABJRU5ErkJggg=="
+    },
+    "capacitor": {
+      "id": "capacitor",
+      "type": "b",
+      "code": "B09",
+      "name": "축전기",
+      "en": "Capacitor",
+      "copy": "무기 재사용 대기 시간을 줄입니다.",
+      "w": "flak",
+      "b": "capacitor",
+      "e": "skybreaker",
+      "family": "탄도",
+      "tag": "발사 간격",
+      "note": "무기 재사용 대기 시간을 줄입니다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "무기 대기 시간": "−6%"
+        },
+        {
+          "무기 대기 시간": "−12%"
+        },
+        {
+          "무기 대기 시간": "−18%"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABeklEQVR42s2XsUvDQBTGfwmZilsXp4KziwjFVSi2UAcLjoqTXcRJiKubi+AiiOAi0v4BDgq2FMRRQRwKbUEQnBx0E9c66NXQmOQud9f4LXd53N33vS/vkZwDUCzXh2SA+9ap4xXL9eFybRWATrVC6ep6khqGnph1qpXR+DA3Y53Z3z8BwA2SC8w/PlPI5wCsjQIuELL9rTTLy/snhXzOyhgSAIxst03+pwOqmQNKcSkHZDd3+z26/V5ofVRcyQEV5UHRUXGZczzZTR83W9+LXo8Afp8FxuJTi8dSIjwZBwC4ayj3urEaSAuZ86QdOJs+B6Ddug0RNf02awdLADwNBj/Ry8k40PTbWg64qu/sX9WAyF7Yr10Dwb4eH+OsD84XNgtK57kmP7FRTsQhlYC4wlOFp5tpUh1YccAUuZEa0CHXEmCqDtwss9cSYIJcqQu2N2pWfs8TBays72gRXDQO7XZBWux5u3IOJGWQaRcYrQFxV7NldRScrK/nX7sJoFtzzjm/AAAAAElFTkSuQmCC"
+    },
+    "skybreaker": {
+      "id": "skybreaker",
+      "type": "e",
+      "code": "E05",
+      "name": "스카이브레이커",
+      "en": "Skybreaker",
+      "copy": "기본 포탄 여러 발 대신 주포탄 하나가 폭발한 뒤 세 방향으로 후속탄을 보낸다. 폭발은 지면 근접을 포함한 모든 밴드에 닿는다.",
+      "w": "flak",
+      "b": "capacitor",
+      "e": "skybreaker",
+      "family": "탄도",
+      "tag": "전방 공중 폭발",
+      "note": "기본 포탄 여러 발 대신 주포탄 하나가 폭발한 뒤 세 방향으로 후속탄을 보낸다. 폭발은 지면 근접을 포함한 모든 밴드에 닿는다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB7klEQVR42sVXTUrDQBT+EuKmhIB00U2p9ACiVOkJCl3ZC3TtAbopJAdIIZueohdwJ3gCUbF4AGkpQpFuSnDjIi6SiZPJ/JqmPhjCTGbm+977Zl5eLAAIx60EAPywj1nwCNZE4zLT2StYbC0rHLcSf9LGf9hsvoGT966egOdrAIA72NUOHj80AQC2H/bTkQycWKfZqPUJAP6kDZunU6fZwHr3VduTKwEJ+yE2NyFhH9JzAIgjT0mCtgKBquHVdUZIwBQ0jjyhZ7rzrGR1k+DzQ/sMsGTjyIM73f9eL0G/RD67hnkicgc7bY0JAE1CZDxwkgdm843ZGeDJVbDbJTA8S5tkX+0zoNK4BA4Anbv0ySHBW+fImLrTfUlT+qoVEUYp+Hokncvu5ahuASEh0zh/z4CTSLgXb8L1yjOgozEA4H5V7lPzeN+CEgGZViqNc1DSsvfEe60zcAiNc1mG/LzAmiPSlQvC0Zg3N16eF7yXkbC1KwhW40wGAkaPqUgqI6BFggIqkaC8V5kyAiR8pBGPdAGUBPKSTAJuarrkhCWZjnYmQLKq2K4cQ5IXMkKmpBzj8DJRcU+7lfgrCfRe3ysH6eWy+3cCssXVWH3zS7JjWRx5QO9EfgtqA88SV+HHhBSJdYValFEt+vf82BYsttYP6yDzCP0oWGsAAAAASUVORK5CYII="
+    },
+    "ion": {
+      "id": "ion",
+      "type": "w",
+      "code": "W06",
+      "name": "이온 항적",
+      "en": "Ion Wake",
+      "copy": "상승과 하강 경로에 적을 해치는 항적을 남깁니다.",
+      "w": "ion",
+      "b": "vector-thrusters",
+      "e": "plasma-ribbon",
+      "family": "에너지",
+      "tag": "지나온 경로",
+      "note": "뒤쫓는 적이 항적을 가로지를 때 피해를 준다. 고도를 바꾸면 항적도 위아래로 이어지지만, 아직 지나지 않은 길은 비어 있다.",
+      "unlock": "기동을 총 30번 하세요.",
+      "start": false,
+      "levels": [
+        {
+          "항적 수": "1줄",
+          "항적 수명": "4 초",
+          "폭 배율": "×1",
+          "항적 위 구슬": "흡인 없음"
+        },
+        {
+          "항적 수": "1줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1",
+          "항적 위 구슬": "흡인 없음"
+        },
+        {
+          "항적 수": "1줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1.3",
+          "항적 위 구슬": "흡인 없음"
+        },
+        {
+          "항적 수": "2줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1.3",
+          "항적 위 구슬": "흡인 없음"
+        },
+        {
+          "항적 수": "2줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1.3",
+          "항적 위 구슬": "흡인"
+        },
+        {
+          "항적 수": "2줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1.6",
+          "항적 위 구슬": "흡인"
+        },
+        {
+          "항적 수": "3줄",
+          "항적 수명": "5 초",
+          "폭 배율": "×1.6",
+          "항적 위 구슬": "흡인"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAByklEQVR42sVXMUvDQBh9DRk6OHQQoRQq8QfYEOjqVCp0asG5W0FIV10UJIMObkIFQXDoH7CTg+jipkKIP8AGhSI4BScHoU4Xz8udvS8m7VuO5PLd++6977sjBQCoN3tTLACP1+cFs97sTR+27hOT3tfxPHKYmrK3S7sfALZzZd45OgMAGOLE8kkJAFCsVLVGBt3vxThTJP+cvKJYqWqNg+Eoju1329pxPAxedgq5DLrxiQRYwVHI+d3zz6kVSLODcqOGcqOWqAWyApRg0XtRhdwV0EFuCsi8l6kwKwllG1IVeLt5Uiaiuw65BvrdNvrdtpJY5zzIRIH95wkiz8VgOMLFeg2+bZFbOZGATlDp4BQAEHlurAgAOEEI37by6wIZuVjVThDCCUJSF5iyFhJHRszIZd/5tgUnCH+poVpPqYAMMvK/sLdCu5aNvO57pkamCfBqZAUz690evs/ZApXUrAgzV4DZsNZpxe/uVoGNFzq5lgKyyufJgR9y37ZI5NoWRJ4bJyKSA8D48opMnMqCyHOBThiTitbonBP/KkJ2wvm2JSVL06YGlVxmDZ+MbhK3rU2aBbM8TiN/rkcxuQjZv1rWYFKrUFj07/k3cd/1+guHZ9gAAAAASUVORK5CYII="
+    },
+    "vector-thrusters": {
+      "id": "vector-thrusters",
+      "type": "b",
+      "code": "B05",
+      "name": "벡터 스러스터",
+      "en": "Vector Thrusters",
+      "copy": "선회와 상승·하강이 빨라지고 부스트가 더 빨리 회복됩니다.",
+      "w": "ion",
+      "b": "vector-thrusters",
+      "e": "plasma-ribbon",
+      "family": "에너지",
+      "tag": "비행 제어",
+      "note": "선회와 상승·하강이 빨라지고 부스트가 더 빨리 회복됩니다.",
+      "unlock": "부스트를 총 60초 쓰세요.",
+      "start": false,
+      "levels": [
+        {
+          "선회·승강 계수": "+8%",
+          "부스트 회복률": "+8%"
+        },
+        {
+          "선회·승강 계수": "+16%",
+          "부스트 회복률": "+16%"
+        },
+        {
+          "선회·승강 계수": "+25%",
+          "부스트 회복률": "+25%"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABkklEQVR42u2Xv0vDQBzFPy0dOoj/QKHS/6AEOjsIDbSDBVdx6+Yk6OJaHRycha6uHVyECgVnhZJB/DGFFtrBURy61aFcvSaX9u6aNA6+5UJyuffufd834TIAlWpzSgp4fmhncpVqc1pvHADQq7ns3Xc3qWGaE1e9mjsf++VS4synlzcAZGVyAcfzyReKAImNAlkgZPtrfZfJaEi+UExkDAkA5rabknfGvrEIpQATcoDJaIjj+Vx8zkq2tgNiUZ2XHc/H8fxQbmRxVg7oksuQO0YWFrsDy8iDbbtKhLEDy8g7Y99YhIycrgOqj5Mcwn65pJyzqgzaGZA/IlEhlNfRIbfqAp0QJtYFJiGMvQuiyMWOTEREhlCIUI1Rf0h5R6o5UetFCliFl/c3AB6fPpTPj48aRutlSRmpC9Auwf7hCQDnrbbWvLvb6/8SxFsCYen31fbvTXcHuoOFeVtnX8k6sEDQHcxEWJJbl0BFZEO+VgbmhIESbDSEQoTN7sVZZO0usLX+77WhOKvFjeCxL4hM2sfzH65V1gGy2Um+AAAAAElFTkSuQmCC"
+    },
+    "plasma-ribbon": {
+      "id": "plasma-ribbon",
+      "type": "e",
+      "code": "E06",
+      "name": "플라즈마 리본",
+      "en": "Plasma Ribbon",
+      "copy": "세 줄 항적 대신 더 넓은 한 줄의 플라즈마 벽을 남긴다. 벽은 8초 동안 남아 통과하는 적에게 피해를 준다.",
+      "w": "ion",
+      "b": "vector-thrusters",
+      "e": "plasma-ribbon",
+      "family": "에너지",
+      "tag": "지나온 경로",
+      "note": "세 줄 항적 대신 더 넓은 한 줄의 플라즈마 벽을 남긴다. 벽은 8초 동안 남아 통과하는 적에게 피해를 준다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACQElEQVR42sWXP2sUQRjGf3ukCHhFDg8iJgTuA6TRkDLVNQpWNkIKC5PGqwJp7q4IgndpBKsLiNfmKwQEK0s5IX6CRTGBaI5YBGK3Fue792Z2ZnZ2vejTzP6ZmeeZ533fmd0IoL+5mAC0++vsdz5iwvXch5C5OodnUdTfXEzaO8v8D+y//sZcend/BJ/WAKg2xzdOfvn+NgCVdn998uQPuWB+aSWoLdpfj2vvLFOxxWl+aYVfJ19zW4CFvQFAUH89TkJQkZtqc0y1Oab+9FbwZIKFvQHDVpxOHjoOUDlQYOXSyuoBal0YEgOwNWgEOQBMHShro+DZmyNq3cn1sBV7HXEKKBN7jcd3G9S6ZISYIjSi5MujhB+naekVsV3j54tWSiohuehN328NGtfmT8tQV4FvxT5yPV6ILnrw5KW9uuwbkSMHXHabq5f+4oANtjB4c6AouYl3V34HcqsgDya5Xr2ZA3r+4H0gL+Fs5FIBvgR0CvDVeSi5jdgV3owAEeGKvZBLP5/lmlzP63WgCFyWm8R5qBTpLK6Ylpcl9wrQdrtWronLkBd2QKP3PSuqDOby6txVis/fwsH2pLUlrctBE5nDKC/+AK/OH6bXB9tTQQC79aOgcMphlH4VF/kQtVmu3RCIGJeAzGEUCkk4LcQkv+ZUK3Ymael9wCy7vESU96aQvxKQ50pIKGYmwLUFu7b1jfqIB9wJr4JZ495xzIfzNfuPyY3/ln1ezX6SSV3OGhv1UfZZojYi/Xv+r9E5PIt+AzEO4xg3F64lAAAAAElFTkSuQmCC"
+    },
+    "drones": {
+      "id": "drones",
+      "type": "w",
+      "code": "W07",
+      "name": "궤도 드론",
+      "en": "Orbit Drones",
+      "copy": "기체를 도는 드론이 가까운 적탄을 막고 적을 공격합니다.",
+      "w": "drones",
+      "b": "magnet-core",
+      "e": "collector-swarm",
+      "family": "에너지",
+      "tag": "기체 둘레",
+      "note": "드론에 가까이 붙는 적과 탄을 막는다. 궤도 밖의 표적에는 접촉 피해가 닿지 않는다.",
+      "unlock": "회수 구슬을 총 100개 모으세요.",
+      "start": false,
+      "levels": [
+        {
+          "드론 수": "2기",
+          "바깥 궤도 반경": "36 m",
+          "궤도": "단일",
+          "원거리 사격": "없음"
+        },
+        {
+          "드론 수": "3기",
+          "바깥 궤도 반경": "36 m",
+          "궤도": "단일",
+          "원거리 사격": "없음"
+        },
+        {
+          "드론 수": "3기",
+          "바깥 궤도 반경": "45 m",
+          "궤도": "단일",
+          "원거리 사격": "없음"
+        },
+        {
+          "드론 수": "4기",
+          "바깥 궤도 반경": "45 m",
+          "궤도": "단일",
+          "원거리 사격": "없음"
+        },
+        {
+          "드론 수": "4기",
+          "바깥 궤도 반경": "45 m",
+          "궤도": "단일",
+          "원거리 사격": "가능"
+        },
+        {
+          "드론 수": "5기",
+          "바깥 궤도 반경": "45 m",
+          "궤도": "단일",
+          "원거리 사격": "가능"
+        },
+        {
+          "드론 수": "6기",
+          "바깥 궤도 반경": "45 m",
+          "궤도": "이중 · 반대 회전",
+          "원거리 사격": "가능"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB6klEQVR42mNkYGBgMHVL/c8wAOD0rtmMLKZuqf9PhZzEkGz800UPN/xnwSbKU/aJgYEhg6Y2l7bNYGBgYGBgQpcQmSjAwMDAwMAhLUdTGgaY0C3/8fQRA4e0HE1prA7gKftEF8uxhgAswdHDcpwhwMDAQLRmZFqgfipWcXQaVwig5AJiLBeon4qRotHFjkQ6YajR0dDEGgIsxIYAskUfGrNxZi+B+qkMB07dxCqHLRqYiAkBmMEfGrMZPjRm481a9nfvwtkJL+LgbP+YIpRoIToNIFtOKJrQwQKJRRhieMsBQnFOTCrfuKQPa/BvXNJHXhqAxTmu3OAfUwS3FCafExeAkiZw6SeYC/AlIFicPi7JZfBH8iWx+olKA7gcBwNLJ+fCHYFPHT5xJmxZBbmQwSbuH1PE8Lgkl8HuIULf45JcBv+YIoxCCBYN2MSxOgAZ4MrvG5f0Mcj2TEYRk+2ZjDMB4is3mCip02GOQHcMKYCFXI0w3/ojsanugCs3rkMYkddRynRsDsFVLFPkAFxlOikAX/zjTQOwfI6rTCcEkItvitMAtjKdULATYzleB2xc0sfg6maHIX5QWZlg3BJrOcEQQC7TKQ1qmpQDpPqWJg4gF+z1ch9YBwx4CGAkQlhfjVZBjQswDnT3HABqttHVos6aDwAAAABJRU5ErkJggg=="
+    },
+    "magnet-core": {
+      "id": "magnet-core",
+      "type": "b",
+      "code": "B03",
+      "name": "자석 코어",
+      "en": "Magnet Core",
+      "copy": "더 먼 거리와 더 큰 고도 차이에서 회수품을 끌어옵니다.",
+      "w": "drones",
+      "b": "magnet-core",
+      "e": "collector-swarm",
+      "family": "에너지",
+      "tag": "회수 범위",
+      "note": "더 먼 거리와 더 큰 고도 차이에서 회수품을 끌어옵니다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "수평 흡인 반경": "+20%",
+          "회수 허용 고도차": "±10 m"
+        },
+        {
+          "수평 흡인 반경": "+40%",
+          "회수 허용 고도차": "±12 m"
+        },
+        {
+          "수평 흡인 반경": "+60%",
+          "회수 허용 고도차": "±14 m"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABiUlEQVR42u2XMUvDQBiGn4YMHfoLUih100EoQhFucRBaaJeCg5Mu0s3VpT+gv0GQTk5uToJCxSmDghQEwcki2F+Qwa2drjTJ5XKXNsbBd/lySb7vfe/7Xg6uBNBs9ecUgJeHq5LbbPXn3d4RAONOm8O7+9/UMHfl07jTXsbXxlbuzBfDSwCcVXKJvckn5WoNILco4QCxtr93D/j5/qJcreUSYwKAZdttyQFrEUoBNuSSFCAQIrS27YC7ujBJDoSAYSNUJBiEDVbxfWMRIQFG5ACDidbhgRBaEYkjMCI3RCCEvQc2RZ4mwqoDWcl1IhJNqFMaRcX3lWRJyNQBHbnqhFOJUm3O2AM6pM3WtAOu7qeR53EznYYSjut1rWGBWM7I8zibzZQiHJVSk9lHT0QZdWNQ1XcoGP8CChfg6j7uP47jL7d3Uova5GkFPD1/ZNqVTd7aI+i9nRTrgdvd6/w8cH7ay1TUJs/Jq7WmtZx1W2siVFVL3kUK98DfOYjkXW3TiF77oigVfT1fABkrgA9ZwnBbAAAAAElFTkSuQmCC"
+    },
+    "collector-swarm": {
+      "id": "collector-swarm",
+      "type": "e",
+      "code": "E07",
+      "name": "수확 군집",
+      "en": "Collector Swarm",
+      "copy": "Lv7의 이중 궤도 드론 6기를 유지한다. 드론이 근처 회수 구슬을 직접 끌어와 수집하며 사격도 계속한다.",
+      "w": "drones",
+      "b": "magnet-core",
+      "e": "collector-swarm",
+      "family": "에너지",
+      "tag": "기체 둘레",
+      "note": "Lv7의 이중 궤도 드론 6기를 유지한다. 드론이 근처 회수 구슬을 직접 끌어와 수집하며 사격도 계속한다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACVElEQVR42sWXv08bMRzFP5dmyMBGJSoRRbC1UvmhFDF2Ym17OySqOrPAECkZGBgSiaEs/QOqADvdQUIdEY1ySqW2U1KUVkXAxpAFXYfWx53PPvuShr7lcna+fs/va/t7dgDqq1M+QLW+TKN2igxdexJsxqodXDhOfXXKr27k+R9o7PbJBm/PzuDTEgATK9djJ785mgQgU60v/2n5Sy6Qmy6M9QlQ3ciTUeUpN11g8OPc+AQizzRxsRQI220H+fz1S0z408dPUovIDjvzk9NvytymIQfIDBP8am0ziHn9qxz8Fu2mcbQCbMhndhYiA7x/1Iy8i35rB4JdYBEkBv+w/1Zpv2g3iQjvguAgmli5NpL3Kl7EKYBiu0trcTbWrvp/uP/maJLGbt+8BpIG06UPoFfxtE5YrwE556r+woOtRBKVCOtdINCreEpyt1NiP7+N2ykp44VrSc4ZHVCJC5Ov9beC96SZjuSAvMBkcgFZRNIaUQqQz/Zw/k3kKhHhdSDXDq2AMMI5FDic29OSi36bcawEyCi2uxTbXSUJwPntNsV2N9V3QVbXEal2L6E8yAUHjpipsPtu5nuBUIBmbhDEi2ppLUCudm+AlsJut1OKOdJanOVd85ATCweUKTBVO1PO08RHipEKcrVLi6R47SeZrtp588excixjZmcBb/44sVqqv4olrJddLYFJRK/isY472i6wPRvClXIYZBgRo5D/EwHD4vnDMwAc//sLn8uf93Ibkk/Vj1dL6l0w9muZNxffBeKuNi6rI23+3W8nfD2/b9QOLpzfGZIR4sSgr2cAAAAASUVORK5CYII="
+    },
+    "phoenix": {
+      "id": "phoenix",
+      "type": "w",
+      "code": "W08",
+      "name": "피닉스 플레어",
+      "en": "Phoenix Flares",
+      "copy": "기체 뒤쪽과 아래로 불타는 플레어를 떨어뜨립니다.",
+      "w": "phoenix",
+      "b": "flare-bay",
+      "e": "phoenix-rising",
+      "family": "병기",
+      "tag": "후방 낙하",
+      "note": "꼬리에 붙은 적에게 자동 플레어를 남긴다. 수동 플레어와는 별도로 작동하며 정면을 향해 발사하지 않는다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "자동 투하": "1발",
+          "플레어 수명": "2 초",
+          "연소 확산 반경": "확산 없음"
+        },
+        {
+          "자동 투하": "1발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "확산 없음"
+        },
+        {
+          "자동 투하": "2발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "확산 없음"
+        },
+        {
+          "자동 투하": "2발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "26 m"
+        },
+        {
+          "자동 투하": "3발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "26 m"
+        },
+        {
+          "자동 투하": "3발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "39 m"
+        },
+        {
+          "자동 투하": "4발",
+          "플레어 수명": "3 초",
+          "연소 확산 반경": "39 m"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABpElEQVR42tVXsU7DMBB9ibIl5QMygJQdOnVnKhsTEh+AKiEmFrpWCImhUyeEhLp0Y0VlgIkVmFB3JBj6ASVsoDCAi+ucnXOCifoWq7n67r3nO0fxAKDV7mSoAY+3F17Qaneyh537XPD4o/8fHLKAehp1ZwD2nVY+Oj0HAPhqYOPkEwCQNEKnq4CvFn9+e0fSCJ2uJIGoOyuVbBjH1vtyBETDlVViS0J7BLZJhnGM3cPUer+WAFWEk0SQ4ZJgOQAA6d2BNqmsXnaBI4LlAABEm2ckCR3UXgCA9GnduN/YAxQJ6uxVF+TiUXNCimP1gEyCukR0LqioPAVykpz6rTXShaQRImpOqk0B1XgcFN0L7CkobDyhXnKB6yhJQG0gtfFUmymIuHwvpP2VBVFGAvN3w0/3aqGq1rjw+3qn4XPPVKt+9arQBRN81AwWgb3pFABwOYhYScX/xL7ld4B04eble33dXvhto766A4KEWF06oO0FqbitegAIbBnPkw9ic9wVAbWQmHXbwpUJlFUs0BuPcI1wicbQFQL1W+2v0RuPjHGv7s/zLyoTylvlfenFAAAAAElFTkSuQmCC"
+    },
+    "flare-bay": {
+      "id": "flare-bay",
+      "type": "b",
+      "code": "B06",
+      "name": "플레어 베이",
+      "en": "Flare Bay",
+      "copy": "플레어 보유량과 연소 시간을 늘리고 재장전을 단축합니다.",
+      "w": "phoenix",
+      "b": "flare-bay",
+      "e": "phoenix-rising",
+      "family": "병기",
+      "tag": "플레어 보급",
+      "note": "플레어 보유량과 연소 시간을 늘리고 재장전을 단축합니다.",
+      "unlock": "후방 플레어로 추격기를 총 20기 격추하세요.",
+      "start": false,
+      "levels": [
+        {
+          "수동 보유 한도": "+1회",
+          "재장전 시간": "−15%",
+          "연소 지속": "+0.3 초"
+        },
+        {
+          "수동 보유 한도": "+2회",
+          "재장전 시간": "−25%",
+          "연소 지속": "+0.6 초"
+        },
+        {
+          "수동 보유 한도": "+3회",
+          "재장전 시간": "−35%",
+          "연소 지속": "+0.9 초"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABpElEQVR42s1XPUvDQBh+ErI16V8Qi9DFQYQuASehgTq04Nji1iHgJNjVzaGDi4UIXST4AxRUqNA1S0Gk6FAoiv9AmjjXodyZtE1yl88+EN679z7e5557L8cJAFCptufIAaOXviBVqu35UeMYADCsaTh8HmTJYS6R0rCmUfu6t5165PPLGwCA6A5OsP/2hZJSAIDULIEIYEX2n4NdfNq/KCmFVOwKAQBUdt7gjqpyk1hLIGpwANwkfAlEmsSwucf7EuAJ7qjqf3DDpmpkokAQMlHAs3rXVrDmQmwFZMsCdGXxEegKZMviVkCKogAlAcDRVVrO9BTQlTTeucnHzoF1K0n8P0DqQXYZQf2ZcsA9qGfeM91qtwB6Zni/05PGWvKS3wDjuo+dcjmRq3c6mfi2SWGDH+6uaNnpFiF3Zp72MF+9dRY4v8i6CqdbBLStheX0BUFiDg4Ag29vncHXHCO+AssSy50Zsy8MzFtAJnNPyuqLtQXuJGqOgXrL287qi0Qg6PgkBRE5w1eBj9FTJgRyU+Di0dyMLdicHCBvtbSk9oOQ9/P8DwlKEaDmV+WAAAAAAElFTkSuQmCC"
+    },
+    "phoenix-rising": {
+      "id": "phoenix-rising",
+      "type": "e",
+      "code": "E08",
+      "name": "불사조 비상",
+      "en": "Phoenix Rising",
+      "copy": "여러 개의 낙하 플레어 대신 불사조 한 기가 날아간다. 가까운 표적을 향해 방향과 고도를 바꾸며 연소를 남긴다.",
+      "w": "phoenix",
+      "b": "flare-bay",
+      "e": "phoenix-rising",
+      "family": "병기",
+      "tag": "후방 낙하",
+      "note": "여러 개의 낙하 플레어 대신 불사조 한 기가 날아간다. 가까운 표적을 향해 방향과 고도를 바꾸며 연소를 남긴다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACEklEQVR42sVXvU/CQBx9bdhoB+NAQogmLCwSBg1DZxPjoGFndHJkMYGBwQFG/QccGdiMG4lzB6MDgcWFBENIiGERmHGwV+56v+sXBd9S2lzfe78veqcBQKuaWQNAvVVGu/EGL1TP/RCGq9GZaVqrmlnXazn8B9oPE6Tcu9N34OMMAGCcz3cuvnw9BADo9Vb574kjzpA30zu9AkC9loNO1SlvpjFarHZ2JUvA0h6VbNkvwigNYpvQt4ncrWe/GHo9/55kYLRYYWlZwmI/smW/CO/7vustSyq3TnaoZbmLVaQujl4EM2SZOD7JgDsFPCpDwbGq9hQocZ5T+FPyTkHeTMOw7UATytl2eoEvJ8/lcnNTIPUAAOD5RDLB94YqeqmEleEmcodTKB81BWQ5PNkIElelPNQUSLg4lrJhlAa0+q0pirN3fYIkM2DY9qYMvTFpQglevDd2Hxu2TfaQTs2xBMJEFHEWDMWv+9aIZSGKCa94lB7g4R0ZMit+91wQfly6n4bQC94sMHxdq6MPEA80ENpETPFQBpQmAkoSRjy0ASUhE/WK3/2E3prRHyOVCYK4ezmPLa7ckgWZYCLdR0O4RhEnP0ZRjQiZcExERWwDT9lsIttzPUnxOKZScQzcTKfbh94sAAcTaOvx1Rrf072chqR9w/1n9ClIRNzZUQkHE3ZWSxzNArFx2fzU+OP5vtHozLRfgCinnLgIwHwAAAAASUVORK5CYII="
+    },
+    "bomb-bay": {
+      "id": "bomb-bay",
+      "type": "w",
+      "code": "W09",
+      "name": "폭탄창",
+      "en": "Bomb Bay",
+      "copy": "아래쪽 적에게 폭탄을 자동으로 떨어뜨립니다.",
+      "w": "bomb-bay",
+      "b": "ordnance-rack",
+      "e": "carpet-annihilator",
+      "family": "병기",
+      "tag": "하방 폭격",
+      "note": "적 위를 통과하면서 자동으로 폭격한다. 수동 폭탄의 재고는 쓰지 않으며 기체보다 높은 적은 노릴 수 없다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "연속 투하": "1발",
+          "폭발 반경": "68 m",
+          "지상 화염": "없음"
+        },
+        {
+          "연속 투하": "1발",
+          "폭발 반경": "78.2 m",
+          "지상 화염": "없음"
+        },
+        {
+          "연속 투하": "2발",
+          "폭발 반경": "78.2 m",
+          "지상 화염": "없음"
+        },
+        {
+          "연속 투하": "2발",
+          "폭발 반경": "88.4 m",
+          "지상 화염": "없음"
+        },
+        {
+          "연속 투하": "3발",
+          "폭발 반경": "88.4 m",
+          "지상 화염": "없음"
+        },
+        {
+          "연속 투하": "3발",
+          "폭발 반경": "88.4 m",
+          "지상 화염": "1.5 초"
+        },
+        {
+          "연속 투하": "4발",
+          "폭발 반경": "88.4 m",
+          "지상 화염": "1.5 초"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABmElEQVR42mNkYGBgMHVL/c8wAOD0rtmMLKZuqf9PhZzEkGz800UPN/xnwSbKU/aJgYEhg6Y2l7bNYGBgYGBgQpfQa/7LwMDAwKDEy01TGgaY0C2/9/krgxIvN01prA7gKftElOYvVlY4DcUnj0xjOACW4Ih1OcwSmKUwsS9WVnA1JIcAIU3oLke2ENliGCApBIjRBKN5jh3DcAhKDjp2jLw0QEwIoGvGBUhOA6SEADKIVrJgMP8tSFLwo3uChdQQ8I8pYohG0qOirg7n37l5k+SQJCkE/GOK8Aa9iro6g7apN21yASHLSXEEyWkAG2itScXrEHyOIDkEsIEDp24yuLrZEQwRkkIAuWRDpokNfuRowGceXgdgA7DUjQx27zrEsHvXIbzqYdGADxDlgKunt5JV5xOjj4lhgAHRDsAWDZSoI9kBV09vJWg4sjyx0cZCSZyqqKtjdRQpaYaJkoRFqeUkhwA2S7508UFb0TROhDiBuzx9cgFOsPPhADuATFC/ZRF1HEBJ/A+KkpAFva9Gq6DGBRgHunsOAD65v0qbEB/GAAAAAElFTkSuQmCC"
+    },
+    "ordnance-rack": {
+      "id": "ordnance-rack",
+      "type": "b",
+      "code": "B07",
+      "name": "폭장 랙",
+      "en": "Ordnance Rack",
+      "copy": "폭탄 보유량과 폭발 반경을 늘리고 재장전을 단축합니다.",
+      "w": "bomb-bay",
+      "b": "ordnance-rack",
+      "e": "carpet-annihilator",
+      "family": "병기",
+      "tag": "폭탄 보급",
+      "note": "폭탄 보유량과 폭발 반경을 늘리고 재장전을 단축합니다.",
+      "unlock": "수동 폭탄을 총 10번 투하하세요.",
+      "start": false,
+      "levels": [
+        {
+          "수동 보유 한도": "+1발",
+          "재장전 시간": "−15%",
+          "폭탄 폭발 반경": "+10%"
+        },
+        {
+          "수동 보유 한도": "+2발",
+          "재장전 시간": "−25%",
+          "폭탄 폭발 반경": "+20%"
+        },
+        {
+          "수동 보유 한도": "+3발",
+          "재장전 시간": "−35%",
+          "폭탄 폭발 반경": "+30%"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB10lEQVR42tVXMUvDQBh9LdnaCv4CMRSi2EGEYgnoIrbQDgqOdXDp5iTo6ubQwbkgOoj9AYIKbSmUDqG0IA6KFqTqPxCtk0MdyoXL5S65YM7iW+7L3ct373t3+SARAEhnSyNMAL36SURLZ0ujwuYWAKCZz2HtpvaXGkYaiZr5nD3eLs4q33n/qAIAiNKbEyzdvUBPxABA2UgQBeCy/X0lhcHnF/RETMnoEgDAtl315lwHRJUDCHXkOaDRDzTp/ukx1EuXmpvninAIoBdb3X7oNz+QAzuVMop6RpisOujY63Qs4u4KjkHzUlgddBC3LEeyoWna8eXF8TgwTV+uyIEozwE2CUnEJmThx/X9CuhPxa+auGXZyWS4gRxgSSLwKvK7gNIO0CjqGSx/T0vdahHXtxPySEU9g9ezUwBA0jDs5MR+WqwXV9oBunMRtLp9rGdXHXML6YKr03lxeZ1RKIBgY3uPO580jF9xWQgFPPfHnbBRb6NRb7vmSWVBudICHnrXnsrp9SBcFprXi6SCpGHYcRhcKQdo5WxCXkVBuNIO0AmG5SnEDz5C40o54EBuBiq48gJqb1DBlRegCNICZM80KHdiDhxenf+zI1AFjf1XU2W1CJFJ/57/AMPXiIDo41j5AAAAAElFTkSuQmCC"
+    },
+    "carpet-annihilator": {
+      "id": "carpet-annihilator",
+      "type": "e",
+      "code": "E09",
+      "name": "융단 소탕",
+      "en": "Carpet Annihilator",
+      "copy": "폭탄 5발을 비행 방향을 따라 일렬로 배치해 한 줄을 폭격한다.",
+      "w": "bomb-bay",
+      "b": "ordnance-rack",
+      "e": "carpet-annihilator",
+      "family": "병기",
+      "tag": "하방 폭격",
+      "note": "폭탄 5발을 비행 방향을 따라 일렬로 배치해 한 줄을 폭격한다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACVklEQVR42sVXPUvkQBh+EtbKKIiFzYIQBAux8lyXFFaeFsfhD4igreVaCNnC4oosXHE2toqC+QFXbOFHIRZhdbWw2CIgi4IIIiKcueqKvWJ3YjJ5Z3b8iD7NJJn3eb9nMqMBgGsPtQDAcQuolE/BQ/RdBhVdZe9O01x7qOWU8vgMVNZvkIveJs6A8y8AAGPmIXPj4eEgAEB33EL7S8c4g9nXm+kIAE4pD52qk9nXi+bT38xGsgQs7Vkb553QZZEDeNeRNw4g1oSc8PzCCrylnXdpOHt7Eb93f5FO5FLdaVkwfD8i8vCaNdhmkTQkm+N1RyWIVgEnSCn3mrWu0VIyXrNG6nRKeUQbEWtCXtDwffKbKEJVbng4iMr6TbIJKeUiBdS6VnGIl9epzUe6g3WUxhsqtCwyxRT4VaCLJq+2NmGbRUz9GyCdCC0rMs5DxuWDzFH7gOH72DgN8HV2GgAwFQQAgEa9mjAoKo+IS+0DZAbmF1YSQiOjo8prXsZlZRNmgOGy4zX/Pjb5DcBje48wi7gMApz0PCpzG/WqPAMMjXo1IsYVNupV2GYRV1ubUXSs1iz9Mi4FXZZOPhqGo1iNGdrZ6c7lkRNNMI/Dn/0wVv+Q9Y3XmYo2zhVB7+ri3HAqqoP9YxzsHwt6hOa+3oG96651FM7HuMISOG4BuL9VXmYsWj7trwH5M1JBKtUK2aEOpclT8QvwkiZ7ew8oNujnOKDQZNk68Bastf8RWuv6ewv3tx9yG0qdK34E9MUkc+MX4+mLCburZZXqBJafH7X49fyjUfbutP8HQq5IdJ1HLQAAAABJRU5ErkJggg=="
+    },
+    "arc": {
+      "id": "arc",
+      "type": "w",
+      "code": "W10",
+      "name": "아크 번개",
+      "en": "Arc Lightning",
+      "copy": "가까운 적과 이웃 밴드의 적에게 번개가 이어집니다.",
+      "w": "arc",
+      "b": "salvage-beacon",
+      "e": "storm-crown",
+      "family": "에너지",
+      "tag": "근거리 연쇄",
+      "note": "같은 고도의 첫 표적을 맞힌 뒤 근처 적을 타고 이웃 고도로 건너간다. 간격이 벌어지면 사슬이 끊긴다.",
+      "unlock": "ACE WIPE ×6을 달성하세요.",
+      "start": false,
+      "levels": [
+        {
+          "줄기당 추가 점프": "2회",
+          "동시 줄기": "1줄",
+          "연쇄 끝 폭발": "없음",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "3회",
+          "동시 줄기": "1줄",
+          "연쇄 끝 폭발": "없음",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "4회",
+          "동시 줄기": "1줄",
+          "연쇄 끝 폭발": "없음",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "4회",
+          "동시 줄기": "1줄",
+          "연쇄 끝 폭발": "32 m",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "5회",
+          "동시 줄기": "1줄",
+          "연쇄 끝 폭발": "32 m",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "5회",
+          "동시 줄기": "2줄",
+          "연쇄 끝 폭발": "32 m",
+          "이웃 고도 점프 피해": "60%"
+        },
+        {
+          "줄기당 추가 점프": "7회",
+          "동시 줄기": "2줄",
+          "연쇄 끝 폭발": "32 m",
+          "이웃 고도 점프 피해": "60%"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB3UlEQVR42sVXPUoDQRT+dtkiRQoLqwQCOUBIWMgVIlhsE68Q8ALaW2hhZyd4hjSWgo2dCiEhBxgImMJGCCkshNjkbWbe/Ow4uzGvGXZn5n0/780kGwFAfzDa4ADx/vQQJf3BaPN29qpNXv3c/geHTWJ6W79cATjfK/LFzT0AIOYTx3dHAIBas7XXkSLm4N8fC9SaraARgDK61lEkqu2rYPD1rKOWsTv3IhHLDVcVOIWPA0oJQm0HALQeFfWufVYCfPF4KQrB17OOAu4jxsuB8VIAgJVEDs6PcHeuiDGR8XJg2GgDAK4/4U5C6heZlocE8P3ePTBstDHptZFOBdKp0BuPWS/XXgbnJLx7gBZPejsirq6X7wHZPXLTeQ/4nAIiAWTGxtOJZag35kZx3g7wTS9RpsteZEY3eEOWckBRyNXLz1syNnBOIrHVkI9WxQ5wn3yx78+nq/FcZSiKxHehrCon9SW81o2XIj8JPOLQPxSKIwbrASCdCu0uCHZATkpHjIPv5pDfH8MCBwoJ0GZKPultE806mvJ8joUNvJCAbJ+cRLbfVPO/hLMHCNSloGwUNqELvKz6oFNA9lcBHnwMqwIPIlAV+PPpSbmL6GAOVB0J/1arOshqW0SH/jz/BUqc1IB1t0GuAAAAAElFTkSuQmCC"
+    },
+    "salvage-beacon": {
+      "id": "salvage-beacon",
+      "type": "b",
+      "code": "B10",
+      "name": "인양 비콘",
+      "en": "Salvage Beacon",
+      "copy": "경험치와 크레딧을 더 얻고 좋은 보상이 나올 확률을 높입니다.",
+      "w": "arc",
+      "b": "salvage-beacon",
+      "e": "storm-crown",
+      "family": "에너지",
+      "tag": "경험치 · 보상",
+      "note": "경험치와 크레딧을 더 얻고 좋은 보상이 나올 확률을 높입니다.",
+      "unlock": "첫 출격부터 카드 후보",
+      "start": true,
+      "levels": [
+        {
+          "구슬 경험치": "+10%",
+          "구슬 크레딧": "+10%",
+          "과충전 카드 확률": "+4%p",
+          "보급 상자": "다중 보상 확률 증가"
+        },
+        {
+          "구슬 경험치": "+20%",
+          "구슬 크레딧": "+20%",
+          "과충전 카드 확률": "+8%p",
+          "보급 상자": "다중 보상 확률 증가"
+        },
+        {
+          "구슬 경험치": "+30%",
+          "구슬 크레딧": "+30%",
+          "과충전 카드 확률": "+12%p",
+          "보급 상자": "다중 보상 확률 증가"
+        }
+      ],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABjElEQVR42u2XMUjDQBiFX0KGjh2FQqm72hLo7CA0mA4GXHXs1E20a8ni0MGtIHTUVaxLxUoWV0FShY6mCM52cHCL0x+Tu1zaC9aA5C2Xhvz/++717uAUAKg3Wj4y0ON4oGj1RstvWvsAAMc0sDO6+0sGX6MnxzSC8am2vnLnk9NzAIAaNifprodCqQwAKxtJKgAu9mlzG1/vbyiUyisZOQAAQeyy5gCkIWIB0pp/fnjSEEKAtObWy6FUvRAgjTlJBkIqAd31FponQbD1bAJaUgIsHABUelVsDKzgfW13i4MYbl7E1kslQOdB+FCq9KpLHTKUBO0u3Y0uVOkE6PesM+Eg3NtnDmDWmUTq2D5LJ/B6PeLIqblIceZxfRJ3AQAUu33M7TaXTBIEa07fz+02it1+ZC0lJrBoa8ZBxJmL+gkBwoQ0+/Bxy87geM3mYETfs/2EALIiiLRSkbFygBwgB9BkC/YOjoLn+/ED9+7m8uyfJyA7Q5Ec0wCGV/ki/PkL6K7222KvfayUrK/n38ifpPacLibmAAAAAElFTkSuQmCC"
+    },
+    "storm-crown": {
+      "id": "storm-crown",
+      "type": "e",
+      "code": "E10",
+      "name": "폭풍 왕관",
+      "en": "Storm Crown",
+      "copy": "근처 회수 구슬을 낙뢰의 중심으로 삼아 주변 적을 친다. 한 번에 최대 세 곳을 타격하며 유효한 구슬이 없으면 일반 연쇄로 돌아간다.",
+      "w": "arc",
+      "b": "salvage-beacon",
+      "e": "storm-crown",
+      "family": "에너지",
+      "tag": "근거리 연쇄",
+      "note": "근처 회수 구슬을 낙뢰의 중심으로 삼아 주변 적을 친다. 한 번에 최대 세 곳을 타격하며 유효한 구슬이 없으면 일반 연쇄로 돌아간다.",
+      "unlock": "진화 상자에서 선택",
+      "levels": [],
+      "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB8UlEQVR42t1XPU/CUBQ9bRgYGDCakEjThB9ANEoYnVxl0JE/QMIiY1kIg2V0IuEPMMrA7ORo0Ej8AY0ESfAjMHRwq4O8l0f7PtpiJfEsbV9e7z333HvfhwYAdjXnAYBll9Fp3sMP0bgMYWw1+3NNs6s5z2oY2AY611Ok6NfxCHgoAQAyp5+JO3dvdwEAumWXf0ZWzgnSeTPRJwBYDQM6L0/pvImv10liT24KiOxRjbkLB5mdQmwS+qaRb+I8QMA/KZQC42Jk0kICrHN34ShJEGRbXWWaRApo3suZh/dZoAZUaQEAd1wEzCEwqSBz8BwpjbQN2S5gjWdbXakCfsjm+xViu4BbA3SxGBeFRmn0ihYmNnj2pTUgI8HD9LwXiJT8u2zXhfaFCizbdRiDGiVBjLNyU/iUYJ0TG5G6gJdjEiF5FyHb6gYJShRMhZkULLZeMP/mENPL1fukoqwNLgFCQgRZ5BSMc2NQo/lnFzdhCvxg6yCMQ17kKqRib+jEGacVo0D/tRNGjOhDExCmgUTPcc7mfyMCSiMxIxduRuLWiw4ZebIZ0VOxjMDNzIlF4GK/ICWwfiqW4OotudOxji0jlAKPh4X/p8DJ3ih8FySBoycHdx8l/sUk8WvZ6qyw1gWkL5OSem3MYxYi9nr+12j259o3BDjt9hb/nWYAAAAASUVORK5CYII="
+    }
+  },
+  "groups": {
+    "w": "무기",
+    "b": "버프",
+    "e": "진화"
+  },
+  "families": {
+    "ballistic": [
+      {
+        "count": 2,
+        "damageScale": 1.15
+      },
+      {
+        "count": 3,
+        "damageScale": 1.3,
+        "pierce": 1
+      }
+    ],
+    "ordnance": [
+      {
+        "count": 2,
+        "damageScale": 1.15
+      },
+      {
+        "count": 3,
+        "damageScale": 1.3,
+        "radiusScale": 1.2
+      }
+    ],
+    "energy": [
+      {
+        "count": 2,
+        "damageScale": 1.15
+      },
+      {
+        "count": 3,
+        "damageScale": 1.3,
+        "cooldownScale": 0.9
+      },
+      {
+        "count": 4,
+        "damageScale": 1.45,
+        "cooldownScale": 0.9
+      }
+    ]
+  },
+  "chests": [
+    {
+      "id": "coast-supply",
+      "second": 100,
+      "carrierXp": 30,
+      "kind": "supply",
+      "rewards": [
+        {
+          "count": 1,
+          "weight": 70
+        },
+        {
+          "count": 3,
+          "weight": 25
+        },
+        {
+          "count": 5,
+          "weight": 5
+        }
+      ]
+    },
+    {
+      "id": "first-evolution",
+      "second": 205,
+      "carrierXp": 30,
+      "kind": "evolution",
+      "bonus": [
+        1,
+        2
+      ],
+      "fallback": 3,
+      "escort": false
+    },
+    {
+      "id": "siege-supply",
+      "second": 310,
+      "carrierXp": 30,
+      "kind": "supply",
+      "rewards": [
+        {
+          "count": 1,
+          "weight": 40
+        },
+        {
+          "count": 3,
+          "weight": 45
+        },
+        {
+          "count": 5,
+          "weight": 15
+        }
+      ]
+    },
+    {
+      "id": "second-evolution",
+      "second": 400,
+      "carrierXp": 30,
+      "kind": "evolution",
+      "bonus": [
+        1,
+        2
+      ],
+      "fallback": 3,
+      "escort": true
+    }
+  ],
+  "order": {
+    "w": [
+      "twin",
+      "pods",
+      "seeker",
+      "rail",
+      "flak",
+      "ion",
+      "drones",
+      "phoenix",
+      "bomb-bay",
+      "arc"
+    ],
+    "b": [
+      "overdrive-coil",
+      "hull-plating",
+      "magnet-core",
+      "band-lens",
+      "vector-thrusters",
+      "flare-bay",
+      "ordnance-rack",
+      "fire-control",
+      "capacitor",
+      "salvage-beacon"
+    ],
+    "e": [
+      "aurora-gatling",
+      "aegis-halo",
+      "swarm-rack",
+      "prism-lance",
+      "skybreaker",
+      "plasma-ribbon",
+      "collector-swarm",
+      "phoenix-rising",
+      "carpet-annihilator",
+      "storm-crown"
+    ]
+  },
+  "snapshot": {
+    "branch": "renderer-proto",
+    "sha": "69f81c80c1f412cd4c98207ac53cc966222d4ee4",
+    "shortSha": "69f81c8",
+    "capturedAt": "2026-11-23 22:59 KST",
+    "repoBase": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/",
+    "sources": {
+      "items": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/data/items.ts",
+      "metaData": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/data/meta.ts",
+      "metaRuntime": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/meta.ts",
+      "progression": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/progression.ts",
+      "hangarDisplay": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/hangar-display.ts",
+      "entry": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/main.ts",
+      "metaTests": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/tests/meta.test.mjs",
+      "hangarPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치",
+      "firstClearPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+    }
+  },
+  "hangar": [
+    {
+      "id": "hull",
+      "code": "H01",
+      "name": "선체 강화",
+      "icon": "01",
+      "perLevelEffect": "레벨당 시작 선체 +1",
+      "cumulativeEffect": "기본 10에서 레벨별 11 / 12 / 13",
+      "requiredRank": 1,
+      "costs": [
+        450,
+        1100,
+        2450
+      ],
+      "perLevel": 1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 450,
+          "requiredRank": 1,
+          "effect": "시작 선체 11 (기본 10 +1)"
+        },
+        {
+          "level": 2,
+          "cost": 1100,
+          "requiredRank": 1,
+          "effect": "시작 선체 12 (기본 10 +2)"
+        },
+        {
+          "level": 3,
+          "cost": 2450,
+          "requiredRank": 1,
+          "effect": "시작 선체 13 (기본 10 +3)"
+        }
+      ]
+    },
+    {
+      "id": "reroll",
+      "code": "H02",
+      "name": "다시 뽑기",
+      "icon": "02",
+      "perLevelEffect": "레벨당 출격 리롤 +1",
+      "cumulativeEffect": "기본 1회에서 레벨별 2 / 3회",
+      "requiredRank": 1,
+      "costs": [
+        300,
+        1100
+      ],
+      "perLevel": 1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 300,
+          "requiredRank": 1,
+          "effect": "출격 리롤 2회 (기본 1 +1)"
+        },
+        {
+          "level": 2,
+          "cost": 1100,
+          "requiredRank": 1,
+          "effect": "출격 리롤 3회 (기본 1 +2)"
+        }
+      ]
+    },
+    {
+      "id": "banish",
+      "code": "H03",
+      "name": "카드 제거",
+      "icon": "03",
+      "perLevelEffect": "레벨당 카드 제거 +1",
+      "cumulativeEffect": "레벨별 1 / 2회",
+      "requiredRank": 2,
+      "costs": [
+        750,
+        2000
+      ],
+      "perLevel": 1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 750,
+          "requiredRank": 2,
+          "effect": "카드 제거 1회"
+        },
+        {
+          "level": 2,
+          "cost": 2000,
+          "requiredRank": 2,
+          "effect": "카드 제거 2회"
+        }
+      ]
+    },
+    {
+      "id": "skip",
+      "code": "H04",
+      "name": "건너뛰기",
+      "icon": "04",
+      "perLevelEffect": "레벨당 건너뛰기 +1 (선택을 넘겨도 XP 보존)",
+      "cumulativeEffect": "레벨별 1 / 2회",
+      "requiredRank": 2,
+      "costs": [
+        550,
+        1650
+      ],
+      "perLevel": 1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 550,
+          "requiredRank": 2,
+          "effect": "건너뛰기 1회"
+        },
+        {
+          "level": 2,
+          "cost": 1650,
+          "requiredRank": 2,
+          "effect": "건너뛰기 2회"
+        }
+      ]
+    },
+    {
+      "id": "magnet",
+      "code": "H05",
+      "name": "회수 자석",
+      "icon": "05",
+      "perLevelEffect": "레벨당 회수 범위 +10%",
+      "cumulativeEffect": "기본 ×1.00에서 ×1.10 / ×1.20",
+      "requiredRank": 1,
+      "costs": [
+        400,
+        1350
+      ],
+      "perLevel": 0.1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 400,
+          "requiredRank": 1,
+          "effect": "회수 범위 ×1.10 (누적 +10%)"
+        },
+        {
+          "level": 2,
+          "cost": 1350,
+          "requiredRank": 1,
+          "effect": "회수 범위 ×1.20 (누적 +20%)"
+        }
+      ]
+    },
+    {
+      "id": "growth",
+      "code": "H06",
+      "name": "경험치 보너스",
+      "icon": "06",
+      "perLevelEffect": "레벨당 XP +3%",
+      "cumulativeEffect": "누적 +3 / +6 / +9 / +12 / +15%",
+      "requiredRank": 1,
+      "costs": [
+        700,
+        1250,
+        2300,
+        3900,
+        6250
+      ],
+      "perLevel": 0.03,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 700,
+          "requiredRank": 1,
+          "effect": "XP +3% (누적)"
+        },
+        {
+          "level": 2,
+          "cost": 1250,
+          "requiredRank": 1,
+          "effect": "XP +6% (누적)"
+        },
+        {
+          "level": 3,
+          "cost": 2300,
+          "requiredRank": 1,
+          "effect": "XP +9% (누적)"
+        },
+        {
+          "level": 4,
+          "cost": 3900,
+          "requiredRank": 1,
+          "effect": "XP +12% (누적)"
+        },
+        {
+          "level": 5,
+          "cost": 6250,
+          "requiredRank": 1,
+          "effect": "XP +15% (누적)"
+        }
+      ]
+    },
+    {
+      "id": "credit",
+      "code": "H07",
+      "name": "크레딧 보너스",
+      "icon": "07",
+      "perLevelEffect": "레벨당 출격 크레딧 +10%",
+      "cumulativeEffect": "누적 +10 / +20 / +30 / +40 / +50%",
+      "requiredRank": 1,
+      "costs": [
+        400,
+        950,
+        1850,
+        3550,
+        6500
+      ],
+      "perLevel": 0.1,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 400,
+          "requiredRank": 1,
+          "effect": "출격 크레딧 +10% (누적)"
+        },
+        {
+          "level": 2,
+          "cost": 950,
+          "requiredRank": 1,
+          "effect": "출격 크레딧 +20% (누적)"
+        },
+        {
+          "level": 3,
+          "cost": 1850,
+          "requiredRank": 1,
+          "effect": "출격 크레딧 +30% (누적)"
+        },
+        {
+          "level": 4,
+          "cost": 3550,
+          "requiredRank": 1,
+          "effect": "출격 크레딧 +40% (누적)"
+        },
+        {
+          "level": 5,
+          "cost": 6500,
+          "requiredRank": 1,
+          "effect": "출격 크레딧 +50% (누적)"
+        }
+      ]
+    },
+    {
+      "id": "ejector",
+      "code": "H08",
+      "name": "비상 복구",
+      "icon": "08",
+      "perLevelEffect": "출격 중 한 번 선체가 0이 되면 절반까지 복구",
+      "cumulativeEffect": "1회 구매: 최대 선체의 절반(올림)으로 복구",
+      "requiredRank": 1,
+      "costs": [
+        10000
+      ],
+      "perLevel": 0.5,
+      "levels": [
+        {
+          "level": 1,
+          "cost": 10000,
+          "requiredRank": 1,
+          "effect": "출격당 한 번, 최대 선체의 절반(올림)까지 복구"
+        }
+      ]
+    }
+  ],
+  "quests": [
+    {
+      "id": "rail",
+      "gearId": "rail",
+      "gearName": "레일 랜스",
+      "metric": "weakPointHits",
+      "target": 5,
+      "targetText": "한 출격에서 ACE를 5회 명중",
+      "aggregation": "단일 출격 최고치; 다른 출격과 합산하지 않음",
+      "aggregationRule": "best"
+    },
+    {
+      "id": "flak",
+      "gearId": "flak",
+      "gearName": "대공 파열포",
+      "metric": "multibandWithinFive",
+      "target": 3,
+      "targetText": "5초 안에 서로 다른 고도 3개 밴드에서 적 격추",
+      "aggregation": "단일 출격 최고치; 다른 출격과 합산하지 않음",
+      "aggregationRule": "best"
+    },
+    {
+      "id": "ion",
+      "gearId": "ion",
+      "gearName": "이온 항적",
+      "metric": "maneuvers",
+      "target": 30,
+      "targetText": "기동 30회",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    },
+    {
+      "id": "drones",
+      "gearId": "drones",
+      "gearName": "궤도 드론",
+      "metric": "orbs",
+      "target": 100,
+      "targetText": "회수 구슬 100개 수집",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    },
+    {
+      "id": "arc",
+      "gearId": "arc",
+      "gearName": "아크 번개",
+      "metric": "peakAceWipe",
+      "target": 6,
+      "targetText": "ACE WIPE ×6 달성",
+      "aggregation": "한 출격에서 기록한 최고 ACE WIPE ×6; 다른 출격 기록과 합산하지 않음",
+      "aggregationRule": "best"
+    },
+    {
+      "id": "band-lens",
+      "gearId": "band-lens",
+      "gearName": "대역 렌즈",
+      "metric": "bandsKilled",
+      "target": 3,
+      "targetText": "저·중·고 세 고도 밴드에서 모두 격추",
+      "aggregation": "단일 출격 밴드 기록; 다른 출격의 밴드와 합치지 않음",
+      "aggregationRule": "bands"
+    },
+    {
+      "id": "vector-thrusters",
+      "gearId": "vector-thrusters",
+      "gearName": "벡터 스러스터",
+      "metric": "boostTicks",
+      "target": 3600,
+      "targetText": "부스트 60초 사용",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    },
+    {
+      "id": "fire-control",
+      "gearId": "fire-control",
+      "gearName": "사격통제",
+      "metric": "lockedKills",
+      "target": 20,
+      "targetText": "조준 고정 상태에서 적 20기 격추",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    },
+    {
+      "id": "flare-bay",
+      "gearId": "flare-bay",
+      "gearName": "플레어 베이",
+      "metric": "rearFlareKills",
+      "target": 20,
+      "targetText": "후방 플레어로 추격 적 20기 격추",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    },
+    {
+      "id": "ordnance-rack",
+      "gearId": "ordnance-rack",
+      "gearName": "폭장 랙",
+      "metric": "manualBombs",
+      "target": 10,
+      "targetText": "수동 폭탄 10회 투하",
+      "aggregation": "출격 간 누적 합계",
+      "aggregationRule": "total"
+    }
+  ],
+  "context": {
+    "rankThresholds": [
+      {
+        "rank": 1,
+        "score": 0
+      },
+      {
+        "rank": 2,
+        "score": 40000
+      },
+      {
+        "rank": 3,
+        "score": 160000
+      },
+      {
+        "rank": 4,
+        "score": 350000
+      },
+      {
+        "rank": 5,
+        "score": 700000
+      }
+    ],
+    "credits": {
+      "scorePerCredit": 500,
+      "aceClearBonus": 250,
+      "retreatMultiplier": 0.5
+    },
+    "heat": [
+      {
+        "level": 0,
+        "rewardBonusPercent": 0,
+        "changes": []
+      },
+      {
+        "level": 1,
+        "rewardBonusPercent": 15,
+        "changes": [
+          "적 장갑 +15%"
+        ]
+      },
+      {
+        "level": 2,
+        "rewardBonusPercent": 30,
+        "changes": [
+          "적 장갑 +15%",
+          "적 발사 간격 ×1/1.15 (발사 속도 +15%)"
+        ]
+      },
+      {
+        "level": 3,
+        "rewardBonusPercent": 45,
+        "changes": [
+          "적 장갑 +15%",
+          "적 발사 간격 ×1/1.15 (발사 속도 +15%)",
+          "회수 범위 ×0.8"
+        ]
+      },
+      {
+        "level": 4,
+        "rewardBonusPercent": 60,
+        "changes": [
+          "적 장갑 +15%",
+          "적 발사 간격 ×1/1.15 (발사 속도 +15%)",
+          "회수 범위 ×0.8",
+          "추가 Ace 장갑"
+        ]
+      },
+      {
+        "level": 5,
+        "rewardBonusPercent": 75,
+        "changes": [
+          "적 장갑 +15%",
+          "적 발사 간격 ×1/1.15 (발사 속도 +15%)",
+          "회수 범위 ×0.8",
+          "추가 Ace 장갑",
+          "수송기 호위기 추가"
+        ]
+      }
+    ],
+    "daily": "일일 출격은 위험도 0과 기본 장비를 사용하며 격납고 강화 효과를 받지 않습니다."
+  },
+  "status": {
+    "current": "개발 통합판(renderer-proto)의 무기·버프·진화, 크레딧 구매형 격납고 강화, 조건 해금 퀘스트는 현재 코드에 연결되어 있습니다. 개인별 잔액·구매·해금 진행률은 이 정적 도감에 표시하지 않습니다.",
+    "experiments": [
+      {
+        "number": 7,
+        "title": "에이스 상호 락온과 발사 직전 기동 회피",
+        "status": "열림 · 현재 스냅샷에 미병합",
+        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/pull/7"
+      },
+      {
+        "number": 8,
+        "title": "플레어·폭탄 장착형 자동 무기 통합 및 C 배럴롤",
+        "status": "열림 · 현재 스냅샷에 미병합",
+        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/pull/8"
+      }
+    ],
+    "plannedTargets": [
+      {
+        "title": "Hawk 복셀 미리보기 및 구매 전후 수치 비교 화면",
+        "status": "계획 항목 · 미구현 시각화",
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치"
+      },
+      {
+        "title": "선체 첫 구매가 가능해지는 시점: 중앙값 3판 이내",
+        "status": "기획 목표 · 실제 구매 시점/달성 여부 미측정",
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+      },
+      {
+        "title": "첫 Ace 격파: 보통 파일럿 중앙값 3~6판",
+        "status": "기획 목표 · 미측정",
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+      },
+      {
+        "title": "첫 무기 해금: 1~2판 목표, 최초 자연 제시는 별도 측정",
+        "status": "기획 목표 · 미측정",
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+      }
+    ]
+  },
+  "sourceAudit": {
+    "checkedAt": "2026-11-23 22:59 KST",
+    "checkedRevision": "69f81c80c1f412cd4c98207ac53cc966222d4ee4",
+    "sourcePathsUnchangedSinceOriginalPin": [
+      "src/data/items.ts",
+      "src/data/meta.ts",
+      "src/meta.ts",
+      "src/progression.ts",
+      "src/hangar-display.ts",
+      "src/main.ts",
+      "src/i18n.ts"
+    ],
+    "originalEquipmentAudit": "기존 장비 30개의 식별자·종류·시작 장비 여부·계열, 무기 7단계·버프 3단계, 진화 10쌍이 현재 소스와 일치합니다. 원본 기준 cfb3abf부터 이 스냅샷까지 점검한 게임 소스 경로에는 변경이 없습니다.",
+    "additions": "현재 코드에 구현된 격납고 강화 8종과 해금 퀘스트 10종을 런 중 장비와 구분해 추가했습니다."
+  },
+  "fontSupplement": {
+    "family": "AW Hangul Supplement",
+    "source": "https://github.com/google/fonts/blob/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf",
+    "sourceSha256": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252",
+    "subsetSha256": "2bbbc778737c1b4990da506535924a017804bbc20e2fc8730a9c678a54cfc6c9",
+    "license": "SIL OPEN FONT LICENSE Version 1.1",
+    "licenseText": "Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nThis license is copied below, and is also available with a FAQ at:\nhttps://scripts.sil.org/OFL\n\n\n-----------------------------------------------------------\nSIL OPEN FONT LICENSE Version 1.1 - 26 February 2007\n-----------------------------------------------------------\n\nPREAMBLE\nThe goals of the Open Font License (OFL) are to stimulate worldwide\ndevelopment of collaborative font projects, to support the font creation\nefforts of academic and linguistic communities, and to provide a free and\nopen framework in which fonts may be shared and improved in partnership\nwith others.\n\nThe OFL allows the licensed fonts to be used, studied, modified and\nredistributed freely as long as they are not sold by themselves. The\nfonts, including any derivative works, can be bundled, embedded, \nredistributed and/or sold with any software provided that any reserved\nnames are not used by derivative works. The fonts and derivatives,\nhowever, cannot be released under any other type of license. The\nrequirement for fonts to remain under this license does not apply\nto any document created using the fonts or their derivatives.\n\nDEFINITIONS\n\"Font Software\" refers to the set of files released by the Copyright\nHolder(s) under this license and clearly marked as such. This may\ninclude source files, build scripts and documentation.\n\n\"Reserved Font Name\" refers to any names specified as such after the\ncopyright statement(s).\n\n\"Original Version\" refers to the collection of Font Software components as\ndistributed by the Copyright Holder(s).\n\n\"Modified Version\" refers to any derivative made by adding to, deleting,\nor substituting -- in part or in whole -- any of the components of the\nOriginal Version, by changing formats or by porting the Font Software to a\nnew environment.\n\n\"Author\" refers to any designer, engineer, programmer, technical\nwriter or other person who contributed to the Font Software.\n\nPERMISSION & CONDITIONS\nPermission is hereby granted, free of charge, to any person obtaining\na copy of the Font Software, to use, study, copy, merge, embed, modify,\nredistribute, and sell modified and unmodified copies of the Font\nSoftware, subject to the following conditions:\n\n1) Neither the Font Software nor any of its individual components,\nin Original or Modified Versions, may be sold by itself.\n\n2) Original or Modified Versions of the Font Software may be bundled,\nredistributed and/or sold with any software, provided that each copy\ncontains the above copyright notice and this license. These can be\nincluded either as stand-alone text files, human-readable headers or\nin the appropriate machine-readable metadata fields within text or\nbinary files as long as those fields can be easily viewed by the user.\n\n3) No Modified Version of the Font Software may use the Reserved Font\nName(s) unless explicit written permission is granted by the corresponding\nCopyright Holder. This restriction only applies to the primary font name as\npresented to the users.\n\n4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font\nSoftware shall not be used to promote, endorse or advertise any\nModified Version, except to acknowledge the contribution(s) of the\nCopyright Holder(s) and the Author(s) or with their explicit written\npermission.\n\n5) The Font Software, modified or unmodified, in part or in whole,\nmust be distributed entirely under this license, and must not be\ndistributed under any other license. The requirement for fonts to\nremain under this license does not apply to any document created\nusing the Font Software.\n\nTERMINATION\nThis license becomes null and void if any of the above conditions are\nnot met.\n\nDISCLAIMER\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT\nOF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE\nCOPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nINCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL\nDAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM\nOTHER DEALINGS IN THE FONT SOFTWARE.\n",
+    "coverage": "갱겨결내넘논누님데된뛰락럴럿련롤료림매맥메및받뽑샷셀실앙액업완윈절존캐퀘클태테퇴풀",
+    "base64": "AAEAAAAWAQAABABgQkFTRWwbjpgAABwsAAABFkdQT1NEdkx1AAAdRAAAACBHU1VC0M7MwgAAHWQAAABISFZBUgA5ACUAAB2sAAAAKk9TLzIAISg0AAAB6AAAAGBTVEFUgWZ9+QAAHdgAAACeYXZhco17jAEAAB54AAAAKmNtYXADK7/yAAACoAAAAWxmdmFyluBpmwAAHqQAAABsZ2FzcAAAABAAABwkAAAACGdseWYSyk4eAAAEbAAAFTJndmFykSs9twAAHxAAAA54aGVhZCaSWVEAAAFsAAAANmhoZWEIKgL0AAABpAAAACRobXR4DdYG5wAAAkgAAABYbG9jYW0qZ84AAAQUAAAAVm1heHAAMwBJAAAByAAAACBuYW1lO79vWAAAGaAAAAJkcG9zdP+GADIAABwEAAAAIHByZXBoBoyFAAAEDAAAAAd2aGVhBekSKQAALYgAAAAkdm10eAn4BZEAAC2sAAAAVgABAAAAAgEG7XadYV8PPPUAAwPoAAAAANywIy4AAAAA5ynxTAAx/7wDbwMyAAAABgACAAAAAAAAAAEAAASI/uAAAAPoADEAKQNvAAEAAAAAAAAAAAAAAAAAAAACAAEAAAAqAEgACAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAABAOwAGQABQAAAooCWAAAAEsCigJYAAABXgAyAUUAAAILAgAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAQURCTwBArDHUgANw/4gAAASIASAAAAABAAAAAAIfAt0AAAAgAAYD6ABkA5gATgBGAE4AbwByADsAOwB3AGQAPwAyAGYAYQBhAGAAOgA7AGYAYgBsAGIAawBrADsAQQBIAEwAVgBKAEwAPAA8AEoAOwBCADEAOwBkAGQAQQA7AAAAAgAAAAMAAAAUAAMAAQAAABQABAFYAAAAUgBAAAUAEqwxrKissLC0sRixfLIEstizcLQctvC3fbf0t/+4KLhkuMy5vLnlulS8D7wbv1HA98FAwuTFWcVhxcXGRMcIyAjIdM6Q0BjQdNDc0UzR9NSA//8AAKwxrKissLC0sRixfLIEstizcLQctvC3fbf0t/+4KLhkuMy5vLnkulS8D7wbv1HA98FAwuTFWcVhxcXGRMcIyAjIdM6Q0BjQdNDc0UzR9NSA//9T0FNaU1NPUE7tTopOA00wTJlL7kkbSI9IGUgPR+dHrEdFRlZGL0XBRAdD/EDHPyI+2j03OsM6vDpZOds5GDgZN64xkzAML7EvSi7bLjQrqQABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALgB/4WwBI0AAAAAAABdAJAA1wEFAT8BbAGNAb4B8gIwAngCtAL7A1MDmAPUBAMEPgRoBJsExQUVBUkFjgXuBj4GhQbwBz8HjwfwCEUIlgjkCR4JagmoCeIKHQpWCpkAAAAHAE7/wQMnAy8AAwAHAAsAFgAaACoAOgAAATMRIwMzFSMDMxEjAzMUBgYHJz4CNSUhFSEBMhYWFRQGBiMiJiY1NDY2FyIGBhUUFhYzMjY2NTQmJgL6ICCvwsISISGeIlWbaxRmlVL+zwFB/r8BmFyDRkaDXFyDRkaDXE52QUF2Tk51QUF1Ay/91gErHgEM/ggBuWOtizAaLIKhXAYe/jclRTIxRiQkRjEyRSUdHzknJzgfHzgnJzkfAAAFAEb/vwMDAzIACwAPABMAFwAbAAABMxQOAgcnPgI1JSEVISUzESMBIRUhByEVIQHUHzBkm2sThrFX/pQBeP6IAnsgIP7xAR3+4woBHf7jAs1Yq5yGNBtAs9ZyAx6D/I0Cbx3LHgAHAE7/xgMtAzAAAwAOABIAFgAaACQAKAAAATMRIwEzFAYGByc+AjUlIRUhBSEVIQchFSEHIRUhFSM1ITUhEyEVIQLjISH++SNrvHwOdrNl/poBef6HAWwBC/71CgEQ/vD8Aij9+h8CBf34AwJO/bIDMP42AZRoqHchHR9tmF4JHj4eiB6lva3Kgv7MHQAABQBv/70DHwMwAAMABwALAA8AGQAAATMRIwMzFSMDMxEjATMRIzUzMjY3FwYGIyMC/iEhtsLCFSAg/jwhITNKnVsGXp5MMwMw/I0B+B8BgvzWAs7+AxAMEx8TDAAGAHL/ywMEAzAAAwAHAAsAFwAbAB8AADchESEBIRUhATMRIzUzMjY2NxcOAiMjATMRIwEhFSHgAiT93AIE/hsB5f2OISE9T4N4QAZBe4RQPQJxISH+4QEr/tX+/s0BFvgDDP6RGQYQDh8NEAcBsP3/AUgdAAYAO//VA1gDBgADAAcACwAPABMAFwAAEyEVIREzESMHIRUhJTMVIwEhFSERMxUjsAJL/bUfH3UDHfzjAX8fH/7vAlj9qCAgAgIdASH+8akeybX+rx4BAewAAAQAO/+9A1wC/gADAAcACwAPAAATIRUhByEVISUzESMBMxEjpgJP/bFrAyH83wF+ICD+7SEhAfEeph4U/poDQf7iAAUAd//MAwMDMAADAAcAEQAVABkAAAEzESMBMxEjNTMyNjcXBgYjIxchESEBIREhAuMgIP2UISFCa9NyCHfTbkJkAij92AII/hgB6AMw/gcBxf6eFhMYHhgTjP7GAR7/AAAABQBk/70DHwMwAAMABwALABcAHQAAATMRIwEzFSMTMxEjJTMyNjY3Fw4CIyMRIRUhESMC/iEh/nHw8OIhIf4TNEtwYDEGM2JxTDQBRv7aIAMw/I0CEx4BZPzbzwQNCx4LDAQCGB7+GwAHAD//1QMiAy4AAwAHAA0AEQAVABkAIwAAEyEVITczFSMDIRUhFSMBMxEjBSEVITUzFSMDJz4CNxcOApQBov5evSEhvQGb/oYhAksgIP4CAkH9vyAgmwdXx8tdAl/LwwH8HQ+4Abwe5wFB/XGsHvLmATofAQUNCxsNDwYABwAy/7wDCQMvAAMABwARABUAGwAhACsAAAEzESMBMxEjAScyNjY3Fw4CNzMVIxEzFSMVIwEzFSMRIzUzMjY3FwYGIyMBXiEhAYohIf1RB13T3GkDa9zQ9+vr4sIg/u3fviEiJWY9BkFnJiIBJP62A1X8jQFXIAMLDBsODgPFHgEwHv8BHR7+/Q8HDh4PBgAABQBm/74DbwMvAAsAFQAZAB0AIwAAEzMyNjY3Fw4CIyMDIRUhFSM1ITUhJTMRIxMzFSMBIREjESFpQEmHiU0DToqHSkADAYf+mx8BZP6ZAlchIRSenv3gAi0h/fQBdAUODB8MDQUBotm82p1V/egBJx7+wv7cAQYABgBh/8sDLgMwAAsAFQAfACMAJwArAAATMzI2NjcXDgIjIwMhFSEVIzUhNSETIRUhFSM1ITUhEyEVIQEzESMDMxUjZD1GgYRJBEyEgUc9AwF//qQgAVv+oncCLP33IAIJ/fQDAlP9rQIIISHB2dkBpwUNDB8LDQUBesWlwYz+QbefvHz+4iADZf4sAQweAAYAYf/BA0MDLwADAAcAEwAdACsAOQAAATMRIwMzFSMFMzI2NjcXDgIjIwMhFSEVIzUhNSEBMxUUDgIHJz4DNTczFRQeAhcHLgM1AuMhIcDZ2f5BPUaAg0kES4SARz0DAX/+pCABXP6hAYMdQGV0Mw8vbmI/BB0/Ym4vEDNzZUADL/2aAYse0gQMDB0MDQQBrN/C4KP+OydBY0gvDBwJKkNbOicnOltDKgkcDC9IY0EABwBg/9wDJAMvAAsAFQAZAB0AIQAlACkAABMzMjY2NxcOAiMjAyEVIRUjNSE1ISUzESMDMxUjASEVITUzFSMBMxUjYztdgmo4Azlrg107AwF0/rAhAVD+rQKDISHK2dn+xQJG/bogIAE72dkBSAMKCR4JCgMBxObR8Ktd/XoB4h39jB758AHiHgAABgA6/8sDWwMMAAMADQARABsAHwAjAAATIRUhFyEVIRUjNSE1IRchFSETIRUhFSM1ITUhFyEVISUzFSM6AyH832UCU/3QIAIw/c0DAnD9kAECS/3YIAIo/dUDAlj9qAEUICABfx1dpoWja/8eA0GeeJRl7R4VhwAABQA7ADYDXALmAAMABwALABUAGQAAATMVIyUzFSMlIRUhEyEVIRUjNSE1IRMhFSEBMCEhAR0gIP3uAyH832kCS/3YIAIo/dUDAl39owEo4uTiDB4CsPDO67X+cR0AAAUAZv/LAwQDLwADAA8AGQAdACEAAAEzESMlMzI2NjcXDgIjIwMhFSEVIzUhNSETIREhASEVIQLjISH9hkFKiYtOBFCMiUtBAwGK/pgfAWj+lXYCKP3YAgj+GAHoAy/99VUFDgweDA4FAZ3Xu9mb/hH+4AED5QAFAGL/vQMhAzAAAwAHAAsADwATAAABMxEjAzMVIwMzESMBIREhASERIQMAISGwwsIWISH+KAFE/rwBJP78AQQDMPyNAggeAXH81gLQ/f0B5/41AAAGAGz/vQMaAy8AAwAHAAsAEQAVABkAAAEzESMDMxUjJzMRIwUhESMRIQMhESEBIREhAvogILXCwgshIf6gAkAg/eBuAUv+tQEr/vQBDAMv/fUBGx79/g1C/tQBDgIa/pEBUv7LAAAFAGL/vQMhAzAAAwAHAAsADwATAAATIREhASERIQEzESMBMxUjEzMRI2IBRP68AST+/AEEAXohIf6W0NDAISECvv39Aef+NQJZ/I0CGh4BX/zWAAAHAGv/wQM8AzAAAwAHAAsAGgAoACwAMAAAEyERIQEhESEBMxEjBzMVFA4CByc+BDU3MxUUHgIXBy4DNSUhFSElMxUjawGK/nYBa/60AUwBDSAg9Bw/Y3AwDiJSUkQqAx09XmgqDjBuYT3+7QJB/b8BECAgAvL+pQE+/t4Bff3/YBYwUkAsChwGGyk0PSEWFilJOigIHAssQVEvLR6CcAAABgBr/8sDbgMwAAMABwAPABMAGQAdAAABMxEjEzMVIyUzFSE1MxEhNxUhNQEhFSEVIzUhFSECvSEhGJmZ/ZYgAUkf/nggAUn++QIa/gchAiv91QMw/foBJR7Qn5/+bda4uP6sHf8VHgAIADv/ywNYAyMABwALABMAFwAbACMAJwArAAATMxUzNTMRITcVMzU3MxUzNTMRITcVMzUFMxUjBTMVITUzESE3FSE1JSEVIZEhzCH+8iHMdyHNIP7yIc3+2CAg/u0hAgIh/bwhAgL9cAMd/OMDI3V1/s+ef3+TdXX+z55/f6iLVnV1/sSqjIz6HgAHAEH/wQNuAzAAAwAHABMAIAAkADIAQAAAATMVIxUzFSMBMxUUBgYHJz4CNTczFRQeAhcHLgI1JTMRIyczFRQOAgcnPgM1NzMVFB4CFwcuAzUC1ZmZmZn+UxxDbj8TPGlCAxsoQ1MrEj1vRgGSISHrHT9lcjMPL21hPgQcPmJtLg8zcmQ/AoQeoh4BXGdTiWUdHBldgExnZzJdTjwRGhpggEqV/awuH0FkSTAMHAksQ1w6Hx86XEMsCRwMMElkQQAHAEj/ywNCAy8AAwAPABsAHwAjAC0AMQAAATMVIyczFRQGBgcnPgI1NzMVFBYWFwcuAjUlMxEjAzMRIwUhFSEVIzUhNSETIRUhAafCwpgcOF47EjdaNgQbNFg2FDlbNQHnICCpISH+lQI0/e8gAhL96wMCWf2nAmsfu3w4dWEcGxlZazJ8gy5dTRUaGFRnNKv+HwHN/j47sJi1df7pHgAABQBM/8sDKgMwAAMADQARAB4ALAAAATMRIwUhFSEVIzUhNSETIRUhEzMVFAYGByc+AzU3MxUUHgIXBy4DNQLjICD9+QIo/fofAgX9+AMCS/21WhxHcT4TLFREKQMcKkZVLBIvWkgqAzD+LDO4m7h9/t4eA0ZEUoplHBsSP1RlOERENV9QOxEbFD9WZzsAAAYAVv/BA24DMAAPAB8AIwAnADcARwAAATIWFhUUBgYjIiYmNTQ2NhciBgYVFBYWMzI2NjU0JiYlMxEjEzMVIwEyFhYVFAYGIyImJjU0NjYXIgYGFRQWFjMyNjY1NCYmATJBYzg4Y0FAZDg4ZEA2VTExVTY3VTExVQFUISEYmZn+91h+Q0N+WFh+Q0N+WEtwPz9wS0txPj5xAvczWj09WjIyWj09WjMdLk4xMU4uLk4xMU4uVv3tASEe/tglRTIxRSUlRTEyRSUdHzknJjkfHzkmJzkfAAAGAEr/vQMaAy8ADwAfACMAJwArADEAAAEyFhYVFAYGIyImJjU0NjYXIgYGFRQWFjMyNjY1NCYmJTMRIwMzFSMnMxEjBSERIxEhARE6WTQ0WTo6WjMzWjowTCwsTDAwTCwsTAG5ICC1wsILISH+oAJAIP3gAvYzWjw7WjIyWjs8WjMdLk4wL04uLk4vME4uVv31ARse/f4NQv7UAQ4AAAYATP/LAwQDMAADABMAIwAnAC8AMwAAATMVIycyFhYVFAYGIyImJjU0NjYXIgYGFRQWFjMyNjY1NCYmJTMRIwUzFSE1MxEhNxUhNQH0/v7LQWQ4OGRBQWQ4OGRBN1YwMFY3N1UxMVUBgyEh/gIhAd0h/eEhAd0CTR7UMVk8O1oxMVo7PFkxHSxNMC9NLS1NLzBNLEr+JzKLi/6msZSUAAAIADz/1gNqAy8AAwATACMAJwArAC8AMwA9AAABMxUjEzIWFhUUBgYjIiYmNTQ2NhciBgYVFBYWMzI2NjU0JiYlMxEjEzMVIwEhFSE1MxUjAycyNjY3Fw4CATwhIQ1AYTY2YUA/YTY2YT81Uy4uUzU2Uy4uUwE2ISEKq6v+CQIv/dEgIIYGUMLKXQNfyr4BuIYB0CpMMzNMKipMMzNMKhwlQCgoQCUlQCgoQCVJ/VsBZR7+Ix7t3QE4HwQODxsREAQAAAcAPP/VAxYDMAAPABsAHwAjAC0AMQA1AAABMhYWFRQGBiMiJiY1NDY2FyIGFRQWMzI2NTQmAzMVIwEzESMlJzI2NjcXDgITIRUhNTMVIwFiQmI1NWJCQWI2NmJBUmdnUlNnZ1QhIQF1ISH9bQdVx89hBGPQxDMCTv2yICADBCZHMTFHJiZHMTFHJhtKOTlKSjk5Sv53sAKA/V7AHwMNDhoQDwT+pR767AAABwBK/8gDLAMwAAMAEAAcACAAJAAuADIAAAEzFSMnMxUUBgYHJz4DNTczFRQWFhcHLgI1JyEVISUzESMFIRUhFSM1ITUhEyEVIQIM7OzZHEZvPhIrU0MoBBxDaDoSPm1E3gHU/iwCiiAg/fgCKP36HwIF/fgDAk79sgJaHqhGSX5dGhsQOU1bMkZHO2tRFBsYV3RDWB5Z/jE2uKTBff7YHQAABwA7/9UDXAL/AA4AHQAhACUAKQAtADEAAAEzFRQOAgcnPgQ1NzMVFB4DFwcuAzUlIRUhEyEVITUzFSMDIRUhJTMVIwG6HUJndDMOJFZVRysEHCtHVVYkDjJ0Z0L+xwKL/XUkAlj9qCEhbgMh/N8BfyAgAucgO15FLAscBh0rOkcqICApRzosHQYcCy1FXTs4Hv0SHvbnAV8ey7kABgBC/70DHwMwAAMABwAUABgAHAAgAAABMxEjAzMVIwMzFA4CByc+AzUlIRUhJTMRIwMVBScC/iEhr8LCtiIhTodmFWCBTSH+0wFC/r4BziEht/7ICQMw/I0B+B0BKk2fmYg2GzKAkZhKAx50/NYCCRofIAAIADH/vQMMAzAAAwANABEAFQAZAB0AIQAsAAATIRUhJTMVFAYHJzY2NRcVBScBMxEjAzMRIyczFSMnMxEjAycyPgI3Fw4CcgFM/rQBPx8IGR8ZCAX+qgoClSEhnCAgv9DQiiEhzgcyeYF9NQJJqqQCyx4eLzGTZwVmjzFjGx0fARD8jQNa/N//H5j+mgFLIgQGCgccCw4HAAYAO//LA1gC+wADAA0AEQAVAB8AIwAAEyEVISUzFRQGByc2NjUXFQUnByEVIRchFSEVIzUhNSETIRUhpQJB/b8CJSAHFiAWBwf9yAdXAx3842QCU/3QIAIw/c0DAnD9kAL7Hh45NI1hBl+JNFwbHB+dHXWxkK52/uceAAAGAGT/vQMhAzAACwARABUAGQAdACEAADczMjY2NxcOAiMjESEVIREjEyEVIQEzESMDMxUjAzMRI2Q0THFgMQY0YnFNNAFS/s4gFAE0/swCiCEhsMLCFiEhxgQNCx4LDQQCGR7+GwEXHgF5/I0CBB4BdfzWAAYAZP+9Ax8DMAADAA8AFQAZAB0AIQAAATMVIwUzMjY2NxcOAiMjESEVIREjEyEVIQEzESMDMxEjAbKwsP6yNEtuXzEFM2BwSzQBRv7aIBQBAv7+AoYhIa0hIQHUHvUEDQseCwwEAhgd/hsBEh0BgfyNA1n82wAGAEH/vQL4AzAAAwAHAA0AEQAVAB8AAAEzFSMnIRUhESEVIREjNyEVIQEzESMlJzI2NjcXDgIBViEhzQHL/jUBxv5bIRUBnf5jAjkhIf1xB1TI1GMEZ9PEAWHL3R4Bgx3+rMMdASP8jcQgAw0PGhIQAwAIADv/ywNYAxYAAwAHAAsADwATABcAIQAlAAATIRUhFSEVIRMzESMBMxEjBSEVISUzFSMlIRUhFSM1ITUhEyEVIYoCff2DAn39g5shIQEnICD97wMd/OMBfiAg/ugCS/3YIAIo/dUDAmb9mgMWHuAeARL+9QEL/vVqHg6UE6eEomz/AB4AAAAAAAATAOoAAwABBAkAAQA4AAAAAwABBAkAAgAOADgAAwABBAkAAwBAAEYAAwABBAkABAA4AAAAAwABBAkABQBqAIYAAwABBAkABgA4AAAAAwABBAkAEAAYAPAAAwABBAkAEQAIAQgAAwABBAkBAQAMARAAAwABBAkBCQAMARAAAwABBAkBCgAIAQgAAwABBAkBCwAUARwAAwABBAkBDAAKATAAAwABBAkBDQAOADgAAwABBAkBDgAMAToAAwABBAkBDwAQAUYAAwABBAkBEAAIAVYAAwABBAkBEQASAV4AAwABBAkBEgAKAXAAQQBTAFQARQBSACAAVwBJAE4ARwAgAEgAYQBuAGcAdQBsACAAUwB1AHAAcABsAGUAbQBlAG4AdABSAGUAZwB1AGwAYQByADIALgAwADAANAA7AEEARABCAE8AOwBOAG8AdABvAFMAYQBuAHMASwBSAC0AVABoAGkAbgA7AEEARABPAEIARQBWAGUAcgBzAGkAbwBuACAAMgAuADAAMAA0AC0ASAAyADsAaABvAHQAYwBvAG4AdgAgADEALgAwAC4AMQAxADgAOwBtAGEAawBlAG8AdABmAGUAeABlACAAMgAuADUALgA2ADUANgAwADMATgBvAHQAbwAgAFMAYQBuAHMAIABLAFIAVABoAGkAbgBXAGUAaQBnAGgAdABFAHgAdAByAGEATABpAGcAaAB0AEwAaQBnAGgAdABNAGUAZABpAHUAbQBTAGUAbQBpAEIAbwBsAGQAQgBvAGwAZABFAHgAdAByAGEAQgBvAGwAZABCAGwAYQBjAGsAAwAAAAAAAP+DADIAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAH//wAPAAEAAQAMAHAAAAD2AGgABAAHREZMVAAsY3lybAA+Z3JlawA+aGFuZwAsaGFuaQAsa2FuYQAsbGF0bgA+AAYAAAAAAAIABAAeACQAKgCsAAYAAAAAAAMABAAMABIAGACaAAP/vQB8AAMDOwCCAAH/iAAEABYABGljZmJpY2Z0aWRlb3JvbW4AB0RGTFQALGN5cmwAPmdyZWsAPmhhbmcALGhhbmkALGthbmEALGxhdG4APgAGAAAAAAACAAQAHgAqADYAOgAGAAAAAAADAAQADAAYACQAKAADADUABgAAAACAAAADA7MABgAAAAGAAAABAAAAAQB4AAEAAAAMAAEAAAAWAAEAAQAAQABAAAACAAAAAQAA5RsAAAABAAAACgAcAB4AAURGTFQACAAEAAAAAP//AAAAAAAAAAEAAAAKAEQARgAHREZMVAAsY3lybAA2Z3JlawA2aGFuZwA2aGFuaQA2a2FuYQA2bGF0bgA2AAQAAAAA//8AAAAAAAAAAAAAAAEAAAAAABQAAAAAAAAAAAAAAAAAAQAAAAwAAQAAABAAAQAAACoAAAAAAAAAAQABAAgAAQAAABQACQAAABwAAndnaHQBAQAAABIAHgAqADYARgBSAF4AagB2AAEAAAAAABEAZAAAAAEAAAAAAQsAyAAAAAEAAAAAAQwBLAAAAAMAAAACAAIBkAAAArwAAAABAAAAAAEOAfQAAAABAAAAAAEPAlgAAAABAAAAAAEQArwAAAABAAAAAAERAyAAAAABAAAAAAESA4QAAAAAAAEAAAAAAAEACMAAwAAAAAAAEAAKPRQAFHsYABj2IAAj1zAAMexAAEAAAAAAAQAAABAAAgABABQACQAId2dodABkAAAAZAAAA4QAAAAAAQkBCgAAAGQAAAELAAAAyAAAAQwAAAEsAAABDQAAAZAAAAEOAAAB9AAAAQ8AAAJYAAABEAAAArwAAAERAAADIAAAARIAAAOEAAAAAQAAAAEAAQAAAGoAKgAAAAAAbAAAAAAARQBoAJYAtgDcAPQBBgEmAUoBcwGmAc8B/gI/AmwCjQKnAs0C4gL8AxEDSQNmA40D1gQPBEMEkwTDBPwFPQV4BbIF6wYTBkcGcQaYBr8G4wcGQACAAQAIAIEAAAALtS4utQfLywepHh6pQP98B/39DQ/9xMCdQf98/3wj4aen4QMKGyYmJhsKA/zs4ODg7PwDG0dhYWFHGwPrwKWlpcDrgzodHRsbTEzp6R0dFxcuLhUC/vtXUS8I+S4uzMwlJRwNBfzt4+Pj7fwFDRwlyMjZ9QUVL0BAQC8VBfXZyIOAAQAIADwAAAAbjw8PFx4aDc2/oo+P2tnZ2rc5ObcIvr4ICL+/CIMbICAL8N3OxigoDPgFICC/vxkZ4uI3N9XVHBy6uoMAgAEACAA4AAAZGAECAgEBAQEBAQEBAQICAgICAgICAgICAgIJOLcKChoaBd7crEH/ff99DKzvwAHBBjhs6bbrG+kYHBM0HAwOEXVrRw3jNNND6DHXJtEcKsdF5ACAAQAIACQAABEQAQICAgICAgIBAQEBAQEBAQEQLLTPAiWvVNTU5dzZ09vg3eUQHOU41ybeLQw4ODg1MsjLzs4AgAEACAAsAAAVFAECAgICAgEBAQEBAQEBAQEBAwICAhQ44WG6YuPj+Ofq/wgTCfHp+Di3zQgUFN+0PygSMDAwMDAwy8nJysocCEPfAIABAAgAGgAADAsBAgICAgICAgICAgILHNlb2R7qRcMe2lvaC2H/MTkz0RsXPNr8AoABAAgAEgAACAcBAgICAgICAgct5RnpP75l5QdD4jDN6+QnGYABAAgAJAAAERABAgICAQEBAQEBAQEBAwICAhAysF7f3/ED++z2BwTxMuBetBAcChr3NDQ0MC7LzM7OF961PgCAAQAIACoAABQTAQICAgICAQEBAQEBAQEBAQEDAgITMLjU9BWg1uba09TW3NvY2+b5VdYTHOUuyyjWLCwsKygmwsPFxcUsy/uAAQAIADAAABcWAQICAgICAgICAgICAgEBAQEBAQEBAQEWDN44tw5e3jq4Lc1PzfXp6ufk5O7s8fcWO9n2/yPCFh/pPNr1H9AvLismJM3MztAAgAEACABcAAAAK6YnJ6a7Ozu7+/Dt5dvW3N7s+uH5+eHh/v5gYOHU7OxSUtTU5fzx6Oz4/+XUgysUFOPjHR3m5tIzMzEwMNbS0dJRUfHxJibExCAgJibExCEhUFBQTkvs8PHx8YMAgAEACAAwAAAXFgABAQEBAQEBAQEBAwICAgICAgICAgICFtjqAQv66fUGEgPqA1nYhNotrREOLa3fFjY2NjUzMtLS0tPTIssLI8Ec+jfRCOOnAIABAAgAOAAAGxoAAQEBAQEBAQEBAQMCAgICAgICAgICAgICAgIa4fMJEgL0/AsXCvMQYeGS4zhl5bjnJeU4t731GkZGRkM+O+Hj5+rqINYaKsUgzxwhxzPaGwlG5QCAAQAIAHgAAAA5tzg4t/S8vPTh9AgSA/QAERsK9OHjEBBhYeHhkZHjxDAwMEZTPA7kCAnoxMTXQ0NDH/7/JPrMtMHX14M5HBwHBzAwz887Ozs8Pj7d3NrZ2dkrK9HR9PQpKcrK6uoFCgHx4+NDQ0U7IQXq6gUhO0VDQ+Pj8QEKBYMAgAEACAA2AAAaGQABAQEBAQEBAQEBAwICAgICAgICAgICAgICGeLx39ba2ujn3+LxEWHikuQ4t8T9LOBh4MT9GTk5OTo6O9rY19bWH8f9H7sc6zzaNdP3HSvKgAEACAAmAAASEQECAgICAgICAgICAgICAgICAhEa6iFf36LhGd8jZOWk5yTlQ8IRLdcW0RYWyCfaN+kiMOk26QUIgAEACAAcAAANDAECAgICAgICAgICAgIMPL9HyRnpLFrarNws2gwCDAAKMMwu2Bc4zUjlAIABAAgALAAAFRQBAgEBAQEBAQEBAQEEAgICAgICAgIUMbDr/xQeEgMRICcWF2vrlu0x312zFB38Pz8/PTo419ja3CDNBia/D9+vPwCAAQAIABYAAAoJAQICAgICAgICAgkttdQIJK8N2E6YCRzlKMYo2zTH0yiAAQAIABwAAA0MAQICAgICAgICAgICAgwutdMPJbAureAA00qLDBz3Mc4d8g3krBTSty8AgAEACAAWAAAKCQECAgICAgICAgIJDdhOmC21zMwSnQk0x9MoHOUnxCjbgAEACABmAAAAMOctLeeuZmausDIysKwaGhouNhfjvuDx4sWsrMUzMzMS9f0oA86ts8XFvh4evq0yMq2DMCQk6+vExExMGxsMDO/v+/nw5eDiPj06MSIL++/v+xEqNzw+4t/l8Pr7KirR0QoK/v6DAIABAAgAIAAADw4BAgICAgICAgICAgICAgIOLa0SCk2QEc1NkClQ0CrQDhv/L8kTSRPiQewVtPxB4ACAAQAIAC4AABYVAQICAgICAgICAgICAgICAgICAgICAhVHoBXQR6BkujLvZLo/vlinJtpYpxzoFRdIF+E98RdIF+E98RIP9Dr03z7fMtKAAQAIAIgAAAA/BQ0NBQUNDQXDKysrOjUU0+rew8PiSUlJNR8ZKOfLzeLirS0trbYjIyM5RzAE1/v72ba2yjc3NxTy8hbqvqe0ygDKgz9FReHhLy/LyxERLSID6uhKS0s+LRERGyY4Q0tL6ev6EBscHP7++/sGCwLy5ONDREQ8IQb7+wYhPEREQ+Pk8gILAAaDAIABAAgAaAAAADH0wMD0qggICBshD8jTwqqqyScnJw32+r6stMnJtS4utaEWFqHaLi5YWNjYrq7a2CEh2IMxYmICAiMjd1QlBv5aYGVtdyMjfnFkXlr6AiRZfhwcGxslJRMTLi7S0gUFKCjR0Tg42tqDAIABAAgAXgAAACywMjKw3TExW1vb27Gx3dseHtu5IiIiMywHzd/fzbm52D8/PyoTDx/ky8HK2NiDLBsbHBwpKdPTIiIoKM3NODja2igoJiIO/f1hYVtONyYoKCY1SVZcXfv7BRMhJoMAgAEACACWAAAAP/b/Eh8fHxL/9u3bzs7O2+32DzVLS0s1D/bdtqCgoLbdrS0trQoSEgoJEyYyMjImEwn/7N/f3+z/CR5GYWFhRh4HCfXLsbGxy/WDPyQkGw0HAfPp6enzAQcNGyS7u9P2Bxg7VFRUOxgH9tO7GxsQEEZG4eEmJh0NA/jo39/f6PgDDR0mxcXX9AMSLT8HPz8tEgP018WDAIABAAgAOgAAHBsBAQECAwIBAgECAgECAQICAQIBAwICAgICAgICG+72+vrp3tnZ3ukwS0sw6aKIiKIutdMPJ7IureAbHhYG9Nvk9AYWtMzvCy1FLQvvzBz3Mc4d8g3krIABAAgARgAAIiEBAgIBAQEBAQECAQEBAQEBAgEBAgEDAQECAQMCAgICAgICIe8LBRMdHR0TBfnr4eHh6/kaRFtbROS7o6O7OLdbuTjcW7khOdYkGg0HAPPp6fMABw0aJLzT9hc6UjoX9tMb/AhKCN9C7oABAAgAUAAAJyYBAgEBAQECAQEBAQEBAgEBAwECAQMBAQIBAQICAgICAgICAQEEAQEmLa3w9P4FBf708Ovh2trh6zhQUDjUp4+Pp9Q/vxchPcpMyu/j0trcJh0VJycgFAn99vb2/QkUICfg/x49Uj0e/+DLHPdC3TvZ+xLTMivU1ACAAQAIAEgAACMiAQEBAgEBAgEBAgEBAgECAwECAwICAgEBAgEBAQEBAQICAgIi9QELCwH169/W1t/rGk9PxpGRLq5FxPbq6Ojn7Ozy9zfIScgiKSEXDwT8/AQPFyEpzfotWC369PAc+dU0NDIx2djW1jza8BEAgAEACABqAAAAMhYNDRa3Hh4eLicEy9zaybe31Ts7Ox0OIOjJxNXV5QsL5bc5ObfsOTlra+rqubns6iYm6oMyPDzb2xkZMSsR+flbXV1VQjEZGTJAUVhX9PYKJjI7O9raGxsSEigo09MQECkpy8tBQeLigwCAAQAIAGgAAAAxoRMTEyw8JPTI5/LdvKGh72JiYkcmERw7D97G1u/v6xgY690TE93dXV3d6BgY6L9AQL+DMfz8CA0F9unpTU5NSDofCPz8CB04R01OTenp9QQMCCgoyMg8PNra8vIdHSkpyMju7gEBgwCAAQAIAEYAAAAguDAwuP7Kyv6YDQ0RFhgW08awoJiY7rOz7q0iIq22tu7mgyAbG+TkPT3Z2R8fAufd188kJA/69QQfH729ISHZ2Ri7viWDAIABAAgAXgAAACzazc3agfj4+Pn7hYKBgdPT5+DjW1vjvjQ0vvfb2/exKCix7eXg2dXT1d3c3+aDLD093Nw9PRoG+voDAQgaGsbJJxsb5OQoKNLSAQGpqdra4OC2FhYTERESubSytYMAgAEACAAyAAAYFwECAgEBAQEBAQEBAQEBAQICAgICAgICAhfx5S0tLS80tbCurtnZ5tsa6ypc3KreKdwXNtg2FwsUJy8cDBcu3OM9Pd0u1g8p0jrfgAEACAAuAAAWFQABAQEBAQEBAQEBAwICAgICAgICAgIV2+zh2t3g5+bh4uwJVNv/NS211AgosxUsLCwqIx+8v8TGxi/O/ifKHOUnxCjbgAEACAAuAAAWFQECAQEBAQEBAQEBAQEDAgICAgICAgIV3OvW5djR0dPa2dXa5e1P1v4wMLgVoBUqxyUlJSMdGbe6v8HBLsz8IsQc5SjWgAEACAAqAAAUEwECAgICAgICAgICAQEBAgEBAQEBEy6t+Nz8XNz+O0TE8ebi29ng5OrvE/QQN9YryRQqzB3iviAgIB/EwsC/gAEACAAoAAATEgECAgICAgICAgICAgICAgICAgISJeAb6TGxVNMc6ELBJF3epeAd3hIiyVf+/R39HT/gAxsp1xIj1DDaAAABEAAB9P4MAAAD6AA+ADQDtAAAAAEAAAAAAAAAAAAAAAAAAQPoAAAAQQA+AEAAQABAAGoAcgBAAEAAQgBBAEEAQABBAEEAZACKAEEAQABBAEAAQABAAE0AQABBAEAAQABBAEAAQQBAAEAAcQBAAEAAdQBAAEAAQABaAAA="
+  }
+}
