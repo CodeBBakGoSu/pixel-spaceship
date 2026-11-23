@@ -181,16 +181,26 @@ function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
   if (!inBand(p.altitude, tell.alt, ACE.attack.bandWindow) || Math.hypot(dx, dz) > ACE.attack.range
     || Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
   // Only an accepted maneuver's first tick counts, not its whole animation or a held input.
-  return aceDodgeWindow(tell, tick) && (state.roll?.elapsed === 0 || state.maneuverTrail?.startTick === tick);
+  const dodgeWindow = aceDodgeWindow(tell, tick)
+    || tell.dodgeGraceUntil !== undefined && tick <= tell.dodgeGraceUntil;
+  return dodgeWindow && (state.roll?.elapsed === 0 || state.maneuverTrail?.startTick === tick);
 }
 
-function updateTell(state: StageState, ace: Ace, events?: CombatEvents): void {
+function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
+  pendingSpace?: { active: boolean; graceTicks: number }): void {
   const { tick, player: p } = state;
   const tuning = ACE_PHASES[ace.phase];
   const tell = ace.tell;
   if (tell) {
     const lost = tell.kind !== 'roll' && lostAttackLock(state, ace, tell);
     if (!lost && tick < tell.until) return;
+    if (!lost && tell.kind !== 'roll' && tick === tell.until && aceDodgeWindow(tell, tick)
+      && pendingSpace?.graceTicks) {
+      tell.dodgeGraceUntil = tick + pendingSpace.graceTicks;
+      return;
+    }
+    if (!lost && tell.kind !== 'roll' && tell.dodgeGraceUntil !== undefined
+      && tick < tell.dodgeGraceUntil && pendingSpace?.active) return;
     ace.tell = null;
     if (tell.kind === 'roll') {
       ace.roll = { kind: 'barrel', side: ace.side, elapsed: 0, altitude: ace.alt };
@@ -198,9 +208,12 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents): void {
       ace.rollReadyAt = tick + Math.max(tuning.rollTicks, ROLLS.barrel.ticks + ACE.roll.recoverTicks);
       ace.attackAt = Math.max(ace.attackAt, tick + ROLLS.barrel.ticks);
     } else {
-      if (!lost) fireAceSalvo(state, ace, tell, tuning[tell.kind], events);
       const fireScale = state.run ? HEAT_TIERS[state.heat].shotIntervalScale : 1;
-      ace.attackAt = tell.until + Math.round(tuning.fireTicks * fireScale);
+      const fireTicks = Math.round(tuning.fireTicks * fireScale);
+      if (!lost) {
+        fireAceSalvo(state, ace, tell, tuning[tell.kind], events);
+        ace.attackAt = Math.max(tell.until, tick) + fireTicks;
+      } else ace.attackAt = tell.until + fireTicks;
     }
     return;
   }
@@ -247,7 +260,8 @@ function advanceDefeat(state: StageState, ace: Ace, ground: Ground): void {
 }
 
 /** Flight, phase changes, and cue timing all advance once per sortie tick. */
-export function advanceAce(state: StageState, ground: Ground, events?: CombatEvents, observe?: SwarmObserver): void {
+export function advanceAce(state: StageState, ground: Ground, events?: CombatEvents, observe?: SwarmObserver,
+  pendingSpace?: { active: boolean; graceTicks: number }): void {
   const ace = state.boss;
   if (!ace || ace.crashed) return;
   if (ace.defeatedAt !== null) {
@@ -265,7 +279,7 @@ export function advanceAce(state: StageState, ground: Ground, events?: CombatEve
   if (ace.roll && ++ace.roll.elapsed >= ROLLS.barrel.ticks) ace.roll = null;
   if (!ace.tell && !ace.roll && state.tick >= ace.bandAt
     && inBand(ace.alt, flightAltitude(ace.band, ground(ace.x, ace.z)), HIT_WINDOW)) nextBand(ace, state);
-  updateTell(state, ace, events);
+  updateTell(state, ace, events, pendingSpace);
   updateFlight(state, ace, ground);
   const p = state.player, dx = p.x - ace.x, dz = p.z - ace.z;
   markTail(state, ace, Math.hypot(dx, dz), -(dx * Math.sin(p.yaw) + dz * Math.cos(p.yaw)), angleTo(ace.yaw, dx, dz), events);

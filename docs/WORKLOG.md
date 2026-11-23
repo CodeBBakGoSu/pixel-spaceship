@@ -23,6 +23,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `c22c9c5`; base `b123ba6`)
+- Preserved FlightChord's full 80 ms Space/Shift arbitration and passed unresolved W/S+Space intent to simulation. At a valid solid-warning fire tick, Ace defers at most five ticks only while a roll or maneuver can be accepted; only an accepted first-tick action cancels the salvo, while cooldown-blocked intent still fires. Phase 1/2 live attack fixtures continue to hold their release cone through the opening salvo.
+- Verification: focused tests 19/19; `npm run build` passed (120 modules); full `npm test` exited 0 (the retained output has no TAP count); `git diff --check HEAD` clean. The `renderer-proto` documentation changes and approved Ace-lock fixes are integrated with no unresolved conflicts.
+- State: in progress; browser/cockpit warning-position verification remains with the UI testing agent.
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
+- [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
+- State: in progress. 원격 버전·Pages 성공 배포·PR 상태 및 게임 데이터와 38개 항목을 대조했다. HTML 도감은 Product Engineer가 별도 반영하며, 확인 전에는 기존 기획 문서를 정리하지 않는다.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438662-ace-lock-dodge (base `81a0e2a`)
 - State: in progress. Ace 상호 락온 표식 및 발사 직전 배럴롤·반전 기동 회피 판정. 키 매핑·Seeker·P1 사운드는 변경하지 않는다.
 

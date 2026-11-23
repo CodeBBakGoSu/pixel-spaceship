@@ -68,6 +68,7 @@ export type StageInput = {
   climb?: number;
   maneuver?: ManeuverKind;
   maneuverTurn?: number;
+  spacePending?: ManeuverKind;
   roll?: boolean;
   rollTurn?: number;
   boost?: boolean;
@@ -199,7 +200,7 @@ export type Effect = Position & (
 );
 // --- S7e lane ---
 export type AcePhase = 1 | 2 | 3;
-export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number };
+export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number; dodgeGraceUntil?: number };
 export type Ace = Position & {
   id: number;
   kind: 'ace';

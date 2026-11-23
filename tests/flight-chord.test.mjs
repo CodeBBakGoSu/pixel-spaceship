@@ -26,6 +26,16 @@ test('Space alone queues one reversal and late Shift keeps that choice', () => {
   assert.equal(chord.flush(900), undefined);
 });
 
+test('Shift resolves a pending Space as a roll in either order', () => {
+  const chord = new FlightChord();
+  assert.equal(chord.pressSpace(100, true), 'roll');
+  assert.equal(chord.flush(100 + ROLL_CHORD_MS), undefined);
+
+  assert.equal(chord.pressSpace(200, false), undefined);
+  assert.equal(chord.flush(200 + ROLL_CHORD_MS - 1), undefined);
+  assert.equal(chord.pressShift(200 + ROLL_CHORD_MS - 1), 'roll');
+});
+
 test('closing flight controls cancels an unresolved gesture', () => {
   const chord = new FlightChord();
   chord.pressSpace(20, false);

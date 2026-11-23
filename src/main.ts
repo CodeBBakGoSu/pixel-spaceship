@@ -1237,6 +1237,7 @@ function advance(): void {
     flare: pendingFlare || control.flare,
     maneuver: pendingRoll === undefined ? pendingManeuver?.kind ?? control.maneuver : undefined,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
+    spacePending: requestedSpace?.kind,
     roll: pendingRoll !== undefined || control.roll,
     rollTurn: pendingRoll ?? control.rollTurn,
     toggleView: pendingViews > 0 || control.toggleView,

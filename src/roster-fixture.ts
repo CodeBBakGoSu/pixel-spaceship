@@ -21,13 +21,15 @@ export function stageAceFixture(state: StageState, phase: AcePhase, cue: string 
   const p = state.player;
   if (!legacy) stageReviewFlight(state);
   const tail = cue === 'tail';
-  const x = tail ? 8 : -16, z = tail ? -57 : 92;
+  const attacking = !legacy && (cue === 'gun' || cue === 'missile' || !cue && phase !== 3);
+  const x = tail ? 8 : attacking ? 0 : -16;
+  const z = tail ? -57 : attacking ? scaleTravel(135) : 92;
   const ace = state.boss = makeAce(state, p.x + (legacy ? scaleTravel(x) : x), p.z + (legacy ? scaleTravel(z) : z));
   ace.phase = phase;
   if (phase === 2) ace.hp = Math.round(ace.maxHp * 0.52);
   if (phase === 3) ace.hp = Math.round(ace.maxHp * 0.24);
-  ace.yaw = tail ? p.yaw : -2.58;
-  ace.bank = phase === 3 ? 1.04 : phase === 2 ? -0.73 : 0.48;
+  ace.yaw = tail ? p.yaw : attacking ? Math.PI : -2.58;
+  ace.bank = attacking ? 0 : phase === 3 ? 1.04 : phase === 2 ? -0.73 : 0.48;
   ace.pitch = phase === 3 ? 0.14 : 0;
   ace.tail = tail;
   ace.boosting = ACE_PHASES[phase].afterburner;

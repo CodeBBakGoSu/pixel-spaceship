@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ACE } from '../src/data/ace.ts';
+import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { advanceAce } from '../src/ace.ts';
+import { FlightChord, ROLL_CHORD_MS } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -14,6 +15,23 @@ function duel() {
   assert.equal(state.boss.tell?.kind, 'missile');
   assert.ok(state.lock.progress > 0 && !state.lock.ready);
   return state;
+}
+
+for (const [phase, kind] of [[1, 'gun'], [2, 'missile']]) {
+  test(`live phase ${phase} Ace fixture keeps its first ${kind} tell through release`, () => {
+    const state = createStage(parseStageOptions(`?fixture=ace&phase=${phase}&live=1`), ground);
+    const ace = state.boss, tell = ace.tell;
+    const hostileShots = () => state.shots.filter(shot => shot.kind === 'hostile');
+    assert.equal(tell?.kind, kind);
+    while (state.tick < tell.until - 1) {
+      step(state);
+      assert.equal(ace.tell?.kind, kind);
+      assert.equal(hostileShots().length, 0);
+    }
+    step(state);
+    assert.equal(ace.tell, null);
+    assert.equal(hostileShots().length, ACE_PHASES[phase][kind].length);
+  });
 }
 
 const splitS = { maneuver: maneuverForKey('Space', 0, -1) };
@@ -51,6 +69,57 @@ test('a reversal request on cooldown does not break the lock', () => {
   while (state.tick < until - 1) step(state);
   step(state, splitS);
   assert.equal(state.maneuver, null);
+  assert.ok(state.shots.some(shot => shot.hostileKind === 'ace-missile'));
+});
+
+test('Space-first Shift chord crossing the fire tick resolves to one accepted roll', () => {
+  const state = duel(), until = state.boss.tell.until, chord = new FlightChord();
+  while (state.tick < until - 1) step(state);
+  const now = 1000;
+  assert.equal(chord.pressSpace(now, false), undefined);
+  step(state, { spacePending: splitS.maneuver });
+  assert.equal(state.tick, until);
+  assert.equal(state.boss.tell?.dodgeGraceUntil, until + Math.ceil(ROLL_CHORD_MS * 60 / 1000));
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
+
+  const action = chord.pressShift(now + 20);
+  assert.equal(action, 'roll');
+  step(state, { roll: action === 'roll', rollTurn: 0 });
+  assert.equal(state.roll?.elapsed, 0);
+  assert.equal(state.maneuver, null);
+  assert.equal(state.boss.tell, null);
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
+});
+
+test('late W/S + Space resolves to an accepted maneuver and cancels only its salvo', () => {
+  const state = duel(), until = state.boss.tell.until, chord = new FlightChord();
+  while (state.tick < until - 1) step(state);
+  const now = 2000;
+  assert.equal(chord.pressSpace(now, false), undefined);
+  for (let elapsed = 16; elapsed < ROLL_CHORD_MS; elapsed += 16) {
+    assert.equal(chord.flush(now + elapsed), undefined);
+    step(state, { spacePending: splitS.maneuver });
+  }
+  assert.equal(state.boss.tell?.dodgeGraceUntil, until + Math.ceil(ROLL_CHORD_MS * 60 / 1000));
+  const action = chord.flush(now + ROLL_CHORD_MS);
+  assert.equal(action, 'reversal');
+  step(state, { maneuver: splitS.maneuver, maneuverTurn: 0 });
+  assert.equal(state.maneuver?.kind, splitS.maneuver);
+  assert.equal(state.maneuverTrail?.startTick, state.tick);
+  assert.equal(state.boss.tell, null);
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
+});
+
+test('cooldown-blocked pending Space does not defer or cancel the Ace salvo', () => {
+  const state = duel(), until = state.boss.tell.until;
+  while (state.tick < until - 1) step(state);
+  state.maneuverReadyAt = until + 60;
+  state.rollReadyAt = until + 60;
+  step(state, { spacePending: splitS.maneuver });
+  assert.equal(state.tick, until);
+  assert.equal(state.boss.tell, null);
+  assert.equal(state.maneuver, null);
+  assert.equal(state.roll, undefined);
   assert.ok(state.shots.some(shot => shot.hostileKind === 'ace-missile'));
 });
 
