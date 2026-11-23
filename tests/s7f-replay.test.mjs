@@ -10,7 +10,7 @@ import { World } from '../src/world.ts';
 // Seed-1 terminal hashes: persistent recycling hordes and weapon rank growth, production terrain, full-view pilot.
 const terminalHashes = {
   legacy: 'cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903',
-  survivors: '3aaa6f5fc421a0528155fe368ba7cec6e3869db6c03a6abac1b29e42ec988c7b',
+  survivors: '8b710ffa621053ed2300724034176244da2522e7ef55d816f5a190c98b0e9e34',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

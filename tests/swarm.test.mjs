@@ -169,6 +169,50 @@ test('distant wave Gnats recycle ahead of travel, terrain-safe in the same band 
   assert.equal(enemy.leaveAt, undefined);
 });
 
+test('aft Gnats recycle only after one continuous second beyond the near-player margin', () => {
+  const state = waveState();
+  Object.assign(state.player, { x: 0, z: 0, yaw: 0, vx: 100, vz: 0 });
+  const enemy = makeEnemy(state, -GNAT.range, 0, 1, 'gnat');
+  state.enemies.push(enemy);
+  for (let i = 0; i < 59; i++) advanceEnemies(state, ground);
+  assert.ok(enemy.x < 0);
+  assert.equal(enemy.farTicks, 59);
+  enemy.x = GNAT.range;
+  advanceEnemies(state, ground);
+  assert.equal(enemy.farTicks, 0, 'returning ahead resets the consecutive timer');
+  enemy.x = -GNAT.range * 0.4;
+  advanceEnemies(state, ground);
+  assert.equal(enemy.farTicks, 0, 'nearby aft Gnats stay in place');
+  enemy.x = -GNAT.range;
+  const copy = structuredClone(state);
+  const rng = JSON.stringify(state.streams);
+  for (let i = 0; i < 60; i++) {
+    advanceEnemies(state, ground);
+    advanceEnemies(copy, ground);
+  }
+  assert.deepEqual(state, copy);
+  assert.equal(JSON.stringify(state.streams), rng);
+  assert.ok(enemy.x > 0, 'relocates ahead of travel rather than heading');
+  assert.equal(enemy.band, 1);
+  assert.ok(enemy.entry, 'flies back in rather than appearing in the forward view');
+  assert.ok(Math.hypot(enemy.entry.target.x, enemy.entry.target.z) <= GNAT.range * 1.5);
+});
+
+test('aft recycling retries unsafe sites after one second without killing the Gnat', () => {
+  const state = waveState();
+  Object.assign(state.player, { x: 0, z: 0, yaw: 0 });
+  const enemy = makeEnemy(state, 0, -GNAT.range * 1.5, 1, 'gnat');
+  state.enemies.push(enemy);
+  for (let i = 0; i < 60; i++) advanceEnemies(state, (x, z) => z < 0 ? 35 : 1000);
+  assert.equal(enemy.hp, 1);
+  assert.ok(enemy.z < 0);
+  for (let i = 0; i < 59; i++) advanceEnemies(state, ground);
+  assert.ok(enemy.z < 0);
+  advanceEnemies(state, ground);
+  assert.ok(enemy.z > 0);
+  assert.equal(enemy.farTicks, 0);
+});
+
 test('failed recycling retains a living Gnat and retries rather than placing it in terrain', () => {
   const state = waveState();
   const enemy = makeEnemy(state, -SPAWN_WORLD.recycleDistance * 2, 0, 1, 'gnat');

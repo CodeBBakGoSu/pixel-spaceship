@@ -498,14 +498,23 @@ function maintainGnats(state: StageState, ground: Ground): void {
     }
   }
   for (const enemy of state.enemies) {
-    if (enemy.kind !== 'gnat' || !enemy.hp || enemy.entry || enemy.leaveAt !== undefined
-      || (enemy.x - p.x) ** 2 + (enemy.z - p.z) ** 2 <= SPAWN_WORLD.recycleDistance ** 2) continue;
+    if (enemy.kind !== 'gnat' || !enemy.hp || enemy.entry || enemy.leaveAt !== undefined) continue;
+    const dx = enemy.x - p.x, dz = enemy.z - p.z;
+    const distance = dx * dx + dz * dz;
+    const distant = distance > SPAWN_WORLD.recycleDistance ** 2;
+    const aft = dx * fx + dz * fz < 0 && distance > (GNAT.range * 0.6) ** 2;
+    if (!distant && !aft) {
+      if (enemy.farTicks) enemy.farTicks = 0;
+      continue;
+    }
     enemy.farTicks = (enemy.farTicks ?? 0) + 1;
-    if (enemy.farTicks > 1 && enemy.farTicks % TICKS_PER_SECOND !== 0) continue;
+    if (!(distant && enemy.farTicks === 1) && enemy.farTicks % TICKS_PER_SECOND !== 0) continue;
     const altitude = BANDS[enemy.band];
     for (let i = 0; i < 12; i++) {
-      const bearing = yaw + (((enemy.id * 0.61803398875 + i / 12) % 1) - 0.5) * 2.1;
-      const range = SPAWN_WORLD.recycleDistance * (i < 6 ? 0.8 : 0.65);
+      const spread = ((enemy.id * 0.61803398875 + i / 12) % 1) - 0.5;
+      const bearing = yaw + spread * 2.1;
+      const range = distant ? SPAWN_WORLD.recycleDistance * (i < 6 ? 0.8 : 0.65)
+        : GNAT.range * (i < 6 ? 1.35 : 1.15);
       const x = p.x + Math.sin(bearing) * range, z = p.z + Math.cos(bearing) * range;
       if (ground(x, z) + GNAT.clearance > altitude) continue;
       enemy.x = x;
@@ -516,6 +525,7 @@ function maintainGnats(state: StageState, ground: Ground): void {
       enemy.yaw = Math.atan2(enemy.vx, enemy.vz);
       enemy.farTicks = 0;
       delete enemy.tell;
+      if (!distant) beginEnemyFlyIn(state, enemy, ground, p, 0.16);
       break;
     }
   }
