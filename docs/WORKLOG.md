@@ -23,10 +23,14 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `69f81c8`; commit: this change)
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
 - Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
 - Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
 - State: done (direct push to `renderer-proto`; no PR or `main`).
+
+### 2026-11-23 22:56 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
+- [Ace 회피 후보 검증](wiki/HISTORY.md#ace-dodge): PR #7의 `1a0a5b2`에서 확인한 브라우저 조작과 자동 시간 제어 경계를 구분했다. PR은 열려 있고 개발판 병합·배포는 하지 않았다.
+- State: in progress. HTML 최종본 게시 확인 전까지 기존 기획 문서는 유지한다.
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
 - [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
