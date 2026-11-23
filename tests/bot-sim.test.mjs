@@ -1,10 +1,95 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { autopilotInput } from '../src/autoplay.ts';
 import { createBot } from '../src/bot.ts';
-import { BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
+import { BOT_PROFILES, BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
+import { random, rngStream } from '../src/stage-random.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { fireHostile } from '../src/stage-combat.ts';
 import { parseSimArgs, runBatch, serializeSummaryCsv } from '../tools/sim.mjs';
+
+function altitudeDecisionSeed(profile, seeksAltitude) {
+  for (let seed = 1; seed <= 1000; seed++) {
+    if ((random(rngStream(seed, `bot:${profile}`)) < BOT_PROFILES[profile].altitudeUse) === seeksAltitude) return seed;
+  }
+  throw new Error(`No altitude decision seed for ${profile}`);
+}
+
+function acePursuitStage(seed, targetAltitude) {
+  const stage = createStage(parseStageOptions(`?mode=survivors&fixture=ace&seed=${seed}`));
+  Object.assign(stage.player, { altitude: 125, pitch: 0, yaw: 0 });
+  Object.assign(stage.boss, { x: stage.player.x, z: stage.player.z + 300, alt: targetAltitude,
+    band: targetAltitude > 125 ? 2 : 0, entry: undefined, tell: null, tail: false });
+  stage.enemies = [];
+  stage.invulnerability = 0;
+  return stage;
+}
+
+test('failed altitude decisions preserve Ace pursuit climb and dive across profile reaction delays', () => {
+  for (const profile of BOT_PROFILE_IDS) {
+    for (const targetAltitude of [75, 180]) {
+      const seed = altitudeDecisionSeed(profile, false);
+      const stage = acePursuitStage(seed, targetAltitude);
+      const base = autopilotInput(stage, 'full', undefined, BOT_PROFILES[profile], false);
+      assert.equal(base.climb, Math.sign(targetAltitude - stage.player.altitude));
+      const pilot = createBot(profile, seed);
+      const input = pilot(stage);
+      assert.equal(input.climb, base.climb);
+      stage.tick++;
+      assert.equal(pilot(stage).climb, input.climb, 'reaction delay holds the pursuit command');
+    }
+  }
+  assert.ok(BOT_PROFILES.skilled.reactionDelayTicks < BOT_PROFILES.average.reactionDelayTicks);
+  assert.ok(BOT_PROFILES.average.reactionDelayTicks < BOT_PROFILES.weak.reactionDelayTicks);
+});
+
+test('successful altitude decisions preserve full Ace pursuit control', () => {
+  for (const profile of BOT_PROFILE_IDS) {
+    const seed = altitudeDecisionSeed(profile, true);
+    const stage = acePursuitStage(seed, 180);
+    assert.equal(createBot(profile, seed)(stage).climb, 1);
+  }
+});
+
+test('failed altitude decisions preserve Ace-fight dodge climb for every profile', () => {
+  for (const profile of BOT_PROFILE_IDS) {
+    const seed = altitudeDecisionSeed(profile, false);
+    const stage = acePursuitStage(seed, 75);
+    stage.effects.push({ kind: 'flak', x: stage.player.x, z: stage.player.z, alt: 125, life: 1 });
+    assert.equal(autopilotInput(stage, 'full', undefined, BOT_PROFILES[profile], false).climb, 1);
+    assert.equal(createBot(profile, seed)(stage).climb, 1);
+  }
+});
+
+test('inactive stages still return no bot controls', () => {
+  const stage = acePursuitStage(1, 180);
+  stage.phase = 'lost';
+  assert.deepEqual(createBot('average', 1)(stage), {});
+  stage.phase = 'playing';
+  stage.paused = true;
+  assert.deepEqual(createBot('average', 1)(stage), {});
+});
+
+test('failed altitude decisions preserve absent and neutral climb commands', () => {
+  const seed = altitudeDecisionSeed('average', false);
+  const maneuvering = acePursuitStage(seed, 180);
+  maneuvering.maneuver = { kind: 'j-turn', elapsed: 0 };
+  assert.equal(createBot('average', seed)(maneuvering).climb, undefined);
+  const aligned = acePursuitStage(seed, 125);
+  assert.equal(createBot('average', seed)(aligned).climb, 0);
+});
+
+test('failed altitude decisions do not attenuate climb outside a boss fight', () => {
+  for (const profile of BOT_PROFILE_IDS) {
+    const seed = altitudeDecisionSeed(profile, false);
+    const stage = acePursuitStage(seed, 180);
+    stage.boss = null;
+    stage.player.altitude = 75;
+    const base = autopilotInput(stage, 'full', undefined, BOT_PROFILES[profile], false);
+    assert.notEqual(base.climb, 0);
+    assert.equal(createBot(profile, seed)(stage).climb, base.climb);
+  }
+});
 
 test('a bot returns controls without mutating stage state or consuming a game RNG stream', () => {
   const stage = createStage(parseStageOptions('?autoplay=1&mode=survivors&seed=42'));

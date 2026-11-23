@@ -32,6 +32,25 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Review fixes (`6c273cb`, `25803c9`): Twin keeps its center shots on target at range; Rail afterglow counts only damaging hits. Build passed and seeded clear gate is unchanged: 1/27/2026 clear, 11/42 time out (60.745/29.0165 Ace HP left), 128 loses at 504.03 s (1069.04 Ace HP left).
 - State: implementation pushed for [review](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/3), merge held for 밸런스 봇. Rank tuning is centralized in `src/data/items.ts`: first recover the Ace gates, then tune base DPS, XP and evolution pacing with the full horde.
 
+### 2026-11-23 (KST) · 데븐 봇 · balance/ace-pursuit-climb (`f40bcd5`; claim `58a08e1`; base `e46b813`)
+- Ace kill drop after Stage C: sim pilot pursuit climb. The 22 m floor hypothesis was rejected: all 22 average timeout replays matched CLI hashes; 20 descended below 22 m and damaged the Ace in its SKIM band, including both aircraft at 14 m clearance. The real pursuit defect was `src/bot.ts` zeroing pursuit/dodge climb for a failed altitude scout window. Wider bands magnified the lost alignment time.
+- Pass through the autopilot's pursuit/dodge climb; keep profile reaction delay, aim error, SKIM selection, dodge quality and maneuver use. Altitude rolls still govern discretionary band exploration. No Ace or Seeker tuning. A profile-scaled attenuation trial left average Ace kills at 66% and reduced weak clears to 22%, so it was not kept.
+- Desktop Heat 0, seeds 1–100: before = `1f1eb4b` (player growth); pulled base `e46b813` adds render-only feedback. Clears include live timeouts. Average alignment rises 41.92% → 48.97%, altitude eligibility 75.18% → 86.81%, and Ace damage/sec 13.13 → 15.41; instrumented final hashes match all 100 CLI average runs.
+
+| Profile | Clear before → after | Ace kill | Timeout | End HP median | Kills median | Level-ups median |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| Skilled | 100% → 100% | 100% → 100% | 0% → 0% | 12 → 12.5 | 1057.5 → 1059.5 | 29 → 29 |
+| Average | 73% → 76% | 66% → 75% | 7% → 1% | 5 → 9 | 1085.5 → 1046.5 | 30 → 29 |
+| Weak | 41% → 23% | 0% → 0% | 41% → 23% | 0 → 0 | 1003.5 → 961.5 | 28 → 28 |
+
+- Tradeoff: weak active pursuit reduces live-timeout survival (41% → 23%); the profile still cannot kill the Ace. No compensating survival or enemy tuning was added. Average lands exactly at the measured 75% always-pursue reference, below skilled's 100%.
+- Verification: `npm test` 524/524, `npm run build` OK, three 100-seed sims exit 0, `git diff --check` clean. Six focused bot tests cover failed/successful altitude rolls, ascent/descent, dodge, reaction-held commands, absent/neutral controls, inactive stages and non-boss behavior. No existing tests or golden hashes changed; golden replay pilots use `autopilotInput`, not `createBot`.
+- State: done; branch ready for review, not merged. Sim-pilot balance area released.
+
+### 2026-11-23 (KST) · 데븐 봇 · balance/ace-pursuit-climb (claim; base `e46b813`)
+- Ace kill drop after Stage C: sim pilot pursuit climb. Replace the boss-fight all-or-nothing climb gate with graded profile control; add bot regression tests and record 100-seed balance results. Files: `src/bot.ts`, `tests/bot-sim.test.mjs`, `docs/BALANCE_NOTES.md`, and this log. No Ace or Seeker changes.
+- State: done; see completion above.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795407702-damage-numbers (`0781cd5`; claim `c86c9d3`)
 - Pooled Canvas damage numbers (real Fire Control crits + large-hit emphasis), persisted option / `?damageNumbers=0`, merged hits, batched Gnat explosions, rolling 5-second kills beside ACE WIPE. WeakMap/WeakSet observers only; no hashed state, spawning, upgrades or gameplay tuning changed.
 - Verify: `npm test` 518/518, build OK, `npm run sim -- --profile all --seeds 5` exit 0 (skilled/average/weak clears 100%/100%/60%; smoke only). Both existing replay goldens unchanged. Incomplete preinstalled node_modules lacked three/@types/three: repaired with npm install, restored package-lock.
