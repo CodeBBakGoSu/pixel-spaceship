@@ -1,0 +1,41 @@
+# ASTER WING bot worklog
+
+Shared log for the bots working on this repo, so each one knows what the other did.
+Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 봇**.
+
+## Rules for every bot
+1. Before you start: `git fetch`, read the top of this file, and check which branch and commit the other bot last touched.
+2. After every piece of work, add an entry at the top of **Log** (newest first) in the same commit or right after it.
+3. Each entry: date (KST), bot name, branch, commit hashes, what changed (1-3 lines), verification (tests/build/sim), and state (done / in progress / blocked / needs 기현님).
+4. Say "in progress" when you claim an area, so the other bot doesn't touch the same files at the same time.
+5. Never push to `main` without 기현님's OK (main auto-deploys to GitHub Pages). Never force-push or rewrite pushed history. Never commit `ref/frames` or `ref/clips`.
+6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
+
+## Current state
+- Working branch: `renderer-proto` (pushed to origin). `main` is behind at `801ff22` (OG preview image) and is what the public site shows.
+- Tests: `npm test` 508 pass at `8265c4e`. Build OK.
+- 100-seed sims at `8265c4e`: skilled 100% clear, average 59%, weak 27%.
+- Open questions for 기현님: bring average clear back toward 74%? Full Stage C (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) not started.
+
+## Log
+
+### 2026-11-23 · 비행기게임봇 · renderer-proto
+- Pushed `renderer-proto` to origin at `8265c4e` (new branch, main untouched). Added this worklog.
+- State: done.
+
+### 2026-11-22 · 비행기게임봇 · s8-forge → renderer-proto (`9b2efad`, `355f991`, `3e2135d`, merge `8265c4e`)
+- Forge-reference visuals: climb-readable chase/cockpit cameras, new palette, sky, altitude haze, jet-shaped shadows (A); one shared pixel terrain material for all views with coastlines, foam, sea glints, contours, forests, voxel clouds and cloud shadows (B); climb-angle flight model (32° up / 38° down) and lighter turn drag 0.22 (C-lite).
+- Verified: 508 tests, build, 60 fps in chase/top/portrait, sims above.
+- State: done; waiting on 기현님 playtest.
+
+### 2026-11-22 · 비행기게임봇 · renderer-proto (`b045bbe`, `5dd58c3`, `fcfd396`)
+- Twin cannon now answers ground AA from any altitude band; swarm density ramps from 4:00 toward 10:00 (peak ~99 enemies PC / 75 phone).
+- State: done.
+
+### 2026-11-21 · 비행기게임봇 · renderer-proto (`5a890c1` … `54e3cb6`)
+- Stage 7a-7f: bank-to-turn flight, numeric instruments, banked cameras, flight audio, enemy roster and Red Kite Ace, streamed Reach with terrain-following SKIM, double flight speed, adaptive graphics quality, ElevenLabs SFX (paid plan, see AUDIO_CREDITS.md), WebGL context-loss recovery, Ion Wake shown as sparse motes.
+- State: done.
+
+### 2026-11-18 – 2026-11-20 · 비행기게임봇 · renderer-proto (`2010b34` … `ee94755`)
+- Survivors rework: Three.js voxel renderer, deterministic Reach sortie, cockpit and rear mirror, enemy archetypes, weapons/buffs/evolutions, Bills and pilot progression, mobile sortie UI, combat feedback and balance passes. Plans in `docs/SURVIVORS_PLAN.md`, `docs/WEAPONS_BUFFS_PLAN.md`, `docs/BALANCE_NOTES.md`.
+- State: done.

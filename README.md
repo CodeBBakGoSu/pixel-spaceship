@@ -1,5 +1,7 @@
 # ASTER WING
 
+> Bots working on this repo log what they did in [docs/WORKLOG.md](docs/WORKLOG.md). Read it before starting, add an entry after finishing.
+
 Fly a ten-minute survival sortie over Kestrel Reach. Match altitude to shoot and collect salvage, draft weapons and buffs, and defeat the enemy Ace that arrives at 8:00. The game uses TypeScript, Vite, and Three.js instanced voxels drawn through a nearest-filtered low-resolution buffer.
 
 ## Run
