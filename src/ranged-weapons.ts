@@ -132,8 +132,9 @@ function advanceRail(state: StageState, source: Position, level: number, ground:
     if (fx.kind !== 'rail-glow' || state.tick >= fx.until || !fx.to || !fx.hits || !fx.radius || !fx.damage) continue;
     for (const target of glowTargets ??= candidates(state)) {
       if (!target.hp || fx.hits.includes(target.id) || !railOverlaps(state, { from: fx.from, to: fx.to }, target, fx.radius)) continue;
-      fx.hits.push(target.id);
+      const hp = target.hp;
       hitTarget(state, target, fx.damage, 'rail', fx.from);
+      if (target.hp < hp) fx.hits.push(target.id);
     }
   }
   const charge = state.railChargeAt;

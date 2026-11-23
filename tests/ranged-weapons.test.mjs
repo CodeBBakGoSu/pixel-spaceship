@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
+import { ROLLS } from '../src/data/roll.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS, openReversal, STEP } from '../src/stage-combat.ts';
@@ -198,6 +199,25 @@ test('an inbound enemy and Ace ignore ranged hits until engagement and lock', ()
   state.lock = { id: ace.id, progress: 1, ready: true };
   advanceRangedWeapons(state, ground);
   assert.equal(ace.hp, 9);
+});
+
+test('Rail afterglow can still damage a locked Ace after barrel-roll immunity expires', () => {
+  const state = setup('rail', 7);
+  const ace = state.boss = makeAce(state, 0, 78);
+  ace.roll = { kind: 'barrel', side: 1, elapsed: 0, altitude: mid };
+  state.lock = { id: ace.id, progress: 1, ready: true };
+  state.railChargeAt = 0;
+  advanceRangedWeapons(state, ground);
+  state.tick = 1;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 0);
+  state.tick = 2;
+  ace.roll.elapsed = ROLLS.barrel.iframeTicks;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 1);
+  state.tick = 3;
+  advanceRangedWeapons(state, ground);
+  assert.equal(ace.hits, 1);
 });
 
 test('the normal fixed-step flight path fires and advances a timed shell', () => {
