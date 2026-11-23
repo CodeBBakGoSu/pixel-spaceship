@@ -28,7 +28,7 @@
 | [P0 측정 도구 #4](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/4) · [별도 기준 측정 #5](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/5) | 닫힘·미병합 | 기준 장면에서 전방 30기 상한 때문에 Twin과 Seeker가 동률이었다. 후속 [Seeker 단일 표적 후보](https://github.com/CodeBBakGoSu/pixel-spaceship/blob/b64bc2f/docs/WORKLOG.md)는 전방 분업을 개선했지만 20m 측면 침입이 9→26으로 늘어 밸런스 검토가 남았다. |
 | [공통 XP 곡선 #6](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/6) | 닫힘·미병합 | 첫 레벨업은 후보 600회 모두 10초 이내. 엄격한 4+4 완성 중앙값이 목표 7:30–8:00보다 늦고 폰 초보 격추도 하한 미달이었다. 현재판 XP로 표기하지 않는다. |
 | [Ace 상호 락온·기동 회피 #7](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/7) | 열림 · 개발판 대상 | 발사 직전 기동으로 해당 일제사격만 끊는 후보. [브라우저 검증 범위](#ace-dodge) |
-| [자동 플레어·폭탄, C 배럴롤 #8](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/8) | 열림 · 개발판 대상 | 장착했을 때만 자동 투하하는 후보. 통합 전에는 기존 조작과 폭장 랙 해금 조건이 유효하다. |
+| [자동 플레어·폭탄, C 배럴롤 #8](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/8) | 열림 · 개발판 대상 | 장착했을 때만 자동 투하하는 후보. [조작·자동 투하 검증](#auto-countermeasures). 통합 전에는 기존 조작과 폭장 랙 해금 조건이 유효하다. |
 | [P1 타격음·상자 릴·탄 잔상 #9](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/9) | 열림 · [검증본 fb6412a](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/fb6412a) | [플레이 녹화](https://app.devin.ai/sessions/64ee5b09bb3f456bb9bf04ba1b3767f1?testRecording=b479b0cb-3404-4584-b72d-27ec5b47ba12)는 후보 버전의 검증이다. 높은 타격음 레이어 청감은 미검수. |
 
 <a id="ace-dodge"></a>
@@ -38,6 +38,14 @@
 Product Engineer가 [후보 `1a0a5b2`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/1a0a5b2a3d5fd3e5bb4bccba352bbf1fc4378f63)의 [브라우저 조작](https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=20512d50-f09e-4658-ad03-f959c57278c0)으로 양방향 락온과 조종석 경고, 기총·미사일 발사, W/S+Space 회피와 Shift 조합의 두 입력 순서를 확인했다.
 
 발사 1틱 전 입력으로 해당 일제사격이 취소되는 경계는 프레임 시간과 키 입력을 자동 제어해 확인했다. 자연 플레이 완주 결과는 아니다. 검증 당시 이 수정은 개발판에 병합되지 않았고 공개 배포도 하지 않았다.
+
+<a id="auto-countermeasures"></a>
+
+### 장착형 자동 폭장·C 배럴롤: PR 후보 검증 (11/23 23:10 KST)
+
+Product Engineer의 [조작 영상](https://app.devin.ai/sessions/7f15ccc7bd4c4b0ea3c7555fd75b88a2?testRecording=9b4b7f3e-18ba-4e5e-b6c3-ee6367b6e79b)은 `264b23a`에서 약한 마우스 조향·중립 C롤, 기존 Shift+Space 및 W/S+Space 조합, 터치 에뮬레이션을 확인했다. [폭탄창 영상](https://app.devin.ai/sessions/7f15ccc7bd4c4b0ea3c7555fd75b88a2?testRecording=51a6487b-364c-40ac-b60b-7bd77dd91839)은 `e104198`에서 장착한 폭탄창이 수동 입력 없이 투하하는 장면이다.
+
+준비된 전투 장면에서의 확인이며 실물 모바일과 일반 플레이를 통한 해금·클리어는 미검증이다. 인계 당시 PR #8(`cf53220`)은 충돌이 표시됐고 개발판 병합·공개 배포는 하지 않았다.
 
 <a id="p1-96bd079"></a>
 

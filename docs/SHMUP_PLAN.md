@@ -1,5 +1,7 @@
 # ASTER // 1943-Style Vertical Shmup MVP Plan
 
+> 과거 기획: 초기 종스크롤 MVP의 설계 기록이며, 현재 Survivors의 무기·적·승리 조건이 아니다. [현행 위키](wiki/README.md)
+
 Concrete design and implementation plan for turning the `pixel-spaceship` flight demo into a 1943-style vertical scrolling shoot-'em-up while preserving the software voxel-projected player ship, banking tilt, ground shadow, layered thruster flames, `#glow` bloom, seamless heightmap terrain (`VESPER-9`), and tactical HTML HUD.
 
 **Target MVP scope**: 1 vertical-scrolling stage (`~115s`), 5 enemy types, 1 multi-part boss, 1 main weapon (Lv.1–3) + 2 swappable special weapons + 1 Nova Bomb, 8-segment Energy + Lives + Continue, `localStorage` high score, zero external assets or runtime dependencies.

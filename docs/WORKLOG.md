@@ -12,6 +12,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
+- [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
 - 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
 - Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
@@ -22,6 +23,20 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-23 23:15 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `cf53220`; renderer-proto `c6d2d16`, `ee908d4`, `4bbf4c6`)
+- Merged the latest documentation-only renderer-proto delta into PR8, preserving additive worklog entries and upstream docs; no game source or test files changed.
+- Verification: `git diff --check`; source/tests/build-input comparison with `cf53220` is empty. State: done; final PR8 integration.
+
+### 2026-11-23 23:10 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
+- [자동 폭장·C롤 실험](wiki/HISTORY.md#auto-countermeasures)에 조작·폭탄창 자동 투하 영상 두 건을 연결했다. 인계 당시 PR #8은 충돌 상태였으며, 실물 모바일·자연 해금·완주는 미검증이다.
+- State: done (실험 기록만 갱신). 개발판 조작과 해금 도감은 변경하지 않았다.
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `7d883ad`)
+- [HTML 도감 파일](wiki/ASTER-WING-무기-버프-도감.html)의 개발판 링크와 위키 복귀 링크를 확인했다. `69f81c8` 기준 장비 명칭·시작 풀·무기/버프 단계별 수치·진화 조합, 격납고 가격·효과·랭크, 퀘스트 조건·집계, 상자·계열 보너스를 코드에 대조했다.
+- [위키 홈](wiki/README.md)에서 현행 상세 기획·과거 원안 및 실험·기술 참고를 구분하고 각 문서에 돌아오는 길을 달았다. 옛 기록은 보존했다.
+- [위키 홈](wiki/README.md)에서 인증이 필요한 웹 도감과 Git 원본을 구분했다. [웹 도감 네 탭 검증 영상](https://app.devin.ai/sessions/4278635e7a724fa497392840d7643666?testRecording=31df854a-fa53-4f2b-ab05-d1295ac749cc)은 Product Engineer의 브라우저 검증이며, 채팅 첨부 미리보기나 공개 게임 배포 검증은 아니다.
+- State: done (문서 검수·정리).
 
 ### 2026-11-23 23:05 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (`264b23a`; Bomb Bay `e104198`; renderer-proto `69f81c8`, `f544ee2`, `7d883ad`)
 - UI session report for `264b23a`: Chrome keyboard/mouse weak-left and neutral C, Shift+Space, W/S+Space, twin-only no-rear-fire, inert X/K, and Phoenix auto-fire fixture passed; forced-touch Roll/Loop passed. Bomb Bay auto-fire passed at `e104198`; combat code is unchanged since.
@@ -40,7 +55,6 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
 - Merged latest `renderer-proto` into the PR branch, preserving its three wiki docs and in-progress planning-bot entry; resolved only the additive worklog overlap.
 - Verification: focused regressions 57/57 and build passed; post-merge `npm test` 578/578 and `npm run build` passed (119 modules, 2.93 s). State: done locally; not pushed.
-
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
 - Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
 - Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
