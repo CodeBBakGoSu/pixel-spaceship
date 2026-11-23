@@ -378,7 +378,11 @@ function explode(state: StageState, shot: Extract<RangedShot, { kind: 'seeker' |
     }
   }
   const ace = lockedAce(state, shot.lockId);
-  if (ace && matches(ace)) hitTarget(state, ace, shot.damage, shot.weapon);
+  if (ace && matches(ace)) {
+    const lockedAceHit = shot.kind === 'seeker' && shot.targetId === ace.id && shot.lockId === ace.id
+      && state.lock?.ready && state.lock.id === ace.id && aceVulnerable(ace);
+    hitTarget(state, ace, shot.damage * (lockedAceHit ? seeker.lockedAceDamageScale : 1), shot.weapon);
+  }
   state.weaponFx.push({
     kind: isFlak ? 'flak-blast' : 'seeker-blast',
     from: { x: shot.x, z: shot.z, alt: skybreaker ? BANDS[1] : shot.alt },

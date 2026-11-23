@@ -45,7 +45,7 @@ export const WEAPONS = {
     family: 'ordnance', coverage: 'adjacent-homing',
     tuning: { cooldownTicks: 180, count: [3, 4, 4, 5, 6, 6, 8],
       damageScale: [1, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5], cooldownScale: [1, 1, 1, 1, 1, 1, 1.28],
-      damage: 0.7, range: scaleTravel(165), speed: scaleTravel(86), verticalSpeed: 34, turnRate: 4.6,
+      damage: 0.7, lockedAceDamageScale: 18, range: scaleTravel(165), speed: scaleTravel(86), verticalSpeed: 34, turnRate: 4.6,
       radius: [12, 12, 15.6, 15.6, 15.6, 19.2, 19.2].map(scaleTravel),
       lifeSeconds: 3.2, spread: 0.14 },
   },

@@ -24,6 +24,24 @@ const contact = (state, x, z, alt = mid) => {
   state.enemies.push(enemy);
   return enemy;
 };
+const readyAce = state => {
+  const ace = makeAce(state, 0, 120, ground);
+  state.boss = ace;
+  state.lock = { id: ace.id, progress: 1, ready: true };
+  return ace;
+};
+const lockedSeekers = (state, ace) => {
+  advanceRangedWeapons(state, ground);
+  return state.shots.filter(shot => shot.kind === 'seeker' && shot.lockId === ace.id);
+};
+const detonateNear = (state, shot, target) => {
+  Object.assign(shot, { x: target.x, z: target.z - 5, alt: target.alt });
+  const before = target.hp;
+  advanceRangedShot(state, shot, ground);
+  return before - target.hp;
+};
+const assertDamage = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9,
+  `expected ${expected} damage, got ${actual}`);
 const projectiles = (state, count, terrain = ground) => {
   for (let tick = 0; tick < count; tick++) {
     const active = state.shots.length;
@@ -93,6 +111,103 @@ test('Seeker level five carries six larger blasts and triggers one separate loop
   Object.assign(first, { x: 0, z: target.z - 5 });
   advanceRangedShot(state, first, ground);
   assert.ok(splash.hp < 12);
+});
+
+test('Seeker multiplies damage only for a currently ready lock on a vulnerable Ace', () => {
+  assert.equal(WEAPONS.seeker.tuning.lockedAceDamageScale, 18);
+  const state = setup('seeker'), ace = readyAce(state);
+  const [shot] = lockedSeekers(state, ace);
+  const baseDamage = shot.damage;
+
+  assertDamage(detonateNear(state, shot, ace), baseDamage * WEAPONS.seeker.tuning.lockedAceDamageScale);
+  assert.equal(shot.damage, baseDamage);
+
+  for (const [label, playerLock, targetMatches] of [
+    ['lost', null, true],
+    ['not ready', id => ({ id, progress: 1, ready: false }), true],
+    ['different id', id => ({ id: id + 1, progress: 1, ready: true }), true],
+    ['different target id', id => ({ id, progress: 1, ready: true }), false],
+  ]) {
+    const state = setup('seeker'), ace = readyAce(state);
+    const [shot] = lockedSeekers(state, ace);
+    const baseDamage = shot.damage;
+    const targetId = targetMatches ? ace.id : ace.id + 1;
+    state.lock = typeof playerLock === 'function' ? playerLock(ace.id) : playerLock;
+    shot.targetId = targetId;
+
+    assertDamage(detonateNear(state, shot, ace), baseDamage);
+    assert.equal(shot.targetId, targetId, label);
+    assert.equal(shot.lockId, ace.id, label);
+    assert.equal(shot.life, 0, label);
+  }
+});
+
+test('Seeker ignores Ace barrel-roll iframe and entry state, then boosts after the iframe expires', () => {
+  const state = setup('seeker'), ace = readyAce(state);
+  const [invulnerable, vulnerable] = lockedSeekers(state, ace);
+  const baseDamage = invulnerable.damage;
+  ace.roll = { kind: 'barrel', side: 1, elapsed: ROLLS.barrel.iframeTicks - 1, altitude: ace.alt };
+
+  assert.equal(detonateNear(state, invulnerable, ace), 0);
+  assert.equal(ace.hits, 0);
+  ace.roll.elapsed = ROLLS.barrel.iframeTicks;
+  state.tick++;
+  assertDamage(detonateNear(state, vulnerable, ace), baseDamage * WEAPONS.seeker.tuning.lockedAceDamageScale);
+
+  const enteringState = setup('seeker'), enteringAce = readyAce(enteringState);
+  const [entryShot] = lockedSeekers(enteringState, enteringAce);
+  const entryHp = enteringAce.hp;
+  enteringAce.entry = {};
+  Object.assign(entryShot, { x: enteringAce.x, z: enteringAce.z - 5, alt: enteringAce.alt });
+  advanceRangedShot(enteringState, entryShot, ground);
+  assert.equal(enteringAce.hp, entryHp);
+  assert.equal(entryShot.targetId, null);
+  assert.equal(entryShot.lockId, null);
+});
+
+test('Seeker Ace bonus never amplifies ordinary enemy splash', () => {
+  for (const keepLock of [true, false]) {
+    const state = setup('seeker'), ace = readyAce(state);
+    const splash = contact(state, ace.x + 5, ace.z);
+    splash.hp = 100;
+    const [shot] = lockedSeekers(state, ace);
+    const baseDamage = shot.damage;
+    if (!keepLock) state.lock = null;
+
+    assertDamage(detonateNear(state, shot, ace), baseDamage * (keepLock ? WEAPONS.seeker.tuning.lockedAceDamageScale : 1));
+    assertDamage(100 - splash.hp, baseDamage);
+    assert.equal(shot.damage, baseDamage);
+  }
+});
+
+test('regular-only and retargeted Seekers and locked Flak shells retain base damage', () => {
+  const regularState = setup('seeker'), regular = contact(regularState, 0, 120);
+  regular.hp = 100;
+  advanceRangedWeapons(regularState, ground);
+  const regularShot = regularState.shots.find(shot => shot.kind === 'seeker');
+  assert.equal(regularShot.lockId, null);
+  assertDamage(detonateNear(regularState, regularShot, regular), regularShot.damage);
+
+  const retargetState = setup('seeker'), retargetAce = readyAce(retargetState);
+  const retarget = contact(retargetState, 0, 120);
+  retarget.hp = 100;
+  const [retargetShot] = lockedSeekers(retargetState, retargetAce);
+  retargetState.boss = null;
+  assertDamage(detonateNear(retargetState, retargetShot, retarget), retargetShot.damage);
+  assert.equal(retargetShot.targetId, retarget.id);
+  assert.equal(retargetShot.lockId, null);
+
+  const flakState = setup('flak'), flakAce = makeAce(flakState, 0, WEAPONS.flak.tuning.range, ground);
+  flakState.boss = flakAce;
+  flakState.lock = { id: flakAce.id, progress: 1, ready: true };
+  advanceRangedWeapons(flakState, ground);
+  const shell = flakState.shots.find(shot => shot.kind === 'flak-shell');
+  assert.ok(shell && shell.lockId === flakAce.id);
+  Object.assign(shell, { x: flakAce.x, z: flakAce.z, alt: flakAce.alt, vx: 0, vz: 0, fuseAt: flakState.tick });
+  const flakDamage = shell.damage;
+  const before = flakAce.hp;
+  advanceRangedShot(flakState, shell, ground);
+  assertDamage(before - flakAce.hp, flakDamage);
 });
 
 test('Rail charges for 54 ticks, pierces a line, and ends against intervening terrain', () => {
