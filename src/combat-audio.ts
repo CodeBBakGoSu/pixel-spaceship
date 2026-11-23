@@ -131,6 +131,7 @@ export class CombatAudio {
   private readonly explosions: ExplosionVoice[] = [];
   private readonly impactVoices: Partial<Record<ImpactCue, AudioBufferSourceNode>> = {};
   private cacheVoice: AudioBufferSourceNode | undefined;
+  private pendingCache: { cue: CacheCue; until: number } | undefined;
   private warningUntil = 0;
   private readonly debugSamples: boolean;
   private detuneSeed = 0x3aa1197b;
@@ -145,6 +146,7 @@ export class CombatAudio {
   setMuted(muted: boolean): void {
     if (this.isMuted === muted) return;
     this.isMuted = muted;
+    if (muted) this.pendingCache = undefined;
     this.updateGain();
     if (typeof window !== 'undefined') {
       try { window.localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); }
@@ -155,6 +157,7 @@ export class CombatAudio {
   setVolume(volume: number): void {
     if (!Number.isFinite(volume)) return;
     this.level = Math.max(0, Math.min(1, volume));
+    if (this.level === 0) this.pendingCache = undefined;
     this.updateGain();
   }
 
@@ -183,7 +186,9 @@ export class CombatAudio {
         const samples: SfxSamples = {};
         this.output = { context, master, rewards, buffers: synthesizeCues(context), samples };
         if (typeof context.decodeAudioData === 'function') {
-          void loadSfx(context, samples).then(() => {
+          void loadSfx(context, samples, name => {
+            if (name === this.pendingCache?.cue) this.flushCache();
+          }).then(() => {
             if (this.debugSamples) console.info('[audio] Decoded SFX', Object.keys(samples).sort().join(', '));
           });
         }
@@ -193,13 +198,14 @@ export class CombatAudio {
       }
     }
     if (context.state !== 'running' && context.state !== 'closed') {
-      void context.resume().catch(() => {});
+      void context.resume().then(() => this.flushCache()).catch(() => {});
     }
   }
 
   setSuspended(suspended: boolean): void {
     if (suspended === this.suspended) return;
     this.suspended = suspended;
+    if (suspended) this.pendingCache = undefined;
     const context = this.output?.context;
     if (!context || context.state === 'closed') return;
     // Submit both requests, even if a quick visibility reversal races the state change.
@@ -276,15 +282,31 @@ export class CombatAudio {
     }
   }
 
-  playCache(cue: CacheCue): void {
+  playCache(cue: CacheCue, maxDelayMs: number): void {
     this.stopCache();
+    if (!this.output || this.isMuted || this.level === 0 || this.suspended) return;
+    this.pendingCache = { cue, until: performance.now() + maxDelayMs };
+    this.flushCache();
+  }
+
+  private flushCache(): void {
+    const pending = this.pendingCache;
+    if (!pending) return;
+    if (performance.now() > pending.until) {
+      this.pendingCache = undefined;
+      return;
+    }
+    const { cue } = pending;
     const source = this.playReward(cue, undefined, () => {
       if (this.cacheVoice === source) this.cacheVoice = undefined;
     });
+    if (!source) return;
+    this.pendingCache = undefined;
     this.cacheVoice = source;
   }
 
   stopCache(): void {
+    this.pendingCache = undefined;
     this.cacheVoice?.stop();
     this.cacheVoice = undefined;
   }

@@ -214,21 +214,42 @@ test('cache playback is static, cancellable on skip, and respects mute and volum
   audio.unlock(gesture);
   await finishDecoding();
   const [context] = instances;
-  audio.playCache('cache_single');
+  audio.playCache('cache_single', 320);
   assert.equal(context.started.length, 0);
-  audio.playCache('cache_jackpot');
+  audio.playCache('cache_jackpot', 940);
   const [jackpot] = voicesFor(context, decoded.cache_jackpot);
   assert.ok(jackpot);
   audio.stopCache();
   assert.equal(jackpot.stopped, true);
   audio.setMuted(true);
   audio.playImpacts(7);
-  audio.playCache('cache_triple');
+  audio.playCache('cache_triple', 540);
   assert.equal(context.started.length, 1);
   audio.setMuted(false);
   audio.setVolume(0);
-  audio.playCache('cache_evolution');
+  audio.playCache('cache_evolution', 960);
   assert.equal(context.started.length, 1);
+});
+
+test('a first-gesture cache waits for decoding, but skip, mute and expiry discard it', async t => {
+  for (const interrupt of ['none', 'skip', 'mute', 'timeout']) {
+    await t.test(interrupt, async t => {
+      const { instances, decoded } = sampleBrowser(t);
+      const audio = new CombatAudio();
+      let now = 0;
+      t.mock.method(performance, 'now', () => now);
+      audio.unlock(gesture);
+      audio.playCache('cache_jackpot', 940);
+      const [context] = instances;
+      assert.equal(context.started.length, 0);
+      if (interrupt === 'skip') audio.stopCache();
+      if (interrupt === 'mute') audio.setMuted(true);
+      now = interrupt === 'timeout' ? 1000 : 30;
+      await finishDecoding();
+      audio.setMuted(false);
+      assert.deepEqual(context.started, interrupt === 'none' ? [decoded.cache_jackpot] : []);
+    });
+  }
 });
 
 test('graze retriggers after 80 ms and warning waits at least 1.5 seconds', async t => {

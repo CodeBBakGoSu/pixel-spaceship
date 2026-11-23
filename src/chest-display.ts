@@ -43,7 +43,7 @@ function symbolFace(id: GearIconId, size: number): HTMLElement {
 
 export function createChestDisplay(root: HTMLElement, pick: (action: StageInput['chestPick']) => void, effects: {
   enabled: boolean;
-  play(cue: CacheCue): void;
+  play(cue: CacheCue, maxDelayMs: number): void;
   stop(): void;
 }) {
   const find = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#chest-${id}`)!;
@@ -140,7 +140,7 @@ export function createChestDisplay(root: HTMLElement, pick: (action: StageInput[
       skip.hidden = !rolling;
       action.hidden = rolling || candidates.length > 0;
       action.textContent = t(reward ? 'chest.continue' : 'chest.open');
-      if (reveal && fresh && effects.enabled) effects.play(reveal.cue);
+      if (reveal && fresh && effects.enabled) effects.play(reveal.cue, reveal.ms);
       if (rolling) timer = setTimeout(settle, reveal.ms);
       (choices.querySelector('button') ?? (rolling ? skip : action)).focus({ preventScroll: true });
     },

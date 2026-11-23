@@ -28,7 +28,7 @@ function sampleLoopRange(buffer: AudioBuffer, entry: ManifestEntry): LoopRange {
 }
 
 /** Loads each voice independently so a missing file doesn't affect the other cues. */
-export async function loadSfx(context: AudioContext, ready: SfxSamples): Promise<void> {
+export async function loadSfx(context: AudioContext, ready: SfxSamples, onReady: (name: SfxLoop | SfxCue) => void): Promise<void> {
   let warned = false;
   const warn = () => {
     if (warned) return;
@@ -50,6 +50,7 @@ export async function loadSfx(context: AudioContext, ready: SfxSamples): Promise
         const buffer = await context.decodeAudioData(await response.arrayBuffer());
         if (!(buffer.duration > 0)) throw new Error('Empty SFX buffer');
         ready[name] = entry.loop ? { buffer, loop: sampleLoopRange(buffer, entry) } : { buffer };
+        onReady(name);
       } catch {
         warn();
       }

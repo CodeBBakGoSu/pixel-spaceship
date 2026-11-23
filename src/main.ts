@@ -112,7 +112,7 @@ const effectsEnabled = query.get('fx') !== '0';
 root.classList.toggle('effects-off', !effectsEnabled);
 const chestDisplay = createChestDisplay(chestCard, action => { pendingChest = action; }, {
   enabled: effectsEnabled,
-  play: cue => audio.playCache(cue),
+  play: (cue, maxDelayMs) => audio.playCache(cue, maxDelayMs),
   stop: () => audio.stopCache(),
 });
 const demoBullets = query.get('fixture') === 'bullets';
