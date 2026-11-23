@@ -4,6 +4,9 @@ import { enemyLimit, relocateStragglers } from '../src/spawn-director.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies, makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
+import { BANDS } from '../src/bands.ts';
+import { scaleClimb } from '../src/data/speed.ts';
+import { STEP } from '../src/stage-combat.ts';
 
 const world = new World();
 const ground = (x, z) => world.height(x, z);
@@ -115,7 +118,7 @@ test('a Bomber has two patrol escorts and its mines fall from CRUISE to LOW', ()
   advance(state, bomber.tell.until - state.tick);
   assert.equal(state.enemyMines.length, 1);
   const mine = state.enemyMines[0];
-  assert.ok(mine.alt > 109 && mine.alt <= 125);
+  assert.ok(mine.alt >= BANDS[1] - scaleClimb(14) * STEP - 1e-9 && mine.alt <= BANDS[1]);
   advance(state, 160, { turn: 1 });
   assert.equal(mine.alt, 75);
 });

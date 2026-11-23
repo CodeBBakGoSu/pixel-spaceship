@@ -4,7 +4,7 @@ import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
-import { BANDS, openReversal } from '../src/stage-combat.ts';
+import { BANDS, openReversal, STEP } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -30,6 +30,22 @@ const projectiles = (state, count, terrain = ground) => {
     state.tick++;
   }
 };
+
+test('Seeker vertical travel retains its per-tick rate in both directions and stops without a target', () => {
+  for (const direction of [-1, 1]) {
+    const state = setup('seeker');
+    const target = contact(state, 0, 120, BANDS[direction < 0 ? 0 : 2]);
+    advanceRangedWeapons(state, ground);
+    const shot = state.shots[0], altitude = shot.alt;
+    advanceRangedShot(state, shot, ground);
+    assert.ok(Math.abs(shot.alt - altitude - direction * 34 * STEP) < 1e-9);
+    target.hp = 0;
+    const prior = shot.alt;
+    advanceRangedShot(state, shot, ground);
+    assert.equal(shot.alt, prior);
+    assert.equal(shot.vy, 0);
+  }
+});
 
 test('Seeker fires three guided missiles and climbs one band, leaving two-band targets alone', () => {
   const state = setup('seeker', 1, low);

@@ -23,6 +23,22 @@ function atPlayer(state, alt, friendly = false) {
   };
 }
 
+test('recovered salvage uses band midpoints and SKIM overrides altitude', () => {
+  for (const [alt, skim, band] of [
+    [99.99, false, 0], [100, false, 0], [100.01, false, 1],
+    [152.49, false, 1], [152.5, false, 1], [152.51, false, 2],
+    [180, true, 0],
+  ]) {
+    const state = stage('?autoplay=1');
+    state.pickups = [{ id: 999, x: state.player.x, z: state.player.z, alt, skim, xp: 1, born: state.tick, collected: true }];
+    run(state, 1);
+    assert.deepEqual(state.salvageBands, [0, 1, 2].map(index => Number(index === band)));
+    assert.equal(state.pickups.length, 0);
+    run(state, 1);
+    assert.equal(state.salvageBands.reduce((sum, value) => sum + value, 0), 1);
+  }
+});
+
 test('the title launches a one-life sortie in cruise with both weapons and three bombs', () => {
   const state = stage('?seed=22');
   assert.equal(state.phase, 'title');
