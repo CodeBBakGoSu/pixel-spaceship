@@ -1,5 +1,7 @@
 # VAPOR WING (`@moglrd`) Video Analysis & Refactor Plan
 
+> 과거 참고 자료: VAPOR WING 영상 분석과 당시 제안이며, 현재 ASTER WING 기능 목록이 아니다. [위키 홈](../docs/wiki/README.md)
+
 > **Media inspection note**: All 33 gameplay clips (`ref/clips/clip_00.mp4`–`clip_32.mp4`, `8m02s` total) were watched directly as `.mp4` video. `ref/clips/quoted_jet.mp4` (`11.39s`, `38.95 MB`) exceeded tool video payload limits and was inspected via `ref/frames/quoted_*.jpg`, supplemented by `ref/frames/scene/*.jpg`. Grounded against branch `game-refactor-moglrd` (`src/*.ts`, `index.html`, `src/style.css`, `docs/GAME_PLAN.md`, `README.md`).
 
 ---

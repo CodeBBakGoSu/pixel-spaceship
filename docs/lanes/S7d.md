@@ -1,5 +1,7 @@
 # Stage 7d streamed Reach and SKIM
 
+> 개발 이력: Stage 7d 작업 당시의 지형·저공 비행 기록이다. [위키 홈](../wiki/README.md)
+
 Base commit `5a890c1` on the `s7d-world` lane. The sortie can fly continuously through signed world coordinates. The 1,792 m reference radius covers 10.24× the previous 560 m arena area. Terrain repeats every 16,384 m. The authored Reach landmarks occupy the starting region and blend into seed-specific terrain.
 
 ## Gameplay and rendering

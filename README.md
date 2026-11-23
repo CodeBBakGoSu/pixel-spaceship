@@ -1,5 +1,7 @@
 # ASTER WING
 
+**[한국어 위키](docs/wiki/README.md)** · [무기·버프·격납고·해금 퀘스트](docs/wiki/CATALOG.md) · [개발판과 공개판의 차이](docs/wiki/README.md#versions). 아래 실행·조작 안내는 `renderer-proto` 개발판 기준입니다.
+
 > Bots working on this repo log what they did in [docs/WORKLOG.md](docs/WORKLOG.md). Read it before starting, add an entry after finishing.
 
 Fly a ten-minute survival sortie over Kestrel Reach. Match altitude to shoot and collect salvage, draft weapons and buffs, and defeat the enemy Ace that arrives at 8:00. The game uses TypeScript, Vite, and Three.js instanced voxels drawn through a nearest-filtered low-resolution buffer.

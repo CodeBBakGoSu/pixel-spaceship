@@ -12,6 +12,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
+- [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
 - 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
 - Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
@@ -22,6 +23,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `d5801c6`; base `4bbf4c6`)
+- Brought the latest `renderer-proto` documentation into PR7 only; `git merge-tree` found only `docs/WORKLOG.md` conflicted, resolved by preserving the PR7 Ace entries and all base-side worklog entries. Changes since common base `b123ba6` are documentation; the P1 branch tip `96bd079` and PR8 branch tip `c070cad` are not ancestors of this base, and no gameplay/audio source was brought in from either.
+- Verification: actual Chrome/Pulse capture on `d5801c6` phase-2 chase heard the short high-pitched pulses and rising two-note accent around 0:01–0:03; they are audible but partly masked by loud effects/clacking (`/home/ubuntu/ace-phase2-d5801c6.wav`). Final merged UI check is pending. No P1/PR8 code was cherry-picked.
+- Controls: regression coverage on `d5801c6` confirms Space-first Shift across the fire tick resolves one roll, late accepted W/S+Space cancels only its salvo, and cooldown-blocked input still fires. Base changes contain no source or test files.
+- State: in progress; final merged UI verification pending. No merge back to `renderer-proto`/`main` or deploy.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `1a0a5b2`; current `renderer-proto` ref `7d883ad`, not merged)
 - Added dedicated synthesized Ace lock pulses (~40 ms, 1.25 kHz) accelerating from 12 to 6 simulation ticks, plus a one-shot rising two-note accent at the existing dodge-window edge. Ace cues bypass the effects bus but retain master/headroom/limiter; effects duck during each cue. Scheduler is keyed by boss/tell, tick-only, capped to one voice and catch-up cue, with no StageState/RNG changes; matching Ace startup warnings are suppressed while unrelated tells remain.
@@ -38,8 +45,29 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: focused tests 19/19; `npm run build` passed (120 modules); full `npm test` exited 0 (the retained output has no TAP count); `git diff --check HEAD` clean. The `renderer-proto` documentation changes and approved Ace-lock fixes are integrated with no unresolved conflicts.
 - State: in progress; browser/cockpit warning-position verification remains with the UI testing agent.
 
+### 2026-11-23 23:10 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
+- [자동 폭장·C롤 실험](wiki/HISTORY.md#auto-countermeasures)에 조작·폭탄창 자동 투하 영상 두 건을 연결했다. 인계 당시 PR #8은 충돌 상태였으며, 실물 모바일·자연 해금·완주는 미검증이다.
+- State: done (실험 기록만 갱신). 개발판 조작과 해금 도감은 변경하지 않았다.
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `7d883ad`)
+- [HTML 도감 파일](wiki/ASTER-WING-무기-버프-도감.html)의 개발판 링크와 위키 복귀 링크를 확인했다. `69f81c8` 기준 장비 명칭·시작 풀·무기/버프 단계별 수치·진화 조합, 격납고 가격·효과·랭크, 퀘스트 조건·집계, 상자·계열 보너스를 코드에 대조했다.
+- [위키 홈](wiki/README.md)에서 현행 상세 기획·과거 원안 및 실험·기술 참고를 구분하고 각 문서에 돌아오는 길을 달았다. 옛 기록은 보존했다.
+- [위키 홈](wiki/README.md)에서 인증이 필요한 웹 도감과 Git 원본을 구분했다. [웹 도감 네 탭 검증 영상](https://app.devin.ai/sessions/4278635e7a724fa497392840d7643666?testRecording=31df854a-fa53-4f2b-ab05-d1295ac749cc)은 Product Engineer의 브라우저 검증이며, 채팅 첨부 미리보기나 공개 게임 배포 검증은 아니다.
+- State: done (문서 검수·정리).
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
+- Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
+- Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
+- State: done (direct push to `renderer-proto`; no PR or `main`).
+
+### 2026-11-23 22:56 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
+- [Ace 회피 후보 검증](wiki/HISTORY.md#ace-dodge): PR #7의 `1a0a5b2`에서 확인한 브라우저 조작과 자동 시간 제어 경계를 구분했다. PR은 열려 있고 개발판 병합·배포는 하지 않았다.
+- State: in progress. HTML 최종본 게시 확인 전까지 기존 기획 문서는 유지한다.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
 - [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
+- [P1 상자 연출 검증](wiki/HISTORY.md#p1-96bd079)은 밸런스 봇이 확인한 `96bd079`에 한정한다. 다른 후보의 플레이 녹화와 분리했다.
+- [후속 글꼴 후보](wiki/HISTORY.md#p1-font) `61154f5`에서는 시드 18의 한국어 ‘잭팟 ×5’와 보상 5개가 보인다. [이동 리플레이](wiki/HISTORY.md#p1-trail)에서는 잔상을 켜도 꺼도 일부 적탄이 가려졌다. 실기기 성능 미검증으로 통합 보류.
 - State: in progress. 원격 버전·Pages 성공 배포·PR 상태 및 게임 데이터와 38개 항목을 대조했다. HTML 도감은 Product Engineer가 별도 반영하며, 확인 전에는 기존 기획 문서를 정리하지 않는다.
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438662-ace-lock-dodge (base `81a0e2a`)

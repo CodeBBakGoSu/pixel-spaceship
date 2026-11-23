@@ -1,5 +1,7 @@
 # Stage 7f fidelity
 
+> 개발 이력: Stage 7f 작업 당시의 그래픽 품질 설정이다. [위키 홈](../wiki/README.md)
+
 Baseline `5a890c1`, lane `s7f-fidelity`. Graphics quality lives in the title and pause menus and persists in `aster.render-quality`.
 
 | Setting | Desktop world buffer at 1920×1080 | Portrait world buffer at 390×844 | Airframes |
