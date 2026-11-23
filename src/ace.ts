@@ -211,6 +211,7 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
       const fireScale = state.run ? HEAT_TIERS[state.heat].shotIntervalScale : 1;
       const fireTicks = Math.round(tuning.fireTicks * fireScale);
       if (!lost) {
+        events?.aceTellFired?.(tell);
         fireAceSalvo(state, ace, tell, tuning[tell.kind], events);
         ace.attackAt = Math.max(tell.until, tick) + fireTicks;
       } else ace.attackAt = tell.until + fireTicks;

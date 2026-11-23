@@ -23,6 +23,16 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `1a0a5b2`; current `renderer-proto` ref `7d883ad`, not merged)
+- Added dedicated synthesized Ace lock pulses (~40 ms, 1.25 kHz) accelerating from 12 to 6 simulation ticks, plus a one-shot rising two-note accent at the existing dodge-window edge. Ace cues bypass the effects bus but retain master/headroom/limiter; effects duck during each cue. Scheduler is keyed by boss/tell, tick-only, capped to one voice and catch-up cue, with no StageState/RNG changes; matching Ace startup warnings are suppressed while unrelated tells remain.
+- Verification: focused audio/lock/chord tests 48/48; `npm run build` passed (120 modules, 2.08 s). Browser playback/listening remains pending; no P1 assets or external APIs were used.
+- State: in progress; browser/audio listening remains pending. This is PR-only work; no base merge or deploy.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `1a0a5b2`; current `renderer-proto` ref `7d883ad`, not merged)
+- Replaced the single Ace warning ring with a fixed viewport-scaled reference circle and a larger shrinking circle; the gap is near-overlap at the existing 18-tick dodge-window entry and exactly zero at fire. An observer-only fire cue preserves that final render frame; maneuver acceptance, input grace and key chords are unchanged.
+- Verification: focused tests 21/21; `npm run build` passed (120 modules, 1.91 s). Screen rendering was not driven; audio hooks/assets were inspected only, with a beep/window-cue design pending review and no audio implementation.
+- State: in progress; no commit, push, base merge or deploy. The current base ref advanced to `7d883ad` after PR head `1a0a5b2`; preserve it for the review handoff.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `c22c9c5`; base `b123ba6`)
 - Preserved FlightChord's full 80 ms Space/Shift arbitration and passed unresolved W/S+Space intent to simulation. At a valid solid-warning fire tick, Ace defers at most five ticks only while a roll or maneuver can be accepted; only an accepted first-tick action cancels the salvo, while cooldown-blocked intent still fires. Phase 1/2 live attack fixtures continue to hold their release cone through the opening salvo.
 - Verification: focused tests 19/19; `npm run build` passed (120 modules); full `npm test` exited 0 (the retained output has no TAP count); `git diff --check HEAD` clean. The `renderer-proto` documentation changes and approved Ace-lock fixes are integrated with no unresolved conflicts.

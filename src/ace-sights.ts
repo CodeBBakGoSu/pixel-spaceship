@@ -1,6 +1,7 @@
 import { aceDodgeWindow } from './ace.ts';
+import { ACE } from './data/ace.ts';
 import type { Rect } from './layout.ts';
-import type { StageState } from './stage-types.ts';
+import type { AceTell, StageState } from './stage-types.ts';
 
 export type Sight = { x: number; y: number; radius: number };
 type Projection = { projectAirframe(state: StageState, subject: 'player' | 'boss'): Sight | null };
@@ -16,13 +17,16 @@ function stroke(ctx: CanvasRenderingContext2D, color: string, width: number): vo
   ctx.stroke();
 }
 
-export function drawAceLocks(ctx: CanvasRenderingContext2D, state: StageState, projection: Projection, field?: Rect): void {
+export function drawAceLocks(ctx: CanvasRenderingContext2D, state: StageState, projection: Projection, field?: Rect,
+  firedTell?: AceTell | null): void {
   const boss = state.boss;
   if (!boss?.hp || boss.entry || state.phase !== 'playing' || state.paused) return;
   const lock = state.view !== 'cockpit' && state.lock?.id === boss.id ? state.lock : null;
   const tell = boss.tell;
-  const incoming = tell && tell.kind !== 'roll' && state.tick < tell.until;
-  if (!lock && !incoming) return;
+  const incoming = tell && tell.kind !== 'roll'
+    && (state.tick <= tell.until || tell.dodgeGraceUntil !== undefined && state.tick <= tell.dodgeGraceUntil);
+  const sightTell = incoming ? tell : firedTell ?? null;
+  if (!lock && !sightTell) return;
 
   ctx.save();
   if (field) {
@@ -45,27 +49,34 @@ export function drawAceLocks(ctx: CanvasRenderingContext2D, state: StageState, p
       stroke(ctx, lock.ready ? '#adfff0' : '#64dfce', lock.ready ? 3 : 2);
     }
   }
-  if (incoming) {
+  if (sightTell) {
     // There is no visible player model in first person; frame the flight glass instead.
     const point = state.view === 'cockpit' && field
       ? { x: field.x + field.width / 2, y: field.y + field.height / 2, radius: 25 }
       : projection.projectAirframe(state, 'player');
     if (point) {
-      const inner = Math.min(limit, Math.max(17, point.radius + 3));
-      const remaining = (tell.until - state.tick) / (tell.until - tell.since);
-      const r = inner + remaining * Math.min(38, limit / 2);
-      const dodge = aceDodgeWindow(tell, state.tick);
-      ctx.beginPath();
-      for (let i = 0; i < 4; i++) {
-        const angle = i * Math.PI / 2, dx = Math.cos(angle), dy = Math.sin(angle);
-        ctx.moveTo(point.x + dx * (inner - 3), point.y + dy * (inner - 3));
-        ctx.lineTo(point.x + dx * (inner + 4), point.y + dy * (inner + 4));
-      }
-      stroke(ctx, '#ffdfb1', 2);
+      const duration = Math.max(1, sightTell.until - sightTell.since);
+      const dodgeTicks = Math.min(ACE.lock.dodgeTicks, duration);
+      const remaining = Math.max(0, Math.min(duration, sightTell.until - state.tick));
+      const referenceRadius = Math.min(limit, Math.max(4, Math.min(22, limit * 0.2)));
+      const maxGap = Math.max(0, Math.min(limit, referenceRadius * 2.25) - referenceRadius);
+      const windowGap = Math.min(maxGap, Math.max(1.5, referenceRadius * 0.25));
+      const preWindowTicks = Math.max(1, duration - dodgeTicks);
+      const gap = remaining >= dodgeTicks
+        ? windowGap + (remaining - dodgeTicks) / preWindowTicks * (maxGap - windowGap)
+        : windowGap * remaining / dodgeTicks;
+      const outerRadius = referenceRadius + gap;
+      const dodge = aceDodgeWindow(sightTell, state.tick)
+        || sightTell.dodgeGraceUntil !== undefined && state.tick <= sightTell.dodgeGraceUntil;
       ctx.beginPath();
       if (!dodge) ctx.setLineDash([9, 5]);
-      ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
-      stroke(ctx, dodge ? '#ff705c' : '#ffb77c', dodge ? 3 : 2);
+      else ctx.setLineDash([]);
+      ctx.arc(point.x, point.y, outerRadius, 0, Math.PI * 2);
+      stroke(ctx, dodge ? '#ff705c' : '#ffb77c', dodge ? 3.5 : 2.5);
+      ctx.beginPath();
+      ctx.setLineDash([]);
+      ctx.arc(point.x, point.y, referenceRadius, 0, Math.PI * 2);
+      stroke(ctx, dodge ? '#f2fff8' : '#7de8d7', 2);
     }
   }
   ctx.restore();

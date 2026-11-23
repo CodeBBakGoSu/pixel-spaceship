@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
-import { advanceAce } from '../src/ace.ts';
+import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
 import { FlightChord, ROLL_CHORD_MS } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -15,6 +15,19 @@ function duel() {
   assert.equal(state.boss.tell?.kind, 'missile');
   assert.ok(state.lock.progress > 0 && !state.lock.ready);
   return state;
+}
+
+function sightFrame(state, field = { x: 10, y: 20, width: 700, height: 400 },
+  canvas = { width: 800, height: 480 }, firedTell = null) {
+  const corners = [], rings = [], dashes = [];
+  const ctx = { canvas, save() {}, restore() {}, beginPath() {}, stroke() {}, rect() {}, clip() {}, lineTo() {},
+    moveTo(x, y) { corners.push([x, y]); }, arc(x, y, r) { rings.push([x, y, r]); },
+    setLineDash(dash) { dashes.push([...dash]); } };
+  const projection = { projectAirframe(_, subject) {
+    return { x: subject === 'boss' ? 450 : 350, y: subject === 'boss' ? 180 : 300, radius: 20 };
+  } };
+  drawAceLocks(ctx, state, projection, field, firedTell);
+  return { corners, rings, dashes };
 }
 
 for (const [phase, kind] of [[1, 'gun'], [2, 'missile']]) {
@@ -140,36 +153,91 @@ test('gun aim drops on loss of bearing, altitude or range before release', () =>
   }
 });
 
-test('sights converge from live lock clocks and disappear when their own lock is gone', () => {
+test('sights converge two circles into the dodge window and preserve chase and cockpit anchors', () => {
   const state = duel(), tell = state.boss.tell;
-  const render = () => {
-    const corners = [], rings = [], dashes = [];
-    const ctx = { canvas: { width: 800, height: 480 }, save() {}, restore() {}, beginPath() {}, stroke() {},
-      rect() {}, clip() {}, lineTo() {}, moveTo(x, y) { corners.push([x, y]); },
-      arc(x, y, r) { rings.push([x, y, r]); }, setLineDash(dash) { dashes.push(dash); } };
-    const projection = { projectAirframe(_, subject) {
-      return { x: subject === 'boss' ? 450 : 350, y: subject === 'boss' ? 180 : 300, radius: 20 };
-    } };
-    drawAceLocks(ctx, state, projection, { x: 10, y: 20, width: 700, height: 400 });
-    return { corners, rings, dashes };
-  };
-  const start = render();
-  assert.equal(start.corners.length, 8);
-  assert.ok(start.dashes.length);
+  const start = sightFrame(state);
+  const [startOuter, startReference] = start.rings;
+  assert.equal(start.rings.length, 2);
+  assert.deepEqual(startOuter.slice(0, 2), [350, 300]);
+  assert.deepEqual(startReference.slice(0, 2), [350, 300]);
+  assert.ok(startOuter[2] >= startReference[2] * 2);
+  assert.equal(start.corners.length, 4, 'the Ace-target lock brackets remain unchanged');
+  assert.deepEqual(start.dashes, [[9, 5], []]);
+
+  while (state.tick < tell.until - ACE.lock.dodgeTicks - 1) step(state);
+  const beforeWindow = sightFrame(state);
+  const [beforeOuter, beforeReference] = beforeWindow.rings;
+  assert.equal(aceDodgeWindow(tell, state.tick), false);
+  assert.ok(beforeOuter[2] - beforeReference[2] < startOuter[2] - startReference[2]);
+
   while (state.tick < tell.until - ACE.lock.dodgeTicks) step(state);
-  const ready = render();
-  assert.deepEqual(ready.rings[0].slice(0, 2), [350, 300]);
-  assert.ok(ready.rings[0][2] < start.rings[0][2]);
-  assert.ok(ready.corners[0][1] > start.corners[0][1]);
-  assert.deepEqual(ready.dashes, []);
+  const window = sightFrame(state);
+  const [windowOuter, windowReference] = window.rings;
+  assert.equal(aceDodgeWindow(tell, state.tick), true);
+  assert.equal(windowReference[2], startReference[2], 'the reference radius stays fixed');
+  assert.ok(windowOuter[2] > windowReference[2]);
+  assert.ok(windowOuter[2] - windowReference[2] <= windowReference[2] * 0.3, 'the circles nearly overlap at window entry');
+  assert.ok(beforeOuter[2] - beforeReference[2] > windowOuter[2] - windowReference[2]);
+  assert.ok(windowOuter[2] < beforeOuter[2]);
+  assert.deepEqual(window.dashes, [[], []]);
+
   state.view = 'cockpit';
-  assert.deepEqual(render().rings[0].slice(0, 2), [360, 220]);
-  state.view = 'overhead';
-  state.lock = null;
-  assert.equal(render().corners.length, 4);
+  const cockpit = sightFrame(state);
+  assert.deepEqual(cockpit.rings.map(ring => ring.slice(0, 2)), [[360, 220], [360, 220]]);
+  assert.deepEqual(cockpit.rings.map(ring => ring[2]), window.rings.map(ring => ring[2]));
+
+  state.view = 'chase';
+  state.tick = tell.until;
+  const fireTick = sightFrame(state);
+  assert.equal(fireTick.rings[0][2], fireTick.rings[1][2], 'the outer ring exactly overlaps the reference at fire');
+  state.boss.tell = null;
+  assert.deepEqual(sightFrame(state).rings, [], 'both circles disappear when the tell ends');
   state.boss.tell = { ...tell, kind: 'roll' };
-  assert.deepEqual(render().rings, []);
-  state.boss.tell = tell;
+  assert.deepEqual(sightFrame(state).rings, [], 'roll tells do not draw attack circles');
   state.paused = true;
-  assert.deepEqual(render().rings, []);
+  assert.deepEqual(sightFrame(state).rings, [], 'paused state clears the warning');
+});
+
+test('dodge-circle overlap is phase-length invariant and scales with the viewport', () => {
+  const ratios = [];
+  for (const [phase, kind] of [[1, 'gun'], [2, 'missile']]) {
+    const state = createStage(parseStageOptions(`?fixture=ace&phase=${phase}&live=1`), ground);
+    const tell = state.boss.tell;
+    assert.equal(tell.kind, kind);
+    state.tick = tell.until - ACE.lock.dodgeTicks;
+    assert.equal(aceDodgeWindow(tell, state.tick), true);
+    const [outer, reference] = sightFrame(state).rings;
+    ratios.push((outer[2] - reference[2]) / reference[2]);
+  }
+  assert.ok(ratios.every(ratio => ratio > 0 && ratio <= 0.3));
+  assert.ok(Math.abs(ratios[0] - ratios[1]) < 0.001, 'gun and missile tell lengths enter the window at the same relative gap');
+
+  const mobile = createStage(parseStageOptions('?fixture=ace&phase=2&live=1'), ground);
+  mobile.tick = mobile.boss.tell.until - ACE.lock.dodgeTicks;
+  const small = sightFrame(mobile, { x: 0, y: 0, width: 340, height: 600 }, { width: 360, height: 640 });
+  const [smallOuter, smallReference] = small.rings;
+  assert.ok(Math.abs((smallOuter[2] - smallReference[2]) / smallReference[2] - ratios[1]) < 0.001,
+    'window overlap scales with the viewport rather than warning duration');
+});
+
+test('fired tell emits one exact-overlap render cue; accepted dodge does not', () => {
+  const state = duel(), tell = state.boss.tell, fired = [];
+  while (state.tick < tell.until - 1) step(state);
+  stepStage(state, {}, ground, undefined, { aceTellFired: value => fired.push(value) });
+  assert.equal(state.tick, tell.until);
+  assert.equal(state.boss.tell, null);
+  assert.deepEqual(fired, [tell]);
+  const frame = sightFrame(state, undefined, undefined, fired[0]);
+  assert.equal(frame.rings.length, 2);
+  assert.equal(frame.rings[0][2], frame.rings[1][2]);
+
+  const dodged = duel(), dodgeTell = dodged.boss.tell;
+  let firedAfterDodge = false;
+  while (dodged.tick < dodgeTell.until - ACE.lock.dodgeTicks - 1) step(dodged);
+  stepStage(dodged, { maneuver: splitS.maneuver }, ground, undefined, {
+    aceTellFired: () => { firedAfterDodge = true; },
+  });
+  assert.equal(dodged.boss.tell, null);
+  assert.equal(firedAfterDodge, false);
+  assert.deepEqual(sightFrame(dodged).rings, []);
 });

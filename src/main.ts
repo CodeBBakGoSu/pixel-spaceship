@@ -44,7 +44,7 @@ import { FlightScene } from './scene.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
+import type { AceTell, ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 import { BANDS, canCueAltitude } from './bands.ts';
 import { COMPARISON_DIVISOR } from './data/render-quality.ts';
@@ -238,6 +238,8 @@ let parryNoticeUntil = 0;
 const projectedShip = { x: 0, y: 0, depth: 0 };
 const feedbackTarget = { x: 0, z: 0, alt: 0 };
 let feedbackAnchor: { x: number; y: number } | null = null;
+let aceFireCue: AceTell | null = null;
+const aceVisualEvents: CombatEvents = { aceTellFired(tell) { aceFireCue = tell; } };
 const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   muzzle(shot, shape, x, z, alt) {
     const age = primingBullets ? query.has('shape') ? 3 : 10 : 0;
@@ -268,8 +270,14 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   // --- S7e lane ---
   tell(kind, x, z) {
     if (kind === 'ace-down') audio.play('explosion');
-    if ((x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) audio.play(`tell:${kind}`);
+    const aceTell = state.boss?.tell;
+    const aceAttack = (kind === 'gun' || kind === 'missile') && aceTell?.kind === kind
+      && aceTell.since === state.tick && state.boss?.x === x && state.boss?.z === z;
+    if (!aceAttack && (x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) {
+      audio.play(`tell:${kind}`);
+    }
   },
+  aceTellFired: aceVisualEvents.aceTellFired,
   destroyed(kind, elite) {
     audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
   },
@@ -1008,6 +1016,7 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => keys.delete(event.code));
 function syncAudioPause(): void {
   audio.setSuspended(!graphics.canAdvance || (touch && (document.hidden || interrupted)));
+  audio.updateAceLock(state, false);
 }
 
 function interruptFlight(reason: 'focus' | 'graphics' = 'focus'): void {
@@ -1243,7 +1252,7 @@ function advance(): void {
     toggleView: pendingViews > 0 || control.toggleView,
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
-  }, ground, undefined, combatEvents);
+  }, ground, undefined, combatEvents ?? aceVisualEvents);
   if (bulletFixture?.stress) bulletFixture.fillStress(combatEvents);
   pendingStart = pendingPause = pendingBomb = pendingFlare = false;
   pendingRetreat = false;
@@ -1395,6 +1404,7 @@ function render(now: number): boolean {
   }
   const audioActive = graphics.canAdvance && effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
   if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass, audioActive);
+  audio.updateAceLock(state, audioActive);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -1519,6 +1529,7 @@ function showReversalImpact(): void {
 }
 
 function animate(now: number): void {
+  aceFireCue = null;
   damageFeedback.beginFrame();
   frameNow = now;
   const elapsed = Math.max(0, (now - previousTime) / 1000);
@@ -1561,6 +1572,8 @@ function animate(now: number): void {
       break;
     }
   }
+  audio.updateAceLock(state, graphics.canAdvance && effectsEnabled && !document.hidden && !guide
+    && state.phase === 'playing' && !state.paused);
   if (graphics.recovering) {
     requestAnimationFrame(animate);
     return;
@@ -1579,7 +1592,7 @@ function animate(now: number): void {
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   drawDamageFeedback();
-  if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield);
+  if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
   requestAnimationFrame(animate);
 }
 

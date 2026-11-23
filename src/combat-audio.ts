@@ -1,7 +1,10 @@
 import { FLIGHT_AUDIO } from './data/flight-audio.ts';
+import { ACE } from './data/ace.ts';
 import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
 import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
 import { loadSfx, SFX_CUE_GAIN, type SfxCue, type SfxSamples } from './sfx-samples.ts';
+import { aceDodgeWindow } from './ace.ts';
+import type { AceTell, StageState } from './stage-types.ts';
 
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
 const DEFAULT_VOLUME = 0.30;
@@ -9,6 +12,9 @@ const CUE_HEADROOM = 0.85;
 const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
 const EXPLOSION_VOICES = 4;
+const ACE_LOCK_PULSE_TICKS = 12;
+const ACE_LOCK_WINDOW_TICKS = 6;
+const ACE_LOCK_EFFECTS_DUCK = 0.38;
 
 const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
@@ -21,9 +27,28 @@ type ExplosionVoice = { source: AudioBufferSourceNode; strength: number };
 interface AudioOutput {
   context: AudioContext;
   master: GainNode;
+  effects: GainNode;
   buffers: Record<SynthSound, AudioBuffer>;
+  aceLockCues: { pulse: AudioBuffer; window: AudioBuffer };
   samples: SfxSamples;
   flight?: FlightAudio;
+}
+
+type AceLockVoice = { source: AudioBufferSourceNode; gain: GainNode };
+
+function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
+  const pulse = synthesize(context, 0.04, (elapsed, progress) => {
+    const envelope = Math.max(0, Math.min(1, elapsed / 0.004, (1 - progress) / 0.2));
+    return 0.42 * Math.sin(TAU * 1_250 * elapsed) * envelope;
+  });
+  const window = synthesize(context, 0.13, elapsed => {
+    const second = elapsed >= 0.065;
+    const noteTime = second ? elapsed - 0.065 : elapsed;
+    if (!second && elapsed >= 0.05 || second && noteTime >= 0.05) return 0;
+    const envelope = Math.max(0, Math.min(1, noteTime / 0.004, (0.05 - noteTime) / 0.008));
+    return 0.46 * Math.sin(TAU * (second ? 1_450 : 1_050) * noteTime) * envelope;
+  });
+  return { pulse, window };
 }
 
 function storedMute(): boolean {
@@ -128,6 +153,11 @@ export class CombatAudio {
   private readonly explosions: ExplosionVoice[] = [];
   private readonly debugSamples: boolean;
   private detuneSeed = 0x3aa1197b;
+  private aceLockKey: string | null = null;
+  private aceLockLastTick = -1;
+  private aceLockNextPulseTick = -1;
+  private aceLockWindowPlayed = false;
+  private aceLockVoice: AceLockVoice | undefined;
 
   constructor(debugSamples = false) {
     this.debugSamples = debugSamples;
@@ -140,6 +170,7 @@ export class CombatAudio {
     if (this.isMuted === muted) return;
     this.isMuted = muted;
     this.updateGain();
+    if (muted) this.stopAceLockVoice();
     if (typeof window !== 'undefined') {
       try { window.localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); }
       catch { /* Keep the preference in memory when storage is unavailable. */ }
@@ -150,6 +181,7 @@ export class CombatAudio {
     if (!Number.isFinite(volume)) return;
     this.level = Math.max(0, Math.min(1, volume));
     this.updateGain();
+    if (this.level === 0) this.stopAceLockVoice();
   }
 
   // Call synchronously from a user gesture so browsers can allow playback.
@@ -165,6 +197,9 @@ export class CombatAudio {
         context = new Context();
         const master = context.createGain();
         master.gain.value = this.isMuted ? 0 : this.level;
+        const effects = context.createGain();
+        effects.gain.value = 1;
+        effects.connect(master);
         const headroom = context.createGain();
         headroom.gain.value = FLIGHT_AUDIO.mixHeadroom;
         const limiter = context.createWaveShaper();
@@ -173,7 +208,7 @@ export class CombatAudio {
         headroom.connect(limiter);
         limiter.connect(context.destination);
         const samples: SfxSamples = {};
-        this.output = { context, master, buffers: synthesizeCues(context), samples };
+        this.output = { context, master, effects, buffers: synthesizeCues(context), aceLockCues: lockPulseCues(context), samples };
         if (typeof context.decodeAudioData === 'function') {
           void loadSfx(context, samples).then(() => {
             if (this.debugSamples) console.info('[audio] Decoded SFX', Object.keys(samples).sort().join(', '));
@@ -192,6 +227,7 @@ export class CombatAudio {
   setSuspended(suspended: boolean): void {
     if (suspended === this.suspended) return;
     this.suspended = suspended;
+    if (suspended) this.stopAceLockVoice();
     const context = this.output?.context;
     if (!context || context.state === 'closed') return;
     // Submit both requests, even if a quick visibility reversal races the state change.
@@ -200,14 +236,14 @@ export class CombatAudio {
 
   play(sound: CombatSound, strength = 1): void {
     if (this.isMuted || this.level === 0 || this.suspended || !this.output) return;
-    const { context, master, buffers, samples } = this.output;
+    const { context, buffers, samples } = this.output;
     if (context.state !== 'running') return;
     const now = context.currentTime;
     const sampleCue = sound === 'tell:missile' ? 'warning' : sound as SfxCue;
     const decoded = samples[sampleCue];
     const voice = decoded && sound === 'tell:missile' ? 'warning' : sound;
     if (now < (this.nextPlayAt[voice] ?? 0)) return;
-    const destination = sound === 'flyby' || sound === 'cloud' ? this.output.flight?.bus : master;
+    const destination = sound === 'flyby' || sound === 'cloud' ? this.output.flight?.bus : this.output.effects;
     if (!destination) return;
 
     if (sound === 'explosion' && this.explosions.length === EXPLOSION_VOICES) {
@@ -249,6 +285,95 @@ export class CombatAudio {
     if (sound === 'explosion') return;
     const cooldown = COOLDOWN_SECONDS[voice as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
     this.nextPlayAt[voice] = now + (voice === 'graze' || voice === 'hit' ? cooldown : Math.max(cooldown, buffer.duration));
+  }
+
+  updateAceLock(state: StageState, active: boolean): void {
+    const boss = state.boss;
+    const tell = boss?.tell;
+    if (!boss || boss.hp <= 0 || boss.entry || boss.defeatedAt != null || state.phase !== 'playing'
+      || !tell || tell.kind === 'roll') {
+      this.aceLockKey = null;
+      this.aceLockNextPulseTick = -1;
+      this.aceLockWindowPlayed = false;
+      this.aceLockLastTick = state.tick;
+      this.stopAceLockVoice();
+      return;
+    }
+
+    const key = `${boss.id}:${tell.kind}:${tell.since}:${tell.until}`;
+    const windowTick = tell.until - ACE.lock.dodgeTicks;
+    if (key !== this.aceLockKey) {
+      this.stopAceLockVoice();
+      this.aceLockKey = key;
+      this.aceLockLastTick = tell.since - 1;
+      this.aceLockWindowPlayed = aceDodgeWindow(tell, state.tick);
+      this.aceLockNextPulseTick = this.aceLockWindowPlayed ? state.tick + ACE_LOCK_WINDOW_TICKS : tell.since;
+    }
+
+    const enteredWindow = !this.aceLockWindowPlayed && this.aceLockLastTick < windowTick && state.tick >= windowTick;
+    const interval = this.aceLockInterval(tell, state.tick);
+    const audible = active && !this.isMuted && this.level > 0 && !this.suspended
+      && !!this.output && this.output.context.state === 'running';
+    if (enteredWindow) {
+      this.aceLockWindowPlayed = true;
+      this.aceLockNextPulseTick = state.tick + ACE_LOCK_WINDOW_TICKS + 2;
+      if (audible) this.playAceLockCue('window');
+      else this.stopAceLockVoice();
+    } else if (state.tick >= this.aceLockNextPulseTick) {
+      this.aceLockNextPulseTick = state.tick + interval;
+      if (audible) this.playAceLockCue('pulse');
+      else this.stopAceLockVoice();
+    } else if (!audible) this.stopAceLockVoice();
+
+    this.aceLockLastTick = state.tick;
+  }
+
+  private aceLockInterval(tell: AceTell, tick: number): number {
+    const windowTick = tell.until - ACE.lock.dodgeTicks;
+    const span = Math.max(1, windowTick - tell.since);
+    const progress = Math.max(0, Math.min(1, (tick - tell.since) / span));
+    return Math.round(ACE_LOCK_PULSE_TICKS - (ACE_LOCK_PULSE_TICKS - ACE_LOCK_WINDOW_TICKS) * progress);
+  }
+
+  private playAceLockCue(kind: 'pulse' | 'window'): void {
+    const output = this.output;
+    if (!output || output.context.state !== 'running') return;
+    const now = output.context.currentTime;
+    const replaced = this.stopAceLockVoice(false);
+    const source = output.context.createBufferSource();
+    const gain = output.context.createGain();
+    const voice: AceLockVoice = { source, gain };
+    source.buffer = output.aceLockCues[kind];
+    gain.gain.value = kind === 'window' ? 1.35 : 1.15;
+    source.connect(gain);
+    gain.connect(output.master);
+    source.onended = () => {
+      if (this.aceLockVoice === voice) {
+        this.aceLockVoice = undefined;
+        this.restoreEffects(output, output.context.currentTime);
+      }
+      source.disconnect();
+      gain.disconnect();
+    };
+    output.effects.gain.setTargetAtTime(ACE_LOCK_EFFECTS_DUCK, now, 0.004);
+    this.aceLockVoice = voice;
+    source.start(now + (replaced ? 0.006 : 0));
+  }
+
+  private stopAceLockVoice(restoreEffects = true): boolean {
+    const voice = this.aceLockVoice;
+    const output = this.output;
+    if (!voice || !output) return false;
+    this.aceLockVoice = undefined;
+    const now = output.context.currentTime;
+    voice.gain.gain.setTargetAtTime(0, now, 0.002);
+    voice.source.stop(now + 0.006);
+    if (restoreEffects) this.restoreEffects(output, now);
+    return true;
+  }
+
+  private restoreEffects(output: AudioOutput, now: number): void {
+    output.effects.gain.setTargetAtTime(1, now, 0.018);
   }
 
   updateFlight(state: FlightAudioState, boostAmount: number, clearance: number, cloudPass: number, active: boolean): void {
