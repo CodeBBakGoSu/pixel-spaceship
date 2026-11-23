@@ -32,7 +32,7 @@ export const WEAPONS = {
   twin: {
     family: 'ballistic', coverage: 'forward-and-below',
     tuning: { cooldownTicks: 21, barrels: [2, 3, 3, 4, 4, 5, 6], damage: 1, range: scaleTravel(175),
-      damageScale: [1, 2, 2, 2, 2, 2, 1.988], cooldownScale: [1, 1, 0.86, 0.76, 0.67, 0.76, 0.86],
+      damageScale: [1, 2, 2, 2, 2, 2, 2], cooldownScale: [1, 1, 0.86, 0.76, 0.67, 0.76, 0.86],
       pierce: [0, 0, 1, 1, 1, 1, 2], tracerScale: [1, 1, 1, 1, 1.3, 1.3, 1.3], fanDegrees: [0, 0, 0, 0, 0, 6, 6] },
   },
   pods: {

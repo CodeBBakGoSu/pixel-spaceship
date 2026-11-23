@@ -151,6 +151,40 @@ test('basic downward strafe fires at two distinct targets on a 0.55 s cadence', 
   assert.equal(second.hp, 0);
 });
 
+test('Twin downward strafe damage preserves the Lv1 scale and one-hits a lower-band patrol at Lv6 and Lv7', () => {
+  for (const [level, expectedDamage, expectedHp] of [[1, 1, 1], [6, 2, 0], [7, 2, 0]]) {
+    const state = createStage(parseStageOptions('?mode=survivors&t=0&seed=23'), calm);
+    state.run.weapons = ['twin'];
+    state.run.weaponLevels = { twin: level };
+    state.run.buffs = [];
+    state.run.buffLevels = {};
+    state.run.evolutions = {};
+    state.run.damageUpgrades = 0;
+    Object.assign(state.player, { x: 0, z: 0, altitude: combat.BANDS[1], yaw: 0 });
+    state.twinAt = Infinity;
+    state.podsAt = Infinity;
+    state.strafeAt = 0;
+    state.shots.length = 0;
+    const patrol = makeEnemy(state, 0, 80, 0, 'patrol');
+    patrol.hp = 2;
+    state.enemies = [patrol];
+
+    combat.acquireAndFire(state);
+    const [shot] = state.shots.filter(candidate => candidate.kind === 'strafe');
+    assert.ok(shot, `Twin Lv${level} should fire a downward strafe`);
+    assert.equal(state.shots.length, 1);
+    assert.equal(shot.targetBand, 0);
+    assert.ok(shot.vy < 0);
+    assert.equal(shot.damage, expectedDamage);
+
+    for (let tick = 0; tick < 60 && patrol.hp > 0; tick++) {
+      state.tick++;
+      combat.advanceShots(state, calm);
+    }
+    assert.equal(patrol.hp, expectedHp, `Twin Lv${level}`);
+  }
+});
+
 test('strafe clamps acquisition to a single lower band and a 38-degree forward lane', () => {
   for (const [altitude, x, z, band, fires] of [
     [180, 0, 28, 1, true], [125, 0, 135, 0, true], [180, 0, 70, 0, false],
