@@ -60,10 +60,9 @@ function perceive(state: StageState, profile: BotProfile, band: FlightBand): Sta
   const p = state.player;
   const pickupRange = BOT_POLICY.salvageSightMinimum +
     (BOT_POLICY.salvageSightRange - BOT_POLICY.salvageSightMinimum) * profile.pickupGreed;
-  const sameBand = state.enemies.filter(onBand);
   return {
     ...state,
-    enemies: state.boss ? state.enemies : sameBand,
+    enemies: state.boss ? state.enemies : state.enemies.filter(onBand),
     shots: state.shots.filter(shot => shot.kind === 'hostile' && withinThreatRange(shot, HOSTILE_HIT_RADIUS)),
     enemyMines: state.enemyMines.filter(mine => withinThreatRange(mine, MINE_RADIUS)),
     effects: state.effects.filter(effect => effect.kind === 'flak' && withinThreatRange(effect, FLAK_RADIUS)),

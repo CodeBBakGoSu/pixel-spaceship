@@ -754,6 +754,11 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
 
 // Sweep the thin per-tick segment so fast bolts cannot skip a contact.
 export function impactTime(origin: Point, dx: number, dz: number, target: Point, radius: number, from = 0, to = 1): number {
+  const reach = radius + 1e-7;
+  const startX = origin.x + dx * from, endX = origin.x + dx * to;
+  const startZ = origin.z + dz * from, endZ = origin.z + dz * to;
+  if (target.x < Math.min(startX, endX) - reach || target.x > Math.max(startX, endX) + reach
+    || target.z < Math.min(startZ, endZ) - reach || target.z > Math.max(startZ, endZ) + reach) return Infinity;
   const x = origin.x - target.x + dx * from, z = origin.z - target.z + dz * from;
   const c = x * x + z * z - radius * radius;
   if (c <= 0) return from;
