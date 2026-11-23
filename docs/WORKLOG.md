@@ -20,6 +20,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
+- Vampire Survivors-style hordes: far more enemies on screen (swarm caps, gnat/regular spawn rates, horde behavior) and keeping 60 fps with them, on branch `devin/1795400000-survivors-horde`. Files: `src/data/phases.ts`, `src/swarm.ts`, `src/spawn-director.ts`, gnat movement in `src/stage-enemies.ts`, enemy instancing in `src/scene.ts`/`src/roster-visuals.ts`, related tests, golden hashes.
+- State: in progress (데븐 봇). Not touching Stage C leftovers (recovery score thresholds, weapon climb/descent rates).
+
 ### 2026-11-23 · 데븐 봇 · devin/1795340000-stage-c-altitude → PR #1 into renderer-proto (`357dc33`, `a65974d`, `ae8b3dc`)
 - Full Stage C: altitude 49–230 m (floor = sea + SKIM), bands 75/125/180, SKIM 14 m (10–18 m). Hostile vertical rates, flares, bombs and mines scale 1.5× to keep band-change timing. Flak half-height is 28 m. The Ace now reaches SKIM. The HUD ALT tape reads 180/125/75. Golden replay hashes were rebaselined.
 - Verified: `npm test` 509/509, `npm run build`, 100-seed sims (skilled 100% / average 68% / weak 35%), in-browser climb to 229 m and SKIM at 49 m over the sea. Details are in `docs/BALANCE_NOTES.md` under "Stage C altitude model".
