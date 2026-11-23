@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `fb6412a`)
+- 한국어 ‘잭팟 ×5’가 ‘×5’로만 보이던 글꼴 누락을 수정. Galmuri11을 현재 한국어 번역으로 다시 생성했고, 보상 로직은 그대로다.
+- 검증: 기존 글리프 유지, 현재 번역의 한글 410자 포함, 프로덕션 빌드 통과. State: done (후보, renderer-proto 미통합).
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `81a0e2a`, code `2bad3c4` + `96bd079`)
 - P1: 실제 아군 피해를 80ms 단위로 모아 타격음을 겹친다. 이미 지급된 상자의 보상 1/3/5개·진화만 공개하고, 고랭크 Twin·Swarm Rack의 실제 탄 위치에서 장식 잔상을 그린다.
 - 정적 ElevenLabs 효과음 7종. 밸런스·난수·Seeker P0 후보는 변경 또는 포함하지 않았다.
