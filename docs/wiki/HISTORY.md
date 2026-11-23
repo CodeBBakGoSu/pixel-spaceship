@@ -47,4 +47,8 @@
 
 **후속 글꼴 수정 후보 (11/23 22:22 KST):** [`61154f5`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/61154f53af5a7214f75cb045d019a08c1b28969e)의 시드 18 한국어 화면에서 ‘잭팟 ×5’와 보상 5개(쌍발 기관포 Lv2~6)가 모두 보인다. 이 화면은 표기 수정의 근거이며 개발판 통합이나 실제 기기 성능의 근거가 아니다.
 
+<a id="p1-trail"></a>
+
+**탄 잔상 통합 보류 (11/23 22:44 KST):** Product Engineer가 [같은 후보 `61154f5`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/61154f53af5a7214f75cb045d019a08c1b28969e)에서 [잔상을 켠 화면과 끈 화면](https://app.devin.ai/sessions/64ee5b09bb3f456bb9bf04ba1b3767f1?testRecording=a05fc0da-575b-45a6-81f9-b9ec11de1679)을 비교했다. 가상 PC와 가상 폰 모두 락온 경고와 180틱 뒤 전투 결과는 같았다. 그러나 가상 폰에서는 잔상이 일부 적탄을 가렸고 실기기 가독성·성능은 확인하지 못해 개발판에 넣지 않았다.
+
 추가할 때는 당시 근거를 덮어쓰지 않는다. 예: `날짜 | 시도·커밋/PR | 채택/보류/폐기 및 이유 | 재검토 조건 또는 검증 링크`. 병합·배포처럼 상태가 바뀌면 새 근거와 날짜를 붙인다.
