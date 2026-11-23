@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795427585-p0-weapon-roles (base `cfb3abfff30948e23e959c33e839df863922cb41`)
+- P0 harness ready: deterministic 900-tick, seed-23 scripted comparisons for Twin forward Gnats, Pods side Sting Gnats, and Seeker locked Ace, using production acquisition and collision routines. No production behavior or numeric changes; this is a controlled mechanics comparison, not a survival simulation.
+- Results (Twin/Pods/Seeker): forward kills ahead 30/0/30; side intrusions within 20m 30/0/9; Ace HP damage over 15s 448/0/26.25. The forward tie is saturation at the 30-target ceiling, not evidence of a targeting fault. Ace was available for all 900 ticks; Seeker fired 25 shots, hit 25 times, and dealt 1.05 HP per shot. P0 acceptance incomplete pending balance verification.
+- Verification: focused tests (39/39), CLI comparison, and `npm run build` passed; build dependencies were restored with the repo-blueprint `npm install` after local `tsc` was initially missing. State: harness ready; P0 acceptance incomplete pending balance verification.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795426562-learn-weapons-through-play (base `2564e31`)
 - P0: 무기 10종의 강점·한계만 남기고 시연·추천 조합·식별 시험을 삭제했다. 같은 입력에서 전방 격추·측면 침입·Ace 실피해를 비교해 차이가 부족한 무기만 고친다.
 - 검증: 테스트 576/576, 프로덕션 빌드, 문서 링크·역할표 및 diff 검사 통과. P1·P2 사양과 게임 코드는 그대로다. 무기 성능 비교는 후속 검수이며 이번에 실측하지 않았다.
