@@ -197,6 +197,10 @@ function beatStream(spawn: { rng: number }): { rng: number } {
 
 export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwarm?: SwarmObserver): void {
   const phase = phaseAt(state.tick / TICKS_PER_SECOND);
+  const mobile = state.swarmCap === SWARM_CAPS.mobile;
+  const gnatsPerMinute = mobile ? phase.gnatsPerMinuteMobile : phase.gnatsPerMinute;
+  const gnatFloor = mobile ? phase.gnatFloorMobile : phase.gnatFloor;
+  const floorCapacity = mobile ? SWARM_CAPS.mobile : SWARM_CAPS.desktop;
   const from = phase.starts * TICKS_PER_SECOND;
   const until = (phase.ends - phase.lull) * TICKS_PER_SECOND;
   const minutes = (phase.ends - phase.starts) / 60;
@@ -212,7 +216,7 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
     const member = { kind, band, bearing: bearing * Math.PI / 180, range };
     spawnWave(state, { time: state.tick / TICKS_PER_SECOND, members: [member] }, ground, rng, phase.hpScale);
   }
-  const gnatCount = phase.gnatsPerMinute * minutes;
+  const gnatCount = gnatsPerMinute * minutes;
   const packs = Math.ceil(gnatCount / phase.packSize);
   const pack = groupAt(state.tick, from + phase.gnatStart * TICKS_PER_SECOND, until, packs);
   if (pack >= 0) {
@@ -222,7 +226,7 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
   if (state.tick >= from + phase.gnatStart * TICKS_PER_SECOND && state.tick < until
     && state.tick % TICKS_PER_SECOND === 0) {
     const rng = beatStream(state.streams.spawn);
-    const floor = Math.floor(phase.gnatFloor * state.swarmCap / SWARM_CAPS.desktop);
+    const floor = Math.floor(gnatFloor * state.swarmCap / floorCapacity);
     let live = 0;
     for (const enemy of state.enemies) if (enemy.kind === 'gnat' && enemy.hp > 0) live++;
     const members = Math.min(phase.packSize, floor - live, state.swarmCap - live);

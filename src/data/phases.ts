@@ -50,7 +50,9 @@ export type RunPhase = {
   regularPerMinute: number;
   enemies: readonly RegularSpawn[];
   gnatsPerMinute: number;
+  gnatsPerMinuteMobile: number;
   gnatFloor: number;
+  gnatFloorMobile: number;
   gnatShare: Readonly<Record<GnatVariant, number>>;
   gnatStart: number;
   packSize: number;
@@ -78,33 +80,38 @@ const siege = [...skirmish, diver, flanker, bomber];
 export const PHASES: readonly RunPhase[] = [
   {
     id: 'coast', starts: 0, ends: PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1,
-    regularCap: 8, regularPerMinute: 14, enemies: coast, gnatFloor: 22,
+    regularCap: 8, regularPerMinute: 14, enemies: coast, gnatFloor: 22, gnatFloorMobile: 14,
     gnatShare: { armored: 0, sting: 0 },
-    gnatsPerMinute: 70, gnatStart: 20, packSize: 10, formations: ['vee', 'line'], bands: [1, 1, 0, 2], splitBands: false,
+    gnatsPerMinute: 70, gnatsPerMinuteMobile: 50, gnatStart: 20, packSize: 10,
+    formations: ['vee', 'line'], bands: [1, 1, 0, 2], splitBands: false,
   },
   {
     id: 'skirmish', starts: PHASE_SECONDS, ends: 2 * PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1.12,
-    regularCap: 16, regularPerMinute: 16, enemies: skirmish, gnatFloor: 44,
+    regularCap: 16, regularPerMinute: 16, enemies: skirmish, gnatFloor: 44, gnatFloorMobile: 37,
     gnatShare: { armored: 0, sting: 0.10 },
-    gnatsPerMinute: 160, gnatStart: 0, packSize: 18, formations: ['ring', 'line'], bands: [0, 1, 2], splitBands: false,
+    gnatsPerMinute: 160, gnatsPerMinuteMobile: 160, gnatStart: 0, packSize: 18,
+    formations: ['ring', 'line'], bands: [0, 1, 2], splitBands: false,
   },
   {
     id: 'siege', starts: 2 * PHASE_SECONDS, ends: 3 * PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 2,
-    regularCap: 26, regularPerMinute: 19, enemies: siege, gnatFloor: 84,
+    regularCap: 26, regularPerMinute: 19, enemies: siege, gnatFloor: 90, gnatFloorMobile: 72,
     gnatShare: { armored: 0.15, sting: 0.10 },
-    gnatsPerMinute: 320, gnatStart: 0, packSize: 28, formations: ['line', 'vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
+    gnatsPerMinute: 320, gnatsPerMinuteMobile: 320, gnatStart: 0, packSize: 28,
+    formations: ['line', 'vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'storm', starts: 3 * PHASE_SECONDS, ends: RUN_BOSS_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 3,
-    regularCap: 30, regularPerMinute: 23, enemies: [...siege, harrier], gnatFloor: 130,
+    regularCap: 30, regularPerMinute: 23, enemies: [...siege, harrier], gnatFloor: 130, gnatFloorMobile: 92,
     gnatShare: { armored: 0.25, sting: 0.15 },
-    gnatsPerMinute: 480, gnatStart: 0, packSize: 36, formations: ['ring', 'vee', 'line', 'encircle'], bands: [0, 1, 2], splitBands: true,
+    gnatsPerMinute: 480, gnatsPerMinuteMobile: 480, gnatStart: 0, packSize: 36,
+    formations: ['ring', 'vee', 'line', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'ace', starts: RUN_BOSS_SECONDS, ends: RUN_END_SECONDS, lull: 0, hpScale: 1.12 ** 3,
-    regularCap: 34, regularPerMinute: 28, enemies: [patrol, interceptor, harrier], gnatFloor: 166,
+    regularCap: 34, regularPerMinute: 28, enemies: [patrol, interceptor, harrier], gnatFloor: 166, gnatFloorMobile: 99,
     gnatShare: { armored: 0.25, sting: 0.20 },
-    gnatsPerMinute: 600, gnatStart: 0, packSize: 40, formations: ['vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
+    gnatsPerMinute: 600, gnatsPerMinuteMobile: 600, gnatStart: 0, packSize: 40,
+    formations: ['vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
 ];
 

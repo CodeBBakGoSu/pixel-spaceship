@@ -358,9 +358,9 @@ Survival rose for the average and weak pilots, because the wider gaps spread out
 ### Replay verification
 
 The seed-1 golden hashes were rebaselined once for the changed flight paths: Legacy `d90af0cd…48ef2`, Survivors `21778f28…0b33`. Two runs reproduced both hashes.
-## Survivors horde (placeholders)
+## Survivors horde (historical pre-integration baseline)
 
-- Gnat caps: desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile uses `floor(desktop floor × swarmCap / 200)`.
+- Historical Gnat caps were desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile used `floor(desktop floor × swarmCap / 200)`.
 - Scheduled Gnats per minute: **70/160/320/480/600**; pack sizes: **10/18/28/36/40**. Coast begins at **20 s**; later phases begin immediately. Floor top-ups add at most one pack per second after the start beat, outside lulls, limited by the deficit and remaining capacity.
 - Regular caps stay **8/16/26/30/34**, with original regular rates **14/16/19/23/28 per minute**. Siege/Storm/Ace include a terrain-safe encircle formation around the projected pilot position.
 - Wave/floor Gnats have no expiry. Beyond `SPAWN_WORLD.recycleDistance`, they relocate ahead as before. Aft Gnats beyond **0.6 × `GNAT.range`** also recycle after **60 consecutive ticks**; returning ahead or inside the margin resets the timer. Aft re-entry starts off-screen using the existing 1.5 s fly-in, converging on terrain-safe sites at **1.15–1.35 × `GNAT.range`**, spread across ±60° ahead of travel in the same band. Unsafe searches retry once per second. Bomber escort Gnats retain their original **12 s** lifetime.
@@ -378,11 +378,11 @@ Forward visibility check: production terrain, seed 1, browser-style `seekStage(t
 
 The table includes the restored 12 s escort lifetime (`51e3a72`) and aft re-entry (`9c3694f`). Earlier batches produced median kills around **3,700–4,050**; this post-re-entry batch produced **3,420.5–3,680.5**, around/slightly above the planning target **2,500–3,500**.
 
-Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These are placeholders; **밸런스 봇** owns tuning. Do not lower density to tune shooting threat.
+Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These were placeholders at the historical baseline; the integrated-base measurements and numeric trial are below. Do not lower density to tune shooting threat.
 
-### Integrated candidate: renderer-proto `7446be4` + horde
+### Historical integrated baseline: renderer-proto `7446be4` + horde
 
-Desktop, Heat 0, seeds 1–100 for each profile, after integrating the weapon Lv7/Ace work with the horde branch. This is a current-candidate snapshot, not a newly measured before/after comparison; the comparison above remains against the earlier `1f1eb4b` growth baseline. Clear includes an Ace kill or live timeout; Ace kill is boss clear.
+Desktop, Heat 0, seeds 1–100 for each profile, after integrating the weapon Lv7/Ace work with the horde branch. This is a historical snapshot, not a newly measured before/after comparison; the comparison above remains against the earlier `1f1eb4b` growth baseline. Clear includes an Ace kill or live timeout; Ace kill is boss clear.
 
 | Profile | Clear | Ace kill | Timeout | Median kills | Median peak live Gnats |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -390,9 +390,130 @@ Desktop, Heat 0, seeds 1–100 for each profile, after integrating the weapon Lv
 | Average | 75% | 72% | 3% | 3,591 | 200 |
 | Weak | 26% | 2% | 24% | 3,373.5 | 200 |
 
-Kills remain around or above the **2,500–3,500** planning target; density settings remain placeholders and **밸런스 봇** owns tuning. This sim does not measure rendered FPS.
+This earlier snapshot is superseded by the integrated `0bc1f99` baseline and trial below. This sim does not measure rendered FPS.
 
 Integrated seed-1 hashes: Legacy `cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903`; Survivors `d0b796fa7db18d5bae954113cdc9d0683f6e80b3babbc6f2b63f066a31ce255a`.
+
+### Integrated `0bc1f99`: density baseline and trials
+
+Heat 0, seeds 1–100 per profile/cap. The preserved baseline is `sim-out/integrated-<profile>-100-from-1-heat-0-{desktop,mobile}.{json,csv}`. The trial is `sim-out/newbase-trial1-<profile>-100-from-1-heat-0-{desktop,mobile}.{json,csv}`. Full/active phase medians below are contacts in Coast/Skirmish/Siege/Storm/Ace order; each JSON also records per-phase max, reached/completed counts, kills/minute, and XP observations.
+
+Trial 1 changed only Gnat density data: desktop floors **22/44/90/130/166** with scheduled rates **70/160/320/480/600 per minute**; mobile floors **13/30/60/92/99** and rates **50/160/320/480/600**. Caps stayed **200/120**, pack sizes and one-second refill cadence were unchanged, as were regular traffic, variants, swarm events, damage, and XP settings.
+
+| Cap / profile | Median kills baseline → Trial 1 | Clear / boss baseline → Trial 1 | Trial 1 full / active phase medians |
+| --- | ---: | ---: | --- |
+| Desktop / skilled | 3,213.5 → 3,268 | 99% / 99% → 100% / 100% | 30/32 · 49/51 · 91/94 · 134/138 · 190/190 |
+| Desktop / average | 3,167.5 → 3,189 | 78% / 78% → 72% / 72% | 30/31 · 49/51 · 92/95 · 135/140 · 189.5/189.5 |
+| Desktop / weak | 3,064.5 → 3,071 | 35% / 1% → 31% / 2% | 33/34 · 54/56 · 97/100 · 140/145 · 192/192 |
+| Phone / skilled | 2,439 → 2,522 | 100% / 100% → 100% / 100% | 20/22 · 37/40 · 65/69 · 97/100 · 116/116 |
+| Phone / average | 2,434 → 2,467.5 | 74% / 72% → 67% / 66% | 21/22 · 40/42 · 69/73.5 · 98/102.5 · 116/116 |
+| Phone / weak | 2,311 → 2,401.5 | 23% / 3% → 31% / 4% | 23/24 · 42/45 · 73.5/78 · 100.5/105 · 117/117 |
+
+The baseline missed full-density bands at desktop Siege (86/87.5 versus the lower bound 88) and phone Coast (25/25/27 versus the upper bound 24). Trial 1 full and active medians are within their ±20% bands, but its phone average and weak 100-seed kill medians miss the strict **2,500–3,500** target by 32.5 and 98.5. The 10-seed screening rule is separate; it does not relax the final 100-seed target. Neither result is a final-target pass. Candidate 1 remains a preserved 100-seed comparison reference, not integrated or finally selected; candidate 3's completed direct 100-seed phone results are compared below.
+
+Trial 2 changes only Storm mobile floor **92→104** and scheduled rate **480→600**; PC and all other Trial 1 values remain unchanged. Its 10-seed phone screening results are:
+
+| Profile | Median kills | Clear / boss | Full / active phase medians: Coast · Skirmish · Siege · Storm · Ace |
+| --- | ---: | ---: | --- |
+| Skilled | 2,726.5 | 100% / 100% | 19.5/21 · 36.5/39 · 63/66.5 · 105/106.5 · 114/114 |
+| Average | 2,778 | 80% / 80% | 21/23 · 37/39.5 · 64/67 · 106/108 · 114.5/114.5 |
+| Weak | 2,197.5 | 10% / 0% | 22.5/23.25 · 44/47 · 74/80 · 109/112 · 120/120 |
+
+All Trial 2 full medians remain within phone ±20% density bands, but weak kills are **252.5 below the 2,450 screening gate** (and 302.5 below the strict 2,500 final target). The gate failed and no Trial 2 100-seed mobile runs were started. Trial 1's phone 100-seed average and weak results remain strict misses by 32.5 and 98.5. PC 100-seed results remain valid because the PC path/data are unchanged. Trial 2 is rejected; its Storm mobile values were restored to Trial 1's **92/480 per minute** for candidate 3. Candidate 3 changes only Skirmish/Siege mobile floors to **35/66**, retaining the other Trial 1 values.
+
+#### Candidate 3: direct phone 100-seed evaluation
+
+Candidate 3 was run directly for seeds 1–100 on all phone profiles; no 10-seed pre-screen was used. The PC values and 100-seed results are unchanged from Trial 1. Phase cells are **full / active median contacts** in Coast · Skirmish · Siege · Storm · Ace order; density acceptance uses the **full-phase median** only. Actual run duration (`seconds`) and the simulator's normalized survival horizon (`survivalSeconds`, which credits boss clears through 600 s) are separate.
+
+| Profile | Median kills (strict 2,500–3,500) | Actual run / normalized survival median (s) | Clear / boss | Full / active phase medians |
+| --- | ---: | ---: | ---: | --- |
+| Skilled | 2,566 — pass | 526.4 / 600 | 100% / 100% | 20/22 · 42/44 · 70/74 · 97/101 · 116/116 |
+| Average | 2,539.5 — pass | 536.5 / 600 | 65% / 64% | 21/22 · 41/44.5 · 71.5/75.5 · 97/101 · 116/116 |
+| Weak | 2,421 — **fail by 79** | 552.2 / 552.2 | 28% / 1% | 23/24 · 46/49 · 76/82 · 100/104 · 117/117 |
+
+All candidate 3 phone **full** phase medians are within ±20% bands. Active medians are diagnostic: weak Skirmish active median is **49** versus an upper band of **48**; its full median is **46**, within band. Candidate 3 therefore passes the density criterion but fails the strict kill target for weak, and is not integrated. Candidate 1 remains a preserved 100-seed reference, not a recommendation or final selection: its density medians are validated, while phone average and weak kills remain strict misses.
+
+#### Candidate 4: direct phone 100-seed evaluation
+
+Candidate 4 was run directly for seeds 1–100 on all phone profiles, preserving candidate 3 outputs. Only the mobile floors changed, to **14/37/72/92/99**; mobile rates stay **50/160/320/480/600 per minute**, and PC values stay at candidate 1. Phase cells are **full / active median contacts** in Coast · Skirmish · Siege · Storm · Ace order. Clear includes Ace clears or live timeouts; boss is Ace clear. Actual run duration and normalized survival are shown separately.
+
+| Profile | Median kills (strict 2,500–3,500) | Actual run / normalized survival median (s) | Clear / boss | Full / active phase medians |
+| --- | ---: | ---: | ---: | --- |
+| Skilled | 2,625.5 — pass | 526.6 / 600 | 100% / 100% | 21/22 · 42/45 · 75/77 · 96.5/100 · 116/116 |
+| Average | 2,564 — pass | 534.6 / 600 | 73% / 73% | 21/22.5 · 42/45 · 77/81 · 97.5/101 · 115/115 |
+| Weak | 2,462 — **strict miss by 38** | 564.2 / 564.2 | 35% / 4% | 23/24 · 46/50 · 81/86 · 101/105 · 117/117 |
+
+Every candidate 4 **full** phase median is within its ±20% band; there are no full-median upper-band violations. Active medians remain diagnostic: weak Skirmish is **50** vs upper band **48**, and Siege is **86** vs upper band **84**; the full medians are 46 and 81, respectively. Candidate 4 improves the weak median from candidate 3's 2,421 to 2,462, but still misses the strict target by 38. Candidate 4 is adopted as the **XP-comparison baseline only**; this is not an all-profile kill pass. Candidate 1 remains a comparison reference only; its phone average/weak strict misses are not accepted as tolerance.
+
+Per-phase details for candidate 4 (median full/active contacts, maximum full occupancy, reached/completed runs, median kills/minute):
+
+| Profile | Phase | Full / active median | Max full | Reached / complete | Median kills/min |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Skilled | Coast | 21 / 22 | 102 | 100 / 100 | 96.25 |
+| Skilled | Skirmish | 42 / 45 | 129 | 100 / 100 | 228.75 |
+| Skilled | Siege | 75 / 77 | 132 | 100 / 100 | 381.50 |
+| Skilled | Storm | 96.5 / 100 | 136 | 100 / 100 | 465.75 |
+| Skilled | Ace | 116 / 116 | 143 | 100 / 0 | 325.04 |
+| Average | Coast | 21 / 22.5 | 103 | 100 / 100 | 96.75 |
+| Average | Skirmish | 42 / 45 | 129 | 100 / 100 | 225.25 |
+| Average | Siege | 77 / 81 | 135 | 100 / 100 | 356.00 |
+| Average | Storm | 97.5 / 101 | 138 | 100 / 100 | 458.50 |
+| Average | Ace | 115 / 115 | 135 | 100 / 0 | 333.83 |
+| Weak | Coast | 23 / 24 | 107 | 100 / 99 | 83.75 |
+| Weak | Skirmish | 46 / 50 | 131 | 99 / 98 | 206.00 |
+| Weak | Siege | 81 / 86 | 136 | 98 / 96 | 326.50 |
+| Weak | Storm | 101 / 105 | 137 | 96 / 96 | 410.50 |
+| Weak | Ace | 117 / 117 | 143 | 96 / 32 | 316.75 |
+
+XP comparison observations (baseline → adopted candidate-4 baseline). Candidate 4 desktop values are the unchanged candidate-1 PC run; mobile values are candidate 4. First XP uses credited XP/salvage, first level-up observes `stage.level` on every input including paused drafts, the 60-second count includes draft picks through tick 3600 (null on earlier termination), and terminal level-ups are `stage.level - 1`.
+
+| Platform / profile | First XP s (n) | First level-up s (n) | Level-ups at 60 s (n) | Terminal level-ups (n=100) |
+| --- | ---: | ---: | ---: | ---: |
+| Desktop / skilled | 5.1→5.1 (100/100) | 24.6→24.6 (100/100) | 4→4 (100/100) | 53→53 |
+| Desktop / average | 5.1→5.1 (100/100) | 24.8→24.8 (100/100) | 4→4 (100/100) | 54→54 |
+| Desktop / weak | 5.1→5.1 (100/100) | 26.1→26.1 (100/100) | 3→3 (100/100) | 54→54 |
+| Phone / skilled | 5.1→5.1 (100/100) | 24.7→24.7 (100/100) | 4→4 (100/100) | 46→48 |
+| Phone / average | 5.1→5.1 (100/100) | 25.2→25.1 (100/100) | 4→3 (100/100) | 47→48 |
+| Phone / weak | 5.1→5.1 (100/100) | 28.0→27.8 (100/100) | 3→3 (99/100) | 46→49 |
+
+#### Phone weak paired-seed comparison
+
+`Actual KPM` is per-run `kills × 60 / run.seconds`; normalized survival is reported separately. Outcome counts use the simulator's `lost`, `timeout`, and `clear` outcomes. Baseline, Trial 1, and rejected Trial 2 use matched phone weak seeds 1–10:
+
+| 10-seed set | Median kills | Median duration (s) | Median actual KPM | Lost / timeout / clear |
+| --- | ---: | ---: | ---: | ---: |
+| Integrated baseline | 2,367.5 | 525.692 | 255.400 | 6 / 4 / 0 |
+| Trial 1 screen | 2,425.5 | 555.108 | 251.173 | 7 / 2 / 1 |
+| Trial 2 screen | 2,197.5 | 529.300 | 246.785 | 9 / 1 / 0 |
+
+The Trial 2 minus baseline paired mean is **−368.3 kills**, with mean duration **−55.848 s** and mean actual KPM **−29.142**. The symmetric arithmetic decomposition assigns −174.194994 to duration and −194.105006 to KPM (`K=D×R/60`); this is descriptive, not causal, because actual KPM also reflects phase exposure. Seed 7 highlights early-run variation: baseline had 2,143 kills / 512.617 s / 250.831 KPM; both trials had 118 kills / 108.750 s / 65.103 KPM and ended before Storm.
+
+The paired 100-seed phone weak comparison now includes baseline, Trial 1, and candidate 3. Median kills are **2,311 / 2,401.5 / 2,421**; median actual duration is **548.092 / 560.383 / 552.2 s**; normalized survival medians are **548.092 / 560.383 / 552.2 s**; and median actual KPM is **255.312 / 258.542 / 265.650**. Lost/timeout/clear counts are **77/20/3 / 69/27/4 / 72/27/1**.
+
+Median kills by phase (baseline / Trial 1 / candidate 3) are Coast **193/169/169**, Skirmish **383/395/405**, Siege **580.5/614/634.5**, Storm **814.5/824/839.5**, and Ace **339/378/351**. Grouped per-run medians are pre-change Coast **193/169/169**, changed Skirmish+Siege **969.5/1,016/1,036**, and post-change Storm+Ace **1,132/1,195.5/1,206**. In paired candidate-3-minus-Trial-1 means, Skirmish/Siege add **18.96** kills while Storm/Ace change by **−17.20**, for **+1.76** total kills; the phase breakdown is Coast **0**, Skirmish **+8.80**, Siege **+10.16**, Storm **+9.74**, Ace **−26.94**. This is a same-seed descriptive comparison, not a causal claim. Candidate 3's weak median improves by 19.5 from Trial 1 but remains 79 below the strict target.
+
+For the matched weak-phone 100 seeds, mean kills / actual run seconds / normalized survival seconds / actual KPM are baseline **2,204.61 / 525.534 / 526.127 / 243.549**, candidate 3 **2,311.26 / 529.143 / 529.171 / 254.461**, and candidate 4 **2,415.18 / 550.213 / 550.561 / 260.053**. Outcomes (lost/timeout/clear) are **77/20/3**, **72/27/1**, and **65/31/4**, respectively.
+
+Paired candidate-4-minus-candidate-3 mean deltas are **+103.92 kills, +21.070 actual seconds, +21.390 normalized-survival seconds, and +5.592 actual KPM**. Candidate-4-minus-baseline deltas are **+210.57 kills, +24.679 actual seconds, +24.435 normalized-survival seconds, and +16.505 actual KPM**. Mean phase-kill contributions (Coast / Skirmish / Siege / Storm / Ace) are candidate 4 minus candidate 3 **+6.05 / +12.47 / +34.24 / +19.17 / +31.99**, and candidate 4 minus baseline **−18.33 / +39.46 / +93.50 / +56.18 / +39.76**. These are paired descriptive comparisons, not causal claims; no conclusion that the strict target is impossible is drawn.
+
+Per-seed baseline/Trial 1/Trial 2 10-seed data, baseline/Trial 1/candidate-3 100-seed weak data, and baseline/candidate-3/candidate-4 100-seed weak data—including actual duration, normalized survival, actual KPM, outcomes, and phase-kill distributions—are saved in `docs/density-balance-results.json`.
+
+`docs/density-balance-results.json` is the tracked compact record of integrated baseline, Trial 1, candidate 3, and candidate 4 100-seed phase medians, maxima, reached/completed counts, and per-phase kills/minute; the rejected Trial 2 10-seed phone screen; terminal level-ups and XP observations with sample counts; and paired per-seed phone weak comparisons. The ignored `sim-out/` reports remain preserved separately.
+
+Terminal level-ups and XP observation medians (baseline 100 seeds → Trial 1 100 seeds; level-ups at 60 s include observed counts in the JSON):
+
+| Cap / profile | Terminal levels | First XP s | First draft / level-up s | Level-ups at 60 s |
+| --- | ---: | ---: | ---: | ---: |
+| Desktop / skilled | 53 → 53 | 5.1 → 5.1 | 24.6 / 24.6 → 24.6 / 24.6 | 4 → 4 |
+| Desktop / average | 54 → 54 | 5.1 → 5.1 | 24.8 / 24.8 → 24.8 / 24.8 | 4 → 4 |
+| Desktop / weak | 54 → 54 | 5.1 → 5.1 | 26.1 / 26.1 → 26.1 / 26.1 | 3 → 3 |
+| Phone / skilled | 46 → 47 | 5.1 → 5.1 | 24.7 / 24.7 → 24.7 / 24.7 | 4 → 4 |
+| Phone / average | 47 → 47 | 5.1 → 5.1 | 25.2 / 25.2 → 25.2 / 25.2 | 4 → 3 |
+| Phone / weak | 46 → 48 | 5.1 → 5.1 | 28.0 / 28.0 → 28.0 / 28.0 | 3 (99) → 3 (100) |
+
+Trial 2 phone screen XP medians (10 runs/profile): first XP **5.1/5.0/5.0 s**, first draft/level-up **24.6/25.5/26.5 s**, level-ups at 60 s **4/3/2.5**, and terminal levels **48/49.5/45** for skilled/average/weak. These remain observations only; no XP settings changed.
+
+The Survivors seed-1 replay golden was intentionally updated for the desktop Trial 1 gameplay change to `1cede402…f0e5905`; Legacy remains `cfe30dda…f3903`. Trial 2 is mobile-only, so no new golden change is expected. Ace regression tests and their criteria are unchanged. Rendered FPS remains unverified.
 
 ## Stage C sim-pilot Ace pursuit
 

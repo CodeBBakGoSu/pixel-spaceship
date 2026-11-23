@@ -9,6 +9,8 @@ import { PHASES, phaseAt, SWARM_CAPS } from '../src/data/phases.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { World } from '../src/world.ts';
+import { createPhaseTelemetry, summarizePhaseTelemetry } from './phase-telemetry.mjs';
+import { createProgressionObservations, summarizeProgressionObservations } from './sim-observations.mjs';
 
 const MAX_SEED = 0xffffffff;
 const USAGE = 'npm run sim -- --profile skilled|average|weak|all --seeds N [--from S] [--heat H] [--mobile]';
@@ -46,6 +48,8 @@ function runSortie(args, profile, seed, world) {
   const ground = (x, z) => world.height(x, z);
   const stage = createStage({ ...parseStageOptions('?autoplay=1&mode=survivors'), seed, mobile: args.mobile, heat: args.heat }, ground);
   const pilot = createBot(profile, seed);
+  const phaseTelemetry = createPhaseTelemetry(PHASES, phaseAt, TICKS_PER_SECOND);
+  const progressionObservations = createProgressionObservations(TICKS_PER_SECOND);
   let inputs = 0, peakLiveGnats = 0, gnatCapPressureBeats = 0;
   const observeSwarm = (live, cap, requestedBeyondRoom) => {
     const expectedCap = args.mobile ? SWARM_CAPS.mobile : SWARM_CAPS.desktop;
@@ -55,7 +59,13 @@ function runSortie(args, profile, seed, world) {
   };
   while (stage.phase === 'playing' || stage.phase === 'draft' || stage.phase === 'chest') {
     if (++inputs > RUN_END_TICK * 2) throw new Error(`Replay did not finish for ${profile}, seed ${seed}`);
+    const previousTick = stage.tick, previousKills = stage.kills, previousLevel = stage.level;
+    const previousXp = stage.xp, previousSalvage = stage.salvage, previousPhase = stage.phase;
     stepStage(stage, pilot(stage, ground), ground, observeSwarm);
+    phaseTelemetry.record({ previousTick, previousKills, nextTick: stage.tick, nextKills: stage.kills, enemies: stage.enemies });
+    progressionObservations.record({ previousTick, previousLevel, previousXp, previousSalvage, previousPhase,
+      nextTick: stage.tick, nextLevel: stage.level, nextXp: stage.xp, nextSalvage: stage.salvage, nextPhase: stage.phase,
+      terminal: !['playing', 'draft', 'chest'].includes(stage.phase) });
   }
   const clear = stage.phase === 'clear' || stage.phase === 'timeout';
   const seconds = stage.tick / TICKS_PER_SECOND;
@@ -69,7 +79,7 @@ function runSortie(args, profile, seed, world) {
     buffs: Object.fromEntries(BUFF_IDS.filter(id => stage.run.buffLevels[id]).map(id => [id, stage.run.buffLevels[id]])),
     evolutions: WEAPON_IDS.flatMap(id => stage.run.evolutions[id] ? [stage.run.evolutions[id]] : []),
     chests: stage.chests.opened, billsOffered: stage.bills.offered, billsPaid: stage.bills.paid,
-    peakLiveGnats, gnatCapPressureBeats,
+    peakLiveGnats, gnatCapPressureBeats, phaseMetrics: phaseTelemetry.finish(), ...progressionObservations.finish(),
     stateHash: createHash('sha256').update(JSON.stringify(stage)).digest('hex'),
   };
 }
@@ -122,6 +132,8 @@ function summarize(profile, runs) {
     medianKills: distribution(runs, 'kills').median, medianLevelUps: distribution(runs, 'levelUps').median,
     peakLiveGnats: runs.reduce((peak, run) => Math.max(peak, run.peakLiveGnats), 0),
     gnatCapPressureBeats: runs.reduce((count, run) => count + run.gnatCapPressureBeats, 0),
+    phaseMetrics: summarizePhaseTelemetry(runs, PHASES),
+    ...summarizeProgressionObservations(runs),
     weapons, evolutions, medianChests: distribution(runs, 'chests').median,
     billsPaidPct: billsOffered ? 100 * billsPaid / billsOffered : null,
   };
@@ -164,13 +176,28 @@ function main(values) {
   const args = parseSimArgs(values);
   const report = runBatch(args);
   const percent = fraction => `${(fraction * 100).toFixed(1)}%`;
+  const observed = metric => `${metric.median === null ? '–' : metric.median.toFixed(1)} (${metric.observedRuns})`;
   console.table(report.profiles.map(row => ({
     profile: row.profile, seeds: row.samples, clear: percent(row.clearRate), boss: percent(row.bossClearRate),
     timeout: percent(row.timeoutRate), 'survival p10/50/90 s':
       [row.survival.p10, row.survival.median, row.survival.p90].map(value => value.toFixed(1)).join('/'),
     'run median s': row.duration.median.toFixed(1), 'end HP median': row.medianEndHull,
     'kills median': row.medianKills, 'level-ups median': row.medianLevelUps, 'Bills %': row.billsPaidPct ?? '–',
+    'first XP s (med,n)': observed(row.firstXpGainSeconds), 'first draft s (med,n)': observed(row.firstDraftSeconds),
+    'first level-up s (med,n)': observed(row.firstLevelUpSeconds), 'level-ups @60 (med,n)': observed(row.levelUpsAt60Seconds),
     'peak live Gnats': row.peakLiveGnats, 'cap pressure beats': row.gnatCapPressureBeats,
+  })));
+  console.table(report.profiles.flatMap(row => PHASES.map(phase => {
+    const metrics = row.phaseMetrics[phase.id];
+    const format = value => value === null ? '–' : Number(value.toFixed(1));
+    return {
+      profile: row.profile, phase: phase.id,
+      'full live med/max': `${format(metrics.medianFullLiveContacts)}/${format(metrics.maxFullLiveContacts)}`,
+      'active median': format(metrics.medianActiveLiveContacts),
+      'observed / active s': `${format(metrics.medianObservedSeconds)} / ${format(metrics.medianActiveObservedSeconds)}`,
+      'reached / complete': `${metrics.reachedRuns}/${metrics.completedRuns}`,
+      'kills / min': format(metrics.medianKillsPerMinute),
+    };
   })));
   const output = fileURLToPath(new URL('../sim-out', import.meta.url));
   mkdirSync(output, { recursive: true });

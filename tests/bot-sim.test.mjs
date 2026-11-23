@@ -4,7 +4,7 @@ import { autopilotInput } from '../src/autoplay.ts';
 import { createBot } from '../src/bot.ts';
 import { BOT_PROFILES, BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
 import { random, rngStream } from '../src/stage-random.ts';
-import { SWARM_CAPS } from '../src/data/phases.ts';
+import { PHASES, SWARM_CAPS } from '../src/data/phases.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { fireHostile } from '../src/stage-combat.ts';
 import { parseSimArgs, runBatch, serializeSummaryCsv } from '../tools/sim.mjs';
@@ -115,6 +115,11 @@ test('three seeds per profile make the same replay hashes and profile reports on
   assert.equal(first.runs.length, 9);
   assert.equal(first.swarmCap, SWARM_CAPS.desktop);
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\bpeakLiveGnats\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bphaseMetrics\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfirstXpGainSeconds\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfirstDraftSeconds\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfirstLevelUpSeconds\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\blevelUpsAt60Seconds\b/);
   const [skilled, average, weak] = first.profiles;
   assert.ok(skilled.survival.median >= average.survival.median, JSON.stringify(first.profiles));
   assert.ok(average.survival.median >= weak.survival.median, JSON.stringify(first.profiles));
@@ -124,6 +129,12 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(run.ticks > 0 && run.survivalSeconds >= run.seconds);
     assert.equal(run.clear, run.outcome !== 'lost');
     assert.ok(run.peakLiveGnats > 0 && run.peakLiveGnats <= first.swarmCap);
+    assert.deepEqual(Object.keys(run.phaseMetrics), PHASES.map(phase => phase.id));
+    assert.equal(Object.values(run.phaseMetrics).reduce((sum, phase) => sum + (phase.kills ?? 0), 0), run.kills);
+    assert.ok(run.firstXpGainSeconds === null || Number.isFinite(run.firstXpGainSeconds));
+    assert.ok(run.firstDraftSeconds === null || Number.isFinite(run.firstDraftSeconds));
+    assert.ok(run.firstLevelUpSeconds === null || Number.isFinite(run.firstLevelUpSeconds));
+    assert.ok(run.levelUpsAt60Seconds === null || Number.isFinite(run.levelUpsAt60Seconds));
   }
   for (const row of first.profiles) {
     assert.ok(Math.abs(row.clearRate - row.bossClearRate - row.timeoutRate) < 1e-12);
@@ -131,6 +142,12 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(row.billsPaidPct >= 0 && row.billsPaidPct <= 100);
     assert.ok(Object.hasOwn(row.weapons, 'twin'));
     assert.equal(row.peakLiveGnats, Math.max(...first.runs.filter(run => run.profile === row.profile).map(run => run.peakLiveGnats)));
+    assert.ok(Object.hasOwn(row.phaseMetrics, 'ace'));
+    assert.ok(row.phaseMetrics.coast.reachedRuns <= row.samples);
+    assert.ok(row.firstXpGainSeconds.observedRuns <= row.samples);
+    assert.ok(row.firstDraftSeconds.observedRuns <= row.samples);
+    assert.ok(row.firstLevelUpSeconds.observedRuns <= row.samples);
+    assert.ok(row.levelUpsAt60Seconds.observedRuns <= row.samples);
   }
 });
 

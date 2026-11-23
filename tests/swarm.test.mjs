@@ -141,11 +141,15 @@ test('engaged wave Gnats pursue indefinitely without attacks', () => {
   assert.deepEqual(state.pickups, []);
 });
 
-test('horde capacity and floors preserve the original regular traffic', () => {
+test('platform-specific horde settings preserve the original regular traffic', () => {
   assert.deepEqual(SWARM_CAPS, { desktop: 200, mobile: 120 });
   assert.deepEqual(PHASES.map(phase => phase.regularCap), [8, 16, 26, 30, 34]);
   assert.deepEqual(PHASES.map(phase => phase.regularPerMinute), [14, 16, 19, 23, 28]);
-  assert.deepEqual(PHASES.map(phase => phase.gnatFloor), [22, 44, 84, 130, 166]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatFloor), [22, 44, 90, 130, 166]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatFloorMobile), [14, 37, 72, 92, 99]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinute), [70, 160, 320, 480, 600]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinuteMobile), [50, 160, 320, 480, 600]);
+  assert.deepEqual(PHASES.map(phase => phase.packSize), [10, 18, 28, 36, 40]);
 });
 
 test('distant wave Gnats recycle ahead of travel, terrain-safe in the same band without RNG', () => {
@@ -297,24 +301,30 @@ test('wave Gnats leave fly-in aimed at the current pilot and steer when the pilo
   assert.ok(enemy.vz > 0);
 });
 
-test('floor top-ups are pack-limited, count only live Gnats, and wait for the next second', () => {
-  const state = waveState();
-  state.enemies.push(makeEnemy(state, 0, 200, 1, 'patrol'));
-  const dead = makeEnemy(state, 0, 200, 1, 'gnat');
-  dead.hp = 0;
-  state.enemies.push(dead);
-  spawnAt(state, 21);
-  assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, PHASES[0].packSize);
-  spawnAt(state, 21 + 1 / 60);
-  assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, PHASES[0].packSize);
-  spawnAt(state, 22);
-  assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, PHASES[0].packSize * 2);
+test('platform floor top-ups are pack-limited, count only live Gnats, and wait for the next second', () => {
+  for (const { cap, floor } of [{ cap: SWARM_CAPS.desktop, floor: 22 }, { cap: SWARM_CAPS.mobile, floor: 14 }]) {
+    const state = waveState(27, cap);
+    state.enemies.push(makeEnemy(state, 0, 200, 1, 'patrol'));
+    const dead = makeEnemy(state, 0, 200, 1, 'gnat');
+    dead.hp = 0;
+    state.enemies.push(dead);
+    spawnAt(state, 21);
+    assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, Math.min(floor, PHASES[0].packSize));
+    spawnAt(state, 21 + 1 / 60);
+    assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, Math.min(floor, PHASES[0].packSize));
+    spawnAt(state, 22);
+    assert.equal(gnats(state).filter(enemy => enemy.hp > 0).length, Math.min(floor, PHASES[0].packSize * 2));
+  }
 });
 
 test('floor top-ups scale by swarm capacity and stop at the deficit', () => {
-  for (const cap of Object.values(SWARM_CAPS)) {
-    const state = waveState(27, cap);
-    const floor = Math.floor(PHASES[0].gnatFloor * cap / SWARM_CAPS.desktop);
+  for (const { cap, floor } of [
+    { cap: SWARM_CAPS.desktop, floor: PHASES[0].gnatFloor },
+    { cap: SWARM_CAPS.mobile, floor: PHASES[0].gnatFloorMobile },
+    { cap: 80, floor: Math.floor(PHASES[0].gnatFloor * 80 / SWARM_CAPS.desktop) },
+  ]) {
+    const state = waveState(27, cap === SWARM_CAPS.mobile ? cap : SWARM_CAPS.desktop);
+    state.swarmCap = cap;
     for (let i = 0; i < floor - 3; i++) state.enemies.push(makeEnemy(state, 0, 200, 1, 'gnat'));
     spawnAt(state, 21);
     assert.equal(gnats(state).length, floor);
@@ -324,4 +334,29 @@ test('floor top-ups scale by swarm capacity and stop at the deficit', () => {
     spawnAt(state, 23, () => 1000);
     assert.equal(gnats(state).length, 0);
   }
+});
+
+test('scheduled Gnat rates select the mobile profile while arbitrary caps use desktop rates', () => {
+  const attempts = cap => {
+    const state = waveState(27, cap === SWARM_CAPS.mobile ? cap : SWARM_CAPS.desktop);
+    state.swarmCap = cap;
+    for (let i = 0; i < cap; i++) state.enemies.push(makeEnemy(state, 0, 200, 1, 'gnat'));
+    const beats = [];
+    for (let tick = 0; tick < ticks(105); tick++) {
+      state.tick = tick;
+      advancePhaseSpawns(state, ground, (_live, _cap, requestedBeyondRoom) => {
+        if (requestedBeyondRoom) beats.push(tick / 60);
+      });
+    }
+    return beats;
+  };
+  const desktop = attempts(SWARM_CAPS.desktop);
+  const mobile = attempts(SWARM_CAPS.mobile);
+  const arbitrary = attempts(80);
+  assert.equal(desktop.length, 14);
+  assert.equal(mobile.length, 10);
+  assert.deepEqual(arbitrary, desktop);
+  assert.equal(desktop[0], 20);
+  assert.equal(mobile[0], 20);
+  assert.ok(desktop[1] < mobile[1]);
 });
