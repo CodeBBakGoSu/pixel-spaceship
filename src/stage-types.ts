@@ -142,7 +142,7 @@ export type Enemy = Position & {
   burnNextAt?: number;
   burnDamage?: number;
   burnCredit?: KillCredit;
-  ionReadyAt?: number;
+  ionReadyAt?: [number, number, number];
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
@@ -231,7 +231,7 @@ export type Ace = Position & {
   burnUntil?: number;
   burnNextAt?: number;
   burnDamage?: number;
-  ionReadyAt?: number;
+  ionReadyAt?: [number, number, number];
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };

@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { makeAce } from '../src/ace.ts';
 import { BANDS } from '../src/bands.ts';
 import { DRAFT_RULES, WEAPON_IDS, WEAPONS } from '../src/data/items.ts';
 import { PLAYER_SHOT_LIMIT } from '../src/data/run-balance.ts';
+import { weaponCooldown, weaponDamage } from '../src/loadout.ts';
 import { advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { acquireAndFire, advanceAutoOrdnance, advanceRearBombs, advanceShots } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
@@ -30,6 +32,24 @@ test('every indexed weapon tune comfortably supports ranks one through seven', (
   for (const id of WEAPON_IDS) {
     for (const [key, values] of Object.entries(WEAPONS[id].tuning)) {
       if (Array.isArray(values)) assert.equal(values.length, 7, `${id}.${key}`);
+    }
+  }
+});
+
+test('each weapon can tune high-rank damage and cooldown without changing Lv1 or Legacy', () => {
+  const legacy = createStage(parseStageOptions('?mode=legacy&t=0'), ground);
+  for (const id of WEAPON_IDS) {
+    const { damageScale, cooldownScale } = WEAPONS[id].tuning;
+    const previous = [damageScale[6], cooldownScale[6]];
+    try {
+      damageScale[6] = 1.5;
+      cooldownScale[6] = 0.75;
+      for (const [state, damage, cooldown] of [[legacy, 4, 20], [start(id, 1), 4, 20], [start(id, 7), 6, 15]]) {
+        assert.equal(weaponDamage(state, id, 4), damage, id);
+        assert.equal(weaponCooldown(state, id, 20), cooldown, id);
+      }
+    } finally {
+      [damageScale[6], cooldownScale[6]] = previous;
     }
   }
 });
@@ -142,6 +162,34 @@ test('Ion Wake has separate lanes and levels widen hits, extend life, and pull s
     assert.equal(!!state.pickups[0].pulling, level >= 5);
     if (level >= 4) assert.deepEqual(state.ionWake.filter(mote => mote.lane).map(mote => mote.x), [-12, 12]);
   }
+});
+
+test('Ion Wake tracks independent overlapping lane hits on enemies and the Ace', () => {
+  const state = start('ion', 7);
+  const enemy = spawn(state, -20, -18);
+  const ace = state.boss = makeAce(state, -20, -18, ground);
+  const baseDamage = weaponDamage(state, 'ion', WEAPONS.ion.tuning.damage);
+  const cooldown = weaponCooldown(state, 'ion', WEAPONS.ion.tuning.hitCooldownTicks);
+  const expectHits = count => {
+    assert.equal(enemy.hp, 100 - count * baseDamage);
+    assert.equal(ace.hp, ace.maxHp - count * baseDamage);
+  };
+  advanceSupportWeapons(state, ground);
+  expectHits(1);
+
+  state.tick = 1;
+  enemy.x = ace.x = 0;
+  advanceSupportWeapons(state, ground);
+  expectHits(3);
+  advanceSupportWeapons(state, ground);
+  expectHits(3);
+
+  state.tick = cooldown;
+  advanceSupportWeapons(state, ground);
+  expectHits(4);
+  state.tick++;
+  advanceSupportWeapons(state, ground);
+  expectHits(6);
 });
 
 test('Orbit Drones remain independent, gain their own ranged fire, and split into two rings', () => {

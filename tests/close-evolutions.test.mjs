@@ -81,7 +81,7 @@ test('Plasma Ribbon preserves an eight-second wall and pulses in its own band', 
   assert.equal(above.hp, 4);
   advanceSupportWeapons(state, sea);
   assert.equal(near.hp, 4 - damage);
-  state.tick = near.ionReadyAt;
+  state.tick = near.ionReadyAt[0];
   advanceSupportWeapons(state, sea);
   assert.ok(near.hp < 4 - damage);
 });

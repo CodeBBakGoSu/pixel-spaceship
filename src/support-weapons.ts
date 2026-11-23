@@ -3,23 +3,25 @@ import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { buffTuning, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { activeAce, aceVulnerable, clamp, HIT_WINDOW, hurtAce, hurtEnemy, inBand, projectileRoom, rearWeaponCredit, STEP,
   TICKS_PER_SECOND } from './stage-combat.ts';
-import type { Ground, Position, StageState } from './stage-types.ts';
+import type { Ace, Enemy, Ground, Position, StageState } from './stage-types.ts';
 
 type WakePoint = StageState['ionWake'][number];
 type WakeSegment = { tail: WakePoint; head: WakePoint };
 
-function wakeSegments(trail: StageState['ionWake']): WakeSegment[] {
+function wakeSegments(trail: StageState['ionWake']): WakeSegment[][] {
   const previous: (WakePoint | undefined)[] = [];
-  return trail.map(tail => {
+  const segments: WakeSegment[][] = [[], [], []];
+  for (const tail of trail) {
     const lane = tail.lane ?? 0;
-    const head = previous[lane] ?? tail;
+    segments[lane].push({ head: previous[lane] ?? tail, tail });
     previous[lane] = tail;
-    return { head, tail };
-  }).reverse();
+  }
+  return segments;
 }
 
 function crossesWake(trail: WakeSegment[], target: Position, width: number, window: number, plasma: boolean): boolean {
-  for (const { tail, head } of trail) {
+  for (let i = trail.length - 1; i >= 0; i--) {
+    const { tail, head } = trail[i];
     if (target.alt < Math.min(tail.alt, head.alt) - window || target.alt > Math.max(tail.alt, head.alt) + window) continue;
     const dx = head.x - tail.x, dz = head.z - tail.z;
     const lengthSquared = dx * dx + dz * dz;
@@ -53,20 +55,24 @@ function advanceWake(state: StageState, level: number): void {
   const width = tuning.width[level - 1] * (plasma ? evolved.widthScale : 1), window = hitWindow(state);
   const damage = weaponDamage(state, 'ion', tuning.damage);
   const next = state.tick + weaponCooldown(state, 'ion', plasma ? evolved.hitCooldownTicks : tuning.hitCooldownTicks);
+  const hitLanes = (target: Enemy | Ace) => {
+    for (let lane = 0; lane < segments.length && target.hp > 0; lane++) {
+      if (state.tick < (target.ionReadyAt?.[lane] ?? 0) || !crossesWake(segments[lane], target, width, window, plasma)) continue;
+      if (target.kind === 'ace') hurtAce(state, target, damage);
+      else hurtEnemy(state, target, damage, { weapon: 'ion' });
+      (target.ionReadyAt ??= [0, 0, 0])[lane] = next;
+    }
+  };
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || state.tick < (enemy.ionReadyAt ?? 0) || !crossesWake(segments, enemy, width, window, plasma)) continue;
-    hurtEnemy(state, enemy, damage, { weapon: 'ion' });
-    enemy.ionReadyAt = next;
+    if (enemy.hp && !enemy.entry) hitLanes(enemy);
   }
   const ace = activeAce(state);
-  if (ace && aceVulnerable(ace) && state.tick >= (ace.ionReadyAt ?? 0) && crossesWake(segments, ace, width, window, plasma)) {
-    hurtAce(state, ace, damage);
-    ace.ionReadyAt = next;
-  }
+  if (ace && aceVulnerable(ace)) hitLanes(ace);
   if (level >= tuning.salvageAt) {
     const pickupWindow = HIT_WINDOW + (buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
     for (const pickup of state.pickups) {
-      if (inBand(p.altitude, pickup.alt, pickupWindow) && crossesWake(segments, pickup, width, pickupWindow, plasma)) pickup.pulling = true;
+      if (inBand(p.altitude, pickup.alt, pickupWindow)
+        && segments.some(lane => crossesWake(lane, pickup, width, pickupWindow, plasma))) pickup.pulling = true;
     }
   }
 }
