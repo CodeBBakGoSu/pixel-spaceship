@@ -13,18 +13,19 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Current state
 - Working branch: `renderer-proto` (pushed to origin). `main` is behind at `801ff22` (OG preview image) and is what the public site shows.
-- Tests: `npm test` 522/522 pass on the Survivors horde build (`51e3a72`). Build OK.
-- 100-seed desktop Heat 0 sims at `51e3a72`: skilled/average/weak clears **100%/77%/48%**, Ace kills **100%/65%/0%**; comparison in `docs/BALANCE_NOTES.md`.
+- Tests: `npm test` 524/524 pass on the Survivors horde build (`9c3694f`). Build OK.
+- 100-seed desktop Heat 0 sims at `9c3694f`: skilled/average/weak clears **100%/69%/51%**, Ace kills **100%/56%/0%**; comparison in `docs/BALANCE_NOTES.md`.
 - Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
 - Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
 
 ## Log
 
 ### 2026-11-23 · 데븐 봇 · devin/1795400000-survivors-horde → renderer-proto
-- Commits: `49aff78`, `c5c477b`, upstream merge `3820811`, recycling `41e4504`, escort lifetime `51e3a72`.
-- Gnat caps 200/120, phase floors with deterministic top-ups, homing/encircle packs, persistent wave Gnats recycled ahead in their band, silent over-cap cleanup. Regular traffic restored; bomber escort lifetime stays 12 s. Protected altitude/recovery mechanics, orb merge and shot budgets unchanged.
-- Verification: `npm test` 522/522, `npm run build` OK; 100 desktop Heat 0 seeds per pilot against growth baseline `1f1eb4b`: clears 100%/77%/48%, median kills 3,990/3,994.5/3,596, median peak Gnats 200 for each. Regenerated seed-1 replay hashes are unchanged after the escort-lifetime correction.
+- Commits: `49aff78`, `c5c477b`, upstream merge `3820811`, recycling `41e4504`, escort lifetime `51e3a72`, aft re-entry `9c3694f`.
+- Gnat caps 200/120, phase floors with deterministic top-ups, homing/encircle packs, persistent wave Gnats recycled ahead in their band, silent over-cap cleanup. Aft Gnats beyond 0.6 × range for 1 s re-enter through off-screen fly-ins; regular traffic and 12 s bomber escort lifetime stay original. Protected altitude/recovery mechanics, orb merge and shot budgets unchanged.
+- Verification: `npm test` 524/524, `npm run build` OK; 100 desktop Heat 0 seeds per pilot against growth baseline `1f1eb4b`: clears 100%/69%/51%, median kills 3,680.5/3,637.5/3,420.5, median peak Gnats 200 for each. Seed-1 replay hashes were rebaselined for deterministic aft re-entry.
 - State: done (merged). Hardware 60 fps and real-phone fps unverified (VM has software GPU); 밸런스 봇 owns tuning.
+- Forward-contact median/minimum at t=540–570, seed 1, average pilot after browser-style seek: **21/0 → 35/15** versus `540735e` (±60°, 1.5 × Gnat range). Cockpit red polygons are the Ace crossing the 0.65 near plane; the same mesh crosses in upstream `1f1eb4b` with unchanged Ace/camera/render code. Investigated only; no fix.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795406694-aster-growth → renderer-proto (`a36ff13`; merge `3da3980`)
 - Survivors weapon ranks raise damage and grow Twin Cannon from two bolts to a wider, piercing six-bolt volley. Draft cards show the gain before selection; flight confirms the selected upgrade.

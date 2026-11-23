@@ -364,17 +364,19 @@ The seed-1 golden hashes were rebaselined once for the changed flight paths: Leg
 - Gnat caps: desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile uses `floor(desktop floor × swarmCap / 200)`.
 - Scheduled Gnats per minute: **70/160/320/480/600**; pack sizes: **10/18/28/36/40**. Coast begins at **20 s**; later phases begin immediately. Floor top-ups add at most one pack per second after the start beat, outside lulls, limited by the deficit and remaining capacity.
 - Regular caps stay **8/16/26/30/34**, with original regular rates **14/16/19/23/28 per minute**. Siege/Storm/Ace include a terrain-safe encircle formation around the projected pilot position.
-- Wave/floor Gnats have no expiry. Beyond `SPAWN_WORLD.recycleDistance`, they relocate off-screen ahead of travel into a terrain-safe site in the same band; failed searches retry. Bomber escort Gnats retain their original **12 s** lifetime.
+- Wave/floor Gnats have no expiry. Beyond `SPAWN_WORLD.recycleDistance`, they relocate ahead as before. Aft Gnats beyond **0.6 × `GNAT.range`** also recycle after **60 consecutive ticks**; returning ahead or inside the margin resets the timer. Aft re-entry starts off-screen using the existing 1.5 s fly-in, converging on terrain-safe sites at **1.15–1.35 × `GNAT.range`**, spread across ±60° ahead of travel in the same band. Unsafe searches retry once per second. Bomber escort Gnats retain their original **12 s** lifetime.
 - Over-cap cleanup prioritizes distant (outside `GNAT.range`), then behind, then farthest Gnats, with descending ID as the final tie-break. Cleanup gives no kill or XP. Orb merging at 150 and shot budgets are unchanged.
 
 The 100-seed desktop comparison uses Heat 0, seeds 1–100 per profile, against `origin/renderer-proto` at `1f1eb4b` (growth included). Clear includes a living timeout; Ace kill means boss clear. Peak is the median of each run's peak live Gnats, not the maximum across the batch. Per-phase median live contacts are not recorded by the sim.
 
 | Profile | Clear before → after | Median kills before → after | Median peak Gnats before → after | Ace kill before → after |
 | --- | ---: | ---: | ---: | ---: |
-| Skilled | 100% → 100% | 1,057.5 → 3,990 | 61 → 200 | 100% → 100% |
-| Average | 73% → 77% | 1,085.5 → 3,994.5 | 61 → 200 | 66% → 65% |
-| Weak | 41% → 48% | 1,003.5 → 3,596 | 60 → 200 | 0% → 0% |
+| Skilled | 100% → 100% | 1,057.5 → 3,680.5 | 61 → 200 | 100% → 100% |
+| Average | 73% → 69% | 1,085.5 → 3,637.5 | 61 → 200 | 66% → 56% |
+| Weak | 41% → 51% | 1,003.5 → 3,420.5 | 60 → 200 | 0% → 0% |
 
-The table includes the restored 12 s escort lifetime (`51e3a72`). Seed-1 replay hashes remain unchanged, but 282/300 run hashes changed against the 20 s escort batch. Initial horde median kills were roughly **3,700–4,050**; the corrected batch is **3,596–3,994.5**, still above the planning target **2,500–3,500**.
+Forward visibility check: production terrain, seed 1, browser-style `seekStage(t=540)` followed by 30 s of the average pilot. Relative to `540735e`, median live Gnats inside the travel-forward ±60° cone and 1.5 × `GNAT.range` increased **21 → 35**; minimum **0 → 15** (1,800 simulation samples each). This is a headless contact proxy, not a renderer-frustum or FPS measurement; `node --experimental-strip-types tools/horde-visibility.mjs` reproduces it.
+
+The table includes the restored 12 s escort lifetime (`51e3a72`) and aft re-entry (`9c3694f`). Earlier batches produced median kills around **3,700–4,050**; this post-re-entry batch produced **3,420.5–3,680.5**, around/slightly above the planning target **2,500–3,500**.
 
 Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These are placeholders; **밸런스 봇** owns tuning. Do not lower density to tune shooting threat.
