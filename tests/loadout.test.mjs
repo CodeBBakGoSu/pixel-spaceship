@@ -64,7 +64,7 @@ test('taking Hull Plating through a real draft raises and repairs hull', () => {
 test('Magnet Core expands both pickup reach and its altitude window', () => {
   const without = start(), withMagnet = start();
   for (const state of [without, withMagnet]) {
-    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 122, xp: 4, born: 0 });
+    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 137, xp: 4, born: 0 });
   }
   withMagnet.run.buffLevels['magnet-core'] = 2;
   stepStage(without, {}, ground);
@@ -78,7 +78,7 @@ test('Salvage Beacon carries sub-unit XP across pickups and boosts run credits',
   const state = start();
   state.run.buffLevels['salvage-beacon'] = 3;
   for (let i = 0; i < 10; i++) {
-    state.pickups.push({ id: 100 + i, x: state.player.x, z: state.player.z + 1, alt: 110, xp: 1, born: 0 });
+    state.pickups.push({ id: 100 + i, x: state.player.x, z: state.player.z + 1, alt: 125, xp: 1, born: 0 });
   }
   stepStage(state, {}, ground);
   assert.equal(state.salvage, 10);
@@ -193,7 +193,7 @@ test('Wing Pods add a rear bolt at level five and keep their same-band restricti
   state.enemies = [makeEnemy(state, x - scaleTravel(22), z - scaleTravel(66), 2, 'patrol', 0)];
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 0);
-  state.enemies[0].alt = 110;
+  state.enemies[0].alt = 125;
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 2);
   assert.equal(state.podsAt, 36);
@@ -204,11 +204,11 @@ test('Ion Wake makes a vertical damage curtain and level five attracts salvage a
   state.tick = 10;
   const { x, z } = state.player;
   state.run.weaponLevels.ion = 5;
-  state.ionWake = [{ x, z: z - scaleTravel(34), alt: 75, until: 100 }, { x, z: z - scaleTravel(60), alt: 145, until: 100 }];
+  state.ionWake = [{ x, z: z - scaleTravel(34), alt: 75, until: 100 }, { x, z: z - scaleTravel(60), alt: 180, until: 100 }];
   const inside = makeEnemy(state, x, z - scaleTravel(49), 1, 'interceptor', 0);
   const outside = makeEnemy(state, x + scaleTravel(12), z - scaleTravel(49), 1, 'interceptor', 0);
   state.enemies = [inside, outside];
-  state.pickups.push({ id: 606, x, z: z - scaleTravel(52), alt: 110, xp: 1, born: 0 });
+  state.pickups.push({ id: 606, x, z: z - scaleTravel(52), alt: 125, xp: 1, born: 0 });
   advanceSupportWeapons(state);
   assert.ok(inside.hp < 3);
   assert.equal(outside.hp, 4);
@@ -229,7 +229,7 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   assert.ok(state.orbitDrones.some(drone => drone.alt > 117));
   assert.ok(contact.hp < 4);
   assert.ok(state.shots.some(shot => shot.kind === 'drone-bolt'));
-  const bolt = { x, z: z + scaleTravel(32), alt: 110, vx: 0, vz: scaleTravel(-900), life: 2, damage: 2, kind: 'hostile',
+  const bolt = { x, z: z + scaleTravel(32), alt: 125, vx: 0, vz: scaleTravel(-900), life: 2, damage: 2, kind: 'hostile',
     volley: 0, nearMiss: false, lockId: null };
   state.shots.push(bolt);
   advanceShots(state, ground);
@@ -259,7 +259,7 @@ test('Phoenix Flares drop one automatic flare and spread at level five without s
 test('Bomb Bay double-drops at level five, detonates below launch band and leaves manual stock intact', () => {
   const state = start();
   state.tick = 40;
-  state.player.altitude = 145;
+  state.player.altitude = 180;
   state.run.weaponLevels['bomb-bay'] = 5;
   advanceAutoOrdnance(state, false);
   state.tick = state.nextBayDrop;
@@ -275,10 +275,27 @@ test('Bomb Bay double-drops at level five, detonates below launch band and leave
   assert.equal(high.hp, 4);
   assert.equal(state.rearBombs.length, 2, 'the launcher cannot pre-detonate in its own band');
   state.tick += 60;
-  bomb.alt = 110;
+  bomb.alt = 125;
   advanceRearBombs(state, ground);
   assert.equal(low.hp, 0);
   assert.equal(high.hp, 4);
+});
+
+test('Bomb Bay dropped from SKIM still hits ground turrets below it', () => {
+  const state = start();
+  state.tick = 40;
+  Object.assign(state.player, { altitude: 49, skim: 'water' });
+  state.run.weaponLevels['bomb-bay'] = 1;
+  advanceAutoOrdnance(state, false);
+  const [bomb] = state.rearBombs;
+  const turret = Object.assign(makeEnemy(state, bomb.x, bomb.z, 0, 'turret', 0), { alt: 40, entry: 0 });
+  state.enemies = [turret];
+  for (let i = 0; i < 90 && state.rearBombs.length; i++) {
+    state.tick++;
+    advanceRearBombs(state, ground);
+  }
+  assert.equal(state.rearBombs.length, 0);
+  assert.ok(turret.hp < 4);
 });
 
 test('headless Heat raises regular armor while leaving the seeded formation unchanged', () => {

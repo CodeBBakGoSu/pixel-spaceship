@@ -17,7 +17,7 @@ import type { Ace, AceTell, Ground, Position, StageState } from './stage-types.t
 import type { SwarmObserver } from './swarm.ts';
 
 function flightAltitude(band: FlightBand, floor: number): number {
-  return Math.max(bandAltitude(band, floor), floor + ACE.flight.clearance);
+  return band === SKIM_BAND ? bandAltitude(band, floor) : Math.max(bandAltitude(band, floor), floor + ACE.flight.clearance);
 }
 
 export function makeAce(state: StageState, x: number, z: number, ground?: Ground): Ace {
@@ -150,7 +150,7 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
     ace.bankDrop = 0;
     return;
   }
-  const floor = groundHeight + data.clearance;
+  const floor = groundHeight + (ace.band === SKIM_BAND ? SKIM.minClearance : data.clearance);
   const level = ace.alt + ace.bankDrop + change;
   const drop = ace.roll ? 0 : advanceBankDrop(ace.bankDrop, ace.bank, STEP);
   ace.alt = Math.max(floor, ace.roll ? rollAltitude(ace.roll) : level - drop);

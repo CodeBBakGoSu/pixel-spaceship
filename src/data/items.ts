@@ -45,7 +45,7 @@ export const WEAPONS = {
   flak: {
     family: 'ballistic', coverage: 'vertical-blast',
     tuning: { cooldownTicks: [144, 144, 120, 120, 120], radius: [22, 25.3, 25.3, 25.3, 25.3].map(scaleTravel),
-      range: scaleTravel(90), speed: scaleTravel(150), damage: 2, halfHeight: 18, fragmentsAt: 5, fragments: 6,
+      range: scaleTravel(90), speed: scaleTravel(150), damage: 2, halfHeight: 28, fragmentsAt: 5, fragments: 6,
       fragmentDamage: 1, fragmentSpeed: scaleTravel(110), fragmentLifeSeconds: 0.33 },
   },
   ion: {

@@ -29,7 +29,7 @@ test('the title launches a one-life sortie in cruise with both weapons and three
   run(state, 1, { start: true });
   assert.equal(state.phase, 'playing');
   assert.equal(state.view, 'overhead');
-  assert.equal(state.player.altitude, 110);
+  assert.equal(state.player.altitude, 125);
   assert.equal(state.hull, 8);
   assert.equal(state.boost, 1);
   assert.equal(state.bombs, 3);
@@ -37,21 +37,21 @@ test('the title launches a one-life sortie in cruise with both weapons and three
   assert.equal(state.podRank, 1);
 });
 
-test('the stack fixture has the same planar contact at 75, 110 and 145 m in every view', () => {
+test('the stack fixture has the same planar contact at 75, 125 and 180 m in every view', () => {
   for (const view of ['overhead', 'chase', 'cockpit']) {
     const state = stage('?fixture=stack&view=' + view);
     assert.equal(state.tick, 30 * 60);
-    assert.deepEqual(state.enemies.map(e => e.alt), [75, 110, 145]);
+    assert.deepEqual(state.enemies.map(e => e.alt), [75, 125, 180]);
     assert.ok(state.enemies.every(e => e.x === state.enemies[0].x && e.z === state.enemies[0].z));
     for (let i = 0; i < 44 && !state.pickups.length; i++) run(state, 1);
-    assert.deepEqual(state.enemies.map(e => e.alt), [75, 145]);
-    assert.equal(state.pickups[0].alt, 110);
+    assert.deepEqual(state.enemies.map(e => e.alt), [75, 180]);
+    assert.equal(state.pickups[0].alt, 125);
   }
 });
 
 test('a real-terrain Immelmann earns ACE WIPE from all six fixture pursuers', () => {
   const state = stage('?fixture=reversal');
-  const original = state.enemies.filter(enemy => enemy.alt === 145).map(enemy => enemy.id);
+  const original = state.enemies.filter(enemy => enemy.alt === 180).map(enemy => enemy.id);
   const lower = state.enemies.find(enemy => enemy.alt === 75);
   assert.equal(original.length, 6);
   run(state, 1, { maneuver: 'immelmann' });
@@ -69,29 +69,29 @@ test('a real-terrain Immelmann earns ACE WIPE from all six fixture pursuers', ()
 
 test('hit and miss feedback use the bolt launch height and emit one miss for a paired volley', () => {
   const state = stage('?fixture=stack');
-  state.enemies = state.enemies.filter(enemy => enemy.alt === 145);
+  state.enemies = state.enemies.filter(enemy => enemy.alt === 180);
   run(state, 18);
   assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 0);
-  assert.equal(state.altitudeHint.delta, 35);
+  assert.equal(state.altitudeHint.delta, 55);
   run(state, 1, { fire: true });
   assert.equal(state.shots.length, 0, 'legacy manual fire cannot bypass acquisition');
-  state.enemies[0].alt = 110;
+  state.enemies[0].alt = 125;
   run(state, 1);
   const bolts = state.shots.filter(shot => shot.kind === 'twin');
   assert.equal(bolts.length, 2);
-  assert.ok(bolts.every(shot => shot.alt === 110));
-  state.enemies[0].alt = 145;
+  assert.ok(bolts.every(shot => shot.alt === 125));
+  state.enemies[0].alt = 180;
   run(state, 25, { climb: 1 });
   assert.equal(state.enemies[0].hp, 2);
   assert.equal(state.effects.filter(effect => effect.kind === 'miss').length, 1);
-  assert.equal(state.effects.find(effect => effect.kind === 'miss').delta, 35);
+  assert.equal(state.effects.find(effect => effect.kind === 'miss').delta, 55);
 });
 
 test('shot and body overlap only damage the player through the inclusive eight-metre window', () => {
   for (const offset of [8, 8.01, -8, -8.01]) {
     const state = stage('?fixture=stack');
     state.enemies = [];
-    state.shots.push(atPlayer(state, 110 + offset));
+    state.shots.push(atPlayer(state, 125 + offset));
     run(state, 1);
     assert.equal(state.hull, Math.abs(offset) <= 8 ? 6 : 8);
   }
@@ -177,7 +177,7 @@ test('the old Warden fixture opens on the same fighter as the Legacy boss fixtur
 test('the legacy Ace fixture rejects cruise bolts, then tracks same-band aim across views', () => {
   const state = stage('?fixture=boss&view=cockpit');
   assert.equal(state.tick, 108 * 60);
-  assert.equal(state.player.altitude, 110);
+  assert.equal(state.player.altitude, 125);
   const ace = activeAce(state);
   assert.ok(ace.alt >= 139);
   run(state, 24);
@@ -301,7 +301,7 @@ test('Wing Pods cover a side contact at launch height and upgrades improve both 
   state.enemies = [target];
   run(state, 1);
   assert.equal(state.shots[0].kind, 'pods');
-  assert.equal(state.shots[0].alt, 110);
+  assert.equal(state.shots[0].alt, 125);
   assert.equal(state.podsAt - state.tick, 25);
   assert.equal(state.twinRank, 1);
 });

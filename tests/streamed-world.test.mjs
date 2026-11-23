@@ -27,18 +27,18 @@ test('ground is seeded and remains continuous across chunk seams at distant coor
 test('the player can cross the former rim, descend into SKIM and climb back to LOW', () => {
   const ground = (x, z) => 35 + Math.max(0, Math.min(18, (z - 1900) / 10));
   const state = createStage(parseStageOptions('?autoplay=1'), ground);
-  Object.assign(state.player, { x: -4200, z: 1870, altitude: 110, yaw: 0 });
+  Object.assign(state.player, { x: -4200, z: 1870, altitude: 125, yaw: 0 });
   for (let i = 0; i < 480; i++) {
     stepStage(state, { climb: -1 }, ground);
-    assert.ok(state.player.altitude >= ground(state.player.x, state.player.z) + 25);
+    assert.ok(state.player.altitude >= ground(state.player.x, state.player.z) + 10);
   }
   const p = state.player;
   assert.ok(p.z > 2200);
   assert.equal(p.skim, 'land');
-  assert.equal(p.altitude, ground(p.x, p.z) + 30);
+  assert.equal(p.altitude, ground(p.x, p.z) + 14);
   for (let i = 0; i < 60; i++) stepStage(state, { climb: 1 }, ground);
   assert.equal(p.skim, undefined);
-  assert.ok(p.altitude >= 110);
+  assert.ok(p.altitude >= 75);
 });
 
 test('wave, swarm and carrier placement preserves local density far from Reach', () => {

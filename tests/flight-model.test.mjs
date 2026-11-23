@@ -160,8 +160,9 @@ test('fixed-step flight banks and turns while remaining in its altitude band', (
 });
 
 test('steep bank at terrain clearance does not store altitude to recover on release', () => {
-  const ground = () => 88;
+  const ground = () => 111;
   const stage = createStage(parseStageOptions('?t=0'), ground);
+  stage.player.altitude = 125;
   const floor = stage.player.altitude;
   for (let tick = 0; tick < 180; tick++) stepStage(stage, { turn: 1 }, ground);
   assert.ok(stage.player.bank >= 1.45);

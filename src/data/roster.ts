@@ -1,12 +1,12 @@
 import type { Enemy } from '../stage-types.ts';
-import { scaleTravel, SPEED_SCALE } from './speed.ts';
+import { scaleClimb, scaleTravel, SPEED_SCALE } from './speed.ts';
 
 export const ROSTER = {
   bands: { low: 0, mid: 1, high: 2 },
   patrol: { warningTicks: 22, closeRange: scaleTravel(14) },
   interceptor: { warningTicks: 27, tailRange: scaleTravel(82), tailHalfAngle: Math.PI / 4,
     tailSlot: scaleTravel(42), tailSpeedScale: 1.33, closeRange: scaleTravel(32) },
-  hound: { bandFollowRange: scaleTravel(85), bandLagTicks: 60, bandSpeed: 29, warningTicks: 27,
+  hound: { bandFollowRange: scaleTravel(85), bandLagTicks: 60, bandSpeed: scaleClimb(29), warningTicks: 27,
     tailSlot: scaleTravel(29), lateralSlot: scaleTravel(6), attackWidth: scaleTravel(23) },
   skimmer: { lookAhead: scaleTravel(18), closeRange: scaleTravel(60), closeMargin: scaleTravel(6), warningTicks: 27,
     range: scaleTravel(176),
@@ -14,10 +14,10 @@ export const ROSTER = {
   spotter: { warningTicks: 48, range: scaleTravel(195), closeRange: scaleTravel(105), longRange: scaleTravel(165),
     rangeMargin: scaleTravel(8), buffRange: scaleTravel(125), cooldownTicks: 150, recoveryTicks: 42 },
   flanker: { warningTicks: 27, range: scaleTravel(106), lateralSlot: scaleTravel(40), cooldownTicks: 240 },
-  harrier: { warningTicks: 33, bandHopWarningTicks: 75, bandHopRange: scaleTravel(115), tailSlot: scaleTravel(62),
+  harrier: { warningTicks: 33, bandHopWarningTicks: 75, bandSpeed: scaleClimb(29), bandHopRange: scaleTravel(115), tailSlot: scaleTravel(62),
     lateralSlot: scaleTravel(15), attackWidth: scaleTravel(33) },
   diver: { warningTicks: 72, range: scaleTravel(180), closeRange: scaleTravel(75), closeMargin: scaleTravel(6),
-    plungeSpeed: 55, climbSpeed: 30, spread: [-0.26, 0, 0.26] },
+    plungeSpeed: scaleClimb(55), climbSpeed: scaleClimb(30), spread: [-0.26, 0, 0.26] },
   bomber: { warningTicks: 32, range: scaleTravel(165), mineOffset: scaleTravel(12), cooldownTicks: 250,
     closeRange: scaleTravel(96), closeMargin: scaleTravel(8), tailRange: scaleTravel(86), tailHalfAngle: Math.PI / 4 },
   flak: { warningTicks: 84, range: scaleTravel(175), leadDistance: scaleTravel(52), cooldownTicks: 270 },

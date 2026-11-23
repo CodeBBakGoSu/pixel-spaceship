@@ -214,7 +214,7 @@ test('the full pilot fires on a nearby tail and holds its flare when the contact
   const state = empty();
   const target = contact(state, 24, 1, 'hound');
   assert.equal(autopilotInput(state, 'full').flare, true);
-  target.alt = 145;
+  target.alt = 180;
   assert.equal(autopilotInput(state, 'full').flare, false);
 });
 
@@ -224,7 +224,7 @@ test('the flare review fixture has moving three-band tails and shows both real w
   const state = create(), player = { ...state.player };
   assert.equal(state.phase, 'playing');
   assert.equal(state.view, 'chase');
-  assert.deepEqual([...new Set(state.enemies.map(enemy => enemy.alt))].sort((a, b) => a - b), [75, 110, 145]);
+  assert.deepEqual([...new Set(state.enemies.map(enemy => enemy.alt))].sort((a, b) => a - b), [75, 125, 180]);
   assert.ok(state.enemies.every(enemy => enemy.z < player.z));
   const before = state.enemies.map(enemy => enemy.z);
   run(state, 1, { flare: true }, ground);

@@ -50,7 +50,7 @@ test('a swept Twin bolt is stopped by the Aegis shield and damages the exposed s
 
 test('a flak warning fixes its blast position and altitude despite a band switch', () => {
   const state = makeRun(), p = state.player;
-  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 110 });
+  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 125 });
   const turret = makeEnemy(state, 0, 75, 1, 'turret');
   turret.alt = 40;
   turret.shotAt = state.tick;
@@ -62,25 +62,25 @@ test('a flak warning fixes its blast position and altitude despite a band switch
   assert.equal(warning.started, state.tick);
   assert.equal(warning.until - warning.started, 84);
 
-  Object.assign(p, { x: warning.x, z: warning.z, altitude: 145 });
+  Object.assign(p, { x: warning.x, z: warning.z, altitude: 180 });
   state.tick = warning.until - 1;
   advanceEnemies(state, ground);
   assert.equal(state.effects.length, 0);
   state.tick++;
   advanceEnemies(state, ground);
   const [burst] = state.effects;
-  assert.deepEqual([burst.x, burst.z, burst.alt], [warning.x, warning.z, 110]);
+  assert.deepEqual([burst.x, burst.z, burst.alt], [warning.x, warning.z, 125]);
   const hull = state.hull;
   advanceEnemyHazards(state, ground);
   assert.equal(state.hull, hull);
-  p.altitude = 110;
+  p.altitude = 125;
   advanceEnemyHazards(state, ground);
   assert.ok(state.hull < hull);
 });
 
 test('a Hound starts following the pilot’s band after a one-second delay', () => {
   const state = makeRun(), p = state.player;
-  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 145 });
+  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 180 });
   const hound = makeEnemy(state, 0, -38, 1, 'hound');
   hound.maneuverAt = state.tick;
   hound.shotAt = Infinity;
@@ -90,14 +90,14 @@ test('a Hound starts following the pilot’s band after a one-second delay', () 
   const started = state.tick;
   assert.equal(hound.maneuver?.diveAt, started + 60);
   for (state.tick = started + 1; state.tick < started + 60; state.tick++) advanceEnemies(state, ground);
-  assert.equal(hound.alt, 110);
+  assert.equal(hound.alt, 125);
   advanceEnemies(state, ground);
-  assert.ok(hound.alt > 110);
+  assert.ok(hound.alt > 125);
 });
 
 test('a charged patrol waits for the full reversal grace period before firing', () => {
   const state = makeRun();
-  Object.assign(state.player, { x: 0, z: 0, yaw: 0, altitude: 110 });
+  Object.assign(state.player, { x: 0, z: 0, yaw: 0, altitude: 125 });
   state.tick = 96;
   state.twinAt = Infinity;
   const patrol = makeEnemy(state, 0, -106, 1);
@@ -118,7 +118,7 @@ test('a charged patrol waits for the full reversal grace period before firing', 
 
 test('an elite Carrier launches its warned wave only into available Gnat slots', () => {
   const state = makeRun(), p = state.player;
-  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 110 });
+  Object.assign(p, { x: 0, z: 0, yaw: 0, altitude: 125 });
   const carrier = makeEnemy(state, 0, 80, 2, 'bomber');
   carrier.carrier = 'coast-supply';
   carrier.shotAt = state.tick;

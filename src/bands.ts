@@ -1,15 +1,17 @@
 import { WORLD_TERRAIN } from './data/world.ts';
 import type { Ace, Band, Enemy, StageState } from './stage-types.ts';
 
-export const BANDS = [75, 110, 145] as const;
+export const BANDS = [75, 125, 180] as const;
 export const SKIM_BAND = 3;
 export type FlightBand = Band | typeof SKIM_BAND;
 const BAND_ORDER: readonly FlightBand[] = [SKIM_BAND, 0, 1, 2];
 
 export const SKIM = {
-  clearance: 30,
-  minClearance: 25,
-  maxClearance: 35,
+  clearance: 14,
+  minClearance: 10,
+  maxClearance: 18,
+  // A held dive aims this far below SKIM so it arrives at speed instead of easing in forever.
+  entryDepth: 8,
   inputThreshold: 0.15,
   magnetScale: 1.3,
   groundDamageScale: 1.25,

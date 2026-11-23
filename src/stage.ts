@@ -488,7 +488,8 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       p.pitch = 0;
     } else {
       // Round out the commanded angle using the clearance at the start of the tick.
-      const floor = climb < 0 ? Math.max(MIN_ALTITUDE, ground(p.x, p.z) + FLY_IN_WORLD.clearance) : MIN_ALTITUDE;
+      const follow = skimAltitude(ground(p.x, p.z));
+      const floor = climb < -SKIM.inputThreshold ? follow - SKIM.entryDepth : climb < 0 ? Math.max(MIN_ALTITUDE, follow) : MIN_ALTITUDE;
       const command = climb * pitchLimitScale(climb, p.altitude, floor, MAX_ALTITUDE);
       p.pitch = advancePitch(p.pitch, command, STEP);
     }
@@ -510,10 +511,11 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   const prior = p.altitude;
   const groundHeight = ground(p.x, p.z);
   const follow = skimAltitude(groundHeight);
-  const floor = Math.max(MIN_ALTITUDE, groundHeight + FLY_IN_WORLD.clearance);
+  const floor = Math.max(MIN_ALTITUDE, follow);
   if (controlled && !roll) {
     // The residual pitch can still point at the limit after the stick reverses.
-    const scale = pitchLimitScale(p.pitch, prior, floor, MAX_ALTITUDE);
+    const limit = climb < -SKIM.inputThreshold ? follow - SKIM.entryDepth : floor;
+    const scale = pitchLimitScale(p.pitch, prior, limit, MAX_ALTITUDE);
     altitude = (p.skim ? follow : altitude) + pitchVerticalSpeed(state.speed, p.pitch, agility) * scale * STEP;
   }
   const descending = controlled && !roll && climb < -SKIM.inputThreshold && altitude <= follow;
