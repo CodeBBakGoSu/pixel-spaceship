@@ -12,7 +12,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- 다음 기능(설계만 완료): P0 무기 역할·사각 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 정산·새 무기 시험 출격. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
+- 다음 기능(설계만 완료): P0 전투 효과로 읽는 무기 역할 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
 - Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
@@ -22,6 +22,14 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-23 (KST) · 기획 봇 · renderer-proto (설계 `fef50fd`, 통합 기준 `421ae44`)
+- P0는 역할 배지 대신 실제 탄선·명중·남은 적으로 읽힌다. P2는 뱀서의 골드/PowerUp, 마늘/포 사례에 맞춰 크레딧 구매와 조건 해금을 분리한다. 첫 카드 예약 없이 기존 풀을 사용한다.
+- 검증: 통합본 테스트 576/576·프로덕션 빌드·문서 앵커·diff 검사 통과. 신규 플레이어 무설명 검수와 P2 해금/구매 속도는 구현 후 측정한다. 게임 코드와 골든 해시 변경 없음.
+- State: done (설계). [담당별 인수 기준](SURVIVORS_PLAN.md#pillars).
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795425740-visible-weapon-roles (claim; base `0ff560f`)
+- State: in progress. P0를 카드 역할 라벨 대신 실제 전투 효과로 수정. P2는 뱀서 기본 게임의 결과·골드·PowerUp·무기/캐릭터 해금 자료를 대조해 재설계. P1과 게임 코드는 범위 밖.
 
 ### 2026-11-23 (KST) · 데븐 봇 · renderer-proto integration
 - Fresh fetch found `origin/renderer-proto` at `0ff560f`; its three changed paths were documentation only. Merged those updates while preserving the local Candidate 4 note; gameplay/test/tool files still match tested `81abe3a` exactly.
