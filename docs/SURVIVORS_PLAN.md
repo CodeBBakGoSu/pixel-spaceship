@@ -1,238 +1,122 @@
-# ASTER WING — Stage 1 Plan
+# ASTER WING — Survivors 빌드 순서 (v2)
 
-Design plan for 기현님’s approval. Baseline `801ff22` on `origin/main`.
-This revises the previous survival plan: **build only Stage 1** first.
-The Z axis is the differentiator. Numbers are starting playtest targets.
-기현님 approved Stage 1 and settled the two open questions below.
+> 작성: 기획 봇 · 2026-11-23 (KST) · 대상: 기현님, Product Engineer 봇, 밸런스 봇
+> 기준: `renderer-proto` `211e757` (Stage C 및 후속 병합 후). 코드 변경 없는 기획 문서입니다.
+> 이전 판(Stage 1 3분 슬라이스 기획)은 이미 구현·대체되어 git 기록(`c612d76`)에만 남깁니다.
+> 숫자는 모두 **시작값**이며 확정은 밸런스 봇의 100시드 시뮬과 기현님 플레이테스트로 합니다.
 
----
+## 0. 목표와 판단 기준
 
-## 1. Stage-1 scope
+목표는 두 가지입니다. 이 문서의 모든 순서는 이 두 가지를 얼마나 빨리 체감시키는지로 정했습니다.
 
-**One 3:00 sortie over Reach.** The existing title launches the same
-plane into a bounded coastal arena (about 240 m radius) using the
-current jungle heightmap and art. Low flight paths run over water so
-ground clearance is readable. Take off in TOP at cruise altitude with
-8 hull, one life, full boost, two Nova Bombs, and Twin Cannon I.
+1. **화면에 적이 훨씬 많다.** 후반에는 화면이 적으로 가득 차고, 잘 죽일수록 더 많이 나온다.
+2. **확실히 강해진다.** 레벨업할 때마다 화면에서 무기가 바뀌는 게 보이고, Ace(8:00) 전에 "완성 빌드"로 쓸어버린다.
 
-| Active time | What happens |
-|---|---|
-| 0:00–0:40 | Clear a cruise-level patrol, then meet two contacts on similar bearings in **different altitude bands**. Turn back and match salvage height. At most six patrols at once. |
-| 0:40–1:45 | Mix patrols with a diving interceptor. Groups on different bearings and bands, with one escape lane in every pattern. First draft around 0:40–0:55, a second before the boss. Cap ordinary enemies at 16. |
-| 1:45–3:00 | A small Stage-1 boss arrives. Reuse Warden art and pod/core logic where cheap. Weak points sit in different altitude bands and must be broken in-band. Escorts cap at 10 while it is active. |
+유지하는 원칙 (변경 없음):
+- 고도 규칙: 명중·충돌·수집은 같은 고도 창(기본 ±8 m) 안에서만. 뷰는 정보이고 보너스가 없음.
+- 60 Hz 고정 스텝, 시드 결정론. 게임플레이 변경은 골든 해시를 의도적으로 갱신하고 100시드 시뮬을 다시 돈다.
+- 위협(생존률)은 **사격하는 정규 적의 피해·빈도**로 맞추고, **적 수로 난이도를 맞추지 않는다**. 밀도로 난이도를 맞추면 결국 "많은 적"을 다시 줄이게 되기 때문입니다.
 
-At 3:00 the stage is clear if the boss is down and the plane is alive.
-Zero hull ends the run immediately. A live boss at 3:00 is a timeout.
-Resolve damage and weak-point hits on the last tick before the result,
-then any earned draft. Reuse the result card (hull, salvage, same-seed
-retry). Rank S/A/B/C still comes from hits taken.
+## 1. 현재 상태 요약 (`211e757`)
 
-- **Two weapons.** Twin Cannon auto-fires forward. Drafted Wing Pods
-  cover the sides and rear at short range. Both fire at their launch
-  altitude. Twin II raises cadence; Twin III adds a paired volley; Wing
-  Pods II raises cadence.
-- **Two drafts.** Patrol salvage = 1 XP, interceptor = 2. First draft
-  costs 6 XP, the second 10 more. Show at most two legal cards (next
-  Twin rank, and Wing Pods install or upgrade). One choice per draft.
-  Surplus XP carries; the meter locks at level 3. The modal pauses the
-  clock, movement, hazards, and boost. Clear held boost and pending
-  bomb/view on open (0.3 s input grace).
-- **Boost and bomb.** Keep the current boost feel. A bomb starts the
-  Nova roll and clears nearby hostile shots **across bands**, but bomb
-  *damage* to craft uses the same altitude window as ordinary fire.
-  Stock stays at two for this stage.
-- **Presentation.** Keep pixel/voxel silhouettes, fighter cockpit, title,
-  Help, EN/KO, desktop bindings, and the portrait stick. Remove the
-  fire bind and the touch FIRE button; give that space to a reachable
-  VIEW button. No audio and no meta shop in this pass.
-
-### Later (not Stage 1)
-
-The full nine-minute run, Orbit transfer, the later Warden fight and
-its full death sequence, Atoll and Canyon routes, Seeker / Rail / Ion
-Wake / Flak, utilities, evolutions, and extra enemy types. (A small
-Reach boss in Stage 1 may reuse Warden art; that is not the Orbit fight.)
-
----
-
-## 2. Altitude model
-
-Continuous height, three **spawn bands centered at 75, 110, and 145 m**,
-35 m apart. Craft and salvage sit within about ±6 m of a center, with a
-stable seeded offset so memorizing the three numbers is not enough. The
-player may hold any height from about 55–165 m, with the existing
-terrain floor. In code, `x,z` stay horizontal; `altitude` / `alt` is Z.
-
-| Interaction | Rule |
-|---|---|
-| Ordinary fire | Twin acquires in a forward cone (~±30°, 135 m horizontal). Wing Pods use short side/rear arcs. Both need **|Δalt| ≤ 8 m** to acquire and deal damage. Bolts travel at launch height. If the only bearing in the cone is in the wrong layer, the gun holds. |
-| Dodge and contact | Hostile shots travel at their firing altitude. Shots and body hits need planar overlap **and** |Δalt| ≤ 8 m. An interceptor warns at least 1.25 s before changing band, then resumes fire after it settles. A climb or dive can escape without a horizontal turn. |
-| Salvage | Drops stay at the kill height. Horizontal pull (22 m) and collect (8 m) work only while **|Δalt| ≤ 8 m**. Leaving the window drops attraction. Same rule in every view. |
-| Stage-1 boss | A compact Reach boss, arriving ~1:45. Reuse Warden ring/pod art and targeting helpers where cheap. Weak points occupy different bands (at least one LOW and one HIGH). A direct hit on an exposed point needs **|Δalt| ≤ 8 m** (tighter **±3 m** if a small core/vent is used). Signal the next weak point at least 3 s, readable in the forward views. Keep the encounter stage-1-sized: fewer parts and less HP than the later Orbit Warden. |
-
-When an exposed weak point is within about ±12° yaw and 140 m, holding
-inside its altitude window for **0.35 s** prioritizes it for Twin.
-Dwell is a world-space lock, kept across view changes, reset if
-alignment breaks. A full-rate climb crosses a six-metre window in under
-0.2 s, so the player must *settle* to score the hit.
-
-**Miss feedback.** A steady wrong-layer target in the firing cone gets a
-short cue. In CHASE and COCKPIT: `↑` climb or `↓` dive, and a dim streak
-past the hull plus **SHOT LOW ↑** or **SHOT HIGH ↓** when a bolt crosses
-the horizontal footprint at the wrong height (one cue per volley). A hit
-keeps the existing bright impact. **TOP may show CHECK ALT**, but not
-up/down on the scene; the coarse radar pip is the only TOP height hint,
-and the signed correction stays in CHASE/COCKPIT.
-
-This is deliberate. A drone, a diamond, and a projectile can share a TOP
-map position while sitting on different flight paths. Camping cruise
-misses later XP and cannot break the boss’s off-band weak points. Blind
-vertical sweeps cross a tight window too fast to settle. Choosing a
-layer in CHASE and lining up in COCKPIT is the normal way to clear.
-
----
-
-## 3. Three views
-
-Views are different *information*, not damage or magnet bonuses.
-Movement, boost, weapon damage, pickup reach, and collision volumes are
-identical in every view. A clear does not require logging a camera
-choice; it follows from the shots.
-
-| View | Job | When to switch |
+| 항목 | 지금 | 목표와의 간극 |
 |---|---|---|
-| **TOP** | Best 360° horizontal map. Choose a turn, find an escape lane, or take a bearing back to salvage. | When two contacts overlap on the map, or CHECK ALT fires — leave TOP to read height. |
-| **CHASE** | Reads relative height and terrain at a glance: airframe, horizon, ground shadows, stacked bands. | Choose the lower or upper route, duck a volley, or fly a salvage return at the right height. Switch to COCKPIT once the precision target is ahead. |
-| **COCKPIT** | Finish the approach. Signed altitude error and lock progress to settle on a boss weak point or in-band target. | After the shot, go back to TOP for the next bearing or CHASE for the next climb or dive. |
+| 런 | 10:00, 5페이즈(Coast/Skirmish/Siege/Storm/Ace), Red Kite Ace 8:00 | 구조는 충분 |
+| 콘텐츠 | 무기 10(Lv5) · 버프 10(Lv3) · 진화 10 · 상자 4 · Bills 5 · 격납고/Heat/체크포인트/일일 시드 | 양은 충분. **새 콘텐츠보다 체감이 문제** |
+| 적 밀도 | 분당 예산형(Gnat 25→250/분), Gnat 수명 12초, 캡 PC 80 / 폰 50 | 관측 피크 99/75(정규+Gnat). 잘 죽여도 더 안 나옴, 상한 미도달 |
+| Gnat | 1 HP · 1 XP · 비무장 · 접촉 피해 없음 | 수는 늘어도 **위협이 0**이라 "포위" 긴장이 없음 |
+| 레벨업 | `14 + round(2.4×Lv)`, 10분에 약 26~30회 | 첫 레벨업이 늦고(16 XP), 런당 횟수가 적음 |
+| 무기 레벨 | Lv2~5 중 절반이 피해 %/쿨다운 % (눈에 안 보임) | 업그레이드해도 화면이 거의 안 바뀌는 레벨이 많음 |
+| 피드백 | 격추 스파크/폭발, ACE WIPE, 상자 릴 | 적 위 피해 숫자 없음, 화면 전체 흡인 없음 |
 
-A typical pass: TOP to find the open side of a pair → CHASE to see that
-the open path is below an interceptor’s line → COCKPIT to settle on a
-weak point. Three different kinds of information.
+## 2. 진행 중인 작업 (Product Engineer 봇 — 이 문서는 덮어쓰지 않음)
 
-`V` / VIEW cycles TOP → CHASE → COCKPIT → TOP. Immediate camera cut with
-a thin ~0.15 s scanline accent; a second press advances without waiting.
-Steering, stick, and boost stay live. Dwell, projectiles, and hazard
-warnings carry across the switch. **No invulnerability** on a view
-change.
+| 작업 | 내용 | 이 문서와의 관계 |
+|---|---|---|
+| **A. 적 무리(horde)** | 분당 예산 위에 **최소 생존 수 리필** 스폰 | 아래 1번(수치)과 2번(수용량)이 이 위에 올라감 |
+| **B. 성장 체감(growth feel)** | 업그레이드 카드의 전/후 수치, 픽 직후 비행 중 피드백 | 아래 3번(무기 레벨 v2)이 "무엇이 바뀌는지"를, B가 "그걸 보여주는 법"을 담당 |
 
----
+두 작업 모두 플레이스홀더 수치이며 밸런스 봇이 맞춥니다.
 
-## 4. UI for managing Z
+## 3. 다음 빌드 순서 (우선순위)
 
-**Options considered**
+크기: **S** 반나절 이하 · **M** 1~2일 · **L** 3일 이상. 담당: **기획**(이 봇) · **구현**(Product Engineer 봇) · **수치**(밸런스 봇).
 
-- Altitude chevrons on every TOP radar contact — easy to teach. Chosen
-  in coarse form (above / level / below only), so exact matching still
-  needs a forward view.
-- A side-profile strip or three mini-maps in TOP — strong overview, but
-  it steals CHASE’s job and crowds portrait layout.
-- Every enemy and gem marked on the ALT tape — precise when sparse,
-  unreadable when an escape decision matters.
-- Keep TOP horizontal; put selective height on CHASE/COCKPIT instruments
-  and one precise track in the cockpit.
+| # | 항목 | 담당 | 크기 | 선행 |
+|---|---|---|---|---|
+| 1 | 밀도 목표 수치 적용 (리필 최소 수·Gnat 캡) | 수치 | S | A |
+| 2 | Gnat 수용량: 수명 폐지→앞쪽 재배치, 캡 200/120 성능 실측 | 구현 | M | A |
+| 3 | 무기 레벨 v2: 매 레벨 화면 변화, 최대 Lv7 | 기획(완료, 아래 §4) → 구현 | L | B |
+| 4 | XP 곡선 재설정 (새 XP 수입 기준) | 수치 | S | 1, 2, 3 |
+| 5 | 적 위 피해 숫자 + 대량 격추 연출 | 구현 | M | — |
+| 6 | Gnat 변종 2종 (Armored, Sting) | 기획(완료, 아래 §5) → 구현 → 수치 | M | 2 |
+| 7 | 스웜 이벤트(포위 링·대규모 횡단) + 휴지기 전역 자석 | 구현 | M | 2 |
+| 8 | 생존률 재조정 (사격 정규 적만으로) + Seeker 34→51 보류분 | 수치 | S | 1~7 |
+| 9 | 나중: 시작 기체 추가, 도감, 공유 결과 카드, Link 합체, 보급창/프로토콜 | 기획→구현 | — | 8 이후 |
 
-**Choice (approved): coarse altitude on the TOP radar, not precise Z.**
-TOP keeps own ALT, safety warnings (PULL UP, perimeter), and a
-horizontal radar whose contacts are marked **above / level / below** in
-coarse form (shape plus color, e.g. `△ / ■ / ▽`, using the 8 m window
-for “level”). TOP still omits exact height, signed shot errors, sprite
-brackets, and size/shadow tricks that would leak precise Z. Overlapping
-contacts at the same bearing may stack or merge; the pip only says which
-side of the window they are on. CHASE and COCKPIT remain necessary to
-match altitude. A neutral **CHECK ALT** cue can still prompt a switch.
+### 3.1 항목별 이유와 완료 기준
 
-| Instrument | Stage-1 minimum |
-|---|---|
-| **ALT** | TOP: own altitude as one number. CHASE: existing ruler with three subdued band ticks (75 / 110 / 145) and the player marker. COCKPIT: existing right tape with own altitude and **one signed delta** to the selected target or weak point (`+05 m`). |
-| **Radar** | One radar in the existing nav zone or cockpit MFD, nose-up, with a north tick. Squares = hostiles, diamonds = salvage. TOP: all bearings to ~160 m, each contact with a **coarse** `△ / ■ / ▽` (above / level / below the 8 m window). No exact height or signed delta in TOP. Forward views: detailed forward contacts, one aggregated rear-rim warning, and at most one priority hostile plus one salvage cluster with a precise `^ / = / v` pip (`=` means inside the 8 m window). The boss weak-point’s tighter alignment uses the cockpit reticle and signed ALT delta, not a second pip language. |
-| **Scene** | CHASE lets projection and shadows show layers, plus one short altitude cue for the chosen threat or salvage. COCKPIT: one aim box, brief dwell fill, locked bracket when ready. Cut floating `[ ] / ^ / v` sprite tags in TOP (they would make TOP self-sufficient). Preserve terrain and perimeter warnings in every view. |
+**1. 밀도 목표 수치 적용 (수치, S).** A가 리필 장치를 만들면 숫자가 체감을 결정합니다. 목표는 "라이브 접촉 수(정규+Gnat, Ace 제외)의 페이즈별 일반적인 값", PC 기준:
 
-In portrait, keep the right tape for digits and one mark; keep radar in
-its own box above the touch controls or in the cockpit dash. Priority
-cues stay inside the playfield and must not collide with objective,
-radio, tape, or stick. Use shape as well as color. Copy goes through
-`src/i18n.ts`; teach the glyphs in the skippable guide.
+| 페이즈 | Coast | Skirmish | Siege | Storm | Ace |
+|---|---:|---:|---:|---:|---:|
+| 목표 라이브 수 (PC) | 30 | 60 | 110 | 160 | 200 |
+| 목표 라이브 수 (폰) | 20 | 40 | 70 | 100 | 120 |
+| 정규 적 동시 캡 | 8 | 16 | 26 | 30 | 34 (유지) |
 
-Implementation touchpoints: `src/game.ts` for layer checks and lock
-state; `src/render.ts` / `src/main.ts` for view-appropriate cues;
-`src/cockpit.ts` / `src/cockpit-display.ts` for the same tracked target
-on the existing cached tapes and ~20 Hz MFD. Replace legacy TOP
-altitude brackets and view-dependent hit tolerances on the Stage 1 path.
+늘어나는 몫은 전부 Gnat 계열이 담당합니다(정규 적 캡은 그대로). 2번 전에는 현재 캡(80/50)까지만 적용합니다.
+완료 기준: 100시드에서 페이즈별 중앙 라이브 수가 목표의 ±20%, 10분 총 격추 **2,500~3,500**(현재 약 750).
 
----
+**2. Gnat 수용량 (구현, M).** 지금 피크가 상한에 못 닿는 이유 중 하나가 12초 수명입니다. 멀어진 Gnat는 지우지 말고 **플레이어 진행 방향 앞쪽(화면 밖)으로 재배치**해 밀도를 유지합니다(VS 방식). 캡을 PC 200 / 폰 120으로 올리고, 상한 초과 시 **화면 밖 Gnat부터** 조용히 정리합니다. 오브 병합(150)·샷 예산은 유지.
+완료 기준: High CHASE 200기에서 PC 60 fps, **실제 폰**(에뮬 아님) 120기에서 평균 55 fps 이상. 미달이면 폰 캡을 낮추고 기록.
 
-## 5. Stage-1 milestones
+**3. 무기 레벨 v2 (기획 완료 → 구현, L).** 성장 체감의 핵심입니다. 지금 Lv2~5의 절반이 피해/쿨다운 %라서 카드를 골라도 화면이 그대로입니다. v2는 **모든 레벨이 탄 수·범위·관통·줄기 수 중 하나를 화면에 보이게 늘리고**, 최대 레벨을 5→7로 올려 단계를 늘립니다. 숨은 %는 버프(Capacitor, Fire Control)와 오버플로 카드로 옮깁니다. 표는 `WEAPONS_BUFFS_PLAN.md` §5.2.
+구현 메모: 상한 한 줄(`DRAFT_RULES.maxWeaponLevel`)로 끝나지 않습니다. 레벨 인덱스 배열(무기 로직, Ion 렌더 폭)을 7칸으로 늘리고, Twin 관통/Pods 후방탄의 `=== 5` 조건을 `>=`로 고쳐야 합니다. 진화 조건은 상한을 참조하므로 자동으로 Lv7이 됩니다(의도된 변화).
+완료 기준: 무기 10종 × Lv2~7 각 레벨에서 스크린샷으로 차이가 보임. 4+4 슬롯 가득 채우기 = 4×7−1+4×3 = **39픽**.
 
-No work starts until the owner approves this plan.
+**4. XP 곡선 재설정 (수치, S).** 1~3번 이후 XP 수입이 3~4배가 되므로 그때 맞춥니다(먼저 맞추면 다시 해야 함). 공식 계수(`xpBase`, `xpPerLevel`)만 데이터에 있습니다.
+목표: 첫 레벨업 **10초 이내**, 첫 1분 **3~4회**, 10분 **42~48회**, 4+4·Lv7 빌드가 **7:30~8:00**에 거의 완성(Ace 직전 전능감), 진화 2회는 상자 C2(3:25)·C4(6:40) 그대로.
 
-| Effort | Deliverable |
-|---|---|
-| **3 h · First playable** | A short Reach fixture from the existing title. Fly two stacked patrol groups in all three cameras: in-band Twin hits, planar enemy shots, same-height salvage. Prove a horizontal overlap can miss, dodge, or fail a pickup at the wrong height. Show coarse above/level/below pips on the TOP radar, and precise relative altitude on CHASE/COCKPIT radar plus the altitude tape. No exact height or signed miss arrows in TOP. |
-| **2.5 h · Stage loop** | 3:00 clock, bounded spawn schedule, two paused drafts, Twin ranks and Wing Pods. Reuse title, pause, controls, and result. Held input must not fire a bomb or advance time. |
-| **2.5 h · Stage-1 boss** | Small Reach boss with weak points in different altitude bands, reusing Warden art/logic where cheap. World-space lock survives camera changes. Check warning time, band accessibility, and last-tick outcome order. |
-| **2.5 h · Instruments and touch** | Coarse TOP radar pips, precise forward-view pips, compact ALT states (including signed cockpit delta), one target cue, fluid V/VIEW, EN/KO guide. Check 1280×720 and 360×780, 390×844, 430×932 with safe-area insets, both languages. |
-| **2.5 h · Replay and tune** | Seeded fixed-tick sim, fixtures below, autoplay that uses CHASE for bands and COCKPIT for lock. Verify replay, camera-invariant collisions, modal clock, warning lead, and 60 fps under Stage 1 caps. `npm test` and `npm run build` after approval. |
+**5. 적 위 피해 숫자 + 대량 격추 연출 (구현, M).** B는 카드와 픽 직후를 담당하고, 이건 **전투 중 매 순간** 강해진 걸 보여줍니다. 적 위 피해 숫자(크리티컬은 크게/색), 프레임당 상한과 풀링, 옵션에서 끌 수 있게. Gnat 동시 격추 시 작은 폭발을 묶어 처리, 5초 격추 카운터(ACE WIPE와 같은 줄).
+완료 기준: 200기 상황에서도 프레임 예산 내(2번 기준과 같은 fps).
 
-Fixtures use the same simulation. `?fixture=stack` at 0:30 with two
-contacts at the same horizontal position, 75 m and 145 m.
-`?fixture=draft` at 0:45 with six XP and two choices open.
-`?fixture=boss` at 1:48, player at 110 m, first weak point ahead in the
-high band. Keep `?seed=`, `?view=`, `?touch=1`, `?lang=`, `?t=`,
-`?autoplay=1`. `t` seeks to an absolute active time; without autoplay,
-control returns to the player. An explicit view sets the starting
-camera. Diagnostics on `window.__game` include tick, altitude, draft
-IDs, boss weak-point hits, and lock state.
+**6. Gnat 변종 2종 (구현 M → 수치).** 적이 많아도 지금 Gnat는 해가 없어서 "포위"가 성립하지 않습니다. 위협을 개체가 아닌 **숫자**에서 나오게 하는 장치. 설계는 §5.
 
----
+**7. 스웜 이벤트 + 휴지기 전역 자석 (구현, M).** 분 단위 리듬. 약 1:30마다 10~15초 **포위 링**(플레이어 주변 원형, 한 밴드는 비워 탈출로) 또는 **대규모 횡단**(한 밴드를 V자 100기 이상이 가로지름)을 15초 휴지기와 번갈아 배치. 휴지기 시작마다 **전역 자석**(맵 전체 오브를 같은 고도로 흡인, 고도 창 무시 1회)으로 "한 번에 다 먹기" 순간. 상자·Bills와 40초 간격 규칙 유지.
 
-## 6. Risks and open questions
+**8. 생존률 재조정 (수치, S).** 1~7이 들어가면 생존률이 흔들립니다. 목표는 지금과 같게 skilled ~100% / average 60~70% / weak 25~35%이며, **정규 적의 사격 피해·빈도·Sting 접촉 피해만** 조정합니다. 밀도와 XP는 건드리지 않습니다. 보류 중인 Seeker 34→51 m/s도 이때 같이 판단.
 
-**Biggest risk:** making altitude necessary but unfair, or leaking enough
-Z into TOP that a skilled player never leaves it. Play matched
-fresh-seed attempts on desktop and touch. A good switched route should
-have time for a TOP turn, a CHASE band change, and a COCKPIT line-up.
-Gate: on an initial six-seed set, at least four clears that use all
-three views, and **zero good TOP-only clears** (both drafts collected,
-salvage from two bands). If TOP-only still clears easily, tighten band spacing or boss timing
-before adding any *precise* height info to TOP. Secondary risk:
-instrument clutter on a 360 px phone. If the approach is covered,
-remove extra pips before adding another display.
+**9. 나중.** 시작 기체 2종(다른 시작 무기), 도감, 공유 결과 카드·리플레이 코드, Link 무기 합체(3번째 진화 경로), 보급창/프로토콜 A/B. 1~8로 "많고 강해진다"가 확인된 뒤에 합니다.
 
-**Decisions (18 Nov 2026, Asia/Seoul):**
+## 4. 무기 레벨 v2 요약
 
-1. **TOP radar shows coarse altitude.** Contacts are marked
-   above / level / below. TOP still has no precise height, so CHASE and
-   COCKPIT remain necessary for exact matching.
-2. **Stage 1 is a 3:00 Reach sortie ending in a small boss**, not a
-   2:30 armored-patrol vent. Reuse Warden art and logic where cheap.
-   Weak points live in different altitude bands.
+자세한 표는 `WEAPONS_BUFFS_PLAN.md` §5.2. 규칙:
+- 레벨 2~7은 **반드시 하나 이상의 화면 변화**(탄 수, 범위/반경, 관통, 줄기·점프 수, 지속).
+- 무기 자체의 피해 % 단계는 없앰. 밸런스 봇은 기본 피해를 조정해 **Lv7 DPS ≈ 현재 Lv5 DPS × 1.4**를 시작점으로 둠.
+- 진화는 Lv7 + 짝 버프. 진화는 외형과 범위가 확 달라지는 기존 설계 유지.
 
-No further owner questions for Stage 1. Remaining values come from the
-playable slice.
+## 5. Gnat 변종 (설계)
 
----
+| 변종 | 등장 | HP | XP | 행동 | 위협 |
+|---|---|---:|---:|---|---|
+| Gnat (기존) | 0:45~ | 1 | 1 | 군집 비행(링/라인/V), 밴드 횡단 | 없음 |
+| **Armored Gnat** | Siege(4:00)~, Gnat의 15%→Storm 25% | 3 | 3 | 기존 Gnat와 같은 군집, 외형 더 크고 어두운 장갑 | 없음 (화력 성장을 시험하는 계단식 HP) |
+| **Sting Gnat** | Skirmish(2:00)~, 10%→Ace 20% | 1 | 1 | 같은 고도면 플레이어를 직선 추적 | **접촉 시 선체 −1**, 피격 쿨다운 1초 공유 |
 
-## 7. agy vs Codex (short)
+- Sting의 접촉 피해는 정규 적 피격(3)보다 작게, 그리고 고도 창(±8 m) 규칙을 그대로 따름 → 상승/하강으로 피할 수 있음(이 게임만의 회피).
+- 원칙: 잡몹은 해당 시점 무기로 **1~2타**. Armored가 3타 이상 걸리면 HP를 낮춤(밸런스 봇 지표: 페이즈별 잡몹 1기당 평균 발수 ≤ 2).
 
-Both were asked independently, planning only, with the current plan as
-context. The first merge preferred Codex; 기현님 then chose agy’s coarse
-TOP radar and a 3:00 boss finale.
+## 6. 밸런스 봇 검증 지표
 
-- **Stage length / roster:** agy wanted ~3:00 with a Heavy Commander.
-  Codex wanted 2:30 with Twin + Wing Pods and a two-band vent. The
-  merged draft first picked Codex; **기현님 chose 3:00 with a small
-  band-based boss.** Seeker and evolutions stay out of Stage 1.
-- **Hit window:** agy ±16 m with a glance band; Codex a hard ±8 m.
-  **Picked Codex** (clearer “wrong layer” feel).
-- **View bonuses:** agy kept light magnet / boost / lock-crit seasoning.
-  Codex uses views as information only. **Picked Codex**, per the
-  request to rethink views around altitude rather than small bonuses.
-- **TOP Z UI (main disagreement):** agy recommended coarse radar
-  `△/■/▽` in TOP (no sprite tags). Codex recommended TOP blind to
-  contact height. The merged draft first picked Codex; **기현님 chose
-  agy’s coarse TOP radar**, with precise height reserved for CHASE and
-  COCKPIT.
-- **Agreed and kept:** three bands, altitude-gated hits/salvage/dodge,
-  visible high/low miss streaks, no view-switch i-frames, fluid V/VIEW,
-  remove FIRE, no audio or meta shop. The full Orbit Warden fight stays
-  in Later; Stage 1 may reuse its art for a smaller Reach boss.
+100시드 × skilled/average/weak, PC·폰 캡 각각:
+- 페이즈별 중앙/최대 라이브 접촉 수, 10분 총 격추, 후반 분당 격추(목표 400+)
+- 첫 레벨업 시각, 1분 레벨업 수, 총 레벨업 수, 빌드 완성 시각
+- 잡몹 1기당 평균 발수(≤2), "플레이어 DPS / 페이즈 평균 적 HP"가 페이즈마다 증가하는지
+- clear/Ace 격추/중앙 생존 시간 (§3.1 8번 목표)
+
+## 7. 기현님이 정할 것
+
+기본값으로 진행하고, 바꾸고 싶으면 말씀해 주세요.
+1. **무기 최대 레벨 5→7** (기본: 7). 레벨업 42~48회에 맞춘 값.
+2. **Sting Gnat 접촉 피해 1** (기본: 넣음). 빼면 Gnat는 다시 무해해지고 위협은 정규 적만 담당.
+3. **폰 목표 120기** (기본: 실기기 측정 후 결정).
