@@ -57,6 +57,27 @@ test('Swarm Rack launches twelve rockets for an engaged carrier and fits two vol
   assert.equal(state.shots.length, 24);
 });
 
+test('Swarm Rack keeps round-robin ordinary targeting and retargets after target loss', () => {
+  const state = setup('seeker', 'swarm-rack');
+  const [nearest, second, third] = [
+    contact(state, 0, 120),
+    contact(state, 0, 160),
+    contact(state, 0, 200),
+  ];
+
+  advanceRangedWeapons(state, ground);
+
+  assert.equal(state.shots.length, 12);
+  assert.deepEqual(state.shots.map(shot => shot.targetId),
+    Array.from({ length: 12 }, (_, i) => [nearest, second, third][i % 3].id));
+  assert.ok(state.shots.every(shot => shot.rack));
+
+  const firstRackShot = state.shots[0];
+  nearest.hp = 0;
+  advanceRangedShot(state, firstRackShot, ground);
+  assert.equal(firstRackShot.targetId, second.id);
+});
+
 test('Prism Lance charges and strikes along exactly one terrain-clipped ray per band', () => {
   const state = setup('rail', 'prism-lance');
   state.player.altitude = mid + 8;

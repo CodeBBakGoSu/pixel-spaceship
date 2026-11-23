@@ -6,7 +6,7 @@ import { weaponDamage } from '../src/loadout.ts';
 import { ROLLS } from '../src/data/roll.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
-import { BANDS, openReversal, STEP } from '../src/stage-combat.ts';
+import { advanceShots, BANDS, openReversal, STEP } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -89,6 +89,93 @@ test('Seeker can line up a close target on an adjacent band', () => {
   advanceRangedWeapons(state, ground);
   projectiles(state, 125);
   assert.ok(adjacent.hp < 12);
+});
+
+test('base Seeker volleys at levels one, four, and seven concentrate on the nearest ordinary target', () => {
+  for (const level of [1, 4, 7]) {
+    const state = setup('seeker', level);
+    contact(state, 0, 180);
+    const nearest = contact(state, 8, 100);
+
+    assert.equal(state.lock?.ready, undefined);
+    advanceRangedWeapons(state, ground);
+    const volley = state.shots.filter(shot => shot.kind === 'seeker');
+
+    assert.equal(volley.length, WEAPONS.seeker.tuning.count[level - 1]);
+    assert.ok(volley.every(shot => shot.targetId === nearest.id));
+    assert.ok(volley.every(shot => shot.lockId === null));
+  }
+});
+
+test('base Seeker keeps its living original target when a closer distractor appears', () => {
+  const state = setup('seeker', 4);
+  const original = contact(state, 0, 160);
+  advanceRangedWeapons(state, ground);
+  const shot = state.shots[0];
+  assert.equal(shot.targetId, original.id);
+
+  const distractor = contact(state, 0, 60);
+  const originalHp = original.hp, distractorHp = distractor.hp;
+  advanceRangedShot(state, shot, ground);
+
+  assert.equal(shot.targetId, original.id);
+  assert.equal(original.hp, originalHp);
+  assert.equal(distractor.hp, distractorHp);
+});
+
+test('base Seeker does not transfer an ordinary missile when its original target is dead or ineligible', () => {
+  for (const condition of ['dead', 'out-of-band', 'entry']) {
+    const playerAltitude = condition === 'out-of-band' ? high : mid;
+    const state = setup('seeker', 4, playerAltitude);
+    const original = contact(state, 0, 160, playerAltitude);
+    advanceRangedWeapons(state, ground);
+    const shot = state.shots[0];
+    assert.equal(shot.targetId, original.id, condition);
+
+    const distractor = contact(state, 0, 80, playerAltitude);
+    if (condition === 'dead') original.hp = 0;
+    if (condition === 'out-of-band') original.alt = low;
+    if (condition === 'entry') original.entry = {};
+    const startZ = shot.z, startLife = shot.life;
+
+    advanceRangedShot(state, shot, ground);
+
+    assert.equal(shot.targetId, original.id, condition);
+    assert.ok(shot.z > startZ, condition);
+    assert.equal(shot.vy, 0, condition);
+    assert.ok(shot.life < startLife, condition);
+    assert.equal(distractor.hp, 12, condition);
+  }
+});
+
+test('base Seeker with no eligible target flies straight and expires through advanceShots', () => {
+  const state = setup('seeker', 4);
+  const original = contact(state, 0, 160);
+  advanceRangedWeapons(state, ground);
+  const shot = state.shots[0];
+  state.shots = [shot];
+  original.hp = 0;
+  const distractor = contact(state, 0, 60);
+  const startZ = shot.z, startLife = shot.life;
+
+  advanceShots(state, ground);
+
+  assert.equal(state.shots.length, 1);
+  assert.equal(shot.targetId, original.id);
+  assert.ok(shot.z > startZ);
+  assert.equal(shot.vy, 0);
+  assert.ok(shot.life < startLife);
+  assert.equal(distractor.hp, 12);
+
+  let ticks = 1;
+  while (state.shots.length && ticks < 300) {
+    state.tick++;
+    advanceShots(state, ground);
+    ticks++;
+  }
+  assert.equal(state.shots.length, 0);
+  assert.ok(ticks < 300);
+  assert.equal(distractor.hp, 12);
 });
 
 test('Seeker level five carries six larger blasts and triggers one separate loop volley', () => {
