@@ -12,17 +12,25 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- Gnat variants: implementation `82c19c6` on the integrated horde (`8f41122`); public `main` unchanged.
-- Tests: **561/561 pass**, production build passes. See the latest log entry for browser and sim verification.
+- Candidate: integrated code at `renderer-proto` `d4e4911` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), and Armored/Sting variants (`82c19c6`). Public `main` is unchanged. Current 200/120-cap actual PC/phone FPS is unverified.
+- Latest pre-landing verification for this documentation update is recorded in the newest log entry.
+- Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The 보통(average) 프로필의 격추 중앙값 **3,591** is **91 above** the 3,500 upper planning target. These are pre-variant results, not results for `d4e4911`.
+- The damage-feedback fixture measured **36.44 fps** in a SwiftShader VM after High→Low fallback; this is a software-renderer sample, not current hardware/device performance. The above simulation does not measure rendered FPS or per-phase median live contacts.
+- Variant evidence: a lead-provided report and recording show both variants appearing together on the feature branch; the recording is not a check of the integrated snapshot and was not personally watched for this update.
+- Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/rest XP magnet implementation started but not merged.
 - Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
-- Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
 
 ## Log
 
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; documentation commit ref to be recorded in following log commit)
+- Updated both plans for the `d4e4911` baseline: #6 variants are integrated, #7 swarm/XP-magnet work is started but unmerged, pre-variant simulation and feature-branch visual evidence are labeled separately, and the all-weapon screenshot acceptance remains unverified. Clarified the fixed swarm schedule without changing chest/Bill timing.
+- The variant recording was supplied as feature-branch evidence; it was not personally watched for this update and is not integration validation. The measured SwiftShader sample is 36.44 fps; actual current PC/phone performance remains unverified.
+- Verification: `npm test` exit 0 — `# tests 561`, `# pass 561`, `# fail 0`; `npm run build` exit 0 — `✓ 118 modules transformed.`, `✓ built in 1.51s`; `git diff --check` exit 0. State: in progress, awaiting review before landing on `renderer-proto`.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795416809-gnat-variants → renderer-proto
-- Work `82c19c6`, claim `a2106c7`, base `8f41122`. Armored (Siege+, 3 HP/3 XP) and Sting (Skirmish+, ±8 m direct pursuit, 1 hull contact on the shared 1 s damage cooldown) replace standard swarm slots. Both keep the Gnat render batch and caps.
-- Verification: 561/561 tests, including six Ace replays; production build passes. Seed-1 Survivors golden deliberately updated to `b42b33e9…c813`; Legacy unchanged. [Browser comparison and live Siege/Storm footage](https://app.devin.ai/sessions/9286f5ebd5a84c4fbdc8c96c6e8abdf9?testRecording=746df89d-adb1-4f8a-9b2d-aaba9638c4b0).
-- Desktop Heat 0, seeds 1–100 per profile (skilled/average/weak): clear including timeouts 100%/78%/24%; Ace kills 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 200 each.
+- Work branch `82c19c6`, claim `a2106c7`, base `8f41122`; merged into `renderer-proto` by `d4e4911`. Armored (Siege+, 3 HP/3 XP) and Sting (Skirmish+, ±8 m direct pursuit, 1 hull contact on the shared 1 s damage cooldown) replace standard swarm slots. Both keep the Gnat render batch and caps.
+- Feature-branch verification: 561/561 tests, including six Ace replays; production build passes. Seed-1 Survivors golden deliberately updated to `b42b33e9…c813`; Legacy unchanged. [Browser comparison and live Siege/Storm footage](https://app.devin.ai/sessions/9286f5ebd5a84c4fbdc8c96c6e8abdf9?testRecording=746df89d-adb1-4f8a-9b2d-aaba9638c4b0) is feature-branch evidence, not an integration-snapshot check.
+- Feature-branch desktop Heat 0, seeds 1–100 per profile (skilled/average/weak): clear including timeouts 100%/78%/24%; Ace kills 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 200 each. These results are separate from the pre-variant `9d677b5` baseline above.
 - State: done. No balance tuning, #7, or public deployment.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795400000-survivors-horde → renderer-proto candidate
