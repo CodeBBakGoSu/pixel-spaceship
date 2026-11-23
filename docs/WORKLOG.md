@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `81a0e2a`, code `2bad3c4`)
+- P1: 실제 아군 피해를 80ms 단위로 모아 타격음을 겹친다. 이미 지급된 상자의 보상 1/3/5개·진화만 공개하고, 고랭크 Twin·Swarm Rack의 실제 탄 위치에서 장식 잔상을 그린다.
+- 정적 ElevenLabs 효과음 7종. 밸런스·난수·Seeker P0 후보는 변경 또는 포함하지 않았다.
+- 검증: P1/SFX 테스트 23개·프로덕션 빌드 통과. State: in progress — 전체 테스트·플레이·밸런스 확인 후 renderer-proto 통합 여부 결정.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).
