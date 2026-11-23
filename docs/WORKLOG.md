@@ -12,7 +12,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- 다음 기능(설계만 완료): P0 전투 효과로 읽는 무기 역할 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
+- 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
 - Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
@@ -22,6 +22,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795426562-learn-weapons-through-play (base `2564e31`)
+- P0: 무기 10종의 강점·한계만 남기고 시연·추천 조합·식별 시험을 삭제했다. 같은 입력에서 전방 격추·측면 침입·Ace 실피해를 비교해 차이가 부족한 무기만 고친다.
+- 검증: 테스트 576/576, 프로덕션 빌드, 문서 링크·역할표 및 diff 검사 통과. P1·P2 사양과 게임 코드는 그대로다. 무기 성능 비교는 후속 검수이며 이번에 실측하지 않았다.
+- State: done (설계). [담당별 인수 기준](SURVIVORS_PLAN.md#pillars).
 
 ### 2026-11-23 (KST) · 기획 봇 · renderer-proto (설계 `fef50fd`, 통합 기준 `421ae44`)
 - P0는 역할 배지 대신 실제 탄선·명중·남은 적으로 읽힌다. P2는 뱀서의 골드/PowerUp, 마늘/포 사례에 맞춰 크레딧 구매와 조건 해금을 분리한다. 첫 카드 예약 없이 기존 풀을 사용한다.
