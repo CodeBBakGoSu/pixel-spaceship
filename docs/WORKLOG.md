@@ -15,9 +15,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Working branch: `renderer-proto` (pushed to origin). `main` is behind at `801ff22` (OG preview image) and is what the public site shows.
 - Tests: `npm test` 508 pass at `8265c4e`. Build OK.
 - 100-seed sims at `8265c4e`: skilled 100% clear, average 59%, weak 27%.
-- Open questions for 기현님: bring average clear back toward 74%? Full Stage C (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) in progress by 데븐 봇.
+- Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
+- Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
 
 ## Log
+
+### 2026-11-23 · 데븐 봇 · devin/1795340000-stage-c-altitude → PR into renderer-proto (`357dc33`, `a65974d`)
+- Full Stage C: altitude 49–230 m (floor = sea + SKIM), bands 75/125/180, SKIM 14 m (10–18 m). Hostile vertical rates, flares, bombs and mines scale 1.5× to keep band-change timing. Flak half-height is 28 m. The Ace now reaches SKIM. The HUD ALT tape reads 180/125/75. Golden replay hashes were rebaselined.
+- Verified: `npm test` 508/508, `npm run build`, 100-seed sims (skilled 100% / average 68% / weak 35%), in-browser climb to 229 m and SKIM at 49 m over the sea. Details are in `docs/BALANCE_NOTES.md` under "Stage C altitude model".
+- State: done, waiting on review. Altitude/band code is free again once this merges.
 
 ### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
 - Full Stage C altitude model (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) on a branch, PR into `renderer-proto`. Files: `src/bands.ts`, `src/stage-combat.ts`, `src/data/*`, altitude-dependent sim/HUD/render code, tests, `docs/BALANCE_NOTES.md`.

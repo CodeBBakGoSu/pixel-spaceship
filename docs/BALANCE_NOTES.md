@@ -340,3 +340,21 @@ Chromium 149 with ANGLE Vulkan on an RTX 4090 rendered a live Survivors time see
 | Desktop | 8:00 | 27 | 16.67 ms | 16.7 ms |
 
 The window averaged 60.00 FPS. High stayed active. There were zero context losses and zero console or page errors during the measured flight. Frame p99 and max were 16.8 ms.
+
+## Stage C altitude model
+
+Stage C widens the flight envelope from 55–165 m to 49–230 m. The fixed bands move from 75/110/145 to 75/125/180, and SKIM drops from 30 m to 14 m above the terrain (10–18 m hold window). The floor is now SKIM height over the sea (35 + 14 m). The player cruise floor follows SKIM height, and a held dive aims 8 m below SKIM so it reaches the layer at speed. Hostile vertical rates, flare launch and fall, bombs and mines scale by 1.5×, so band changes keep their tick timing across the wider gaps. Flak half-height grows from 18 to 28 m so it still bridges two adjacent bands. The Ace now drops to SKIM height instead of stopping at its 22 m clearance.
+
+The 100-seed desktop sims (seeds 1–100, heat 0) compare `renderer-proto` at `8265c4e` with Stage C:
+
+| Profile | Clear (C-lite → C) | Ace kill | Timeout | End HP median | Kills median |
+| --- | --- | --- | --- | ---: | ---: |
+| Skilled | 100% → 100% | 98% → 97% | 2% → 3% | 12.5 → 13 | 1071.5 → 1083 |
+| Average | 59% → 68% | 56% → 46% | 3% → 22% | 5.5 → 6 | 1084 → 1093.5 |
+| Weak | 27% → 35% | 0% → 0% | 27% → 35% | 0 → 0 | 896.5 → 977.5 |
+
+Survival rose for the average and weak pilots, because the wider gaps spread out contact. The average pilot kills the Ace less often (56% → 46%): more of its clears are now live timeouts while the Ace skims at 14 m. Tuning the Ace's SKIM time or the bot's low-band chase is the next balance question.
+
+### Replay verification
+
+The seed-1 golden hashes were rebaselined once for the changed flight paths: Legacy `d90af0cd…48ef2`, Survivors `21778f28…0b33`. Two runs reproduced both hashes.
