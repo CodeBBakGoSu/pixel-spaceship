@@ -23,15 +23,20 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (review parent `c070cad`; renderer-proto `81a0e2a`)
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`eb21d00`; renderer-proto `a77502d`)
 - PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
-- Verification: focused regressions 57/57 and `npm run build` passed; post-merge full suite/build pending. State: review-fix commit complete locally; authorized renderer-proto merge pending.
+- Verification: focused regressions 57/57 and `npm run build` passed; full post-merge test/build pending. State: `renderer-proto` `a77502d` merged into the PR branch; full verification pending.
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `81a0e2a`)
+- [한국어 위키](wiki/README.md)에 공개판·개발판·실험 PR을 나누고, [시도·결정 이력](wiki/HISTORY.md)과 [무기·버프·격납고·해금 전체 목록](wiki/CATALOG.md)을 연결했다.
+- [P1 상자 연출 검증](wiki/HISTORY.md#p1-96bd079)은 밸런스 봇이 확인한 `96bd079`에 한정한다. 다른 후보의 플레이 녹화와 분리했다.
+- [후속 글꼴 후보](wiki/HISTORY.md#p1-font) `61154f5`에서는 시드 18의 한국어 ‘잭팟 ×5’와 보상 5개가 보인다. 개발판에 통합된 결과는 아니다.
+- State: in progress. 원격 버전·Pages 성공 배포·PR 상태 및 게임 데이터와 38개 항목을 대조했다. HTML 도감은 Product Engineer가 별도 반영하며, 확인 전에는 기존 기획 문서를 정리하지 않는다.
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438706-auto-countermeasures (`70204b0`, base `81a0e2a`)
 - 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.
 - 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.
 - 데스크톱 Heat 0, 시드 1–100: 숙련/평균/초보 생존(시간 종료 포함) 100%/69%/26%, 에이스 격추 100%/69%/1%, 격추 수 중앙값 3,155/3,193.5/2,806. State: done (구현·로컬 검증).
-
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).
