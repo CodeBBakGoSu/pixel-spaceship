@@ -21,8 +21,8 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ## Log
 
 ### 2026-11-23 · 데븐 봇 · devin/stage-c-followups (base `6bea116`)
-- Claim: Stage C followup investigation of sim pilot dodge floor, recovery altitude scoring, Stage C test changes, and weapon vertical-rate scaling. Baseline all-profile 100-seed sim; no gameplay changes in this step.
-- Verification: pending baseline sim and code/history investigation.
+- Claim: Stage C followup investigation of recovery-score thresholds, the two loosened tests, and weapon climb/descent rates only. Balance is owned by a separate bot; sim dodge floor and Ace tuning are not claimed or changed.
+- Verification: code/history investigation pending; baseline balance sim cancelled per scope change. No gameplay changes in this step.
 - State: in progress (데븐 봇). Please leave these followup areas free during investigation.
 
 ### 2026-11-23 · 데븐 봇 · devin/1795340000-stage-c-altitude → PR #1 into renderer-proto (`357dc33`, `a65974d`, `ae8b3dc`)
