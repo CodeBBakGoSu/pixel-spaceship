@@ -34,6 +34,18 @@ test('every indexed weapon tune comfortably supports ranks one through seven', (
   }
 });
 
+test('a rank-seven Twin fan keeps two shots aimed at its distant primary target', () => {
+  for (const evolved of [false, true]) {
+    const state = start('twin', 7);
+    if (evolved) state.run.evolutions.twin = 'aurora-gatling';
+    const target = spawn(state, 0, 300);
+    acquireAndFire(state);
+    assert.equal(state.shots.length, 6);
+    for (; state.tick < 37; state.tick++) advanceShots(state, ground);
+    assert.equal(target.hp, 98);
+  }
+});
+
 test('Wing Pods widen acquisition and scale each flank and rear volley independently', () => {
   const totals = [2, 4, 4, 5, 7, 7, 8];
   for (const level of levels) {

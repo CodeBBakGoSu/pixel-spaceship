@@ -247,15 +247,16 @@ function fireFriendly(
   for (let i = 0; i < offsets.length; i++) {
     if (room-- <= 0) break;
     const side = offsets[i];
+    const fanned = fan > 0 && Math.abs(i - (offsets.length - 1) / 2) > 0.5;
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
     const aim = target
-      ? Math.atan2(target.x + (target.vx ?? 0) * lead - (fan ? p.x + forwardX * muzzle : x),
-        target.z + (target.vz ?? 0) * lead - (fan ? p.z + forwardZ * muzzle : z))
+      ? Math.atan2(target.x + (target.vx ?? 0) * lead - (fanned ? p.x + forwardX * muzzle : x),
+        target.z + (target.vz ?? 0) * lead - (fanned ? p.z + forwardZ * muzzle : z))
       : p.yaw;
-    const wingSpread = fan && maxOffset ? side / maxOffset * fan : 0;
-    const yaw = aim + wingSpread + (aurora ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
+    const wingSpread = fanned ? side / maxOffset * fan : 0;
+    const yaw = aim + wingSpread + (aurora && (fanned || !fan) ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
       damage: weaponDamage(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
