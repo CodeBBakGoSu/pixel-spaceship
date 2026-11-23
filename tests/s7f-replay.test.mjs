@@ -9,8 +9,8 @@ import { World } from '../src/world.ts';
 
 // Seed-1 terminal hashes: s8-flak ground AA + s8-forge flight-path model, production terrain, full-view pilot.
 const terminalHashes = {
-  legacy: 'd90af0cd6c2a0f1870a5ef048e06b47a627bd4094c471f239a23fa6219f48ef2',
-  survivors: '21778f2848148fb697dc2991bc83f5d3fc4eb4c97ba14b7ac705669dbfcc0b33',
+  legacy: '08be00a7bd57e95555ebdc92f6d27322071f10fcb60db0d7823520fede976da8',
+  survivors: 'b8cbb9fc980f3e8e4a37a97498585f06a95a3a7babf446632220406c1446bc2d',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

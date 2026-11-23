@@ -574,7 +574,7 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
     state.metrics.orbs++;
     noteBillPickup(state, pickup);
   }
-  const band = pickup.skim || pickup.alt < 92.5 ? 0 : pickup.alt > 127.5 ? 2 : 1;
+  const band = pickup.skim ? 0 : fixedBand(pickup.alt);
   state.salvageBands[band] += pickup.xp;
 }
 

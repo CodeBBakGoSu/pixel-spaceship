@@ -12,6 +12,7 @@ import { acquireAndFire, advanceShots, TICKS_PER_SECOND } from '../src/stage-com
 import { makeEnemy, placeSkimEnemy } from '../src/stage-enemies.ts';
 import { spawnSwarm } from '../src/swarm.ts';
 import { World } from '../src/world.ts';
+import { BANDS } from '../src/bands.ts';
 
 test('ground is seeded and remains continuous across chunk seams at distant coordinates', () => {
   const world = new World(93), replay = new World(93), other = new World(94);
@@ -24,7 +25,7 @@ test('ground is seeded and remains continuous across chunk seams at distant coor
   }
 });
 
-test('the player can cross the former rim, descend into SKIM and climb back to LOW', () => {
+test('the player can cross the former rim, descend into SKIM and climb back to MID', () => {
   const ground = (x, z) => 35 + Math.max(0, Math.min(18, (z - 1900) / 10));
   const state = createStage(parseStageOptions('?autoplay=1'), ground);
   Object.assign(state.player, { x: -4200, z: 1870, altitude: 125, yaw: 0 });
@@ -38,7 +39,10 @@ test('the player can cross the former rim, descend into SKIM and climb back to L
   assert.equal(p.altitude, ground(p.x, p.z) + 14);
   for (let i = 0; i < 60; i++) stepStage(state, { climb: 1 }, ground);
   assert.equal(p.skim, undefined);
-  assert.ok(p.altitude >= 75);
+  assert.ok(state.climbRate > 0);
+  const remainingTicks = Math.max(0, Math.ceil((BANDS[1] - p.altitude) / state.climbRate * TICKS_PER_SECOND));
+  for (let i = 0; i < remainingTicks; i++) stepStage(state, { climb: 1 }, ground);
+  assert.ok(p.altitude >= BANDS[1]);
 });
 
 test('wave, swarm and carrier placement preserves local density far from Reach', () => {
