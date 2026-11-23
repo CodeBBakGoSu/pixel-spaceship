@@ -4,6 +4,7 @@ import { makeAce } from '../src/ace.ts';
 import { BANDS } from '../src/bands.ts';
 import { DRAFT_RULES, WEAPON_IDS, WEAPONS } from '../src/data/items.ts';
 import { PLAYER_SHOT_LIMIT } from '../src/data/run-balance.ts';
+import { ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { weaponCooldown, weaponDamage } from '../src/loadout.ts';
 import { advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { acquireAndFire, advanceAutoOrdnance, advanceRearBombs, advanceShots } from '../src/stage-combat.ts';
@@ -36,6 +37,24 @@ test('every indexed weapon tune comfortably supports ranks one through seven', (
   }
 });
 
+test('weapon tuning preserves Lv1 and keeps fodder within two primary hits', () => {
+  for (const id of WEAPON_IDS) {
+    const tuning = WEAPONS[id].tuning;
+    assert.equal(tuning.damageScale[0], 1, id);
+    assert.equal(tuning.cooldownScale[0], 1, id);
+    for (const level of levels) {
+      const damage = weaponDamage(start(id, level), id, tuning.damage ?? 1);
+      assert.ok(Math.ceil(ENEMY_KINDS.gnat.hp / damage) <= 2, `${id} Lv${level} Gnat`);
+      if (level > 1) assert.ok(Math.ceil(ENEMY_KINDS.patrol.hp / damage) <= 2, `${id} Lv${level} patrol`);
+    }
+  }
+  const twin = WEAPONS.twin.tuning;
+  const oldLv5 = 1.42 * 6 * 60 / 18;
+  const newLv7 = twin.damage * twin.damageScale[6] * twin.barrels[6]
+    * 60 / Math.round(twin.cooldownTicks * twin.cooldownScale[6]);
+  assert.ok(Math.abs(newLv7 / oldLv5 - 1.4) < 0.01);
+});
+
 test('each weapon can tune high-rank damage and cooldown without changing Lv1 or Legacy', () => {
   const legacy = createStage(parseStageOptions('?mode=legacy&t=0'), ground);
   for (const id of WEAPON_IDS) {
@@ -62,7 +81,8 @@ test('a rank-seven Twin fan keeps two shots aimed at its distant primary target'
     acquireAndFire(state);
     assert.equal(state.shots.length, 6);
     for (; state.tick < 37; state.tick++) advanceShots(state, ground);
-    assert.equal(target.hp, 98);
+    const centralShots = WEAPONS.twin.tuning.barrels[6] - 2;
+    assert.ok(Math.abs(target.hp - (100 - centralShots * weaponDamage(state, 'twin', WEAPONS.twin.tuning.damage))) < 1e-9);
   }
 });
 
@@ -228,7 +248,8 @@ test('Phoenix and Bomb Bay change count, lifetime, radius and lingering fire as 
     const inFire = spawn(bay, 1, 1, 39), above = spawn(bay, 1, 1, low);
     bay.tick += 89;
     advanceRearBombs(bay, ground);
-    assert.equal(inFire.hp, 99);
+    assert.equal(inFire.hp, 100 - weaponDamage(bay, 'bomb-bay', WEAPONS['bomb-bay'].tuning.damage)
+      * WEAPONS['bomb-bay'].tuning.fireDamageScale);
     assert.equal(above.hp, 100);
     const late = spawn(bay, 1, 1, 39);
     bay.tick = fire.until;

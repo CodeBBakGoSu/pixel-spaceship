@@ -20,12 +20,34 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795407698-aster-weapon-levels · weapon v2 balance (base `7f03b8a`)
+- State: done — weapon numeric tables tuned, Lv1 unchanged. Twin Lv7 keeps six shots, two pierces and the original ±6° outer fan; inner muzzle offsets tighten to ±0.2/±0.6 so four central shots reach the Ace while outer shots retain flank coverage. Nominal DPS: old Lv1/new Lv1 = 1×2×60/21 = 5.714; old Lv5 = 1.42×6×60/18 = 28.4; new Lv7 = 1.988×6×60/18 = 39.76 (exactly 1.4×). No spawning, XP, enemy fire, Seeker vertical speed, Ace or bot edits.
+- All ten weapons retain each Lv2–7 visible change from SURVIVORS_PLAN §4 / WEAPONS_BUFFS_PLAN §5.2: barrel/projectile/chain counts, pierce, widths/radii/range, lifetime, salvage attraction, repeat/afterimage, fire, and double orbit are unchanged. Only Twin's inner six-shot muzzle spacing changes. Numeric test expectations now use tuning helpers; new regression covers unchanged Lv1, Gnat/patrol fodder hit counts and Twin DPS anchor. Six Ace replay criteria and flank-hit assertions unchanged; only Survivors golden deliberately regenerated (`6198a775…` → `317fe8c5…`), Legacy unchanged.
+- Verification: `npm test` 545/545; `npm run build` passes; each 100-seed sim exits 0. Ace kills skilled/average/weak = 100%/70%/1% (pre-v2 100%/66%/0%). Survival is report-only per requester. Six Ace kills (seeds 1/11/27/42/128/2026): 523.92/519.87/524.38/528.72/530.53/520.33 s. Final fetch confirms `origin/renderer-proto` (`b2fe031`) remains an ancestor, so combined = branch; no merge pushed. Stash reapplied cleanly after ff-only pull to `7f03b8a`. No visual screenshots captured; visible rank changes checked against data/logic and existing tests, not rendered.
+
+Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / survival (%); CLI clear includes live timeouts. Pre-v2 independently measured at `6ba58b8`; branch-before at `6a5deca` (checkpoint follow-up `7f03b8a` does not run in fresh sorties).
+
+| Profile | Pre-v2 | Branch-before | Tuned |
+| --- | --- | --- | --- |
+| skilled | 100 / 100 / 0 / 100 | 100 / 40 / 60 / 100 | 100 / 100 / 0 / 100 |
+| average | 73 / 66 / 7 / 73 | 63 / 9 / 54 / 63 | 71 / 70 / 1 / 71 |
+| weak | 41 / 0 / 41 / 41 | 16 / 0 / 16 / 16 | 12 / 1 / 11 / 12 |
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795407698-aster-weapon-levels · balance hooks (`670211b`; verified at `e49660f`)
 - Per Product Engineer follow-up, each weapon exposes seven `damageScale` and `cooldownScale` values in `src/data/items.ts` (all currently ×1). Lv1 stats, visible rank changes and Legacy stay unchanged. Weapon damage and cooldowns apply the scales; fixed pattern timing (e.g. time between Rail's two beams) does not.
 - Ion Wake now applies its cooldown per target and trail lane. Overlap can land more than one hit, but extra segments on the same lane do not. New Plasma Ribbon samples still use a single lane.
 - Checkpoint follow-up: resume migrates old scalar Ion cooldowns to lane deadlines while preserving immunity. Replay bots start fresh and do not load checkpoints.
 - Build passed; 540/543 tests passed. In the six-seed Ace gate: 1/27/2026 clear, 11/42 time out with 60.745/29.0165 Ace HP left respectively, 128 loses at 504.03 s with 1069.04 Ace HP left.
 - Desktop Heat 0, seeds 1–100 per pilot (skilled/average/weak; includes the current `renderer-proto` sim pursuit fix): Ace kills 40%/9%/0%, survival 100%/63%/16%, median level-ups 30/31/26. No merge pending balance tuning and a green gate; see [PR](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/3).
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795407698-aster-weapon-levels (`98a2284`, claim)
+- State: historical trials, superseded by the completed balance entry above. Numeric assertion updates and deliberate Survivors golden regeneration authorized; six replay criteria unchanged. Survival gate subsequently removed by requester.
+- Independently measured desktop 100-seed skilled/average/weak at pre-v2 `6ba58b8`: survival 100%/73%/41%, Ace kills 100%/66%/0%, timeouts 0%/7%/41%. At pulled `6a5deca`: survival 100%/63%/16%, Ace kills 40%/9%/0%, timeouts 60%/54%/16%. Upstream already merged the pursuit fix; local combined worktree fast-forwards to the same state.
+- Trial 1 (uncommitted `items.ts`): survival 100%/55%/16%, Ace kills 99%/49%/0%, timeouts 1%/6%/16%. Build passes. Tests 535/543: six fixed-number/golden failures, seed 11 loses, and one fragment damage assertion fails. This is not accepted balance; survival targets not met. Initial test run exposed missing Three.js; `npm ci` restored dependencies without tracked package changes.
+- Trial 2 front-loaded Lv2–6 damage/cadence, especially Twin, Seeker and rear ordnance: survival 100%/66%/19%, Ace kills 100%/61%/0%, timeouts 0%/5%/19%. Best measured weak survival remains 19%, below pre-v2 41%.
+- Trial 3 narrowed Twin's Lv6/7 fan from 6° to 1° without changing nominal DPS: survival 100%/68%/18%, Ace kills 100%/65%/1%, timeouts 0%/3%/17%. All six replays clear at 521.13/532.73/535.25/527.55/534.68/543.00 s (seeds 1/11/27/42/128/2026). Tests 542/543, build passes; the retained flank-hit assertion correctly rejects the narrowed fan. Trial 3 is left uncommitted for inspection, not accepted as the solution.
+- Weak death instrumentation outside repo matches all 100 CLI terminal hashes in trial 3: 29 deaths before Ace, 53 during Ace. Terminal hits: pre-Ace 26 hostile projectiles + 3 contact/hazard; during Ace 38 non-missile hostile projectiles + 14 Ace missiles + 1 contact/hazard. Ace-death median entry hull 10, median remaining Ace HP 816.16; all 53 have Twin Lv7. Stronger early ranks did not remove the late fight bottleneck. This does not prove all legal weapon settings impossible.
+- Final fetch: `origin/renderer-proto` remains ancestor `b2fe031`. Remote tuning branch advanced to checkpoint-only `7f03b8a`; local measurements remain on `6a5deca`, not yet pulled. No production/UI visual check performed.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795407698-aster-weapon-levels (`7e787c6`, `033a311`)
 - All ten Survivors weapons visibly change at ranks 2–7; draft text, HUD, rendering and Lv7 + paired-buff evolutions follow the new cap. Per-rank damage and cooldown multipliers are gone. XP, enemy density and Stage C are unchanged.

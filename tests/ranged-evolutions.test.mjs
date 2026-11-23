@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
 import { scaleTravel } from '../src/data/speed.ts';
+import { WEAPONS } from '../src/data/items.ts';
+import { weaponDamage } from '../src/loadout.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { BANDS } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
@@ -162,7 +164,7 @@ test('three Ballistic weapons let a flak fragment penetrate two contacts once ap
   const second = contact(state, shard.x, shard.z + scaleTravel(16));
   const third = contact(state, shard.x, shard.z + scaleTravel(27));
   projectiles(state, 18);
-  const damage = 1.3;
+  const damage = weaponDamage(state, 'flak', WEAPONS.flak.tuning.fragmentDamage);
   assert.ok(Math.abs(first.hp - (12 - damage)) < 1e-9);
   assert.ok(Math.abs(second.hp - (12 - damage)) < 1e-9);
   assert.equal(third.hp, 12);

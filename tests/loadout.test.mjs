@@ -7,7 +7,8 @@ import {
   bombCapacity, dropFlares, dropRearBomb, flareCapacity, hurtEnemy, openReversal,
 } from '../src/stage-combat.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
-import { weaponCooldown } from '../src/loadout.ts';
+import { weaponCooldown, weaponDamage } from '../src/loadout.ts';
+import { WEAPONS } from '../src/data/items.ts';
 import { STARTER_BUFFS, STARTER_WEAPONS } from '../src/data/meta.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 
@@ -187,8 +188,8 @@ test('Twin Cannon grows at every rank and the final fan hits flank contacts', ()
     for (const enemy of state.enemies) enemy.hp = 12;
     acquireAndFire(state);
     assert.equal(state.shots.length, barrels);
-    assert.equal(state.twinAt, 21);
-    assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.damage === 1
+    assert.equal(state.twinAt, weaponCooldown(state, 'twin', WEAPONS.twin.tuning.cooldownTicks));
+    assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.damage === weaponDamage(state, 'twin', 1)
       && (shot.tracerScale ?? 1) === (i < 4 ? 1 : 1.3)
       && (shot.pierce?.remaining ?? 1) === (i < 2 ? 1 : i < 6 ? 2 : 3)));
     for (let tick = 0; tick < 15; tick++) advanceShots(state, ground);
@@ -208,7 +209,7 @@ test('Wing Pods add rear bolts starting at level four and keep their same-band r
   state.enemies[0].alt = 125;
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 3);
-  assert.equal(state.podsAt, 43);
+  assert.equal(state.podsAt, weaponCooldown(state, 'pods', WEAPONS.pods.tuning.cooldownTicks));
 });
 
 test('Ion Wake makes a vertical damage curtain and level five attracts salvage along it', () => {

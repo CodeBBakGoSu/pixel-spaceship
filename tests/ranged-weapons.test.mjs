@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { WEAPONS } from '../src/data/items.ts';
+import { weaponDamage } from '../src/loadout.ts';
 import { ROLLS } from '../src/data/roll.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.ts';
@@ -124,7 +125,7 @@ test('Rail level five fires wider beams in its own and the adjacent bands', () =
   advanceRangedWeapons(state, ground);
   state.tick = 54;
   advanceRangedWeapons(state, ground);
-  for (const target of [wide, below, above]) assert.equal(target.hp, 9);
+  for (const target of [wide, below, above]) assert.equal(target.hp, 12 - weaponDamage(state, 'rail', WEAPONS.rail.tuning.damage));
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 3);
 });
 
