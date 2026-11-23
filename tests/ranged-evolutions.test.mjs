@@ -162,7 +162,7 @@ test('three Ballistic weapons let a flak fragment penetrate two contacts once ap
   const second = contact(state, shard.x, shard.z + scaleTravel(16));
   const third = contact(state, shard.x, shard.z + scaleTravel(27));
   projectiles(state, 18);
-  const damage = 1.15 * 1.3;
+  const damage = 1.42 * 1.3;
   assert.ok(Math.abs(first.hp - (12 - damage)) < 1e-9);
   assert.ok(Math.abs(second.hp - (12 - damage)) < 1e-9);
   assert.equal(third.hp, 12);

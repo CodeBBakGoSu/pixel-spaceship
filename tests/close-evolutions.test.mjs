@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scaleTravel } from '../src/data/speed.ts';
+import { scaleClimb, scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import {
-  acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots, openReversal,
+  acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots, openReversal, STEP, FLARE_GRAVITY,
 } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
@@ -22,13 +22,13 @@ function contact(state, x, z, band = 1) {
   return enemy;
 }
 
-test('Aurora Gatling fires a four-barrel fan and aims into both adjacent bands', () => {
+test('Aurora Gatling keeps the six-bolt fan and aims into both adjacent bands', () => {
   const state = start();
   evolve(state, 'twin', 'aurora-gatling');
   const low = contact(state, 4, 85, 0), middle = contact(state, 0, 64), high = contact(state, -4, 85, 2);
   acquireAndFire(state);
   const flat = state.shots.filter(shot => shot.kind === 'twin');
-  assert.equal(flat.length, 4);
+  assert.equal(flat.length, 6);
   assert.ok(flat.every(shot => shot.aurora));
   assert.ok(new Set(flat.map(shot => shot.vx)).size > 1);
   const strafe = state.shots.filter(shot => shot.kind === 'strafe');
@@ -102,6 +102,24 @@ test('Collector Swarm adds a fourth drone and draws salvage into drones beyond p
   stepStage(state, {}, sea);
   assert.equal(state.salvage, 1);
   assert.ok(!state.pickups.includes(pickup));
+});
+
+test('Phoenix firebird scales per-tick ascent and descent, falling when no target remains', () => {
+  for (const direction of [-1, 1]) {
+    const state = start();
+    evolve(state, 'phoenix', 'phoenix-rising');
+    const target = contact(state, 0, -60, direction < 0 ? 0 : 1);
+    advanceAutoOrdnance(state, false);
+    const flare = state.flares[0];
+    flare.alt = target.alt - direction * 20;
+    const altitude = flare.alt;
+    advanceFlares(state, sea);
+    assert.ok(Math.abs(flare.alt - altitude - direction * scaleClimb(28) * STEP) < 1e-9);
+    target.hp = 0;
+    const vy = flare.vy;
+    advanceFlares(state, sea);
+    assert.ok(Math.abs(flare.vy - (vy - FLARE_GRAVITY * STEP)) < 1e-9);
+  }
 });
 
 test('Phoenix Rising steers its automatic firebird and preserves manual inventory', () => {

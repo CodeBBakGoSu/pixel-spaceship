@@ -80,18 +80,19 @@
 .gear-level-pip { width: 5px; height: 4px; background: #243a4a; box-shadow: inset 0 -1px #0a1421; }
 .gear-level-owned { background: #88bcb1; }
 .gear-level-gain { background: #f5d486; box-shadow: 0 0 5px #f5d4859e; }
-.loadout-draft-effect, .loadout-draft-cost, .loadout-draft-hint, .loadout-draft-set {
+.loadout-draft-effect, .loadout-draft-growth, .loadout-draft-cost, .loadout-draft-hint, .loadout-draft-set {
   font: 11px/1.35 var(--game-font);
   overflow-wrap: anywhere;
 }
 .loadout-draft-effect { color: #c4d7e0; }
+.loadout-draft-growth { color: #b4ffd6; }
 .loadout-draft-cost { color: #ffb7ae; }
 .loadout-draft-hint { color: #ffe295; }
 .loadout-draft-set { display: flex; align-items: center; gap: 4px; color: #a9c4cb; }
 .loadout-draft-set[data-active="true"] { color: var(--gear-family); }
 .loadout-draft-set .gear-icon { flex: none; }
 .draft-card :is(.draft-actions button, .loadout-draft-option) { min-height: 44px; }
-:lang(ko) :is(.loadout-draft-name, .loadout-draft-effect, .loadout-draft-set, .loadout-draft-hint) { word-break: keep-all; }
+:lang(ko) :is(.loadout-draft-name, .loadout-draft-effect, .loadout-draft-growth, .loadout-draft-set, .loadout-draft-hint) { word-break: keep-all; }
 
 @keyframes loadout-card-enter {
   from { opacity: .15; transform: translateY(12px) scale(.98); }

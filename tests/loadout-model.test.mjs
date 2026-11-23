@@ -25,9 +25,20 @@ test('an existing weapon upgrade opens its chest evolution without adding to the
   run.buffLevels['overdrive-coil'] = 1;
   const model = buildDraftCardModel(card('twin', 4, 5), run, 'en');
   assert.equal(model.levelLabel, 'Lv 4 → 5');
+  assert.equal(model.growth, '+9% damage · 6 bolts per volley · +1 pierce');
   assert.deepEqual(model.pips, ['owned', 'owned', 'owned', 'owned', 'gain']);
   assert.deepEqual(model.evolution, { badge: 'EVOLVES', hint: 'Chest evolves Aurora Gatling' });
   assert.deepEqual(model.setPreview, { count: 1, tier: 0, bonus: '', text: 'Set 1/2' });
+});
+
+test('weapon previews aggregate a two-rank pick and account for rank-specific base damage', () => {
+  const run = createProgression(2);
+  const twin = buildDraftCardModel(card('twin', 1, 3, { variant: 'overcharged' }), run, 'ko');
+  assert.equal(twin.growth, '피해 +16% · 대기 시간 −14% · 한 번에 4발');
+  const rail = buildDraftCardModel(card('rail', 0, 2, { variant: 'overcharged' }), run, 'en');
+  assert.equal(rail.levelLabel, 'NEW · Lv 2');
+  assert.equal(rail.growth, '+35% damage');
+  assert.equal(buildDraftCardModel(card('rail', 0, 1), run, 'en').growth, '');
 });
 
 test('a paired buff at weapon level five is marked as ready to evolve in Korean', () => {
