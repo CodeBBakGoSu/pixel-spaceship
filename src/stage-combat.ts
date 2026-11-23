@@ -11,7 +11,7 @@ import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIU
 import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_PROJECTILES, PLAYER_SHOT_LIMIT, REAR_ORDNANCE, SURVIVOR_PLAYER_DAMAGE,
   WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
-import { WEAPONS, type WeaponId } from './data/items.ts';
+import { TWIN_VOLLEYS, TWIN_WING_SHOT_SPREAD, WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, weaponCooldown, weaponDamage } from './loadout.ts';
 import { nearestBand } from './maneuvers.ts';
@@ -222,7 +222,7 @@ function steerAceMissile(shot: Shot, player: Position): void {
 type Aim = Position & { vx?: number; vz?: number; id: number; kind?: string };
 
 function fireFriendly(
-  state: StageState, kind: 'twin' | 'pods', offsets: number[], target: Aim | null, lockId: number | null,
+  state: StageState, kind: 'twin' | 'pods', offsets: readonly number[], target: Aim | null, lockId: number | null,
 ): void {
   const p = state.player;
   const forwardX = Math.sin(p.yaw), forwardZ = Math.cos(p.yaw);
@@ -233,15 +233,17 @@ function fireFriendly(
   const pierce = Number(upgraded) + (familyBonus(state, kind)?.pierce ?? 0);
   const aurora = kind === 'twin' && !!state.run?.evolutions.twin;
   let room = projectileRoom(state, kind);
-  for (const side of offsets) {
+  for (let i = 0; i < offsets.length; i++) {
     if (room-- <= 0) break;
+    const side = offsets[i];
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
     const aim = target
       ? Math.atan2(target.x + (target.vx ?? 0) * lead - x, target.z + (target.vz ?? 0) * lead - z)
       : p.yaw;
-    const yaw = aim + (aurora ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
+    const wingSpread = kind === 'twin' && i >= TWIN_VOLLEYS[4].length ? Math.sign(side) * TWIN_WING_SHOT_SPREAD : 0;
+    const yaw = aim + wingSpread + (aurora ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);
     state.shots.push({
       x, z, alt: p.altitude, kind, vx: Math.sin(yaw) * BOLT_SPEED, vz: Math.cos(yaw) * BOLT_SPEED,
       damage: weaponDamage(state, kind, kind === 'twin' ? state.twinDamage : state.podDamage),
@@ -417,8 +419,8 @@ export function acquireAndFire(state: StageState): void {
 
   const primary = hasTwin && state.tick >= state.twinAt && (!overdrive || locked) ? twin : null;
   if (primary) {
-    const paired = twinLevel ? WEAPONS.twin.tuning.barrels[twinLevel - 1] === 4 : state.twinRank === 3;
-    fireFriendly(state, 'twin', paired ? [-4.2, -1.6, 1.6, 4.2] : [-2.2, 2.2], primary, locked && ace ? ace.id : null);
+    const barrels = twinLevel ? WEAPONS.twin.tuning.barrels[twinLevel - 1] : state.twinRank === 3 ? 4 : 2;
+    fireFriendly(state, 'twin', TWIN_VOLLEYS[barrels], primary, locked && ace ? ace.id : null);
     const cadence = twinLevel ? WEAPONS.twin.tuning.cooldownTicks[twinLevel - 1] : state.twinRank === 1 ? 21 : 13;
     state.twinAt = state.tick + weaponCooldown(state, 'twin', cadence);
   }

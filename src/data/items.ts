@@ -19,12 +19,23 @@ type WeaponDefinition = {
   tuning: Record<string, number | readonly number[]>;
 };
 
-export const WEAPON_DAMAGE_LEVEL = { level: 4, multiplier: 1.15 } as const;
+export const WEAPON_RANK_DAMAGE = [1, 1.08, 1.16, 1.30, 1.42] as const;
+
+export function weaponRankDamage(level: number): number {
+  return WEAPON_RANK_DAMAGE[level - 1] ?? 1;
+}
+
+export const TWIN_VOLLEYS = {
+  2: [-2.2, 2.2],
+  4: [-4.2, -1.6, 1.6, 4.2],
+  6: [-4.2, -1.6, 1.6, 4.2, -7, 7],
+} as const;
+export const TWIN_WING_SHOT_SPREAD = 0.16;
 
 export const WEAPONS = {
   twin: {
     family: 'ballistic', coverage: 'forward-and-below',
-    tuning: { cooldownTicks: [21, 18, 18, 18, 18], barrels: [2, 2, 4, 4, 4], damage: 1, range: scaleTravel(175), pierceAt: 5 },
+    tuning: { cooldownTicks: [21, 18, 18, 18, 18], barrels: [2, 2, 4, 4, 6], damage: 1, range: scaleTravel(175), pierceAt: 5 },
   },
   pods: {
     family: 'ballistic', coverage: 'same-band',

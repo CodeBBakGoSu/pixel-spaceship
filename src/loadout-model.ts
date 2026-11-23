@@ -1,4 +1,4 @@
-import { DRAFT_RULES, EVOLUTIONS, FAMILIES, WEAPON_IDS, WEAPONS, type BuffId, type DraftChoiceId, type EvolutionId,
+import { DRAFT_RULES, EVOLUTIONS, FAMILIES, WEAPON_IDS, WEAPONS, weaponRankDamage, type BuffId, type DraftChoiceId, type EvolutionId,
   type FamilyId, type GearId, type WeaponId } from './data/items.ts';
 import { createTranslator, type Language } from './i18n.ts';
 import { isBuffId, isWeaponId, type DraftCard, type RunProgression } from './progression.ts';
@@ -13,6 +13,7 @@ export type DraftCardModel = {
   name: string;
   effect: string;
   description: string;
+  growth?: string;
   family: Category;
   familyLabel: string;
   pips: LevelPip[];
@@ -81,6 +82,26 @@ export function levelPips(level: number, nextLevel: number, maxLevel: number): L
   return Array.from({ length: maxLevel }, (_, i) => i < level ? 'owned' : i < nextLevel ? 'gain' : 'empty');
 }
 
+function weaponGrowth(id: WeaponId, current: number, next: number, t: Translator): string {
+  const from = Math.max(1, current);
+  if (from === next) return '';
+  const tuning: Partial<Record<'damage' | 'cooldownTicks', number | readonly number[]>> = WEAPONS[id].tuning;
+  const damage = (level: number) => weaponRankDamage(level) *
+    (typeof tuning.damage === 'number' ? tuning.damage : tuning.damage?.[level - 1] ?? 1);
+  const percent = Math.round((damage(next) / damage(from) - 1) * 100);
+  const gains = percent ? [t('loadout.bonus.damage', { percent })] : [];
+  const cooldown = tuning.cooldownTicks;
+  if (typeof cooldown !== 'number' && cooldown && cooldown[next - 1] < cooldown[from - 1]) {
+    gains.push(t('loadout.bonus.cooldown', { percent: Math.round((1 - cooldown[next - 1] / cooldown[from - 1]) * 100) }));
+  }
+  if (id === 'twin') {
+    const { barrels, pierceAt } = WEAPONS.twin.tuning;
+    if (barrels[next - 1] !== barrels[from - 1]) gains.push(t('draft.growth.volley', { count: barrels[next - 1] }));
+    if (from < pierceAt && next >= pierceAt) gains.push(t('loadout.bonus.pierce', { count: 1 }));
+  }
+  return gains.join(' · ');
+}
+
 export function buildDraftCardModel(card: DraftCard, run: RunProgression, language: Language): DraftCardModel {
   const t = createTranslator(language);
   const { id, currentLevel, nextLevel, variant } = card;
@@ -100,10 +121,12 @@ export function buildDraftCardModel(card: DraftCard, run: RunProgression, langua
   return {
     icon: capped ? 'credits' : id, name: t(`${copyKey}.title`),
     effect: weapon || buff ? t(`draft.effect.${id}`) : t(`${copyKey}.copy`),
+    growth: weapon ? weaponGrowth(id, currentLevel, nextLevel, t) : undefined,
     description: t(`${copyKey}.copy`), family,
     familyLabel: family === 'buff' ? t('loadout.buffs') : family === 'supply' ? t('loadout.supply') : t(`loadout.family.${family}`),
     pips: levelPips(currentLevel, nextLevel, maxLevel),
-    levelLabel: !maxLevel ? '' : currentLevel === 0 ? t('draft.new') : t('draft.levels', { from: currentLevel, to: nextLevel }),
+    levelLabel: !maxLevel ? '' : currentLevel !== 0 ? t('draft.levels', { from: currentLevel, to: nextLevel })
+      : nextLevel > 1 ? t('draft.newAtLevel', { level: nextLevel }) : t('draft.new'),
     variant, variantLabel: variant === 'normal' ? '' : t(`draft.${variant}`),
     cost: variant === 'risky' ? t('draft.riskCost', { hull: DRAFT_RULES.riskHull }) : '',
     pairHint: card.pairHint ? t('draft.pair') : undefined,
