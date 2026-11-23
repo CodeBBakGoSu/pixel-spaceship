@@ -358,3 +358,23 @@ Survival rose for the average and weak pilots, because the wider gaps spread out
 ### Replay verification
 
 The seed-1 golden hashes were rebaselined once for the changed flight paths: Legacy `d90af0cd…48ef2`, Survivors `21778f28…0b33`. Two runs reproduced both hashes.
+
+## Survivors horde (placeholders)
+
+- Gnat caps: desktop **200**, mobile **120**. Desktop minimum-live floors by Coast/Skirmish/Siege/Storm/Ace: **22/44/84/130/166**; mobile uses `floor(desktop floor × swarmCap / 200)`.
+- Scheduled Gnats per minute: **70/160/320/480/600**; pack sizes: **10/18/28/36/40**. Coast begins at **20 s**; later phases begin immediately. Floor top-ups add at most one pack per second after the start beat, outside lulls, limited by the deficit and remaining capacity.
+- Regular caps stay **8/16/26/30/34**, with original regular rates **14/16/19/23/28 per minute**. Siege/Storm/Ace include a terrain-safe encircle formation around the projected pilot position.
+- Wave/floor Gnats have no expiry. Beyond `SPAWN_WORLD.recycleDistance`, they relocate off-screen ahead of travel into a terrain-safe site in the same band; failed searches retry. Bomber escort Gnats retain their original **12 s** lifetime.
+- Over-cap cleanup prioritizes distant (outside `GNAT.range`), then behind, then farthest Gnats, with descending ID as the final tie-break. Cleanup gives no kill or XP. Orb merging at 150 and shot budgets are unchanged.
+
+The 100-seed desktop comparison uses Heat 0, seeds 1–100 per profile, against `origin/renderer-proto` at `1f1eb4b` (growth included). Clear includes a living timeout; Ace kill means boss clear. Peak is the median of each run's peak live Gnats, not the maximum across the batch. Per-phase median live contacts are not recorded by the sim.
+
+| Profile | Clear before → after | Median kills before → after | Median peak Gnats before → after | Ace kill before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Skilled | 100% → 100% | 1,057.5 → 3,990 | 61 → 200 | 100% → 100% |
+| Average | 73% → 77% | 1,085.5 → 3,994.5 | 61 → 200 | 66% → 65% |
+| Weak | 41% → 48% | 1,003.5 → 3,596 | 60 → 200 | 0% → 0% |
+
+The table includes the restored 12 s escort lifetime (`51e3a72`). Seed-1 replay hashes remain unchanged, but 282/300 run hashes changed against the 20 s escort batch. Initial horde median kills were roughly **3,700–4,050**; the corrected batch is **3,596–3,994.5**, still above the planning target **2,500–3,500**.
+
+Hardware 60 fps and real-phone fps remain unverified: this VM has a software GPU. These are placeholders; **밸런스 봇** owns tuning. Do not lower density to tune shooting threat.
