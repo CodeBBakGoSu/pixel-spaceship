@@ -25,6 +25,13 @@ The development and preview servers default to port 5180. To use a different por
 - On touchscreens, tap **LOOP** with the stick neutral or up for Immelmann, down for Split-S, or sideways for J-turn. Tap **ROLL** to dodge or **FLR** next to **BOMB** to deploy flares. The other controls are **BOOST**, **VIEW** and pause.
 - Match the salvage height to collect XP. At each level, press **1–3** or select a card to draft an upgrade. The sortie pauses during the draft.
 
+### Ace duel
+
+Four corners converge when your forward aim and altitude match the boss.
+The dashed circle around your ship (on the glass in COCKPIT) closes as the Ace prepares a salvo.
+When it turns solid, start a roll, **W + Space** or **S + Space** to break the lock. This stops that salvo, not shots already in flight.
+Try `?fixture=ace&cue=duel&view=chase&live=1` for a head-on approach.
+
 ## Language
 
 Choose **EN** or **한국어** from the title or pause menu. The game saves the choice as `aster.lang`. Korean browser locales default to Korean. Use `?lang=ko` or `?lang=en` to override the initial language.

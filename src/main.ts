@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import './style.css';
 import './numeric-hud.css';
+import { drawAceLocks } from './ace-sights.ts';
 import { DamageFeedback, observeDamage } from './combat-feedback.ts';
 import { COMBAT_FEEDBACK as DAMAGE } from './data/combat-feedback.ts';
 import { advanceDamageFixture } from './damage-fixture.ts';
@@ -1577,6 +1578,7 @@ function animate(now: number): void {
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   drawDamageFeedback();
+  if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield);
   requestAnimationFrame(animate);
 }
 

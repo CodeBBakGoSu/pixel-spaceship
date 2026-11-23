@@ -31,6 +31,11 @@ export function stageAceFixture(state: StageState, phase: AcePhase, cue: string 
   ace.pitch = phase === 3 ? 0.14 : 0;
   ace.tail = tail;
   ace.boosting = ACE_PHASES[phase].afterburner;
+  if (cue === 'duel') {
+    // A head-on approach acquires both locks through the live flight rules.
+    Object.assign(ace, { x: p.x, z: p.z + 470, yaw: Math.PI, bank: 0, attackAt: state.tick,
+      attacks: ACE_PHASES[phase].missileEvery - 1, rollReadyAt: state.tick + 180 });
+  }
   if (legacy) {
     ace.band = ROSTER.bands.high;
     ace.alt = BANDS[ace.band];

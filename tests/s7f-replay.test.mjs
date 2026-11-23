@@ -10,7 +10,7 @@ import { World } from '../src/world.ts';
 // Survivors seed-1 uses desktop Gnat floors 22/44/90/130/166 and rates 70/160/320/480/600; mobile values do not affect this hash.
 // Seed-1 terminal hashes also cover timed swarm formations and recovery pulses, production terrain, and the full-view pilot.
 const terminalHashes = {
-  legacy: 'cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903',
+  legacy: 'c6fe779e11b7771ce5115bb82a57c315fc30c3342a7023a106a06ba421debe4c',
   survivors: '1cede4023fb8ad248a8eef93bc7dc79f0da81989555e3f74a4f1be948f0e5905',
 };
 const world = new World();

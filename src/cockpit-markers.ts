@@ -1,4 +1,5 @@
 import { cockpitTarget } from './cockpit.ts';
+import { bracketRadius } from './ace-sights.ts';
 import type { ContactProjection } from './contact-projection.ts';
 import type { RearDanger, RearPursuit } from './instruments.ts';
 import type { CockpitLayout, Rect } from './layout.ts';
@@ -27,7 +28,8 @@ const forwardPriority = (a: CockpitMarker, b: CockpitMarker) =>
 
 export function markerRadius(marker: CockpitMarker, compact: boolean): number {
   if (marker.placement !== 'forward') return arrowRadius;
-  return marker.boxed ? compact ? 9 : 11 : compact ? 5 : 6;
+  const radius = marker.boxed ? compact ? 9 : 11 : compact ? 5 : 6;
+  return marker.ace && marker.lockProgress > 0 ? bracketRadius(radius, marker.lockProgress) : radius;
 }
 
 function contains(rect: Readonly<Rect>, x: number, y: number, padding: number): boolean {

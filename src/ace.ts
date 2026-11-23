@@ -171,12 +171,26 @@ export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], t
   events?.tell?.(kind, ace.x, ace.z, ace.alt);
 }
 
+export function aceDodgeWindow(tell: AceTell, tick: number): boolean {
+  return tell.kind !== 'roll' && tick >= tell.until - ACE.lock.dodgeTicks && tick <= tell.until;
+}
+
+function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
+  const { player: p, tick } = state;
+  const dx = p.x - ace.x, dz = p.z - ace.z;
+  if (!inBand(p.altitude, tell.alt, ACE.attack.bandWindow) || Math.hypot(dx, dz) > ACE.attack.range
+    || Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
+  // Only an accepted maneuver's first tick counts, not its whole animation or a held input.
+  return aceDodgeWindow(tell, tick) && (state.roll?.elapsed === 0 || state.maneuverTrail?.startTick === tick);
+}
+
 function updateTell(state: StageState, ace: Ace, events?: CombatEvents): void {
   const { tick, player: p } = state;
   const tuning = ACE_PHASES[ace.phase];
   const tell = ace.tell;
   if (tell) {
-    if (tick < tell.until) return;
+    const lost = tell.kind !== 'roll' && lostAttackLock(state, ace, tell);
+    if (!lost && tick < tell.until) return;
     ace.tell = null;
     if (tell.kind === 'roll') {
       ace.roll = { kind: 'barrel', side: ace.side, elapsed: 0, altitude: ace.alt };
@@ -184,9 +198,9 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents): void {
       ace.rollReadyAt = tick + Math.max(tuning.rollTicks, ROLLS.barrel.ticks + ACE.roll.recoverTicks);
       ace.attackAt = Math.max(ace.attackAt, tick + ROLLS.barrel.ticks);
     } else {
-      fireAceSalvo(state, ace, tell, tuning[tell.kind], events);
+      if (!lost) fireAceSalvo(state, ace, tell, tuning[tell.kind], events);
       const fireScale = state.run ? HEAT_TIERS[state.heat].shotIntervalScale : 1;
-      ace.attackAt = tick + Math.round(tuning.fireTicks * fireScale);
+      ace.attackAt = tell.until + Math.round(tuning.fireTicks * fireScale);
     }
     return;
   }

@@ -23,6 +23,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 기획 봇 · devin/1795438662-ace-lock-dodge (base `81a0e2a`)
+- State: in progress. Ace 상호 락온 표식 및 발사 직전 배럴롤·반전 기동 회피 판정. 키 매핑·Seeker·P1 사운드는 변경하지 않는다.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).

@@ -11,6 +11,7 @@ export const ACE = {
     verticalScale: 0.8, pitchScale: 0.46, bandStepDelay: 90,
   },
   attack: { startDelay: 82, range: scaleTravel(156), cone: 0.58, leadSeconds: 0.34, bandWindow: 11 },
+  lock: { dodgeTicks: 18, releaseCone: 0.85 },
   gun: { warningTicks: 33, speedScale: 1.58 },
   missile: { warningTicks: 52, speedScale: 1.46, turnRate: 0.76, life: 2.45 },
   roll: { warningTicks: 17, threatSeconds: 0.47, threatMargin: scaleTravel(4), recoverTicks: 95 },

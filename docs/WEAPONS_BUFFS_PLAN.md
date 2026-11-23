@@ -524,6 +524,7 @@ Bills Must Be Paid의 구조(기한 있는 청구서 → 갚으면 퍽, 무시�
 > 필수 방어형 버프는 B02 하나뿐이라, 3칸 중 방어를 고르면 공격 선택지가 줄어듭니다. 이 긴장감이 의도입니다. B02 대신 "자동 수리(주기적 선체 회복)" 변형을 쓸지 `[결정 필요]`.
 
 ### 6.1 버프 ↔ 우리 메카닉 연결
+- **Ace 조준:** 사각 모서리가 모이는 시간은 기존 Fire Control 락 속도를 따른다. 내 기체의 원형 경고는 별개인 보스 발사 시계이며 버프가 회피 시간을 바꾸지 않는다. Seeker의 표적 선택도 그대로다.
 - **고도 핵심:** Band Lens(명중 창), Magnet Core(오브 창), Vector Thrusters(밴드 이동 속도)
 - **기동:** Overdrive Coil(Space), Flare Bay(C), Ordnance Rack(X)
 - **생존:** Hull Plating
