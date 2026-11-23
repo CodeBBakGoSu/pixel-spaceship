@@ -53,6 +53,7 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 - Review the new enemies with `?fixture=skimmer|spotter|hound|flanker|harrier|diver|bomber|turret`. Each fixture puts its featured enemy ahead for inspection.
 - Review the opening landmarks with `?fixture=ridge|strait|stacks|atoll`. The north-up NAV map covers 1,536 m and tracks nearby world sites and the Ace signal. Use `?fixture=world&seed=19&x=4350&z=1250&alt=skim&live=1` to fly low over remote water or change the coordinates to `x=2450&z=1100` for land.
 - Use `?seed=1`, `?view=overhead|chase|cockpit`, `?touch=1`, and `?autoplay=1` for replay checks. `?t=SECONDS` seeks to an absolute sortie time and returns control to the player unless autoplay is active.
+- Survivors swarm events run on the sortie clock: rings at 1:50/5:15, single-band V crossings at 3:35/6:45. The first two last 15 s, the last two 10 s. Each ends with one global orb pull and 15 s without ordinary spawns. Only orbs already in play are swept; chests still require a same-altitude pickup. For a playable approach, use `?mode=survivors&seed=1&t=109&view=overhead` (ring) or `t=214` (crossing).
 
 `window.__game` exposes a read-only snapshot with tick, altitude, enemy contacts, mine count, draft choices, Ace health and phase, and lock progress.
 

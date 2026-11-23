@@ -29,6 +29,7 @@ import { applyRunPick, availableEvolutions, banishRunCard, createProgression, ev
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
+import { advanceSwarmEvent } from './swarm-events.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
@@ -546,9 +547,16 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
 function mergeSalvage(state: StageState): void {
   const pickups = state.pickups;
   while (pickups.length > PICKUP_LIMIT) {
-    const added = pickups.pop()!;
+    let added = pickups.pop()!;
+    // If only the newest drop is outside the pulse, merge two old orbs to free its slot.
+    if (!pickups.some(pickup => !!pickup.recovery === !!added.recovery)) {
+      const lone = added;
+      added = pickups.pop()!;
+      pickups.push(lone);
+    }
     let closest = pickups[0], distance = Infinity;
     for (const pickup of pickups) {
+      if (!!added.recovery !== !!pickup.recovery) continue;
       const range = (added.x - pickup.x) ** 2 + (added.z - pickup.z) ** 2
         + (added.alt - pickup.alt) ** 2 * SALVAGE_RANGE.altitudeWeight;
       if (range < distance) {
@@ -605,6 +613,16 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
   const magnetScale = (state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1)
     * (p.skim ? SKIM.magnetScale : 1);
   state.pickups = state.pickups.filter(pickup => {
+    if (pickup.recovery) {
+      const { until, sourceAlt } = pickup.recovery;
+      const fraction = 1 / Math.max(1, until - state.tick);
+      pickup.x += (p.x - pickup.x) * fraction;
+      pickup.z += (p.z - pickup.z) * fraction;
+      pickup.alt += (p.altitude - pickup.alt) * fraction;
+      if (!pickup.collected && Math.hypot(p.x - pickup.x, p.z - pickup.z, p.altitude - pickup.alt) > SALVAGE_RANGE.collect) return true;
+      creditSalvage(state, { ...pickup, alt: sourceAlt });
+      return false;
+    }
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
     if (!pickup.collected && !(p.skim && pickup.skim) && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
       pickup.pulling = false;
@@ -698,6 +716,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       const launch = input.launch;
       delete state.roll;
       delete state.rollReadyAt;
+      delete state.swarmNotice;
       // --- S7d lane ---
       delete state.rally;
       delete state.claimedSites;
@@ -778,7 +797,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground);
-    advancePhaseSpawns(state, ground, observeSwarm);
+    if (!advanceSwarmEvent(state, ground, observeSwarm)) advancePhaseSpawns(state, ground, observeSwarm);
   } else {
     const wave = WAVES[state.nextWave];
     if (wave && state.tick >= wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) {
