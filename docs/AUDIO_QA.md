@@ -1,4 +1,6 @@
 # SFX objective QA (2026-11-21, nobody listened; numbers only)
+
+> 기술 참고: 음원 파일의 측정 기록이다. 게임 안 타격음의 청감 검수 결과는 아니다. [위키 홈](wiki/README.md)
 Tooling: decode via ffmpeg, numpy analysis (`analyze.py`, `process.py` in /workspace/aster-survivors/sfx on the box).
 
 Take selection (2 takes each, picked on measurements):

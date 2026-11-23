@@ -1,5 +1,7 @@
 # ASTER // 3-View Arcade Loop Game Plan
 
+> 과거 기획: 세 시점을 잇는 아케이드 루프 원안이다. 현재 Survivors 빌드 순서는 [위키](wiki/README.md)에서 확인한다.
+
 Revision of the MVP into a fast arcade loop that uses **all three existing camera views** (`overhead`, `chase`, `cockpit`) as distinct, back-to-back gameplay segments over the Vesper-9 heightmap and voxel spacecraft.
 
 **MVP Goal**: One tight `~105s` loop (`overhead -> chase -> cockpit + boss`) using 3 entity/obstacle types (`Drone`, `Rock Pillar / Energy Ring`, `Boss`), score + lives + 8-bar hull energy in the existing HUD, win/game-over screens, and endless faster loops (`Loop 2+`).

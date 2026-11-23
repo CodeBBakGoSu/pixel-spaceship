@@ -4,7 +4,11 @@ Hawk로 10분 출격해 같은 고도의 적을 격추하고, 구슬을 모아 �
 
 **도감:** [무기 10종](CATALOG.md#weapons) · [버프 10종](CATALOG.md#buffs) · [격납고 강화 8종](CATALOG.md#hangar) · [해금 퀘스트 10종](CATALOG.md#quests)
 
-**찾아보기:** [HTML 그림 도감](ASTER-WING-무기-버프-도감.html) (별도 반영 예정) · [시도와 결정 이력](HISTORY.md) · [두 봇의 작업 로그](../WORKLOG.md)
+**찾아보기:** [HTML 그림 도감 파일](ASTER-WING-무기-버프-도감.html) · [시도와 결정 이력](HISTORY.md) · [두 봇의 작업 로그](../WORKLOG.md)
+
+GitHub에서 HTML 코드가 보이면 **Download raw file**로 내려받아 브라우저에서 연다. 파일 하나로 동작하며, 다운로드 없이 읽으려면 위의 항목별 도감을 이용한다.
+
+<a id="versions"></a>
 
 ## 어느 버전을 보고 있나?
 
@@ -23,7 +27,9 @@ Hawk로 10분 출격해 같은 고도의 적을 격추하고, 구슬을 모아 �
 | 지금 게임에서 얻거나 살 수 있는 것은? | [현행 도감](CATALOG.md). 수치가 다르면 해당 개발판의 [장비](../../src/data/items.ts)·[파일럿 데이터](../../src/data/meta.ts)가 기준이다. |
 | 다음에 무엇을 만들고 어떻게 검수하나? | [구현 순서·담당별 인수 기준](../SURVIVORS_PLAN.md#pillars) → [무기 역할](../WEAPONS_BUFFS_PLAN.md#weapon-roles) · [잭팟 연출](../WEAPONS_BUFFS_PLAN.md#jackpot) · [패배 후 첫 승리](../WEAPONS_BUFFS_PLAN.md#first-clear) |
 | 왜 이 안을 썼고 다른 안은 왜 보류했나? | [결정과 대안](HISTORY.md) → [시드별 실험의 조건·결과](../BALANCE_NOTES.md) |
-| 예전 문서와 기술 기록은? | [3뷰 아케이드 원안](../GAME_PLAN.md) · [초기 종스크롤안](../SHMUP_PLAN.md)은 과거 기획이다. [사운드 출처](../AUDIO_CREDITS.md)와 [WebGL 문제 기록](../WEBGL_CONTEXT_LOSS.md)은 기술 참고용이다. |
+| 어떤 설계가 대체됐나? | [초기 종스크롤안](../SHMUP_PLAN.md) · [3뷰 아케이드 원안](../GAME_PLAN.md) · [레퍼런스 영상 분석](../../ref/VIDEO_ANALYSIS.md)은 과거 기록이다. |
+| 특정 개발 단계에서 무엇을 바꿨나? | Stage 7의 [지형·저공 비행](../lanes/S7d.md) · [적·Ace](../lanes/S7e.md) · [그래픽 품질](../lanes/S7f.md)은 당시 작업 기록이다. |
+| 기술 문제나 음원 사용 조건은? | [WebGL 오류 분석](../WEBGL_CONTEXT_LOSS.md) · [음원 출처·사용 조건](../AUDIO_CREDITS.md) · [음원 측정](../AUDIO_QA.md). |
 
 ## 그록봇·데븐 봇 공통 인계
 

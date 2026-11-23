@@ -1,5 +1,7 @@
 # ASTER WING balance notes
 
+> 측정 기록: 각 표는 해당 커밋·시드·기기 조건의 결과다. 현재 목표와 채택 여부는 [위키](wiki/README.md)와 [결정 이력](wiki/HISTORY.md)을 본다.
+
 ## Stage 1
 
 New browser sorties use the phase director. The previous sortie is available with `?mode=legacy`, and the existing fixtures and replay entry point keep their previous defaults.

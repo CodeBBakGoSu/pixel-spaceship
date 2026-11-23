@@ -1,5 +1,7 @@
 # WebGL context loss
 
+> 기술 참고: 렌더러 오류의 재현·수정 기록. [위키 홈](wiki/README.md)
+
 The release-blocking exception is a race in Three.js r170. When loss begins during the first use of a shader program, the native context can already return a null info log while Three still considers the context live. Three calls `.trim()` before its shader error callback and the thrown exception aborts the game's animation callback before it requests the next frame.
 
 An isolated Chromium 149 run on RTX 4090 reproduced the original stack from `5f92897`. The harness requested `WEBGL_lose_context` inside the first real `getProgramInfoLog` call at 249.5 ms. The call returned null with `isContextLost()` true, Three threw from its program diagnostics, and the corresponding canvas event arrived at 257.3 ms. The audio decoder had made zero calls. This isolates the fatal application path. The initiating trigger for the earlier spontaneous driver loss remains unconfirmed.

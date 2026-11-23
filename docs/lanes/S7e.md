@@ -1,5 +1,7 @@
 # Stage 7e · Enemy roster and Red Kite
 
+> 개발 이력: Stage 7e 작업 당시의 적·Ace 사양이다. [위키 홈](../wiki/README.md)
+
 Red Kite enters from the atoll signal at 8:00 in Survivors. The legacy sortie also uses the fighter and keeps its original timetable. The Ace shares the player's fixed-step bank drive, yaw, bank drop, and barrel-roll trajectory. Its health phases start at 100%, 66%, and 33%. In Survivors, phase two calls capped wingmen and Gnats once. Phase three adds afterburner, faster band changes, shorter roll recovery, and a wider salvo. The 10:00 timeout still applies.
 
 Gun runs commit to a tracer line for 33 ticks. Missile attacks signal a lock for 52 ticks, then launch guided same-band rounds. The existing roll parries these rounds on contact. The Ace signals an evasive roll for 17 ticks before displacing laterally. The start of the roll deflects hits, and the fighter is vulnerable during recovery. Tailing holds the matched layer and gives a rear-mirror cue and tone. The fighter spirals down on defeat, awarding 2,500 score and a 250-credit cache before payout modifiers. Existing hangar quest progress carries forward. An 8:00 checkpoint saved in Stage 7a resumes with the new fighter.
