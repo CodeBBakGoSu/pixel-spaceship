@@ -71,6 +71,7 @@ export function renderDraftCard(button: HTMLButtonElement, card: DraftCard | und
   const effect = span('loadout-draft-effect', model.effect);
   effect.title = model.description;
   content.append(effect);
+  if (model.growth) content.append(span('loadout-draft-growth', model.growth));
   if (model.cost) content.append(span('loadout-draft-cost', model.cost));
   if (model.evolution) content.append(span('loadout-draft-hint', model.evolution.hint));
   if (model.setPreview && model.family !== 'buff' && model.family !== 'supply') {

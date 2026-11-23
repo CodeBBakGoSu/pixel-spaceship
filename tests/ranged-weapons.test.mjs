@@ -107,7 +107,7 @@ test('Rail level five widens and pierces an additional lower band', () => {
   advanceRangedWeapons(state, ground);
   state.tick = 54;
   advanceRangedWeapons(state, ground);
-  for (const target of [wide, below]) assert.ok(Math.abs(target.hp - (12 - 3.75 * 1.15)) < 1e-9);
+  for (const target of [wide, below]) assert.ok(Math.abs(target.hp - (12 - 3.75 * 1.42)) < 1e-9);
   assert.equal(tooLow.hp, 12);
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 2);
 });

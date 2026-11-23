@@ -30,6 +30,7 @@ import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
+import type { DraftCard } from './progression.ts';
 import { clockText, hudHullTone, NumericHud } from './numeric-hud.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
@@ -60,7 +61,7 @@ const draftCard = $('#draft-card');
 const chestCard = $('#chest-card');
 const chestDisplay = createChestDisplay(chestCard, action => { pendingChest = action; });
 const draftButtons = [...draftCard.querySelectorAll<HTMLButtonElement>('[data-pick]')];
-const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), evolutionToast = $('#evolution-toast');
+const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), gearToast = $('#gear-toast');
 const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
@@ -185,7 +186,10 @@ let guideOpener: HTMLElement | null = null;
 let menuKey = '';
 let renderedDraft: DraftId[] | null = null;
 let renderedChest: ChestReward[] | null = null;
-let evolutionNotice: { item: Extract<ChestReward, { kind: 'evolution' }>; until: number } | null = null;
+let gearNotice: (
+  { kind: 'evolution'; item: Extract<ChestReward, { kind: 'evolution' }> } |
+  { kind: 'upgrade'; card: DraftCard; level: number }
+) & { until: number } | null = null;
 let banishing = false;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
 let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
@@ -549,8 +553,19 @@ function updateHud(readout: RadarReadout): void {
       ? ' · ' + (notice.repaired ? t('phase.lullRepair', { hull: notice.repaired }) : t('phase.lull')) : '';
     setText('#phase-banner', context + lull);
   }
-  evolutionToast.hidden = !evolutionNotice || evolutionNotice.until <= state.tick || state.phase !== 'playing' || state.paused;
-  if (evolutionNotice && !evolutionToast.hidden) setText('#evolution-name', t(`item.${evolutionNotice.item.id}.title`));
+  gearToast.hidden = !gearNotice || gearNotice.until <= state.tick || state.phase !== 'playing' || state.paused;
+  if (gearNotice && !gearToast.hidden) {
+    if (gearNotice.kind === 'evolution') {
+      setText('#gear-toast-heading', t('chest.evolved'));
+      setText('#gear-toast-name', t(`item.${gearNotice.item.id}.title`));
+    } else {
+      const { card, level } = gearNotice;
+      const capped = card.id === 'damage' && card.nextLevel === card.currentLevel;
+      const name = t(capped ? 'draft.damageCap.title' : `item.${card.id}.title`);
+      setText('#gear-toast-heading', t('draft.applied', { level }));
+      setText('#gear-toast-name', card.nextLevel > card.currentLevel ? t('draft.appliedGear', { name, level: card.nextLevel }) : name);
+    }
+  }
   const flareReady = canDropFlare(state);
   const ready = canManeuver(state, 'immelmann');
   const keyboard = keyboardAxes();
@@ -1178,6 +1193,8 @@ function advance(): void {
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
+  const previousCards = previousPhase === 'draft' ? state.run?.cards : undefined;
+  const previousPicks = state.picks.length;
   const launching = pendingStart;
   // --- S7d lane ---
   const launch = launching ? launchSettings() : undefined;
@@ -1215,7 +1232,7 @@ function advance(): void {
   }
   if (launching && state.phase === 'playing' && previousPhase !== 'playing') {
     if (checkpointData) writeCheckpointData(null);
-    evolutionNotice = null;
+    gearNotice = null;
     feedback.reset();
     parryNoticeUntil = 0;
     visualFreezeUntil = -Infinity;
@@ -1233,11 +1250,21 @@ function advance(): void {
       turn: !wasFlying || !maneuverAllowsControl(state.maneuver) || Math.abs(headingDelta) > Math.PI * 0.9 ? 0 : ease(motion.turn, headingDelta / STEP),
     };
   }
+  if (previousCards && state.picks.length > previousPicks) {
+    const card = previousCards.find(choice => choice.id === state.picks[previousPicks]);
+    if (card) {
+      gearNotice = { kind: 'upgrade', card, level: state.level, until: state.tick + 3 * TICKS_PER_SECOND };
+      gearToast.dataset.kind = 'upgrade';
+      const capped = card.id === 'damage' && card.nextLevel === card.currentLevel;
+      $('#gear-toast-icon').replaceChildren(createGearIcon(capped ? 'credits' : card.id, 36));
+    }
+  }
   if (state.chestReveal !== previousReveal) {
     const item = state.chestReveal?.find(reward => reward.kind === 'evolution');
     if (item) {
-      evolutionNotice = { item, until: state.tick + 3 * TICKS_PER_SECOND };
-      $('#evolution-icon').replaceChildren(createGearIcon(item.id, 44));
+      gearNotice = { kind: 'evolution', item, until: state.tick + 3 * TICKS_PER_SECOND };
+      gearToast.dataset.kind = 'evolution';
+      $('#gear-toast-icon').replaceChildren(createGearIcon(item.id, 44));
     }
   }
   if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft || state.chestReveal !== previousReveal) {

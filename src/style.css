@@ -589,7 +589,7 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .experience.cockpit-view .phase-banner { top: 24%; }
 .experience.phone-portrait .phase-banner { top: calc(var(--objective-y) + var(--objective-h) + 92px); }
 .experience.phone-portrait.cockpit-view .phase-banner { top: calc(var(--objective-y) + var(--objective-h) + 154px); }
-.evolution-toast {
+.gear-toast {
   position: absolute;
   z-index: 3;
   left: 50%;
@@ -605,18 +605,24 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   box-shadow: 0 0 16px #f6bd5970, inset 0 0 12px #f6bd5929;
   pointer-events: none;
 }
-.evolution-toast:not([hidden]) { display: flex; animation: evolution-toast-in 360ms steps(6, end) both; }
-.evolution-toast .gear-icon { display: block; }
-.evolution-toast strong, .evolution-toast div > span { display: block; }
-.evolution-toast strong { color: #ffe097; font-size: 15px; margin-bottom: 4px; }
-.evolution-toast div > span { color: #fff2de; font-size: 11px; }
-.experience.cockpit-view .evolution-toast { top: calc(var(--objective-y) + var(--objective-h) + 108px); }
-.experience.phone-portrait.cockpit-view .evolution-toast { top: calc(var(--objective-y) + var(--objective-h) + 152px); }
-@keyframes evolution-toast-in {
+.gear-toast:not([hidden]) { display: flex; animation: gear-toast-in 360ms steps(6, end) both; }
+.gear-toast .gear-icon { display: block; }
+.gear-toast strong, .gear-toast div > span { display: block; }
+.gear-toast strong { color: #ffe097; font-size: 15px; margin-bottom: 4px; }
+.gear-toast div > span { color: #fff2de; font-size: 11px; }
+.gear-toast[data-kind="upgrade"] {
+  background: #10252cf2;
+  border-color: #89f8c8;
+  box-shadow: 0 0 16px #76efb648, inset 0 0 12px #76efb624;
+}
+.gear-toast[data-kind="upgrade"] strong { color: #b4ffd6; }
+.experience.cockpit-view .gear-toast { top: calc(var(--objective-y) + var(--objective-h) + 108px); }
+.experience.phone-portrait.cockpit-view .gear-toast { top: calc(var(--objective-y) + var(--objective-h) + 152px); }
+@keyframes gear-toast-in {
   from { opacity: 0; transform: translate(-50%, -10px) scale(.9); }
   to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
-.menu-open .evolution-toast { visibility: hidden; }
+.menu-open .gear-toast { visibility: hidden; }
 .draft-card h2 { margin: 10px 0 18px; color: #f5c06f; font-size: clamp(20px, 4vw, 31px); }
 .draft-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .draft-options button {
@@ -700,7 +706,7 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 }
 @keyframes cache-evolved { from { box-shadow: 0 0 34px 9px #fff0ad; } to { box-shadow: 6px 6px #0a101a; } }
 @media (prefers-reduced-motion: reduce) {
-  .rolling .chest-reel-strip, .evolution-reveal.settled, .evolution-toast:not([hidden]) { animation: none; }
+  .rolling .chest-reel-strip, .evolution-reveal.settled, .gear-toast:not([hidden]) { animation: none; }
 }
 .experience.phone-layout .draft-card { width: min(650px, 100%); }
 .experience.phone-layout .draft-options kbd { display: none; }

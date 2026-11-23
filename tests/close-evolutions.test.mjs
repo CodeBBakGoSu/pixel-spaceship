@@ -22,13 +22,13 @@ function contact(state, x, z, band = 1) {
   return enemy;
 }
 
-test('Aurora Gatling fires a four-barrel fan and aims into both adjacent bands', () => {
+test('Aurora Gatling keeps the six-bolt fan and aims into both adjacent bands', () => {
   const state = start();
   evolve(state, 'twin', 'aurora-gatling');
   const low = contact(state, 4, 85, 0), middle = contact(state, 0, 64), high = contact(state, -4, 85, 2);
   acquireAndFire(state);
   const flat = state.shots.filter(shot => shot.kind === 'twin');
-  assert.equal(flat.length, 4);
+  assert.equal(flat.length, 6);
   assert.ok(flat.every(shot => shot.aurora));
   assert.ok(new Set(flat.map(shot => shot.vx)).size > 1);
   const strafe = state.shots.filter(shot => shot.kind === 'strafe');
