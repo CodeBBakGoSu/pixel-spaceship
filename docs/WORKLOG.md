@@ -12,12 +12,18 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- Gnat variants: implementation `82c19c6` on the integrated horde (`8f41122`); public `main` unchanged.
-- Tests: **561/561 pass**, production build passes. See the latest log entry for browser and sim verification.
+- Swarm events + recovery magnet: `77163bc` on the integrated Gnat variants (`d4e4911`); public `main` unchanged.
+- Tests: **567/567 pass**, production build passes. See the latest log entry for browser and sim verification.
 - Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
 - Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
 
 ## Log
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795417618-swarm-events → renderer-proto
+- Work `77163bc`, claim `86e2991`, base `d4e4911`. Survivors alternates a two-band closing ring (escape altitude announced) and a 105-Gnat crossing V. Planning confirmed fixed starts at 1:50/3:35/5:15/6:45, durations 15/15/10/10 s. Each ends with a single global sweep of existing orbs, then 15 s without ordinary spawns. Chest/Bill schedules and phase repairs stay put; no ±40 s swarm exclusion.
+- Verification: 567/567 tests including all six Ace replays, production build OK. Survivors seed-1 golden deliberately updated to `cd87e5ab…07ca9`; Legacy unchanged. [Playable-flow recording](https://app.devin.ai/sessions/245af8f813bf47df88fafc1bfc0f7a97?testRecording=1db81c86-8882-4bb0-b9d4-b200287038a7): 72-member ring, 105-member V, 34 and 105 orbs swept in the first two recoveries. Touch cap 120 checked; actual device performance not measured.
+- Desktop Heat 0, seeds 1–100 per pilot (skilled/average/weak): survival including timeouts 99%/78%/35%; Ace kills 99%/78%/1%; median kills 3,213.5/3,167.5/3,064.5; median level-ups 53/54/54. Peak Gnats 200 each.
+- State: done. Final difficulty and XP tuning belongs to 밸런스 봇. No PR or public deployment.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795417618-swarm-events (claim)
 - Base `d4e4911` (Gnat variants integrated). Implementing §3.1 #7: timed ring/crossing formations and a one-shot global salvage pull at recovery, with HUD and regression tests.
