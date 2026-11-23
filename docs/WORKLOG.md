@@ -23,7 +23,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ### 2026-11-23 · 기획 봇 (데븐 봇 계열, 게임 디자인) · renderer-proto (claim)
 - Survivors build order: rewrite `docs/SURVIVORS_PLAN.md` and update `docs/WEAPONS_BUFFS_PLAN.md` with the prioritized next-build list, on branch `devin/1795407127-survivors-build-order`. Docs only; no code, no goldens.
 - Plans around (does not redo) the in-progress horde and growth branches above.
-- State: in progress (기획 봇).
+- Commit `8e10887`: SURVIVORS_PLAN v2 (build order 1–9, density/XP/Lv7 targets, Gnat variants) + WEAPONS_BUFFS_PLAN v2 (current state at 211e757, weapon level v2 table to Lv7, phase status).
+- Verify: `npm test` 512 pass, `npm run build` ok.
+- State: done (기획 봇), merged into renderer-proto.
 
 ### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
 - Survivors growth on `devin/1795406694-aster-growth`: make upgrade choices and weapon rank gains tangible in flight. Areas: progression, player weapon patterns and upgrade/HUD feedback; coordinate shared replay goldens separately.
