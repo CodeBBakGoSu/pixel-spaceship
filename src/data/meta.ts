@@ -15,7 +15,7 @@ export const METRIC_RULES = {
   boostTicks: 'total',
   lockedKills: 'total',
   rearFlareKills: 'total',
-  manualBombs: 'total',
+  bombsDropped: 'total',
 } as const;
 export type RunMetric = keyof typeof METRIC_RULES;
 
@@ -29,7 +29,7 @@ export const UNLOCK_QUESTS = [
   { id: 'vector-thrusters', metric: 'boostTicks', target: 60 * 60 },
   { id: 'fire-control', metric: 'lockedKills', target: 20 },
   { id: 'flare-bay', metric: 'rearFlareKills', target: 20 },
-  { id: 'ordnance-rack', metric: 'manualBombs', target: 10 },
+  { id: 'ordnance-rack', metric: 'bombsDropped', target: 10 },
 ] as const satisfies readonly { id: GearId; metric: RunMetric; target: number }[];
 export type QuestId = (typeof UNLOCK_QUESTS)[number]['id'];
 

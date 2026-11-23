@@ -9,7 +9,7 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 const calm = () => 0;
 
 function flight(altitude = 125) {
-  const state = createStage(parseStageOptions('?fixture=flare'));
+  const state = createStage(parseStageOptions('?fixture=reversal&mode=legacy'));
   state.player.altitude = altitude;
   state.enemies.length = 0;
   state.podsAt = Infinity;

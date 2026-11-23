@@ -83,12 +83,12 @@ test('Ace Duty counts three reversal kills during the live Bill', () => {
 test('Rear Guard counts engaged rear-threat kills credited to rear equipment', () => {
   const state = game();
   beat(state, 255);
-  kill(state, 1, 'hound', { weapon: 'manual-flare', rear: false });
-  kill(state, 1, 'gnat', { weapon: 'manual-flare', rear: true });
+  kill(state, 1, 'hound', { weapon: 'phoenix', rear: false });
+  kill(state, 1, 'gnat', { weapon: 'phoenix', rear: true });
   kill(state, 1, 'patrol', { weapon: 'twin', rear: true });
   assert.equal(state.bills.active.progress, 0);
   kill(state, 1, 'harrier', { weapon: 'pods', rear: true });
-  kill(state, 1, 'hound', { weapon: 'manual-flare', rear: true });
+  kill(state, 1, 'hound', { weapon: 'phoenix', rear: true });
   kill(state, 0, 'patrol', { weapon: 'phoenix', rear: true });
   assert.deepEqual(finishBillTick(state), { definition: BILLS[2], paid: true });
 });
@@ -182,13 +182,13 @@ test('rear collateral and delayed flare damage retain the source of a genuine pu
   state.enemies.push(tail);
   advanceFlares(state, () => 35);
   assert.equal(tail.hp, 2);
-  assert.deepEqual(tail.burnCredit, { weapon: 'manual-flare', rear: true });
+  assert.deepEqual(tail.burnCredit, { weapon: 'phoenix', rear: true });
   p.yaw = Math.PI;
   for (let i = 0; i < 2; i++) {
     state.tick = tail.burnNextAt;
     advanceFlares(state, () => 35);
   }
-  assert.deepEqual(tail.killCredit, { weapon: 'manual-flare', rear: true });
+  assert.deepEqual(tail.killCredit, { weapon: 'phoenix', rear: true });
   noteBillKill(state, tail);
   assert.equal(state.bills.active.progress, 1);
 });

@@ -168,7 +168,6 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     };
     const rollTurn = rollDirection(state, profile, rollRng);
     if (rollTurn !== undefined) return { ...held, toggleView: base.toggleView, roll: true, rollTurn };
-    return { ...held, toggleView: base.toggleView, maneuver: useManeuvers ? base.maneuver : undefined,
-      bomb: useManeuvers && base.bomb, flare: useManeuvers && base.flare };
+    return { ...held, toggleView: base.toggleView, maneuver: useManeuvers ? base.maneuver : undefined };
   };
 }

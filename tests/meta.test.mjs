@@ -121,8 +121,9 @@ test('Heat tiers stack their pressure, and boss clears unlock the next tier up t
 });
 
 test('retreat halves credits but preserves earned quest progress', () => {
-  const profile = createProfile();
-  const run = { ...createRunMetrics(), manualBombs: 10 };
+  const profile = normalizeProfile({ metrics: { manualBombs: 9 } });
+  assert.ok(!draftPool(profile).buffs.includes('ordnance-rack'));
+  const run = { ...createRunMetrics(), bombsDropped: 1 };
   const loss = settleRun(profile, run, { ...lost, score: 20_000, credits: 100 });
   const retreat = settleRun(profile, run, { ...lost, outcome: 'retreated', score: 20_000, credits: 100 });
   assert.equal(retreat.credits, Math.floor(loss.credits / 2));

@@ -17,7 +17,7 @@ import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
-import { FlightChord, type SpaceAction } from './flight-chord.ts';
+import { barrelRollForKey, FlightChord, type SpaceAction } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
 import { createGearIcon } from './gear-icons.ts';
 import { GraphicsRecovery } from './graphics-recovery.ts';
@@ -41,7 +41,7 @@ import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
-import { canDropFlare, clamp, inBand, STEP,
+import { clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -72,8 +72,6 @@ const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
 const touchLoop = $<HTMLButtonElement>('#touch-loop');
-const touchBomb = $<HTMLButtonElement>('#touch-bomb');
-const touchFlare = $<HTMLButtonElement>('#touch-flare');
 const touchRoll = $<HTMLButtonElement>('#touch-roll');
 const stick = $('#stick'), knob = $('#stick-knob');
 const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-lang]')];
@@ -214,7 +212,7 @@ let gearNotice: (
 ) & { until: number } | null = null;
 let banishing = false;
 let dirty = true, lastRadarTick: number | null = null, lastFlightKey = '';
-let pendingStart = false, pendingPause = false, pendingBomb = false, pendingFlare = false, pendingViews = 0;
+let pendingStart = false, pendingPause = false, pendingViews = 0;
 let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
 let pendingChest: StageInput['chestPick'];
 type ManeuverPress = { kind: ManeuverKind; turn: number };
@@ -419,7 +417,7 @@ function layoutFlight(): void {
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
-    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'roll', 'boost', 'bomb', 'flare', 'view'] as const) setRect(key, phone[key]);
+    for (const key of ['playfield', 'controls', 'pause', 'stick', 'loop', 'roll', 'boost', 'view'] as const) setRect(key, phone[key]);
   }
   if (state.run) layoutSortieHud();
   cockpit = state.view === 'cockpit' ? phone?.cockpit ?? cockpitLayout(innerWidth, innerHeight, safe, hud.objective) : null;
@@ -498,7 +496,7 @@ function objectiveText(): string {
   const fixture = options.fixture;
   if (rosterSheet) return t(rosterSheet === 'ace' ? 'speaker.ace' : `enemy.${rosterSheet}`);
   if (fixture === 'flare' && state.tick >= 30 * TICKS_PER_SECOND && state.tick < 40 * TICKS_PER_SECOND) {
-    return t('hud.flareDemo', { control: touch ? t('control.flareShort') : 'C' });
+    return t('guide.flareHint');
   }
   // --- S7e lane ---
   if (fixture === 'roster') {
@@ -590,13 +588,12 @@ function updateHud(readout: RadarReadout): void {
       setText('#gear-toast-name', card.nextLevel > card.currentLevel ? t('draft.appliedGear', { name, level: card.nextLevel }) : name);
     }
   }
-  const flareReady = canDropFlare(state);
   const ready = canManeuver(state, 'immelmann');
   const keyboard = keyboardAxes();
   const selected = touch ? chooseManeuver(stickX, stickY) : chooseManeuver(keyboard.turn, keyboard.climb);
   const lowBoost = ready && selected === 'j-turn' && state.boost < MANEUVERS['j-turn'].boost;
   numericHud.update(state, t, ready && !lowBoost);
-  updateRearDangerCue(readout, ready && !lowBoost, flareReady);
+  updateRearDangerCue(readout, ready && !lowBoost);
   const time = Math.max(0, Math.ceil((endTick(state) - state.tick) / TICKS_PER_SECOND));
   if (state.run) {
     const eta = Math.ceil((bossTick(state) - state.tick) / TICKS_PER_SECOND);
@@ -705,7 +702,6 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   } else if (mine) message = 'hud.mineWarning';
   else if (top && state.altitudeHint) message = 'hud.checkAlt';
   else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
-  else if (state.tick < state.bombReadyAt) message = 'hud.bombAway';
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   const tag = $('#view-tag');
@@ -780,7 +776,6 @@ function updateMenu(): void {
   if (!$('#hangar-panel').hidden) renderHangar();
   if (showing) {
     resetTouch();
-    pendingBomb = pendingFlare = false;
     pendingManeuver = undefined;
     pendingRoll = undefined;
     flushSpaceInput();
@@ -990,9 +985,13 @@ window.addEventListener('keydown', event => {
   if (code === 'KeyP' && !interrupted) pendingPause = true;
   if (state.phase === 'playing' && !state.paused) {
     if (code === 'KeyV') pendingViews++;
-    if (code === 'KeyX' || code === 'KeyK') pendingBomb = true;
-    if (code === 'KeyC') pendingFlare = true;
     const { turn, climb } = keyboardAxes();
+    const barrel = barrelRollForKey(code, turn, state.player.lastTurn);
+    if (barrel !== undefined) {
+      flushSpaceInput();
+      pendingRoll = barrel;
+      return;
+    }
     const kind = maneuverForKey(code, turn, climb);
     if (kind) {
       event.preventDefault();
@@ -1011,7 +1010,6 @@ function syncAudioPause(): void {
 
 function interruptFlight(reason: 'focus' | 'graphics' = 'focus'): void {
   keys.clear();
-  pendingBomb = pendingFlare = false;
   pendingManeuver = undefined;
   pendingRoll = undefined;
   flushSpaceInput();
@@ -1187,8 +1185,6 @@ function bindPress(button: HTMLButtonElement, press: () => void): void {
   });
 }
 bindPress(touchPause, () => { pendingPause = true; });
-bindPress(touchBomb, () => { pendingBomb = true; });
-bindPress(touchFlare, () => { pendingFlare = true; });
 bindPress(touchRoll, () => { pendingRoll = stickX; });
 bindPress($<HTMLButtonElement>('#touch-view'), () => { pendingViews++; });
 
@@ -1232,8 +1228,6 @@ function advance(): void {
     launch,
     retreat: pendingRetreat,
     pause: pendingPause,
-    bomb: pendingBomb || control.bomb,
-    flare: pendingFlare || control.flare,
     maneuver: pendingRoll === undefined ? pendingManeuver?.kind ?? control.maneuver : undefined,
     maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
     roll: pendingRoll !== undefined || control.roll,
@@ -1243,7 +1237,7 @@ function advance(): void {
     ...pendingDraft,
   }, ground, undefined, combatEvents);
   if (bulletFixture?.stress) bulletFixture.fillStress(combatEvents);
-  pendingStart = pendingPause = pendingBomb = pendingFlare = false;
+  pendingStart = pendingPause = false;
   pendingRetreat = false;
   if (pendingViews) pendingViews--;
   pendingDraft = {};
@@ -1310,7 +1304,7 @@ function updateRearBombMarker(): void {
   rearBombMarker.hidden = !offscreen;
 }
 
-function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flareReady: boolean): void {
+function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean): void {
   const { rearDanger: danger, rearPursuit: pursuit } = readout;
   const running = state.phase === 'playing' && !state.paused;
   if (!running || state.view !== 'cockpit') mirrorThreat.clear();
@@ -1329,8 +1323,7 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
     rearDangerCue.style.setProperty('--rear-bottom', `${innerHeight - mirror.y - mirror.height + 3}px`);
   }
   let position = '▼', description = t('hud.rear');
-  let action = danger?.kind === 'contact' && flareReady ? (touch ? t('control.flareShort') : `C ${t('control.flare')}`)
-    : danger && reversalReady ? (touch ? t('control.loop') : `SPACE ${t('hud.rearReverse')}`)
+  let action = danger && reversalReady ? (touch ? t('control.loop') : `SPACE ${t('hud.rearReverse')}`)
     : danger ? t('hud.rearEvade') : readout.rearMarks.join(' ');
   if (danger) description = t('hud.rearDanger');
   // --- S7e lane ---
@@ -1353,8 +1346,6 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean, flar
     if (kind) {
       const direction = kind === 'immelmann' ? '↑' : kind === 'split-s' ? '↓' : threat.lateral < 0 ? '←' : '→';
       action = `${t('hud.reverseShort')} ${direction}`;
-    } else if (flareReady && threat.height !== 'Above' && Math.abs(threat.lateral) <= 22 && threat.distance <= 80) {
-      action = t('hud.rearFlare', { count: state.flareCharges });
     } else {
       action = seconds > 0 ? t('hud.rearCooldown', { seconds }) : t('hud.rearEvade');
     }
@@ -1456,11 +1447,10 @@ function render(now: number): boolean {
 Object.defineProperty(window, '__game', { get: () => Object.freeze({
   tick: state.tick, elapsed: state.tick / TICKS_PER_SECOND, seed: state.seed, phase: state.phase, paused: state.paused,
   view: state.view, airspace: { ...state.arena }, objective: objectiveText(), altitude: state.player.altitude,
-  player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting, bombs: state.bombs,
+  player: { ...state.player }, hull: state.hull, boost: state.boost, boosting: state.boosting,
   speed: state.speed, boostTicks: state.boostTicks, speedFeel: scene && { ...scene.speedFeel },
   rearBombs: state.rearBombs.map(bomb => ({ ...bomb })),
-  flares: state.flares.map(flare => ({ ...flare })), flareCharges: state.flareCharges,
-  flareReadyAt: state.flareReadyAt, flareReloadAt: state.flareReloadAt,
+  flares: state.flares.map(flare => ({ ...flare })),
   flareHit: state.flareHit && { ...state.flareHit },
   rearGlimpse: state.rearGlimpse && { ...state.rearGlimpse, target: state.rearGlimpse.target && { ...state.rearGlimpse.target } },
   rearView: scene?.rearView && { ...scene.rearView },

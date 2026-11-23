@@ -16,15 +16,10 @@ for (const [width,height] of sizes) for (const safe of insets) for (const view o
     for(let i=0;i<zones.length;i++)for(let j=i+1;j<zones.length;j++)assert.equal(intersects(zones[i],zones[j]),false,`zone ${i} overlaps ${j}`);
     assert.ok(l.playfield.height>=l.playfield.width*.85,'instruments leave a usable portrait playfield');
     assert.ok(contains(l.playfield,l.radar));assert.ok(contains(l.playfield,l.alt));assert.equal(intersects(l.radar,l.alt),false);
-    assert.ok(l.flare, 'the flare control has a layout');
-    const buttons=[l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view];
+    const buttons=[l.stick,l.loop,l.roll,l.boost,l.view];
     for(const b of buttons){assert.ok(contains(l.controls,b));assert.ok(b.width>=44 && b.height>=44);}
     for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false,`control ${i} overlaps ${j}`);
     assert.ok(contains(l.controls,l.stickLabel));assert.equal(intersects(l.stick,l.stickLabel),false);
-    assert.equal(l.flare.width, l.bomb.width);
-    assert.equal(l.flare.height, l.bomb.height);
-    assert.equal(l.flare.y, l.bomb.y);
-    assert.ok(l.bomb.x - l.flare.x - l.flare.width <= 10);
     assert.ok(contains(l.hud,l.pause));assert.ok(l.pause.width>=44 && l.pause.height>=44);
     if(view==='cockpit')assert.ok(l.dashboard.height >= 83 && l.dashboard.height <= 99);else assert.equal(l.dashboard,null);
   });
@@ -37,9 +32,8 @@ test('landscape phone has usable, separated zones and controls', () => {
   assert.ok(chase.shipY+55<=chase.controls.y,'landscape ship clears the control area');
   assert.equal(intersects(l.hud,l.radio),false);assert.equal(intersects(l.radio,l.objective),false);
   assert.equal(intersects(l.playfield,l.dashboard),false);assert.equal(intersects(l.dashboard,l.controls),false);
-  assert.ok(l.flare, 'the flare control has a layout');
-  for(const b of [l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
-  const buttons=[l.stick,l.loop,l.roll,l.boost,l.bomb,l.flare,l.view];
+  for(const b of [l.stick,l.loop,l.roll,l.boost,l.view,l.pause])assert.ok(b.width>=44&&b.height>=44);
+  const buttons=[l.stick,l.loop,l.roll,l.boost,l.view];
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++)assert.equal(intersects(buttons[i],buttons[j]),false);
 });
 

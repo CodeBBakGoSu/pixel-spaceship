@@ -174,10 +174,11 @@ test('a held dive still enters SKIM and drops its pitch before the next climb', 
 
 test('flares inherit the measured climb or dive rate while rear bombs hold their launch altitude', () => {
   for (const [climb, angle] of [[1, 32], [-1, -38], [0.1, 0], [0, 0]]) {
-    const state = start();
+    const state = createStage(parseStageOptions('?t=0&mode=survivors'), lowGround);
+    Object.assign(state.run.weaponLevels, { phoenix: 1, 'bomb-bay': 1 });
     state.player.pitch = radians(angle);
     const altitude = state.player.altitude;
-    stepStage(state, { climb, flare: true, bomb: true }, lowGround);
+    stepStage(state, { climb }, lowGround);
     const launchAltitude = state.player.altitude;
     const verticalSpeed = (launchAltitude - altitude) * 60;
     const flareRate = Math.min(-9, Math.max(-18, verticalSpeed * 0.2 - 10.5));

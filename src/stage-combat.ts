@@ -32,12 +32,7 @@ export const SHOT_LIMIT = 192;
 export const MINE_LIMIT = 16;
 export { BODY_RADIUS, FLAK_RADIUS, HOSTILE_HIT_RADIUS, MINE_RADIUS } from './data/hostile-fire.ts';
 export const FLAK_LIFE = 0.65;
-export const MAX_BOMBS = 3;
-export const BOMB_RELOAD_TICKS = 450;
 export const BOMB_BLAST_RADIUS = WEAPONS['bomb-bay'].tuning.radius[0];
-export const MAX_FLARES = 3;
-export const FLARE_COOLDOWN_TICKS = 36;
-export const FLARE_RELOAD_TICKS = 420;
 export const FLARE_LIFE_TICKS = 120;
 export const FLARE_GRAVITY = scaleClimb(14);
 export const REAR_GLIMPSE_TICKS = 84;
@@ -46,8 +41,6 @@ const FLARE_HIT_RADIUS = 4.5;
 const FLARE_BURN_TICKS = 88;
 const FLARE_BURN_INTERVAL = 27;
 const FLARE_CONFIRM_TICKS = 72;
-const FLARE_FAN = [-2, -1, 0, 1, 2];
-const BOMB_DROP_TICKS = 24;
 const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
@@ -118,7 +111,7 @@ export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credi
   state.effects.push({ kind: 'hit', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.16 });
 }
 
-type RearWeapon = Extract<KillCredit['weapon'], 'pods' | 'phoenix' | 'bomb-bay' | 'manual-flare' | 'manual-bomb'>;
+type RearWeapon = Extract<KillCredit['weapon'], 'pods' | 'phoenix' | 'bomb-bay'>;
 
 export function rearWeaponCredit(state: StageState, enemy: Enemy, weapon: RearWeapon): KillCredit {
   const { x, z, yaw } = state.player, dx = enemy.x - x, dz = enemy.z - z;
@@ -477,26 +470,6 @@ function showRearImpact(state: StageState, kind: RearGlimpse['kind'], { x, z, al
   };
 }
 
-export const bombCapacity = (state: StageState): number => MAX_BOMBS + (buffTuning(state, 'ordnance-rack')?.stock ?? 0);
-export const flareCapacity = (state: StageState): number => MAX_FLARES + (buffTuning(state, 'flare-bay')?.stock ?? 0);
-export const bombReloadTicks = (state: StageState): number =>
-  Math.round(BOMB_RELOAD_TICKS * (buffTuning(state, 'ordnance-rack')?.reloadScale ?? 1));
-export const flareReloadTicks = (state: StageState): number =>
-  Math.round(FLARE_RELOAD_TICKS * (buffTuning(state, 'flare-bay')?.reloadScale ?? 1));
-
-export function dropRearBomb(state: StageState): void {
-  if (!state.bombs || state.tick < state.bombReadyAt) return;
-  const p = state.player;
-  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  const { aftOffset, driftSpeed } = REAR_ORDNANCE.bomb;
-  state.rearBombs.push({ x: p.x - fx * aftOffset, z: p.z - fz * aftOffset, alt: p.altitude,
-    vx: -fx * driftSpeed, vz: -fz * driftSpeed, born: state.tick });
-  state.bombs--;
-  state.bombReadyAt = state.tick + BOMB_DROP_TICKS;
-  state.bombReloadAt ??= state.tick + bombReloadTicks(state);
-  showRearLaunch(state, 'bomb');
-}
-
 function nearBomb(bomb: RearBomb, target: Position, radius: number): boolean {
   return Math.hypot(target.x - bomb.x, target.z - bomb.z) <= radius;
 }
@@ -515,7 +488,7 @@ function blast(state: StageState, bomb: RearBomb): void {
   for (const enemy of state.enemies) {
     if (enemy.hp && !enemy.entry && belowLaunchBand(enemy) && nearBomb(bomb, enemy, radius)
       && inBand(enemy.alt, bomb.alt, window)) {
-      hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, bomb.weapon ?? 'manual-bomb'));
+      hurtEnemy(state, enemy, damage, rearWeaponCredit(state, enemy, 'bomb-bay'));
     }
   }
   const ace = activeAce(state);
@@ -524,12 +497,7 @@ function blast(state: StageState, bomb: RearBomb): void {
   }
 }
 
-export function canDropFlare(state: StageState, tick = state.tick): boolean {
-  return state.phase === 'playing' && !state.paused && tick > state.graceUntil
-    && state.flareCharges > 0 && tick >= state.flareReadyAt;
-}
-
-function launchFlares(state: StageState, vx: number, vz: number, fan: readonly number[], phoenixLevel = 0): void {
+function launchFlares(state: StageState, vx: number, vz: number, fan: readonly number[], phoenixLevel: number): void {
   const p = state.player;
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   // Keep boosted flares close enough to catch a tail while still inheriting launch momentum.
@@ -537,17 +505,17 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
   const kick = Math.max(minimumKick, (vx * fx + vz * fz) * 0.89);
   const vy = clamp(state.climbRate * 0.2 - scaleClimb(7), -scaleClimb(12), -scaleClimb(6));
   const tuning = WEAPONS.phoenix.tuning;
-  const bonus = phoenixLevel ? tuning.lifeBonusTicks[phoenixLevel - 1] : 0;
-  const firebird = phoenixLevel && state.run?.evolutions.phoenix;
+  const bonus = tuning.lifeBonusTicks[phoenixLevel - 1];
+  const firebird = state.run?.evolutions.phoenix;
   const evolution = CLOSE_EVOLUTIONS.phoenix;
-  const ordnance = phoenixLevel ? {
+  const ordnance = {
     weapon: 'phoenix' as const,
     lifeTicks: firebird ? evolution.lifeTicks : FLARE_LIFE_TICKS + bonus,
     burnTicks: Math.round((FLARE_BURN_TICKS + bonus) * (firebird ? evolution.burnScale : 1)),
     damage: weaponDamage(state, 'phoenix', 1),
     spread: tuning.burnRadius[phoenixLevel - 1] * (familyBonus(state, 'phoenix')?.radiusScale ?? 1) || undefined,
     ...(firebird ? { phoenix: true as const, sourceBand: playerBand(p) } : {}),
-  } : {};
+  };
   for (const side of fan) {
     state.flares.push({
       x: p.x - fx * aftOffset + fz * side * fanSpacing, z: p.z - fz * aftOffset - fx * side * fanSpacing, alt: p.altitude - 1,
@@ -556,15 +524,6 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
       vy, born: state.tick, ...ordnance,
     });
   }
-}
-
-export function dropFlares(state: StageState, vx: number, vz: number): void {
-  if (!canDropFlare(state)) return;
-  launchFlares(state, vx, vz, FLARE_FAN);
-  state.flareCharges--;
-  state.flareReadyAt = state.tick + FLARE_COOLDOWN_TICKS;
-  state.flareReloadAt ??= state.tick + flareReloadTicks(state);
-  showRearLaunch(state, 'flare');
 }
 
 function setBurn(state: StageState, target: Enemy | Ace, interval: number, flare: Flare, credit?: KillCredit): void {
@@ -586,7 +545,7 @@ function ignite(state: StageState, target: Enemy | Ace, interval: number, flare:
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || enemy.id === target.id || !inBand(target.alt, enemy.alt, window)) continue;
       if (Math.hypot(enemy.x - target.x, enemy.z - target.z) <= flare.spread) {
-        setBurn(state, enemy, FLARE_BURN_INTERVAL, flare, rearWeaponCredit(state, enemy, flare.weapon ?? 'manual-flare'));
+        setBurn(state, enemy, FLARE_BURN_INTERVAL, flare, rearWeaponCredit(state, enemy, 'phoenix'));
       }
     }
   }
@@ -646,11 +605,6 @@ function steerFirebird(state: StageState, flare: Flare, ace: Ace | null): boolea
 }
 
 export function advanceFlares(state: StageState, ground: Ground): void {
-  if (state.flareReloadAt !== null && state.tick >= state.flareReloadAt) {
-    const capacity = flareCapacity(state);
-    state.flareCharges = Math.min(capacity, state.flareCharges + 1);
-    state.flareReloadAt = state.flareCharges < capacity ? state.tick + flareReloadTicks(state) : null;
-  }
   if (state.flareHit && state.tick >= state.flareHit.until) state.flareHit = null;
   // Burns already active on a returning craft keep aging during fly-in.
   for (const enemy of state.enemies) {
@@ -683,7 +637,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
       hurtAce(state, ace, flare.damage ?? 1);
       ignite(state, ace, ACE.burnInterval, flare);
     } else if (hit) {
-      const credit = rearWeaponCredit(state, hit, flare.weapon ?? 'manual-flare');
+      const credit = rearWeaponCredit(state, hit, 'phoenix');
       hurtEnemy(state, hit, flare.damage ?? 1, credit);
       ignite(state, hit, FLARE_BURN_INTERVAL, flare, credit);
     } else if (terrain === Infinity) {
@@ -716,11 +670,6 @@ export function advanceEnemyHazards(state: StageState, ground: Ground, events?: 
 }
 
 export function advanceRearBombs(state: StageState, ground: Ground): void {
-  if (state.bombReloadAt !== null && state.tick >= state.bombReloadAt) {
-    const capacity = bombCapacity(state);
-    state.bombs = Math.min(capacity, state.bombs + 1);
-    state.bombReloadAt = state.bombs < capacity ? state.tick + bombReloadTicks(state) : null;
-  }
   for (const fx of state.weaponFx) {
     if (fx.kind !== 'ground-fire' || state.tick >= fx.until || !fx.hits || !fx.damage || !fx.radius) continue;
     const within = (target: Position) => target.alt <= (fx.ceiling ?? Infinity)
@@ -772,6 +721,7 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
     const count = run.evolutions.phoenix ? 1 : tuning.count[phoenix - 1];
     const fan = Array.from({ length: count }, (_, i) => i - (count - 1) / 2);
     launchFlares(state, state.player.vx ?? 0, state.player.vz ?? 0, fan, phoenix);
+    showRearLaunch(state, 'flare');
     state.weaponFireAt.phoenix = state.tick + weaponCooldown(state, 'phoenix', tuning.cooldownTicks);
   }
   const bay = run.weaponLevels['bomb-bay'] ?? 0;
@@ -794,6 +744,8 @@ export function advanceAutoOrdnance(state: StageState, reversed: boolean): void 
       radius: tuning.radius[bay - 1], damage, ceiling,
       ...(carpet ? { carpet: true } : bay >= tuning.fireAt ? { groundFire: true } : {}) });
   }
+  state.metrics.bombsDropped += bombs;
+  showRearLaunch(state, 'bomb');
   if (!followUp) state.weaponFireAt['bomb-bay'] = state.tick + weaponCooldown(state, 'bomb-bay', tuning.cooldownTicks);
   state.bayDropsLeft = carpet ? 0 : Math.max(0, (followUp ? state.bayDropsLeft ?? 1 : tuning.volley[bay - 1]) - 1);
   state.nextBayDrop = state.bayDropsLeft ? state.tick + tuning.followUpTicks : null;

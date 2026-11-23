@@ -21,7 +21,7 @@ export type BillState = {
   interest: boolean;
 };
 
-const REAR_WEAPONS: ReadonlySet<string> = new Set(['pods', 'phoenix', 'bomb-bay', 'manual-flare', 'manual-bomb']);
+const REAR_WEAPONS: ReadonlySet<string> = new Set(['pods', 'phoenix', 'bomb-bay']);
 
 export function createBillState(): BillState {
   return { next: 0, active: null, last: null, offered: 0, paid: 0, interest: false };

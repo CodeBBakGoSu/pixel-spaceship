@@ -29,6 +29,6 @@ export function noteSortieKill(state: StageState, enemy: Enemy): void {
   const distinct = state.killBandTicks.reduce((count, tick) => count + Number(tick >= 0 && state.tick - tick <= window), 0);
   metrics.multibandWithinFive = Math.max(metrics.multibandWithinFive, distinct);
   if (enemy.killCredit?.locked) metrics.lockedKills++;
-  if (enemy.killCredit?.rear && (enemy.killCredit.weapon === 'phoenix' || enemy.killCredit.weapon === 'manual-flare')
+  if (enemy.killCredit?.rear && enemy.killCredit.weapon === 'phoenix'
     && enemy.kind !== 'gnat' && enemy.kind !== 'turret' && !enemy.carrier) metrics.rearFlareKills++;
 }

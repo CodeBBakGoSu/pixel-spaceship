@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FlightChord, ROLL_CHORD_MS } from '../src/flight-chord.ts';
+import { barrelRollForKey, FlightChord, ROLL_CHORD_MS } from '../src/flight-chord.ts';
 
 test('Space while either Shift is held rolls immediately and never queues a reversal', () => {
   const chord = new FlightChord();
@@ -32,4 +32,12 @@ test('closing flight controls cancels an unresolved gesture', () => {
   chord.reset();
   assert.equal(chord.pressShift(25), undefined);
   assert.equal(chord.flush(200), undefined);
+});
+
+test('only C requests a dedicated barrel roll, even with the stick centered', () => {
+  assert.equal(barrelRollForKey('KeyC', 0), 1);
+  assert.equal(barrelRollForKey('KeyC', 0, -1), -1);
+  assert.equal(barrelRollForKey('KeyC', 1, -1), 1);
+  assert.equal(barrelRollForKey('KeyC', -1, 1), -1);
+  for (const key of ['KeyX', 'KeyK', 'Space', 'ShiftLeft']) assert.equal(barrelRollForKey(key, 1), undefined);
 });

@@ -30,7 +30,6 @@ export const WORLD_SITES = {
   claimWindow: 12,
   wellXp: 4,
   boost: 0.6,
-  reliefBombs: 1,
   rallyNear: scaleTravel(380),
   rallyDistance: scaleTravel(230),
   fixtureExtent: 1_048_576,
