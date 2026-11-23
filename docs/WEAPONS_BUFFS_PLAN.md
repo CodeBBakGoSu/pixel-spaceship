@@ -6,7 +6,7 @@
 > `[확인 필요]` = 출처가 약하거나 제가 직접 검증하지 못한 항목입니다.
 > 아이콘 콘셉트: `icons-concept.png` (같은 폴더, 코드: `make_icons.py`)
 >
-> **현재 상태 갱신 (2026-11-23, 기획 봇):** 기준 구현은 `renderer-proto` `d4e4911`이며 무기 Lv7(`7446be4`), 피해 숫자/대량 격추(`e46b813`), horde(`8f41122`), Armored/Sting 변종(`82c19c6`)이 통합되었습니다. 다음 빌드 순서는 `docs/SURVIVORS_PLAN.md` §3의 계획 우선순위를 따릅니다. 아래의 설계 목표와 실제 측정값은 별도로 표기합니다.
+> **현재 상태 갱신 (2026-11-23, 기획 봇):** 기준 구현은 `renderer-proto` `0bc1f99`이며 무기 Lv7(`7446be4`), 피해 숫자/대량 격추(`e46b813`), horde(`8f41122`), Armored/Sting 변종(`82c19c6`), 스웜 이벤트/회복 자석(`77163bc`)이 통합되었습니다. 다음 빌드 순서는 `docs/SURVIVORS_PLAN.md` §3의 계획 우선순위를 따릅니다. 아래의 설계 목표와 실제 측정값은 별도로 표기합니다.
 > v1 TL;DR와 v1 세부표는 이전 설계 기록입니다. 현재 구현 상태는 §1·§5.2·§13을 기준으로 합니다.
 
 ---
@@ -44,7 +44,7 @@
 
 ---
 
-## 1. 현재 게임 상태 진단 (`renderer-proto` `d4e4911`)
+## 1. 현재 게임 상태 진단 (`renderer-proto` `0bc1f99`)
 
 v1 시점(3분 스크립트, 레벨 1~3, 드래프트 5종)의 진단은 더 이상 맞지 않아 교체합니다.
 
@@ -52,12 +52,13 @@ v1 시점(3분 스크립트, 레벨 1~3, 드래프트 5종)의 진단은 더 이
 - **구현 완료:** 무기 W01–W10(Lv7), 버프 B01–B10(Lv3), 진화 10종, 계열 세트 보너스, Echo Overdrive, 상자 4개(C1/C3 보급, C2/C4 진화), Bills 5회, 3+3 → 4+4 슬롯, 과충전·고위험·리롤·추방·스킵, 격납고 8종, Heat 0–5, 체크포인트·철수, 일일 시드(KST), 카드의 전/후 수치와 픽 후 피드백. 시작 기체는 Hawk 1종.
 - **적/스폰:** 정규 11종 + Gnat + Armored/Sting 변종 + Elite Carrier + Ace. 예약 예산과 minimum-live floor top-up, Gnat cap PC 200/폰 120, persistent wave/floor Gnats 및 앞쪽 재활용, encircle 편대가 구현됨. PC floor는 22/44/84/130/166, 모바일은 cap 비례 축소. 작업 브랜치에서 두 변종 동시 등장 검증 보고와 [녹화](https://app.devin.ai/sessions/9286f5ebd5a84c4fbdc8c96c6e8abdf9?testRecording=746df89d-adb1-4f8a-9b2d-aaba9638c4b0)가 있으나 통합 기준 검증 자료는 아닙니다.
 - **무기 성장:** 10종의 모든 Lv2–7 rank change 코드와 Lv7 진화 조건이 구현됨. 전체 Lv2–7 스크린샷 수용 기준은 미검증입니다. 피해 숫자/크리 강조, Gnat 폭발 묶음, 5초 격추 카운터도 병합됨.
-- **변종 통합 전 기준 시뮬:** `9d677b5`(변종 통합 전 후보), Heat 0, 데스크톱 seed 1–100/profile. skilled / 보통(average) / weak 순: clear 100%/75%/26%, Ace kill 99%/72%/2%, median kills 3,677.5/3,591/3,373.5, median peak Gnats 각 200. 보통(average) 프로필의 격추 중앙값 3,591은 기존 3,500 상한보다 91 높습니다. 이 표는 `d4e4911` 변종 통합 이후 결과가 아니며 렌더 FPS/현재 level-up 중앙값을 측정하지 않습니다.
+- **변종 통합 전 기준 시뮬:** `9d677b5`(변종 통합 전 후보), Heat 0, 데스크톱 seed 1–100/profile. skilled / 보통(average) / weak 순: clear 100%/75%/26%, Ace kill 99%/72%/2%, median kills 3,677.5/3,591/3,373.5, median peak Gnats 각 200. 보통(average) 프로필의 격추 중앙값 3,591은 기존 3,500 상한보다 91 높습니다. 이 표는 변종 통합 전 결과이며 `0bc1f99` 결과가 아니고, 렌더 FPS/현재 level-up 중앙값을 측정하지 않습니다.
 - **성능 증거:** 기존 RTX 4090 결과와 모바일 에뮬 결과는 80/50 Gnat cap 시절 자료입니다. 피해 숫자 fixture의 VM SwiftShader는 High→Low auto-fallback 상태에서 36.44 fps를 측정했습니다. 현재 200/120 cap의 실제 PC/실제 폰 FPS는 미검증입니다.
 
 | 시뮬 스냅샷 | 변종 작업 브랜치 결과 |
 |---|---|
-| `82c19c6` feature branch (skilled / average / weak; `d4e4911` 통합 빌드 재실행 아님) | clear(타임아웃 포함) 100%/78%/24%; Ace kill 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 각 200 |
+| `82c19c6` feature branch (skilled / average / weak; `0bc1f99` 통합 빌드 재실행 아님) | clear(타임아웃 포함) 100%/78%/24%; Ace kill 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 각 200 |
+| `77163bc` swarm feature branch (base `d4e4911`, not rerun on `0bc1f99`) | desktop Heat 0, 100 seeds/profile; skilled / average / weak median kills 3,213.5/3,167.5/3,064.5; survival incl. timeouts 99%/78%/35%; Ace kills 99%/78%/1%. Average median kills 3,167.5 is within 2,500–3,500, but this does not establish phase density or whole survival acceptance. |
 
 **상태 해석:** §4.4·§4.7 및 §5.2의 수치는 설계 목표/placeholder입니다. 구현되었다는 사실만으로 목표를 달성한 것은 아닙니다. 변종 통합 전 기준 `9d677b5`의 100시드 결과에서 보통(average) 프로필의 격추 중앙값이 기존 상한보다 높았고, 페이즈별 중앙 라이브 접촉 수는 측정되지 않았으므로 기존 기획 목표와 tuning ownership을 유지합니다. 우선순위는 `SURVIVORS_PLAN.md` §3이 기준입니다.
 
@@ -437,7 +438,7 @@ Bills Must Be Paid의 구조(기한 있는 청구서 → 갚으면 퍽, 무시�
 
 ### 5.2 무기 레벨 v2 — 매 레벨 화면 변화, 최대 Lv7 (2026-11-23)
 
-**구현 상태 (기준 `renderer-proto` `d4e4911`):** Lv7 상한, W01–W10 랭크 변화, HUD/카드 표시, 짝 버프 진화 조건이 `7446be4`에서 구현·통합됐습니다. 아래 표는 구현된 랭크 설계이며 대기 중인 구현 제안이 아닙니다. 현재 100시드 표에는 랭크별 DPS나 레벨업 시각이 없어 런 템포 목표는 미검증입니다.
+**구현 상태 (기준 `renderer-proto` `0bc1f99`):** Lv7 상한, W01–W10 랭크 변화, HUD/카드 표시, 짝 버프 진화 조건이 `7446be4`에서 구현·통합됐습니다. 아래 표는 구현된 랭크 설계이며 대기 중인 구현 제안이 아닙니다. 현재 100시드 표에는 랭크별 DPS나 레벨업 시각이 없어 런 템포 목표는 미검증입니다.
 
 **구현 전 rationale(역사적):** 당시 Lv2–5의 절반(쿨다운 −15~20%, 공통 Lv4 피해 +15% 등)이 화면에 보이지 않아 카드를 골라도 "강해진" 느낌이 약하다는 점이 변경 동기였습니다. 이 변경은 `7446be4`에 구현·통합됐습니다. W01–W10 전체의 Lv2–7 스크린샷 수용 기준은 미검증입니다. 기록된 수동 UI 확인은 Twin Lv6→7만 다룹니다.
 
@@ -689,7 +690,7 @@ Bills Must Be Paid의 구조(기한 있는 청구서 → 갚으면 퍽, 무시�
 
 ## 13. 단계별 구현 순서 — 현재 상태 (2026-11-23)
 
-구현 기준은 `renderer-proto` `d4e4911`입니다. **다음 빌드 순서는 `docs/SURVIVORS_PLAN.md` §3이 기준**이며, #1–#9는 계획 우선순위 번호(일부는 GitHub PR 번호와 무관)입니다.
+구현 기준은 `renderer-proto` `0bc1f99`입니다. **다음 빌드 순서는 `docs/SURVIVORS_PLAN.md` §3이 기준**이며, #1–#9는 계획 우선순위 번호(일부는 GitHub PR 번호와 무관)입니다.
 
 | Phase (v1) | 상태 |
 |---|---|
@@ -698,13 +699,13 @@ Bills Must Be Paid의 구조(기한 있는 청구서 → 갚으면 퍽, 무시�
 | 3. 메타 + 세션 | 완료(크레딧, 저장, 퀘스트, 격납고, 체크포인트, 철수, 결과). **도감 없음** |
 | 4. 위험/압박 | Bills·Heat 완료. **시작 기체 3종 미구현**(Hawk만); Armored/Sting Gnat 구현 통합 완료 |
 | 5. 일일/공유 | 일일 시드 완료. **공유 결과 카드·리플레이 코드, Link 합체, 보급창/프로토콜 미구현** |
-| 6. 폴리시 | 피해 숫자/대량 격추 구현 완료 (`e46b813`). #7 스웜 이벤트·휴지기 XP 자석 구현 착수, 미병합; XP/밀도 tuning 미완료 |
+| 6. 폴리시 | 피해 숫자/대량 격추 구현 완료 (`e46b813`). #7 스웜 이벤트·회복 자석 `77163bc`가 `0bc1f99`에 통합됨; XP/밀도 tuning 및 acceptance 미완료 |
 
-**변종 통합 전 기준 측정:** `9d677b5`(변종 통합 전 후보), 데스크톱 Heat 0, profile별 seed 1–100에서 skilled / 보통(average) / weak 순으로 median kills **3,677.5/3,591/3,373.5**, Ace kill **99%/72%/2%**, median peak Gnats **각 200**입니다. 보통(average) 프로필의 격추 중앙값 3,591은 §4.7의 3,500 상한보다 91 높습니다. 이 수치는 `d4e4911` 변종 통합 이후 결과가 아닙니다. 시뮬은 렌더 FPS나 페이즈별 median live contacts를 측정하지 않습니다.
+**변종 통합 전 기준 측정:** `9d677b5`(변종 통합 전 후보), 데스크톱 Heat 0, profile별 seed 1–100에서 skilled / 보통(average) / weak 순으로 median kills **3,677.5/3,591/3,373.5**, Ace kill **99%/72%/2%**, median peak Gnats **각 200**입니다. 보통(average) 프로필의 격추 중앙값 3,591은 §4.7의 3,500 상한보다 91 높습니다. 이 데이터는 현재 통합 기준 `0bc1f99` 이전 결과이며, 렌더 FPS나 페이즈별 median live contacts를 측정하지 않습니다.
 
 **FPS:** `BALANCE_NOTES.md`의 이전 RTX 4090 및 모바일 에뮬 결과는 구형 80/50 cap 기준이라 현재 200/120 cap의 성능을 입증하지 않습니다. 피해 피드백 fixture는 SwiftShader VM에서 High→Low 전환 후 36.44 fps를 기록했으며 실제 PC/기기 측정이 아닙니다. 현재 실기기 PC 및 폰 FPS는 미검증입니다.
 
-**현재 순서 (상세는 SURVIVORS_PLAN §3):** #1 밀도 수치 조정 → #2 horde/성능 검증 → #3 무기 Lv7(구현 완료) → #4 XP 수치 조정 → #5 피해 숫자/대량 격추(구현 완료) → #6 Armored/Sting Gnat(통합 완료) → #7 스웜 이벤트/휴지기 XP 자석(구현 착수, 미병합) → #8 생존 밸런스 → #9 미래 콘텐츠.
+**현재 순서 (상세는 SURVIVORS_PLAN §3):** #1 밀도 수치 조정 → #2 horde/성능 검증 → #3 무기 Lv7(구현 완료) → #4 XP 수치 조정 → #5 피해 숫자/대량 격추(구현 완료) → #6 Armored/Sting Gnat(통합 완료) → #7 스웜 이벤트/회복 자석(구현 통합 완료, `0bc1f99`) → #8 생존 밸런스 → #9 미래 콘텐츠.
 
 <details><summary>v1 원래 표 (참고)</summary>
 
