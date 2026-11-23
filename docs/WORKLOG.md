@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `2d1ccd6`; browser retest pending)
+- Regenerated the Galmuri11 subset from the documented `galmuri@2.40.3` source under the existing OFL, adding the missing Korean warning glyphs. Shortened English Ace warnings to “GUNS · DODGE AS RINGS NEARLY MEET” / “MISSILE · DODGE AS RINGS NEARLY MEET”; kept the Korean near-overlap copy and aligned the README instruction. No dependency manifests changed.
+- `aceTellFired` now restores the effects bus to unity immediately before the same-tick salvo muzzle callback; ordinary muzzle SFX still route through effects to master. The 0.15 tell duck, cadence, other lifecycle restores, rings, and controls are unchanged.
+- Verification: focused audio/lock/chord/flight-audio/i18n/layout tests passed 108/108; `npm run build` passed (120 modules, 2.46 s). FontTools found all Korean warning glyphs; at 12 px both English strings (240/254 px) and Korean strings (224 px) fit the 274 px text width at 320 px and 329 px at 375 px.
+- Prior cockpit W/S+Space live-input pass and the held 0.15 mix listen were reported as passing; the earlier capture found cues partly masked by hit/clacking. Browser visual/audio retest remains pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (implementation commit `1b3e0db`, parent `1f8e649`)
 - Kept the Ace effects bus at 0.15 for the full audible tell, including pulse gaps, and restore it on fire/cancel/pause/mute/zero-volume/suspend; cue gain, master gain, headroom, limiter, cadence, dodge window, and controls are unchanged. Gun/missile HUD copy now says “DODGE WHEN THE TWO RINGS NEARLY OVERLAP” / “두 원이 거의 겹칠 때 회피”; current Ace plan copy matches.
 - Verification: focused audio/Ace-lock/chord/flight-audio/i18n tests passed 57/57; `npm run build` passed (120 modules, 2.59 s). Prior cockpit W/S+Space live-input pass was reported; the `d5801c6` listen failed the clarity bar (cues audible but partly masked by hit/clacking). Corrected English/Korean HUD screenshots: `/home/ubuntu/ace-hud-en-overlap-1f8e649.png`, `/home/ubuntu/ace-hud-ko-overlap-1f8e649.png`; new browser audio listen pending.

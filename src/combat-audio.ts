@@ -330,6 +330,11 @@ export class CombatAudio {
     this.aceLockLastTick = state.tick;
   }
 
+  finishAceLockFire(): void {
+    this.stopAceLockVoice(false);
+    this.setAceLockEffectsDuck(false, true);
+  }
+
   private aceLockInterval(tell: AceTell, tick: number): number {
     const windowTick = tell.until - ACE.lock.dodgeTicks;
     const span = Math.max(1, windowTick - tell.since);
@@ -373,14 +378,17 @@ export class CombatAudio {
     return !!voice && !!output;
   }
 
-  private setAceLockEffectsDuck(ducked: boolean): void {
-    if (this.aceLockEffectsDucked === ducked) return;
+  private setAceLockEffectsDuck(ducked: boolean, immediate = false): void {
+    if (this.aceLockEffectsDucked === ducked && !(immediate && !ducked)) return;
     this.aceLockEffectsDucked = ducked;
     const output = this.output;
     if (!output) return;
     const now = output.context.currentTime;
     if (ducked) output.effects.gain.setTargetAtTime(ACE_LOCK_EFFECTS_DUCK, now, 0.004);
-    else this.restoreEffects(output, now);
+    else if (immediate) {
+      output.effects.gain.cancelScheduledValues(now);
+      output.effects.gain.setValueAtTime(1, now);
+    } else this.restoreEffects(output, now);
   }
 
   private restoreEffects(output: AudioOutput, now: number): void {

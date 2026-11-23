@@ -30,8 +30,8 @@ The development and preview servers default to port 5180. To use a different por
 ### Ace duel
 
 Four corners converge when your forward aim and altitude match the boss.
-The dashed circle around your ship (on the glass in COCKPIT) closes as the Ace prepares a salvo.
-When it turns solid, start a roll, **W + Space** or **S + Space** to break the lock. This stops that salvo, not shots already in flight.
+The small reference circle stays fixed as the larger circle shrinks toward it (on the glass in COCKPIT).
+Dodge when the two rings nearly overlap: roll, or press **W + Space** or **S + Space** to break the lock. This stops that salvo, not shots already in flight.
 Try `?fixture=ace&cue=duel&view=chase&live=1` for a head-on approach.
 
 ## Language

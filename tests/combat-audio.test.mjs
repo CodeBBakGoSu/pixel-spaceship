@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CombatAudio } from '../src/combat-audio.ts';
 import { FLIGHT_AUDIO } from '../src/data/flight-audio.ts';
 import { mapFlightAudio } from '../src/flight-audio.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const gesture = { isTrusted: true };
 const sounds = ['hit', 'graze', 'warning', 'muzzle', 'roll', 'parry'];
@@ -14,10 +15,15 @@ const levelFlight = Object.freeze({
 
 function audioParam(value) {
   return {
-    value, targets: [],
+    value, targets: [], values: [], cancellations: [],
     setTargetAtTime(target, now, timeConstant) {
       this.value = target;
       this.targets.push({ target, now, timeConstant });
+    },
+    cancelScheduledValues(now) { this.cancellations.push(now); },
+    setValueAtTime(target, now) {
+      this.value = target;
+      this.values.push({ target, now });
     },
   };
 }
@@ -727,6 +733,58 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   assert.equal(effects.gain.value, 1, 'the effects bus restores when the tell fires');
   assert.deepEqual(lockVoice.outputs, []);
   assert.deepEqual(lockGain.outputs, []);
+});
+
+test('the actual Ace fired observer restores effects before same-tick muzzle playback', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  const ground = () => 0;
+  const state = createStage(parseStageOptions('?fixture=ace&cue=duel&view=chase'), ground);
+  for (let i = 0; i < 120 && !state.boss?.tell; i++) stepStage(state, {}, ground);
+  const tell = state.boss?.tell;
+  assert.equal(tell?.kind, 'missile');
+
+  audio.updateAceLock(state, true);
+  const effects = context.master.inputs.find(node => node.kind === 'gain');
+  assert.equal(effects.gain.value, 0.15, 'the warning duck remains held until the fire observer');
+  const order = [];
+  let gainAtFire, muzzleVoice;
+  const events = {
+    aceTellFired(firedTell) {
+      order.push('aceTellFired');
+      assert.equal(firedTell, tell);
+      gainAtFire = effects.gain.value;
+      audio.finishAceLockFire();
+    },
+    muzzle(_shot, _shape, x, z) {
+      order.push('muzzle');
+      const inAudioRange = (x - state.player.x) ** 2 + (z - state.player.z) ** 2 < 180 ** 2;
+      assert.ok(inAudioRange, 'the firing fixture reaches main.ts muzzle-audio range');
+      assert.equal(effects.gain.value, 1, 'same-tick muzzle starts at full effects-bus gain');
+      if (muzzleVoice) return;
+      const sourcesBefore = context.nodes.filter(node => node.kind === 'buffer-source').length;
+      audio.play('muzzle');
+      const sources = context.nodes.filter(node => node.kind === 'buffer-source');
+      assert.equal(sources.length, sourcesBefore + 1);
+      muzzleVoice = sources.at(-1);
+      assert.equal(muzzleVoice.startTime, context.currentTime);
+      let route = muzzleVoice;
+      while (route && route !== effects) route = route.outputs[0];
+      assert.equal(route, effects, 'ordinary muzzle audio still routes through effects');
+      assert.equal(effects.outputs[0], context.master);
+      assert.deepEqual(effects.gain.values.at(-1), { target: 1, now: context.currentTime });
+    },
+  };
+  while (state.tick < tell.until - 1) stepStage(state, {}, ground);
+  stepStage(state, {}, ground, undefined, events);
+
+  assert.equal(gainAtFire, 0.15);
+  assert.deepEqual(order.slice(0, 2), ['aceTellFired', 'muzzle']);
+  assert.deepEqual(effects.gain.cancellations.at(-1), context.currentTime);
+  assert.equal(effects.gain.value, 1);
 });
 
 test('Ace lock scheduler keys tells and skips paused, muted, suspended and cancelled cues without replay', t => {

@@ -239,7 +239,10 @@ const projectedShip = { x: 0, y: 0, depth: 0 };
 const feedbackTarget = { x: 0, z: 0, alt: 0 };
 let feedbackAnchor: { x: number; y: number } | null = null;
 let aceFireCue: AceTell | null = null;
-const aceVisualEvents: CombatEvents = { aceTellFired(tell) { aceFireCue = tell; } };
+const aceVisualEvents: CombatEvents = { aceTellFired(tell) {
+  audio.finishAceLockFire();
+  aceFireCue = tell;
+} };
 const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   muzzle(shot, shape, x, z, alt) {
     const age = primingBullets ? query.has('shape') ? 3 : 10 : 0;
