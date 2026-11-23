@@ -22,6 +22,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 기획 봇 · devin/1795425156-survivors-pillars (claim; base `0631118`)
+- State: in progress. Scope: Survivors and weapons/buffs plans only — weapon tradeoffs, chest and hit feedback, post-loss progression. No changes to gameplay, balance constants or Legacy.
+
 ### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `0bc1f99`; docs `8ac3a37`; landed via `27d6ba5`)
 - Updated both plans for #7's integrated status while preserving the exact schedule and event/magnet rules. Added the `77163bc` feature-branch 100-seed report as historical evidence; kept `9d677b5` pre-variant and `82c19c6` variant metrics explicitly scoped. Removed the stale Stage C PR claim from the current summary without altering historical logs.
 - The #7 playable-flow recording and branch statistics are supplied by WORKLOG at `77163bc`; this update did not personally watch the recording or treat it as integrated-snapshot validation. The average median kills are within range, but do not establish phase density or whole survival acceptance.
