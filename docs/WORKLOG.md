@@ -15,9 +15,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Working branch: `renderer-proto` (pushed to origin). `main` is behind at `801ff22` (OG preview image) and is what the public site shows.
 - Tests: `npm test` 508 pass at `8265c4e`. Build OK.
 - 100-seed sims at `8265c4e`: skilled 100% clear, average 59%, weak 27%.
-- Open questions for 기현님: bring average clear back toward 74%? Full Stage C (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) not started.
+- Open questions for 기현님: bring average clear back toward 74%? Full Stage C (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) in progress by 데븐 봇.
 
 ## Log
+
+### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
+- Full Stage C altitude model (altitude range 165→230 m, bands 75/125/180, SKIM 30→14 m) on a branch, PR into `renderer-proto`. Files: `src/bands.ts`, `src/stage-combat.ts`, `src/data/*`, altitude-dependent sim/HUD/render code, tests, `docs/BALANCE_NOTES.md`.
+- State: in progress (데븐 봇). Please don't touch the altitude/band code until this lands.
 
 ### 2026-11-23 · 비행기게임봇 · renderer-proto
 - Pushed `renderer-proto` to origin at `8265c4e` (new branch, main untouched). Added this worklog.
