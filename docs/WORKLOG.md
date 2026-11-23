@@ -20,6 +20,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · renderer-proto · weapon levels v2 integration
+- Independently verified the balance handoff (`bc1f3fe`) for [PR #3](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/3): Ace replays 1/11/27/42/128/2026 all clear; `npm test` 545/545; `npm run build` passes.
+- State: done for the renderer-proto integration. Preview uses the renderer-proto build; main and public deployment are unchanged.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795407698-aster-weapon-levels · weapon v2 balance (base `7f03b8a`)
 - State: done — weapon numeric tables tuned, Lv1 unchanged. Twin Lv7 keeps six shots, two pierces and the original ±6° outer fan; inner muzzle offsets tighten to ±0.2/±0.6 so four central shots reach the Ace while outer shots retain flank coverage. Nominal DPS: old Lv1/new Lv1 = 1×2×60/21 = 5.714; old Lv5 = 1.42×6×60/18 = 28.4; new Lv7 = 1.988×6×60/18 = 39.76 (exactly 1.4×). No spawning, XP, enemy fire, Seeker vertical speed, Ace or bot edits.
 - All ten weapons retain each Lv2–7 visible change from SURVIVORS_PLAN §4 / WEAPONS_BUFFS_PLAN §5.2: barrel/projectile/chain counts, pierce, widths/radii/range, lifetime, salvage attraction, repeat/afterimage, fire, and double orbit are unchanged. Only Twin's inner six-shot muzzle spacing changes. Numeric test expectations now use tuning helpers; new regression covers unchanged Lv1, Gnat/patrol fodder hit counts and Twin DPS anchor. Six Ace replay criteria and flank-hit assertions unchanged; only Survivors golden deliberately regenerated (`6198a775…` → `317fe8c5…`), Legacy unchanged.
