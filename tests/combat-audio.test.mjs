@@ -569,8 +569,8 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
   const flightCeiling = loudest.engineGain * (1 + FLIGHT_AUDIO.engine.noiseMix)
     + loudest.afterburnerGain + loudest.windGain + loudest.rushGain;
   const lockCeiling = Math.max(
-    Math.max(...lockPulse.getChannelData(0).map(Math.abs)) * 1.15,
-    Math.max(...lockWindow.getChannelData(0).map(Math.abs)) * 1.35,
+    Math.max(...lockPulse.getChannelData(0).map(Math.abs)) * 2.0,
+    Math.max(...lockWindow.getChannelData(0).map(Math.abs)) * 2.4,
   );
   const [headroom] = first.master.outputs;
   const [limiter] = headroom.outputs;
@@ -581,7 +581,7 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
   assert.deepEqual(limiter.outputs, [first.destination]);
 
   const { curve } = limiter;
-  const fullPeak = Math.max(effectsCeiling + flightCeiling, effectsCeiling * 0.15 + flightCeiling + lockCeiling)
+  const fullPeak = Math.max(effectsCeiling + flightCeiling, effectsCeiling * 0.06 + flightCeiling + lockCeiling)
     * headroom.gain.value;
   const defaultPeak = fullPeak * first.master.gain.value;
   assert.ok(fullPeak > 1, 'cover a mixed peak that would clip at full volume');
@@ -670,9 +670,11 @@ test('Ace lock pulses accelerate by tell tick and window entry replaces the puls
   const shortPulse = shortContext.buffers.at(-2), shortWindow = shortContext.buffers.at(-1);
   short.updateAceLock(aceLockState(100, { until: 119 }), true);
   const pulseVoice = voicesFor(shortContext, shortPulse).at(-1);
+  assert.equal(pulseVoice.outputs[0].gain.value, 2.0, 'pulse starts at its requested cue gain');
   shortContext.currentTime = 1 / 60;
   short.updateAceLock(aceLockState(101, { until: 119 }), true);
   const accentVoice = voicesFor(shortContext, shortWindow).at(-1);
+  assert.equal(accentVoice.outputs[0].gain.value, 2.4, 'window accent starts at its requested cue gain');
   assert.equal(pulseVoice.stopTime, accentVoice.startTime, 'accent replaces, rather than overlaps, the pulse');
   const count = shortContext.started.length;
   short.updateAceLock(aceLockState(101, { until: 119 }), true);
@@ -714,8 +716,9 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   const lockVoice = voicesFor(context, pulse).at(-1);
   assert.equal(lockVoice.outputs[0].outputs[0], context.master, 'the lock cue bypasses the effects bus only');
   const effects = context.master.inputs.find(node => node.kind === 'gain');
-  assert.equal(effects.gain.value, 0.15);
   const lockGain = lockVoice.outputs[0];
+  assert.equal(lockGain.gain.value, 2.0);
+  assert.equal(effects.gain.value, 0.06);
   audio.play('hit');
   const hitVoice = context.nodes.filter(node => node.kind === 'buffer-source').at(-1);
   const hitEffects = hitVoice.outputs[0];
@@ -723,11 +726,11 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   assert.equal(hitEffects.outputs[0], context.master);
 
   lockVoice.onended();
-  assert.equal(effects.gain.value, 0.15, 'the effects duck stays active after the pulse ends');
+  assert.equal(effects.gain.value, 0.06, 'the effects duck stays active after the pulse ends');
   const gapVoiceCount = context.started.length;
   audio.updateAceLock(aceLockState(101), true);
   assert.equal(context.started.length, gapVoiceCount, 'no cue is needed to keep the tell ducked between pulses');
-  assert.equal(effects.gain.value, 0.15);
+  assert.equal(effects.gain.value, 0.06);
   const fired = aceLockState(160);
   audio.updateAceLock({ ...fired, boss: { ...fired.boss, tell: null } }, true);
   assert.equal(effects.gain.value, 1, 'the effects bus restores when the tell fires');
@@ -749,7 +752,7 @@ test('the actual Ace fired observer restores effects before same-tick muzzle pla
 
   audio.updateAceLock(state, true);
   const effects = context.master.inputs.find(node => node.kind === 'gain');
-  assert.equal(effects.gain.value, 0.15, 'the warning duck remains held until the fire observer');
+  assert.equal(effects.gain.value, 0.06, 'the warning duck remains held until the fire observer');
   const order = [];
   let gainAtFire, muzzleVoice;
   const events = {
@@ -781,7 +784,7 @@ test('the actual Ace fired observer restores effects before same-tick muzzle pla
   while (state.tick < tell.until - 1) stepStage(state, {}, ground);
   stepStage(state, {}, ground, undefined, events);
 
-  assert.equal(gainAtFire, 0.15);
+  assert.equal(gainAtFire, 0.06);
   assert.deepEqual(order.slice(0, 2), ['aceTellFired', 'muzzle']);
   assert.deepEqual(effects.gain.cancellations.at(-1), context.currentTime);
   assert.equal(effects.gain.value, 1);
@@ -811,7 +814,7 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   const resumedCount = context.started.length;
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.equal(context.started.length, resumedCount, 'resume does not replay the paused pulse');
-  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15, 'the active tell re-ducks effects on resume');
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06, 'the active tell re-ducks effects on resume');
 
   audio.setMuted(true);
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'mute restores effects even between pulses');
@@ -820,12 +823,12 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   audio.setMuted(false);
   audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.equal(context.started.length, mutedCount, 'unmute skips pulses that became due while muted');
-  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
   audio.setVolume(0);
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'zero volume restores effects');
   audio.setVolume(0.30);
   audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
-  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
 
   audio.updateAceLock(aceLockState(200, { since: 200, until: 260 }), true);
   const suspendedCount = context.started.length;
@@ -835,7 +838,7 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   audio.setSuspended(false);
   audio.updateAceLock(aceLockState(212, { since: 200, until: 260 }), true);
   assert.equal(context.started.length, suspendedCount, 'resume does not replay a suspended cue');
-  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
 
   audio.updateAceLock(aceLockState(300, { since: 300, until: 360 }), true);
   const activeVoice = voicesFor(context, pulse).at(-1);

@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `3e07d43`; audio retest pending)
+- The latest isolated prefire listen still found the warning materially masked by repeated hit clacking at the 0.15 effects duck. Raising the tell-wide duck to 0.06 and lock cue gains to 2.0/2.4; cadence, buffers, timing, master volume, headroom/limiter, and immediate fire restore remain unchanged.
+- Verification: combat-audio/flight-audio tests passed 26/26; `npm run build` passed (120 modules, 1.98 s). The updated combined-mix headroom assertion passes at the new gains.
+- Current browser audio retest remains pending; no commit or push.
+- State: browser audio retest pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `2d1ccd6`; browser retest pending)
 - Regenerated the Galmuri11 subset from the documented `galmuri@2.40.3` source under the existing OFL, adding the missing Korean warning glyphs. Shortened English Ace warnings to “GUNS · DODGE AS RINGS NEARLY MEET” / “MISSILE · DODGE AS RINGS NEARLY MEET”; kept the Korean near-overlap copy and aligned the README instruction. No dependency manifests changed.
 - `aceTellFired` now restores the effects bus to unity immediately before the same-tick salvo muzzle callback; ordinary muzzle SFX still route through effects to master. The 0.15 tell duck, cadence, other lifecycle restores, rings, and controls are unchanged.

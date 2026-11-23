@@ -14,7 +14,9 @@ const TAU = 2 * Math.PI;
 const EXPLOSION_VOICES = 4;
 const ACE_LOCK_PULSE_TICKS = 12;
 const ACE_LOCK_WINDOW_TICKS = 6;
-const ACE_LOCK_EFFECTS_DUCK = 0.15;
+const ACE_LOCK_EFFECTS_DUCK = 0.06;
+const ACE_LOCK_PULSE_GAIN = 2.0;
+const ACE_LOCK_WINDOW_GAIN = 2.4;
 
 const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
@@ -351,7 +353,7 @@ export class CombatAudio {
     const gain = output.context.createGain();
     const voice: AceLockVoice = { source, gain };
     source.buffer = output.aceLockCues[kind];
-    gain.gain.value = kind === 'window' ? 1.35 : 1.15;
+    gain.gain.value = kind === 'window' ? ACE_LOCK_WINDOW_GAIN : ACE_LOCK_PULSE_GAIN;
     source.connect(gain);
     gain.connect(output.master);
     source.onended = () => {
