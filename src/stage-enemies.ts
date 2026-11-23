@@ -472,6 +472,10 @@ function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
     enemy.vx = dx * scale;
     enemy.vz = dz * scale;
     enemy.yaw = Math.atan2(dx, dz);
+  } else if (enemy.eventFlight) {
+    enemy.vx = (state.player.vx ?? 0) + enemy.eventFlight.x;
+    enemy.vz = (state.player.vz ?? 0) + enemy.eventFlight.z;
+    enemy.yaw = Math.atan2(enemy.vx, enemy.vz);
   }
   const x = enemy.x + enemy.vx * STEP, z = enemy.z + enemy.vz * STEP;
   if ((enemy.leaveAt !== undefined && state.tick >= enemy.leaveAt)
@@ -481,7 +485,7 @@ function advanceGnat(state: StageState, enemy: Enemy, ground: Ground): void {
   }
   enemy.x = x;
   enemy.z = z;
-  if (pursuing) return;
+  if (pursuing || enemy.eventFlight) return;
   const dx = state.player.x - x, dz = state.player.z - z;
   const distance = Math.hypot(dx, dz);
   if (distance > GNAT.spacing && (enemy.vx || enemy.vz)) {
@@ -549,6 +553,7 @@ function maintainGnats(state: StageState, ground: Ground): void {
 
 export function spawnEscortGnats(state: StageState, source: Position & { band: Band }, ground: Ground,
   members: number, observeSwarm?: SwarmObserver): void {
+  if (state.swarmNotice) return;
   const live = state.enemies.reduce((count, enemy) => count + Number(enemy.kind === 'gnat' && enemy.hp > 0), 0);
   const room = state.swarmCap - live;
   const aim = Math.atan2(state.player.x - source.x, state.player.z - source.z);

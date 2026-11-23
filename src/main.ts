@@ -45,7 +45,7 @@ import { canDropFlare, clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
-import { canCueAltitude } from './bands.ts';
+import { BANDS, canCueAltitude } from './bands.ts';
 import { COMPARISON_DIVISOR } from './data/render-quality.ts';
 import { primeFidelityFixture } from './fidelity-fixture.ts';
 import { initialRenderQuality, parseRenderQuality, saveRenderQuality } from './render-quality.ts';
@@ -567,9 +567,11 @@ function updateHud(readout: RadarReadout): void {
     if (!billCount.firstElementChild?.classList.contains('gear-icon')) billCount.prepend(createGearIcon('bill', 14));
     setText('#bill-count b', `${state.bills.paid}/${state.bills.offered}`);
   }
-  const notice = state.phaseNotice, banner = $('#phase-banner');
-  banner.hidden = !notice || state.phase !== 'playing' || state.paused;
-  if (notice && !banner.hidden) {
+  const notice = state.phaseNotice, swarm = state.swarmNotice, banner = $('#phase-banner');
+  banner.hidden = (!notice && !swarm) || state.phase !== 'playing' || state.paused;
+  if (swarm && !banner.hidden) {
+    setText('#phase-banner', swarm.kind === 'recovery' ? t('phase.recovery') : t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }));
+  } else if (notice && !banner.hidden) {
     const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.aceInbound') : t(`phase.${notice.phase}`);
     const lull = notice.kind === 'lull'
       ? ' · ' + (notice.repaired ? t('phase.lullRepair', { hull: notice.repaired }) : t('phase.lull')) : '';
@@ -1477,6 +1479,9 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   salvage: state.salvage, salvageBands: [...state.salvageBands], draftIds: [...state.draft], picks: [...state.picks],
   twinRank: state.twinRank, podRank: state.podRank, enemyCount: state.enemies.length, shotCount: state.shots.length,
   kills: state.kills, fodderCount: state.enemies.filter(enemy => enemy.kind === 'gnat').length,
+  swarmEvent: state.swarmNotice && { ...state.swarmNotice },
+  formationCount: state.enemies.filter(enemy => enemy.eventFlight).length,
+  recoveringOrbs: state.pickups.filter(pickup => pickup.recovery).length,
   hostileCount: state.shots.filter(shot => shot.kind === 'hostile').length, invulnerability: state.invulnerability,
   heat: state.heat, daily: state.daily, maxHull: state.maxHull, billsPaid: state.bills.paid,
   weaponLevels: state.run?.weaponLevels, buffLevels: state.run?.buffLevels, swarmCap: state.swarmCap,

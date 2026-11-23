@@ -15,6 +15,23 @@ export const GNAT = {
 
 export type GnatVariant = 'armored' | 'sting';
 
+export type SwarmEventKind = 'ring' | 'crossing';
+export type SwarmEvent = { kind: SwarmEventKind; start: number; duration: number };
+export const SWARM_EVENTS: readonly SwarmEvent[] = [
+  { kind: 'ring', start: 110, duration: 15 }, { kind: 'crossing', start: 215, duration: 15 },
+  { kind: 'ring', start: 315, duration: 10 }, { kind: 'crossing', start: 405, duration: 10 },
+];
+export const SWARM_EVENT = {
+  recoverySeconds: 15, ringSize: 72, crossingRanks: 3, crossingWing: 17,
+  ringRadius: scaleTravel(145), ringExitRadius: scaleTravel(12),
+  crossingTravel: scaleTravel(270), crossingLead: scaleTravel(52), fileSpacing: scaleTravel(3.6),
+  magnetTicks: 90,
+} as const;
+
+export function swarmWindowAt(seconds: number): SwarmEvent | undefined {
+  return SWARM_EVENTS.find(event => seconds >= event.start && seconds < event.start + event.duration + SWARM_EVENT.recoverySeconds);
+}
+
 export type SwarmFormation = 'ring' | 'line' | 'vee' | 'encircle';
 export type RegularSpawn = {
   kind: RegularEnemyKind;
