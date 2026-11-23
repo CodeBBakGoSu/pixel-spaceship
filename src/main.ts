@@ -986,7 +986,9 @@ window.addEventListener('keydown', event => {
   if (state.phase === 'playing' && !state.paused) {
     if (code === 'KeyV') pendingViews++;
     const { turn, climb } = keyboardAxes();
-    const barrel = barrelRollForKey(code, turn, state.player.lastTurn);
+    const barrel = code === 'KeyC'
+      ? barrelRollForKey(code, flightInput().turn ?? 0, state.player.lastTurn)
+      : undefined;
     if (barrel !== undefined) {
       flushSpaceInput();
       pendingRoll = barrel;

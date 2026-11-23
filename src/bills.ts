@@ -32,7 +32,8 @@ export const billDefinition = (id: BillId): BillDefinition & { id: BillId } =>
 
 /** Call before combat so the offer's first tick can contribute to the objective. */
 export function startBillTick(state: StageState): void {
-  if (!state.run || state.bills.active) return;
+  const run = state.run;
+  if (!run || state.bills.active) return;
   const bills = state.bills;
   while (bills.next < BILLS.length) {
     const definition = BILLS[bills.next];
@@ -42,6 +43,10 @@ export function startBillTick(state: StageState): void {
     bills.next++;
     // A fixture can advance the starting clock past one or more offers.
     if (state.tick > deadline) continue;
+    if (definition.demand.kind === 'pursuer-kills'
+      && (run.weaponLevels.pods ?? 0) <= 0 && (run.weaponLevels.phoenix ?? 0) <= 0
+      && (run.weaponLevels['bomb-bay'] ?? 0) <= 0
+      && Object.keys(run.weaponLevels).length >= run.weaponSlots) continue;
     bills.active = { id: definition.id, startedAt, deadline, progress: 0, unharmedTicks: 0, bandKills: [0, 0, 0] };
     bills.offered++;
     bills.interest = false;

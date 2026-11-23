@@ -122,7 +122,13 @@ function eligibleGear(run: RunProgression, held: DraftChoiceId[] = []) {
     const level = gearLevel(run, id);
     return !held.includes(id) && !run.banished.includes(id) && level < maximumLevel(id) && (level > 0 || canAdd);
   };
-  return { weapons: run.weapons.filter(id => eligible(id, canAddWeapon)), buffs: run.buffs.filter(id => eligible(id, canAddBuff)) };
+  const pairedWeaponAvailable = (buff: BuffId): boolean => {
+    const weapon = buffPairs[buff];
+    return gearLevel(run, weapon) > 0 || canAddWeapon && run.weapons.includes(weapon) && !run.banished.includes(weapon);
+  };
+  return { weapons: run.weapons.filter(id => eligible(id, canAddWeapon)),
+    buffs: run.buffs.filter(id => eligible(id, canAddBuff)
+      && (id !== 'flare-bay' && id !== 'ordnance-rack' || pairedWeaponAvailable(id))) };
 }
 
 function deal(run: RunProgression, keep: DraftCard[] = []): DraftCard[] {

@@ -78,6 +78,20 @@ test('full slots offer upgrades only for owned gear and flag the missing half of
   assert.equal(modal(pairCards, card => card.id === 'pods').pairHint, false);
 });
 
+test('weapon-specific buffs are offered only when their weapon is owned or can still be added', () => {
+  for (const [weapon, buff] of [['phoenix', 'flare-bay'], ['bomb-bay', 'ordnance-rack']]) {
+    const full = createProgression(116, { weapons: [weapon], buffs: [buff] });
+    full.weaponLevels = { twin: 7, pods: 7, seeker: 7 };
+    assert.ok(!openRunDraft(full).some(card => card.id === buff));
+
+    const available = createProgression(116, { weapons: [weapon], buffs: [buff] });
+    available.weaponLevels = { twin: 7, pods: 7 };
+    const cards = openRunDraft(available);
+    assert.ok(cards.some(card => card.id === weapon));
+    assert.ok(cards.some(card => card.id === buff));
+  }
+});
+
 test('sealed pool falls back to all three legal overflow choices at max damage', () => {
   const run = createProgression(22, { weapons: ['twin'], buffs: [] });
   run.weaponLevels.twin = 7;

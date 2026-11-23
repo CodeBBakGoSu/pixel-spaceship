@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (review parent `c070cad`; renderer-proto `81a0e2a`)
+- PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
+- Verification: focused regressions 57/57 and `npm run build` passed; post-merge full suite/build pending. State: review-fix commit complete locally; authorized renderer-proto merge pending.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438706-auto-countermeasures (`70204b0`, base `81a0e2a`)
 - 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.
 - 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.

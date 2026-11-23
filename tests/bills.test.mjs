@@ -93,6 +93,39 @@ test('Rear Guard counts engaged rear-threat kills credited to rear equipment', (
   assert.deepEqual(finishBillTick(state), { definition: BILLS[2], paid: true });
 });
 
+test('Rear Guard skips a full non-rear loadout and advances to the next scheduled Bill', () => {
+  const state = game();
+  state.bills.next = 2;
+  state.bills.offered = 2;
+  state.run.weaponSlots = 4;
+  state.run.weaponLevels = { twin: 1, seeker: 1, rail: 1, arc: 1 };
+  state.tick = 255 * TICKS_PER_SECOND;
+  startBillTick(state);
+  assert.equal(state.bills.active, null);
+  assert.equal(state.bills.next, 3);
+  assert.equal(state.bills.offered, 2);
+  assert.equal(state.bills.interest, false);
+  assert.equal(billXpScale(state), 1);
+  startBillTick(state);
+  assert.equal(state.bills.next, 3);
+  assert.equal(state.bills.offered, 2);
+
+  state.tick = 345 * TICKS_PER_SECOND;
+  startBillTick(state);
+  assert.equal(state.bills.active?.id, BILLS[3].id);
+  assert.equal(state.bills.next, 4);
+  assert.equal(state.bills.offered, 3);
+
+  const withOpenSlot = game();
+  withOpenSlot.bills.next = 2;
+  withOpenSlot.bills.offered = 2;
+  withOpenSlot.run.weaponSlots = 4;
+  withOpenSlot.run.weaponLevels = { twin: 1, seeker: 1, rail: 1 };
+  withOpenSlot.run.weapons = ['pods'];
+  beat(withOpenSlot, 255);
+  assert.equal(withOpenSlot.bills.active?.id, BILLS[2].id);
+});
+
 test('High Recovery counts physical high-band orb collections', () => {
   const state = game();
   beat(state, 345);
