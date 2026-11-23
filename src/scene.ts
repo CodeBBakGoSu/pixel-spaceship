@@ -6,6 +6,8 @@ import {
   type BufferGeometry, type Camera,
 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { batchBursts, gnatBursts } from './combat-feedback.ts';
+import { COMBAT_FEEDBACK } from './data/combat-feedback.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
@@ -91,8 +93,8 @@ function airframeLod(mesh: Mesh, bakeDetailed: () => BufferGeometry) {
   return { mesh, bakeDetailed, coarse: mesh.geometry, detailed: undefined as BufferGeometry | undefined };
 }
 
-export function makeGnatBatch(detailed = false): InstancedMesh {
-  const mesh = instances(gnatGeometry(detailed), SWARM_CAPS.desktop, new MeshBasicMaterial({ vertexColors: true }));
+export function makeGnatBatch(detailed = false, capacity: number = SWARM_CAPS.desktop): InstancedMesh {
+  const mesh = instances(gnatGeometry(detailed), capacity, new MeshBasicMaterial({ vertexColors: true }));
   mesh.name = 'Gnat swarm';
   return mesh;
 }
@@ -232,6 +234,7 @@ export class FlightScene {
   private readonly chestMarkers = makeChestBatch();
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
+  private readonly gnatBatch = { x: 0, z: 0, alt: 0, life: 0, count: 0 };
   private readonly shadows = instances(new PlaneGeometry(2, 2).rotateX(-Math.PI / 2), REGULAR_RENDER_CAP + 2,
     new MeshBasicMaterial({ color: SHADOW.color, map: jetShadowTexture(), opacity: SHADOW.enemyOpacity,
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
@@ -256,6 +259,11 @@ export class FlightScene {
   private readonly hostileVisuals = new HostileVisuals(this.ground);
 
   constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena'], options: FlightRenderOptions = {}) {
+    if (options.fixture === 'damage') {
+      this.gnats.geometry.dispose();
+      this.gnats = makeGnatBatch(false, 200);
+      this.airframeLods[2] = airframeLod(this.gnats, () => gnatGeometry(true));
+    }
     this.world = world;
     this.quality = new AdaptiveQuality(options.quality ?? DEFAULT_QUALITY);
     this.comparisonScale = options.comparisonScale;
@@ -931,7 +939,17 @@ export class FlightScene {
       }
     }
     upload(this.bombs, bombs);
+    const batchedGnats = batchBursts(state.effects, effect => gnatBursts.has(effect), this.gnatBatch);
+    if (batchedGnats) {
+      const batch = this.gnatBatch;
+      for (let i = 0; i < COMBAT_FEEDBACK.batchParticles && sparks < 240; i++) {
+        const angle = i * 2.4, reach = 4 + (0.42 - batch.life) * 65;
+        this.write(this.sparks, sparks++, batch.x + Math.sin(angle) * reach, batch.z + Math.cos(angle) * reach,
+          flat ? TOP_FLIGHT + 7 : batch.alt + Math.cos(angle) * reach, angle, 3, 3, 7, 0xffd780);
+      }
+    }
     for (const effect of state.effects) {
+      if (batchedGnats && gnatBursts.has(effect)) continue;
       if (effect.kind === 'miss') {
         if (!flat && sparks < 240) {
           const age = 0.55 - effect.life, scale = effect.life / 0.55;

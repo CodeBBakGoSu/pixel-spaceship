@@ -1,6 +1,9 @@
 /// <reference types="vite/client" />
 import './style.css';
 import './numeric-hud.css';
+import { DamageFeedback, observeDamage } from './combat-feedback.ts';
+import { COMBAT_FEEDBACK as DAMAGE } from './data/combat-feedback.ts';
+import { advanceDamageFixture } from './damage-fixture.ts';
 import { autopilotInput, seekStage } from './autoplay.ts';
 import { updateBillDisplay } from './bill-display.ts';
 import type { Segment } from './camera.ts';
@@ -131,6 +134,25 @@ const persistent = options.mode === 'survivors' && !options.autoplay && !options
 let profile = persistent ? readPilot() : normalizeProfile(null);
 options.profile = profile;
 const state = seekStage(options, ground);
+const damageFeedback = new DamageFeedback();
+const damageCanvas = $<HTMLCanvasElement>('#damage-feedback');
+const damageContext = damageCanvas.getContext('2d')!;
+const damageOption = $<HTMLInputElement>('#damage-numbers');
+let damageNumbers = true;
+try { damageNumbers = localStorage.getItem('aster-damage-numbers') !== '0'; } catch { /* In-memory option. */ }
+if (query.has('damageNumbers')) damageNumbers = query.get('damageNumbers') !== '0';
+damageOption.checked = damageNumbers;
+damageOption.addEventListener('change', () => {
+  damageNumbers = damageOption.checked;
+  damageFeedback.clear();
+  try { localStorage.setItem('aster-damage-numbers', damageNumbers ? '1' : '0'); } catch { /* In-memory option. */ }
+  const url = new URL(location.href);
+  url.searchParams.delete('damageNumbers');
+  history.replaceState(history.state, '', url);
+});
+observeDamage(state, (id, damage, critical, target) => {
+  if (damageNumbers && effectsEnabled) damageFeedback.hit(id, damage, critical, target, state.tick / 60);
+});
 const bulletFixture = demoBullets ? createHostileFixture(state, query, ground) : null;
 const storage = {
   getItem: (key: string) => localStorage.getItem(key),
@@ -1188,6 +1210,7 @@ function flightInput(): StageInput {
 
 function advance(): void {
   if (!graphics.canAdvance || !scene || guide || (persistent && document.hidden)) return;
+  if (query.get('fixture') === 'damage') { advanceDamageFixture(state); return; }
   if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
   const priorSummary = state.summary;
@@ -1489,6 +1512,7 @@ function showReversalImpact(): void {
 }
 
 function animate(now: number): void {
+  damageFeedback.beginFrame();
   frameNow = now;
   const elapsed = Math.max(0, (now - previousTime) / 1000);
   previousTime = now;
@@ -1547,7 +1571,36 @@ function animate(now: number): void {
     }
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
+  drawDamageFeedback();
   requestAnimationFrame(animate);
+}
+
+function drawDamageFeedback(): void {
+  if (damageCanvas.width !== innerWidth || damageCanvas.height !== innerHeight) {
+    damageCanvas.width = innerWidth; damageCanvas.height = innerHeight;
+  }
+  const ctx = damageContext, now = state.tick / 60;
+  ctx.clearRect(0, 0, damageCanvas.width, damageCanvas.height);
+  const kills = damageFeedback.count(state.kills, now);
+  const counter = $('#kill-counter');
+  counter.hidden = state.phase !== 'playing' || kills === 0;
+  counter.textContent = `×${kills} · 5s`;
+  $('#damage-numbers-label').textContent = language === 'ko' ? '피해 숫자' : 'Damage numbers';
+  if (!damageNumbers || !effectsEnabled || state.phase !== 'playing' || guide) return;
+  ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#10141d';
+  for (const slot of damageFeedback.slots) {
+    const age = now - slot.born;
+    if (age < 0 || age >= DAMAGE.lifetime) continue;
+    const point = scene?.project(slot);
+    if (!point) continue;
+    ctx.globalAlpha = Math.min(1, (DAMAGE.lifetime - age) * 4);
+    ctx.font = `bold ${slot.big ? DAMAGE.bigFontSize : DAMAGE.fontSize}px Galmuri11, monospace`;
+    ctx.fillStyle = slot.big ? '#ffbf63' : '#fff5c9';
+    const text = `${Math.round(slot.damage * 10) / 10}${slot.big ? '!' : ''}`;
+    const y = point.y - 24 - age * DAMAGE.riseSpeed;
+    ctx.strokeText(text, point.x, y); ctx.fillText(text, point.x, y);
+  }
+  ctx.globalAlpha = 1;
 }
 
 async function start(): Promise<void> {

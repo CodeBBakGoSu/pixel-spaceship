@@ -1,6 +1,7 @@
 import type { Ace, AceTell, Effect, Enemy, Flare, Ground, KillCredit, Point, Position, RearBomb, RearGlimpse, Shot,
   StageState } from './stage-types.ts';
 import { ACE } from './data/ace.ts';
+import { reportDamage } from './combat-feedback.ts';
 import { aegisBlocks } from './data/roster.ts';
 import { scaleClimb } from './data/speed.ts';
 import { BOOST_SPEED } from './flight.ts';
@@ -107,7 +108,9 @@ export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credi
     return;
   }
   if (state.player.skim && enemy.kind === 'turret') damage *= SKIM.groundDamageScale;
-  enemy.hp = Math.max(0, enemy.hp - criticalDamage(state, damage));
+  const dealt = criticalDamage(state, damage);
+  enemy.hp = Math.max(0, enemy.hp - dealt);
+  reportDamage(state, enemy.id, dealt, dealt > damage, enemy);
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
   if (state.run && enemy.shotDown && credit) enemy.killCredit = credit;
@@ -140,7 +143,9 @@ export function aceVulnerable(ace: Ace): boolean {
 
 export function hurtAce(state: StageState, ace: Ace, damage: number): void {
   if (!aceVulnerable(ace)) return;
-  ace.hp = Math.max(0, ace.hp - criticalDamage(state, damage));
+  const dealt = criticalDamage(state, damage);
+  ace.hp = Math.max(0, ace.hp - dealt);
+  reportDamage(state, ace.id, dealt, dealt > damage, ace);
   ace.hits++;
   ace.hitUntil = state.tick + 8;
   state.effects.push({ kind: 'hit', x: ace.x, z: ace.z, alt: ace.alt, life: 0.16 });

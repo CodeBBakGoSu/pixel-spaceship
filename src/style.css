@@ -867,10 +867,29 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   white-space: nowrap;
   pointer-events: none;
 }
+#damage-feedback { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.combat-feedback-line {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(var(--objective-y) + var(--objective-h) + 35px);
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
+}
+.experience .combat-feedback-line :is(.reversal-cue, .kill-counter) {
+  position: static; transform: none; margin: 0;
+}
+.kill-counter {
+  color: #ffe08a; background: #18262de6; padding: 5px; font-size: 17px;
+  pointer-events: none; white-space: nowrap;
+}
+.phone-layout .kill-counter { left: auto; right: 8px; font-size: 13px; }
+.menu-open .kill-counter { visibility: hidden; }
 .experience.phone-layout:not(.cockpit-view) .reversal-cue {
   top: auto;
   bottom: calc(100% - var(--controls-y) + 76px);
 }
+.experience.phone-layout:not(.cockpit-view) .combat-feedback-line {
+  top: auto; bottom: calc(100% - var(--controls-y) + 76px);
+}
+.experience.cockpit-view .combat-feedback-line { top: var(--cockpit-message-y); }
 .experience.cockpit-view .reversal-cue {
   top: var(--cockpit-message-y);
   height: var(--cockpit-message-h);
@@ -889,11 +908,11 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   left: calc(var(--cockpit-message-x) + (var(--cockpit-message-w) + var(--reversal-dock-width)) / 2);
   max-width: calc(var(--cockpit-message-w) - var(--reversal-dock-width));
 }
-.experience.cockpit-view .flight-message:not([hidden]) ~ .reversal-cue {
+.experience.cockpit-view .flight-message:not([hidden]) ~ .combat-feedback-line {
   left: var(--cockpit-message-x);
   transform: none;
 }
-.experience.cockpit-view .reversal-cue:not([hidden]) ~ .view-tag { visibility: hidden; }
+.experience.cockpit-view .combat-feedback-line:has(.reversal-cue:not([hidden])) ~ .view-tag { visibility: hidden; }
 
 .maneuver-cue {
   --cue-color: #bde1ff;
