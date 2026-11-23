@@ -206,7 +206,7 @@ test('bomber escort Gnats retain their expiry instead of recycling', () => {
   const state = waveState();
   spawnEscortGnats(state, { x: 0, z: 0, alt: 125, band: 1 }, ground, 3);
   const [enemy] = gnats(state);
-  assert.ok(enemy.leaveAt > state.tick);
+  assert.equal(enemy.leaveAt - state.tick, ticks(12));
   state.tick = enemy.leaveAt;
   enemy.x = SPAWN_WORLD.recycleDistance * 2;
   advanceEnemies(state, ground);

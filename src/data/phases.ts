@@ -9,7 +9,7 @@ export const RUN_BOSS_SECONDS = 4 * PHASE_SECONDS;
 export const RUN_END_SECONDS = RUN_BOSS_SECONDS + PHASE_SECONDS;
 export const SWARM_CAPS = { mobile: 120, desktop: 200 } as const;
 export const GNAT = {
-  hp: 1, xp: 1, speed: scaleTravel(32), lifeSeconds: 20, range: scaleTravel(134), clearance: 22, spacing: scaleTravel(11),
+  hp: 1, xp: 1, speed: scaleTravel(32), lifeSeconds: 12, range: scaleTravel(134), clearance: 22, spacing: scaleTravel(11),
 } as const;
 
 export type SwarmFormation = 'ring' | 'line' | 'vee' | 'encircle';
