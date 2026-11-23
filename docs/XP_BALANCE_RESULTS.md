@@ -82,8 +82,8 @@ E100 normalized-survival medians의 observed 순서는 skilled/average/weak 기�
 ## 검증 상태
 
 - E100 6개 job 완료; raw JSON은 `/home/ubuntu/xp-progression-screen/candidate-e-100-{skilled,average,weak}-{desktop,mobile}.json`.
-- E 시뮬레이션 후 `npm run build`가 119 modules로 성공했다. 이 build는 마지막 tests/docs-only 수정 전에 실행됐고, runtime 코드는 그 후 바뀌지 않아 반복하지 않았다. Focused progression/run/Bills/recovery tests: 37/37 통과.
-- 마지막 tests/docs 수정 뒤 실행한 최종 `npm test`: 579/579 통과, 실패 0, `duration_ms 101251.099774`, exit 0.
+- E 시뮬레이션 후 `npm run build`가 119 modules로 성공했다. 이 build는 bot-sim/test/report follow-up 전에 실행됐다. Focused progression/run/Bills/recovery tests: 37/37 통과.
+- bot-sim 변경과 초기 report/WORKLOG update 뒤 실행한 최종 `npm test`: 579/579 통과, 실패 0, `duration_ms 101251.099774`, exit 0. 그 뒤 PR-readiness edits는 docs-only였으므로 tests/build를 반복하지 않았고, `git diff --check`는 통과했다.
 - `tests/bot-sim.test.mjs`는 cross-profile survival 순위 가정 대신 각 run의 normalized-survival 계산과 profile별 sorted median의 일치를 검증한다. 반복 run hash/report, outcome/cap/XP/CSV, 새 observation의 CSV 노출과 관측 수 bounds도 유지/확장했다. 생존 순위는 표본 결과로만 보고한다.
 - Survivors replay는 `stage.phase === 'clear'`까지 통과했다. 기대 hash를 원래 baseline `1cede4023fb8ad248a8eef93bc7dc79f0da81989555e3f74a4f1be948f0e5905`에서 최종 E `929d9d57b8802a1d2167752073c4bf053829232b1bdf50fa3ee8a72c0ee32ad8`로 갱신했고 legacy hash는 유지했다. 전체 task acceptance는 strict full-build 시간이 480초를 넘으므로 주장하지 않는다.
 
