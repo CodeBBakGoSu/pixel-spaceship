@@ -12,27 +12,43 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 6. Keep determinism: render-only changes must keep replay hashes identical; gameplay changes update golden hashes on purpose and re-run `npm run sim -- --profile skilled|average|weak --seeds 100`.
 
 ## Current state
-- Swarm events + recovery magnet: `77163bc` on the integrated Gnat variants (`d4e4911`); public `main` unchanged.
-- Tests: **567/567 pass**, production build passes. See the latest log entry for browser and sim verification.
-- Full Stage C (49–230 m, bands 75/125/180, SKIM 14 m) is in a PR from `devin/1795340000-stage-c-altitude` into `renderer-proto` (데븐 봇). Its sims: skilled 100%, average 68%, weak 35%.
-- Open questions for 기현님: bring average clear back toward 74%? The average pilot's Ace kill rate fell from 56% to 46% under Stage C.
+- Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
+- #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
+- Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
+- Historical feature-branch results: `82c19c6` variant run and `77163bc` swarm run are separately scoped in the log below, not reruns on integrated `0bc1f99`. The `77163bc` desktop Heat 0, 100-seed average median kills were **3,167.5**, within 2,500–3,500; this does not establish phase density or whole survival acceptance.
+- The damage-feedback fixture measured **36.44 fps** in a SwiftShader VM after High→Low fallback; this software-renderer sample is not current hardware/device performance. The 100-seed simulations do not measure rendered FPS or phase density.
+- Supplied feature-branch recordings document both variants and the #7 ring/V/orb-sweep demo; neither recording is integrated-snapshot validation or personally watched for this update. The all-weapon Lv2–7 screenshot acceptance remains unverified.
+- Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
 
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `0bc1f99`; commit refs to follow)
+- Updated both plans for #7's integrated status while preserving the exact schedule and event/magnet rules. Added the `77163bc` feature-branch 100-seed report as historical evidence; kept `9d677b5` pre-variant and `82c19c6` variant metrics explicitly scoped. Removed the stale Stage C PR claim from the current summary without altering historical logs.
+- The #7 playable-flow recording and branch statistics are supplied by WORKLOG at `77163bc`; this update did not personally watch the recording or treat it as integrated-snapshot validation. The average median kills are within range, but do not establish phase density or whole survival acceptance.
+- Verification on combined tree `dd26738` (code baseline `0bc1f99`): `npm test` exit 0 — `# tests 567`, `# pass 567`, `# fail 0`; `npm run build` exit 0 — `✓ 119 modules transformed.`, `✓ built in 1.45s`; `git diff --check` exit 0. State: landing authorized.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795417618-swarm-events → renderer-proto
-- Work `77163bc`, claim `86e2991`, base `d4e4911`. Survivors alternates a two-band closing ring (escape altitude announced) and a 105-Gnat crossing V. Planning confirmed fixed starts at 1:50/3:35/5:15/6:45, durations 15/15/10/10 s. Each ends with a single global sweep of existing orbs, then 15 s without ordinary spawns. Chest/Bill schedules and phase repairs stay put; no ±40 s swarm exclusion.
-- Verification: 567/567 tests including all six Ace replays, production build OK. Survivors seed-1 golden deliberately updated to `cd87e5ab…07ca9`; Legacy unchanged. [Playable-flow recording](https://app.devin.ai/sessions/245af8f813bf47df88fafc1bfc0f7a97?testRecording=1db81c86-8882-4bb0-b9d4-b200287038a7): 72-member ring, 105-member V, 34 and 105 orbs swept in the first two recoveries. Touch cap 120 checked; actual device performance not measured.
-- Desktop Heat 0, seeds 1–100 per pilot (skilled/average/weak): survival including timeouts 99%/78%/35%; Ace kills 99%/78%/1%; median kills 3,213.5/3,167.5/3,064.5; median level-ups 53/54/54. Peak Gnats 200 each.
+- Work `77163bc`, claim `86e2991`, base `d4e4911`; integrated by `0bc1f99`. Survivors alternates a two-band closing ring (escape altitude announced) and a 105-Gnat crossing V. Planning confirmed fixed starts at 1:50/3:35/5:15/6:45, durations 15/15/10/10 s. Each ends with a single global sweep of existing orbs, then 15 s without ordinary spawns. Chest/Bill schedules and phase repairs stay put; no ±40 s swarm exclusion.
+- Feature-branch verification: 567/567 tests including all six Ace replays, production build OK. Survivors seed-1 golden deliberately updated to `cd87e5ab…07ca9`; Legacy unchanged. The supplied [playable-flow recording](https://app.devin.ai/sessions/245af8f813bf47df88fafc1bfc0f7a97?testRecording=1db81c86-8882-4bb0-b9d4-b200287038a7) reports a 72-member ring, 105-member V, and 34/105 orbs swept in the first two recoveries; touch cap 120 checked. This is feature-branch evidence, not integrated-snapshot validation, and was not personally watched for this update. Actual device performance was not measured.
+- Desktop Heat 0, seeds 1–100 per pilot (skilled/average/weak) on `77163bc`: survival including timeouts 99%/78%/35%; Ace kills 99%/78%/1%; median kills 3,213.5/3,167.5/3,064.5; median level-ups 53/54/54. Peak Gnats 200 each. This run does not measure phase density or establish whole survival acceptance.
 - State: done. Final difficulty and XP tuning belongs to 밸런스 봇. No PR or public deployment.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795417618-swarm-events (claim)
 - Base `d4e4911` (Gnat variants integrated). Implementing §3.1 #7: timed ring/crossing formations and a one-shot global salvage pull at recovery, with HUD and regression tests.
 - State: in progress. Scope: Survivors swarm director, Gnat event movement, salvage recovery and phase notices. Final tuning stays with 밸런스 봇.
 
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; correction commit `075ebd0`)
+- Applied review corrections: restored #7 event geometry and one-shot global XP magnet behavior while keeping the fixed schedule, added separate `82c19c6` feature-branch simulation rows to both plans, and removed the stale Stage C PR line from the current WORKLOG summary. Checked the suspected text corruption; it is not present.
+- Verification: `git diff --check` exit 0; no tests/build rerun for these prose-only corrections. State: done; authorized to land on `renderer-proto`.
+
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; docs commit `82b5b8a`)
+- Updated both plans for the `d4e4911` baseline: #6 variants are integrated, #7 swarm/XP-magnet work is started but unmerged, pre-variant and feature-branch simulation results are separately scoped, and the all-weapon screenshot acceptance remains unverified. Restored the event geometry/magnet behavior and clarified the fixed schedule without changing chest/Bill timing.
+- The variant recording was supplied as feature-branch evidence; it was not personally watched for this update and is not integration validation. The measured SwiftShader sample is 36.44 fps; actual current PC/phone performance remains unverified.
+- Verification: prose-only corrections; `git diff --check` exit 0. No tests/build rerun. State: done; authorized to land on `renderer-proto`.
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795416809-gnat-variants → renderer-proto
-- Work `82c19c6`, claim `a2106c7`, base `8f41122`. Armored (Siege+, 3 HP/3 XP) and Sting (Skirmish+, ±8 m direct pursuit, 1 hull contact on the shared 1 s damage cooldown) replace standard swarm slots. Both keep the Gnat render batch and caps.
-- Verification: 561/561 tests, including six Ace replays; production build passes. Seed-1 Survivors golden deliberately updated to `b42b33e9…c813`; Legacy unchanged. [Browser comparison and live Siege/Storm footage](https://app.devin.ai/sessions/9286f5ebd5a84c4fbdc8c96c6e8abdf9?testRecording=746df89d-adb1-4f8a-9b2d-aaba9638c4b0).
-- Desktop Heat 0, seeds 1–100 per profile (skilled/average/weak): clear including timeouts 100%/78%/24%; Ace kills 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 200 each.
+- Work branch `82c19c6`, claim `a2106c7`, base `8f41122`; merged into `renderer-proto` by `d4e4911`. Armored (Siege+, 3 HP/3 XP) and Sting (Skirmish+, ±8 m direct pursuit, 1 hull contact on the shared 1 s damage cooldown) replace standard swarm slots. Both keep the Gnat render batch and caps.
+- Feature-branch verification: 561/561 tests, including six Ace replays; production build passes. Seed-1 Survivors golden deliberately updated to `b42b33e9…c813`; Legacy unchanged. [Browser comparison and live Siege/Storm footage](https://app.devin.ai/sessions/9286f5ebd5a84c4fbdc8c96c6e8abdf9?testRecording=746df89d-adb1-4f8a-9b2d-aaba9638c4b0) is feature-branch evidence, not an integration-snapshot check.
+- Feature-branch desktop Heat 0, seeds 1–100 per profile (skilled/average/weak): clear including timeouts 100%/78%/24%; Ace kills 100%/76%/3%; median kills 3,510.5/3,411.5/3,302.5; peak Gnats 200 each. These results are separate from the pre-variant `9d677b5` baseline above.
 - State: done. No balance tuning, #7, or public deployment.
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795400000-survivors-horde → renderer-proto candidate
