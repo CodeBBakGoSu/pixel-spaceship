@@ -21,7 +21,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; correction commit ref to be recorded in following log commit)
+### 2026-11-23 (KST) · 기획 봇 (데븐 봇 계열) · devin/1795417710-status-update (base `d4e4911`; correction commit `075ebd0`)
 - Applied review corrections: restored #7 event geometry and one-shot global XP magnet behavior while keeping the fixed schedule, added separate `82c19c6` feature-branch simulation rows to both plans, and removed the stale Stage C PR line from the current WORKLOG summary. Checked the suspected text corruption; it is not present.
 - Verification: `git diff --check` exit 0; no tests/build rerun for these prose-only corrections. State: done; authorized to land on `renderer-proto`.
 
