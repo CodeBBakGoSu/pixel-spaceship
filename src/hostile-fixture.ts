@@ -24,7 +24,7 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
   const requested = query.get('shape');
   const closeup = SHAPES.find(shape => shape === requested);
   const rawAlt = Number(query.get('alt') ?? 110);
-  const altitude = Number.isFinite(rawAlt) ? clamp(rawAlt, BANDS[0], BANDS[2]) : 110;
+  const altitude = Number.isFinite(rawAlt) ? clamp(rawAlt, BANDS[0], BANDS[2]) : BANDS[1];
   state.tick = stress ? STRESS_TICK : FIXTURE_TICK + (cue === 'shield' && query.get('blink') === '1' ? 4 : 0);
   const { player: p } = state;
   const pose = (height: number) => {
