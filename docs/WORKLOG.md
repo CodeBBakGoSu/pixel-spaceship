@@ -24,6 +24,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (source `c06e3c9`; final delivery)
+- Retained verification on source `c06e3c9`: Korean HUD warning glyph coverage, English gun/missile fit at 320/375px, and cockpit W+Space/S+Space live-input pass.
+- The audio cue is identifiable; the delivered WAV measured true peak −13.3 dBFS with no clipping. Listening reports conflict: the original isolated prefire check reported unmasked, while the AV-derived extract showed material masking. No unqualified clarity pass; final user listening judgment is pending.
+- The registered session recording is video-only. The actual WAV was delivered separately and is not synchronized: [viewer](https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=f84a24ed-427b-410e-b514-7ef515659946).
+- P1/PR8 are not integrated or tested; no base merge or deployment. PR7 threads 4667752243 and 4667752482 are resolved.
+- State: final user listening judgment pending; this update is documentation only.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `3e07d43`; audio retest pending)
 - The latest isolated prefire listen still found the warning materially masked by repeated hit clacking at the 0.15 effects duck. Raising the tell-wide duck to 0.06 and lock cue gains to 2.0/2.4; cadence, buffers, timing, master volume, headroom/limiter, and immediate fire restore remain unchanged.
 - Verification: combat-audio/flight-audio tests passed 26/26; `npm run build` passed (120 modules, 1.98 s). The updated combined-mix headroom assertion passes at the new gains.
