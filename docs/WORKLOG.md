@@ -20,6 +20,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 · 데븐 봇 · devin/stage-c-followups (base `6bea116`)
+- Claim: Stage C followup investigation of sim pilot dodge floor, recovery altitude scoring, Stage C test changes, and weapon vertical-rate scaling. Baseline all-profile 100-seed sim; no gameplay changes in this step.
+- Verification: pending baseline sim and code/history investigation.
+- State: in progress (데븐 봇). Please leave these followup areas free during investigation.
+
 ### 2026-11-23 · 데븐 봇 · devin/1795340000-stage-c-altitude → PR #1 into renderer-proto (`357dc33`, `a65974d`, `ae8b3dc`)
 - Full Stage C: altitude 49–230 m (floor = sea + SKIM), bands 75/125/180, SKIM 14 m (10–18 m). Hostile vertical rates, flares, bombs and mines scale 1.5× to keep band-change timing. Flak half-height is 28 m. The Ace now reaches SKIM. The HUD ALT tape reads 180/125/75. Golden replay hashes were rebaselined.
 - Verified: `npm test` 509/509, `npm run build`, 100-seed sims (skilled 100% / average 68% / weak 35%), in-browser climb to 229 m and SKIM at 49 m over the sea. Details are in `docs/BALANCE_NOTES.md` under "Stage C altitude model".
