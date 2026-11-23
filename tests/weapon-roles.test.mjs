@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
 import { BANDS, acquireAndFire, advanceShots } from '../src/stage-combat.ts';
+import { GNAT, PHASES } from '../src/data/phases.ts';
+import { WEAPONS as WEAPON_DATA } from '../src/data/items.ts';
 import { makeGnat } from '../src/stage-enemies.ts';
 import { advanceRangedWeapons } from '../src/ranged-weapons.ts';
+import { sampleFlyIn } from '../src/fly-in.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
 import { createComparisonState, runComparison } from '../tools/weapon-roles.mjs';
@@ -44,6 +47,43 @@ test('the fixed-seed comparison is deterministic and exposes bounded, isolated s
   assert.equal(first.scenarios.forwardGnatColumn.scene.firstZ, 120);
   assert.equal(first.scenarios.forwardGnatColumn.scene.spacing, 20);
   assert.equal(first.scenarios.forwardGnatColumn.scene.lastZ, 700);
+  const productionLine = first.scenarios.representativeProductionLine;
+  assert.equal(productionLine.scene.sourcePhase, PHASES[0].id);
+  assert.equal(productionLine.scene.sourcePackSize, PHASES[0].packSize);
+  assert.equal(productionLine.scene.count, PHASES[0].packSize);
+  assert.equal(productionLine.scene.formation, 'line');
+  assert.equal(productionLine.scene.band, 'mid');
+  assert.equal(productionLine.scene.splitBands, false);
+  assert.equal(productionLine.scene.spacing, GNAT.spacing);
+  assert.match(productionLine.scene.spacingAxis, /lateral/);
+  assert.equal(productionLine.scene.geometryIdenticalAcrossWeapons, true);
+  for (const weapon of ['pods', 'seeker']) {
+    assert.deepEqual(productionLine.scene.initialTargetsByWeapon[weapon], productionLine.scene.initialTargetsByWeapon.twin);
+  }
+  const initialTargets = productionLine.scene.initialTargetsByWeapon.twin;
+  assert.equal(initialTargets.length, PHASES[0].packSize);
+  for (const [index, target] of initialTargets.entries()) {
+    assert.equal(target.hp, 1);
+    assert.deepEqual(target.initialPosition, target.entryTarget);
+    assert.deepEqual(target.flyIn.target, target.entryTarget);
+    const exit = sampleFlyIn(target.flyIn, target.flyIn.arriveAt, ground);
+    assert.deepEqual(target.exitVelocity, { x: exit.vx, z: exit.vz });
+    if (index > 0) {
+      const previous = initialTargets[index - 1].initialPosition;
+      assert.ok(Math.abs(Math.hypot(target.initialPosition.x - previous.x,
+        target.initialPosition.z - previous.z) - GNAT.spacing) < 1e-8);
+    }
+  }
+  for (const count of [240, 480]) {
+    const scenario = first.scenarios[`forwardGnatColumn${count}`];
+    assert.match(scenario.classification, /Sensitivity only/);
+    assert.equal(scenario.scene.count, count);
+    assert.equal(scenario.scene.firstZ, 120);
+    assert.equal(scenario.scene.lastZ, 700);
+    assert.equal(scenario.scene.spacing, 580 / (count - 1));
+    assert.equal(scenario.verdict.expectedWinner, 'twin');
+    assert.equal(scenario.verdict.meetsCriterion, scenario.verdict.measuredWinner === 'twin');
+  }
   assert.equal(first.scenarios.sideStingApproach.scene.count, 30);
   assert.equal(first.scenarios.sideStingApproach.scene.perSide, 15);
   assert.equal(first.scenarios.sideStingApproach.scene.firstAbsX, 120);
@@ -78,6 +118,38 @@ test('the fixed-seed comparison is deterministic and exposes bounded, isolated s
     assert.equal(damagePerFiredShot, result.firedProjectiles ? hpDamage / result.firedProjectiles : 0);
     assert.equal(damagePerAceHit, actualHitCount ? hpDamage / actualHitCount : null);
   }
+
+  const movingAce = first.diagnostics.movingAce;
+  assert.match(movingAce.classification, /not an acceptance/);
+  assert.equal(movingAce.scene.bossStartSeconds, 480);
+  assert.equal(movingAce.scene.bossStartTick, 480 * 60);
+  assert.equal(movingAce.scene.advanceAceBeforeAcquireAndFire, true);
+  const baseline = movingAce.results.baselineScale1;
+  const provisional = movingAce.results.provisionalScale18;
+  assert.equal(baseline.lockedAceDamageScale, 1);
+  assert.equal(provisional.lockedAceDamageScale, 18);
+  assert.deepEqual(baseline.setup, provisional.setup);
+  assert.deepEqual(baseline.setup.initialBossPosition, { x: 0, z: 120, alt: BANDS[1] });
+  assert.equal(baseline.setup.initialBossHp, 1200);
+  assert.deepEqual(provisional.outcome.startPosition, baseline.outcome.startPosition);
+  assert.deepEqual(provisional.outcome.endPosition, baseline.outcome.endPosition);
+  assert.equal(provisional.outcome.pathDistance, baseline.outcome.pathDistance);
+  assert.equal(provisional.outcome.vulnerableTicks, baseline.outcome.vulnerableTicks);
+  assert.equal(provisional.outcome.readyLockTicks, baseline.outcome.readyLockTicks);
+  assert.equal(provisional.outcome.playerHp.damage, baseline.outcome.playerHp.damage);
+  assert.equal(provisional.firedProjectiles, baseline.firedProjectiles);
+  assert.equal(provisional.outcome.actualHitCount, baseline.outcome.actualHitCount);
+  for (const result of [baseline, provisional]) {
+    assert.equal(result.setup.bossStartTick, 480 * 60);
+    assert.equal(result.setup.readyLockAtStart, true);
+    assert.ok(result.outcome.vulnerableTicks <= 900);
+    assert.ok(result.outcome.readyLockTicks <= 900);
+    assert.ok(result.outcome.pathDistance >= 0);
+    assert.equal(result.outcome.hpDamage, result.outcome.initialHp - result.outcome.remainingHp);
+    assert.equal(result.outcome.playerHp.damage,
+      result.outcome.playerHp.initial - result.outcome.playerHp.remaining);
+  }
+  assert.equal(WEAPON_DATA.seeker.tuning.lockedAceDamageScale, 18);
 });
 
 test('Twin fires forward at an eligible target and fires after turning toward the same target', () => {

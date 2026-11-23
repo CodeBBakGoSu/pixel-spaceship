@@ -34,6 +34,29 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - The unchanged seed-23, 900-tick comparison reports forward kills 30/0/30 (Twin/Pods/Seeker; tie remains NOT MET), side intrusions 30/0/9 (Pods MET), and locked-Ace damage Twin 448 HP / 29.87 DPS vs Seeker 472.5 HP / 31.5 DPS (Seeker MET). The original forward fixture is unchanged; no spacing or moving-Ace acceptance measurements were made here.
 - Verification: ranged/role tests 25/25; unchanged comparison CLI and `npm run build` passed. No full suite or replay-golden update in this step. State: Seeker multiplier is provisional for boss testing; P0 acceptance remains incomplete pending further balance verification.
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795427585-p0-weapon-roles (comparison measurement setup, pinned before CLI run)
+- Preserve the original 30-target forward column exactly: ordinary 1-HP Gnats at x=0, z=120..700, 20 m longitudinal spacing, vz=-60 m/s. Add the representative production-derived line from `spawnSwarm` using `PHASES[0]` coast and its packSize 10; override only formation to line and band to middle (production splitBands remains false). Start each Gnat at its actual `entry.target`, take straight scripted velocity from `sampleFlyIn(entry, entry.arriveAt, ground)`, then clear entry. Record per-weapon initial positions/velocities and source path. `GNAT.spacing` (22) is lateral formation spacing, not longitudinal z spacing. Pilot/yaw remain fixed for 900 ticks.
+- Add 240- and 480-target sensitivity columns over the same z=120..700 segment with spacing exactly `580/(count-1)`. They are sensitivity-only, not acceptance replacements. Every comparison verdict requires a unique strict lead; ties remain NOT MET. No fixture values will be changed after seeing outcomes.
+- Add supplemental moving-Ace diagnostic only: real Ace at (0,120), real HP, seed 23, player at the fixed mid-band/yaw/input setup, 900 ticks beginning at boss-start tick 28,800 (480 s). Call production `advanceAce` before acquisition/fire every tick; initialize the ready lock once, then let `acquireAndFire` lose/reacquire it. Compare Seeker scale 1 baseline against provisional 18 only through temporary in-memory tuning with `try/finally` restoration. Record path, vulnerability/ready-lock ticks, actual damage/hits/shots, and player HP. This is supplemental, not a replacement for the stationary-Ace criterion. P0 remains incomplete.
+- CLI measurements (seed 23, 900 ticks, fixed pilot): original forward 30-target column remains 30/0/30 kills while ahead for Twin/Pods/Seeker, a saturated tie and NOT MET. The production-derived line reports 7/6/10 kills ahead, 3/4/0 crossed alive, and 40/10/5 fired projectiles (Twin/Pods/Seeker): Seeker leads, so the strict Twin criterion is NOT MET. The measured line geometry is recorded below; each weapon run generated identical positions and velocities.
+
+| Gnat | Initial x | Initial z | Exit vx | Exit vz |
+|---:|---:|---:|---:|---:|
+| 1 | 5.683869 | 285.644348 | 20.978289 | -60.464133 |
+| 2 | -15.100677 | 278.433061 | 20.978289 | -60.464133 |
+| 3 | -35.885223 | 271.221774 | 20.978289 | -60.464133 |
+| 4 | -56.669768 | 264.010487 | 20.978289 | -60.464133 |
+| 5 | -77.454314 | 256.799200 | 20.978289 | -60.464133 |
+| 6 | -98.238860 | 249.587913 | 20.978289 | -60.464133 |
+| 7 | -119.023405 | 242.376626 | 20.978289 | -60.464133 |
+| 8 | -139.807951 | 235.165339 | 20.978289 | -60.464133 |
+| 9 | -160.592497 | 227.954052 | 20.978289 | -60.464133 |
+| 10 | -181.377043 | 220.742765 | 20.978289 | -60.464133 |
+
+- Same-segment density sensitivity only: 240 targets at `580/239 = 2.4267782427` spacing produced Twin/Pods/Seeker kills 240/24/222 (strict Twin MET, not a replacement acceptance result); 480 at `580/479 = 1.2108559499` produced 350/26/406 (strict Twin NOT MET, Seeker leads). The original spacing/targets were not changed.
+- Existing side result remains 30/0/9 intrusions (Pods MET). Fixed-Ace result remains Twin 448 HP/29.87 DPS, Pods 0, Seeker 472.5 HP/31.5 DPS (Seeker MET).
+- Moving-Ace diagnostic (supplemental; no verdict): both runs had the same path, from (0,120,125) to (-72.118808,-36.267497,157.633333), distance 1122.557570. Each had 900 vulnerable ticks, only 62/900 ready-lock ticks, 5 Seeker shots and 5 Ace hits. Scale 1 dealt 5.25 HP (Ace 1200→1194.75); provisional 18 dealt 94.5 HP (1200→1105.5). Player HP was 10→7 in both. Lock availability and shot count are limited; this does not establish a moving-Ace acceptance result. P0 remains incomplete.
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795426562-learn-weapons-through-play (base `2564e31`)
 - P0: 무기 10종의 강점·한계만 남기고 시연·추천 조합·식별 시험을 삭제했다. 같은 입력에서 전방 격추·측면 침입·Ace 실피해를 비교해 차이가 부족한 무기만 고친다.
 - 검증: 테스트 576/576, 프로덕션 빌드, 문서 링크·역할표 및 diff 검사 통과. P1·P2 사양과 게임 코드는 그대로다. 무기 성능 비교는 후속 검수이며 이번에 실측하지 않았다.

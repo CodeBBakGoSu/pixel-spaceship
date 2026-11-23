@@ -1,8 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { makeAce } from '../src/ace.ts';
-import { BANDS, acquireAndFire, advanceShots } from '../src/stage-combat.ts';
+import { advanceAce, makeAce } from '../src/ace.ts';
+import { BANDS, acquireAndFire, aceVulnerable, advanceShots } from '../src/stage-combat.ts';
 import { advanceRangedWeapons } from '../src/ranged-weapons.ts';
 import { makeGnat } from '../src/stage-enemies.ts';
+import { GNAT, PHASES } from '../src/data/phases.ts';
+import { WEAPONS as WEAPON_DATA } from '../src/data/items.ts';
+import { sampleFlyIn } from '../src/fly-in.ts';
+import { random } from '../src/stage-random.ts';
+import { spawnSwarm } from '../src/swarm.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
 
 const SEED = 23;
@@ -13,6 +18,12 @@ const MID_BAND = 1;
 const MID_ALTITUDE = BANDS[MID_BAND];
 const TARGET_COUNT = 30;
 const APPROACH_SPEED = 60;
+const FORWARD_START_Z = 120;
+const FORWARD_END_Z = 700;
+const FORWARD_SPAN = FORWARD_END_Z - FORWARD_START_Z;
+const SENSITIVITY_COUNTS = [240, 480];
+const BOSS_START_SECONDS = 480;
+const BOSS_START_TICK = BOSS_START_SECONDS * TICKS_PER_SECOND;
 const WEAPONS = ['twin', 'pods', 'seeker'];
 const ground = () => 35;
 
@@ -115,11 +126,11 @@ function finishMetrics(metrics) {
   };
 }
 
-function runForwardColumn(weapon) {
+function runForwardColumn(weapon, count = TARGET_COUNT, spacing = 20) {
   const state = createComparisonState(weapon);
   const tracker = createAcquisitionTracker();
-  const targets = Array.from({ length: TARGET_COUNT }, (_, i) => {
-    const enemy = makeGnat(state, 0, 120 + 20 * i, MID_BAND);
+  const targets = Array.from({ length: count }, (_, i) => {
+    const enemy = makeGnat(state, 0, FORWARD_START_Z + spacing * i, MID_BAND);
     if (enemy.hp !== 1) throw new Error(`Expected a standard Gnat to have 1 HP, got ${enemy.hp}.`);
     const target = trackAcquisitionTarget(enemy, tracker);
     target.vx = 0;
@@ -150,6 +161,76 @@ function runForwardColumn(weapon) {
   return {
     ...finishMetrics(metrics),
     outcome: { uniqueKillsWhileAhead: [...killedAhead].length, crossedAlive: [...crossedAlive].length },
+  };
+}
+
+function spawnProductionLine(state, tracker) {
+  const sourcePhase = PHASES[0];
+  const phase = { ...sourcePhase, formations: ['line'], bands: [MID_BAND] };
+  const rng = { rng: random(state.streams.spawn) * 0x1_0000_0000 };
+  spawnSwarm(state, phase, phase.packSize, ground, rng);
+  if (state.enemies.length !== sourcePhase.packSize) {
+    throw new Error(`Expected ${sourcePhase.packSize} production Gnats, got ${state.enemies.length}.`);
+  }
+
+  const initialTargets = [];
+  const targets = state.enemies.map(enemy => {
+    const path = enemy.entry;
+    if (!path) throw new Error(`Production Gnat ${enemy.id} has no fly-in path.`);
+    const exit = sampleFlyIn(path, path.arriveAt, ground);
+    const entryTarget = { ...path.target };
+    Object.assign(enemy, entryTarget, { vx: exit.vx, vz: exit.vz, yaw: exit.yaw });
+    delete enemy.entry;
+    initialTargets.push({
+      id: enemy.id,
+      hp: enemy.hp,
+      entryTarget,
+      initialPosition: { x: enemy.x, z: enemy.z, alt: enemy.alt },
+      exitVelocity: { x: enemy.vx, z: enemy.vz },
+      flyIn: {
+        origin: { ...path.origin },
+        target: { ...path.target },
+        startedAt: path.startedAt,
+        arriveAt: path.arriveAt,
+        bend: path.bend,
+        exitSpeed: path.exitSpeed,
+        clearance: path.clearance,
+      },
+    });
+    return trackAcquisitionTarget(enemy, tracker);
+  });
+  state.enemies = targets;
+  return { targets, initialTargets };
+}
+
+function runProductionLine(weapon) {
+  const state = createComparisonState(weapon);
+  const tracker = createAcquisitionTracker();
+  const { targets, initialTargets } = spawnProductionLine(state, tracker);
+  const metrics = makeMetrics(state, weapon, targets, tracker);
+  const killedAhead = new Set();
+  const crossedAlive = new Set();
+
+  for (let i = 0; i < TICKS; i++) {
+    state.tick++;
+    metrics.targetAvailability.liveTargetTicks += state.enemies.filter(target => target.hp > 0).length;
+    for (const target of state.enemies) {
+      target.x += target.vx / TICKS_PER_SECOND;
+      target.z += target.vz / TICKS_PER_SECOND;
+    }
+    const hpBefore = new Map(targets.map(target => [target.id, target.hp]));
+    resolveCombatTick(state, weapon, targets, metrics);
+    for (const target of targets) {
+      if (hpBefore.get(target.id) > 0 && target.hp === 0 && target.z > state.player.z) killedAhead.add(target.id);
+      if (target.z <= state.player.z && target.hp > 0) crossedAlive.add(target.id);
+    }
+    state.enemies = state.enemies.filter(target => target.hp > 0 && target.z > state.player.z);
+  }
+
+  return {
+    ...finishMetrics(metrics),
+    initialTargets,
+    outcome: { uniqueKillsWhileAhead: killedAhead.size, crossedAlive: crossedAlive.size },
   };
 }
 
@@ -222,6 +303,71 @@ function runLockedAce(weapon) {
   };
 }
 
+function runMovingAce(scale) {
+  const state = createComparisonState('seeker');
+  state.tick = BOSS_START_TICK;
+  const tracker = createAcquisitionTracker();
+  const ace = trackAcquisitionTarget(makeAce(state, 0, 120, ground), tracker);
+  state.boss = ace;
+  state.lock = { id: ace.id, progress: 1, ready: true };
+  const startPosition = { x: ace.x, z: ace.z, alt: ace.alt };
+  const initialHp = ace.hp;
+  const initialHull = state.hull;
+  const metrics = makeMetrics(state, 'seeker', [ace], tracker);
+  metrics.setup.bossStartTick = BOSS_START_TICK;
+  metrics.setup.initialBossPosition = startPosition;
+  metrics.setup.initialBossHp = ace.hp;
+  metrics.setup.readyLockAtStart = true;
+  let previous = { x: ace.x, z: ace.z };
+  let pathDistance = 0;
+  let vulnerableTicks = 0;
+  let readyLockTicks = 0;
+
+  for (let i = 0; i < TICKS; i++) {
+    advanceAce(state, ground);
+    pathDistance += Math.hypot(ace.x - previous.x, ace.z - previous.z);
+    previous = { x: ace.x, z: ace.z };
+    if (ace.hp > 0) metrics.targetAvailability.liveTargetTicks++;
+    if (aceVulnerable(ace)) vulnerableTicks++;
+    resolveCombatTick(state, 'seeker', [ace], metrics);
+    if (state.lock?.ready && state.lock.id === ace.id) readyLockTicks++;
+    state.tick++;
+  }
+
+  const hpDamage = initialHp - ace.hp;
+  const actualHitCount = ace.hits;
+  return {
+    ...finishMetrics(metrics),
+    lockedAceDamageScale: scale,
+    outcome: {
+      startPosition,
+      endPosition: { x: ace.x, z: ace.z, alt: ace.alt },
+      pathDistance,
+      vulnerableTicks,
+      readyLockTicks,
+      readyLockFraction: readyLockTicks / TICKS,
+      initialHp,
+      maxHp: ace.maxHp,
+      remainingHp: ace.hp,
+      hpDamage,
+      actualHitCount,
+      shotsStillInFlight: state.shots.filter(shot => projectileWeapon(shot) === 'seeker').length,
+      playerHp: { initial: initialHull, max: state.maxHull, remaining: state.hull, damage: initialHull - state.hull },
+    },
+  };
+}
+
+function withSeekerAceScale(scale, action) {
+  const tuning = WEAPON_DATA.seeker.tuning;
+  const previous = tuning.lockedAceDamageScale;
+  try {
+    tuning.lockedAceDamageScale = scale;
+    return action();
+  } finally {
+    tuning.lockedAceDamageScale = previous;
+  }
+}
+
 function ranking(rows, metric, higherIsBetter) {
   const values = Object.entries(rows).map(([weapon, row]) => [weapon, metric(row)]);
   const best = Math[higherIsBetter ? 'max' : 'min'](...values.map(([, value]) => value));
@@ -238,6 +384,39 @@ export function runComparison() {
   const forward = Object.fromEntries(WEAPONS.map(weapon => [weapon, runForwardColumn(weapon)]));
   const sides = Object.fromEntries(WEAPONS.map(weapon => [weapon, runSideApproach(weapon)]));
   const ace = Object.fromEntries(WEAPONS.map(weapon => [weapon, runLockedAce(weapon)]));
+  const productionLineRuns = Object.fromEntries(WEAPONS.map(weapon => [weapon, runProductionLine(weapon)]));
+  const initialTargetsByWeapon = Object.fromEntries(WEAPONS.map(weapon => [weapon, productionLineRuns[weapon].initialTargets]));
+  const initialTargets = initialTargetsByWeapon[WEAPONS[0]];
+  if (WEAPONS.some(weapon => JSON.stringify(initialTargetsByWeapon[weapon]) !== JSON.stringify(initialTargets))) {
+    throw new Error('Production-spawned line geometry differs between weapon runs.');
+  }
+  const productionLine = Object.fromEntries(WEAPONS.map(weapon => {
+    const { initialTargets: _initialTargets, ...result } = productionLineRuns[weapon];
+    return [weapon, result];
+  }));
+  const densityScenarios = Object.fromEntries(SENSITIVITY_COUNTS.map(count => {
+    const spacing = FORWARD_SPAN / (count - 1);
+    const results = Object.fromEntries(WEAPONS.map(weapon => [weapon, runForwardColumn(weapon, count, spacing)]));
+    return [count, { spacing, results }];
+  }));
+  const movingAce = {
+    classification: 'Supplemental moving-target diagnostic; not an acceptance criterion.',
+    scene: {
+      seed: SEED,
+      bossStartSeconds: BOSS_START_SECONDS,
+      bossStartTick: BOSS_START_TICK,
+      bossStartPosition: { x: 0, z: 120 },
+      realAceHp: true,
+      readyLockAtStart: true,
+      pilot: { x: 0, z: 0, altitude: MID_ALTITUDE, yaw: 0, userInput: false },
+      ticks: TICKS,
+      advanceAceBeforeAcquireAndFire: true,
+    },
+    results: {
+      baselineScale1: withSeekerAceScale(1, () => runMovingAce(1)),
+      provisionalScale18: withSeekerAceScale(18, () => runMovingAce(18)),
+    },
+  };
   return {
     scope: 'Controlled mechanics comparison only: scripted target trajectories, no spawn director or enemy AI; not a survival simulation.',
     fixedSetup: {
@@ -261,6 +440,43 @@ export function runComparison() {
         results: forward,
         verdict: verdict('twin', ranking(forward, row => row.outcome.uniqueKillsWhileAhead, true)),
       },
+      representativeProductionLine: {
+        classification: 'Production-derived forward-line comparison.',
+        scene: {
+          target: 'ordinary 1-HP Gnat',
+          seed: SEED,
+          count: PHASES[0].packSize,
+          sourcePhase: PHASES[0].id,
+          sourcePackSize: PHASES[0].packSize,
+          formation: 'line',
+          band: 'mid',
+          splitBands: PHASES[0].splitBands,
+          spacing: GNAT.spacing,
+          spacingAxis: 'lateral; production GNAT.spacing is not longitudinal z spacing',
+          positionSource: 'enemy.entry.target',
+          velocitySource: 'sampleFlyIn(entry, entry.arriveAt, ground)',
+          startEngaged: true,
+          scriptedStraightVelocity: true,
+          initialTargetsByWeapon,
+          geometryIdenticalAcrossWeapons: true,
+        },
+        results: productionLine,
+        verdict: verdict('twin', ranking(productionLine, row => row.outcome.uniqueKillsWhileAhead, true)),
+      },
+      forwardGnatColumn240: {
+        classification: 'Sensitivity only; not an acceptance replacement.',
+        scene: { target: 'ordinary 1-HP Gnat', count: 240, firstZ: FORWARD_START_Z, lastZ: FORWARD_END_Z,
+          spacing: densityScenarios[240].spacing, velocity: { x: 0, z: -APPROACH_SPEED } },
+        results: densityScenarios[240].results,
+        verdict: verdict('twin', ranking(densityScenarios[240].results, row => row.outcome.uniqueKillsWhileAhead, true)),
+      },
+      forwardGnatColumn480: {
+        classification: 'Sensitivity only; not an acceptance replacement.',
+        scene: { target: 'ordinary 1-HP Gnat', count: 480, firstZ: FORWARD_START_Z, lastZ: FORWARD_END_Z,
+          spacing: densityScenarios[480].spacing, velocity: { x: 0, z: -APPROACH_SPEED } },
+        results: densityScenarios[480].results,
+        verdict: verdict('twin', ranking(densityScenarios[480].results, row => row.outcome.uniqueKillsWhileAhead, true)),
+      },
       sideStingApproach: {
         scene: { target: 'same-band Sting Gnat', count: TARGET_COUNT, perSide: TARGET_COUNT / 2,
           firstAbsX: 120, spacing: 20, lastAbsX: 120 + 20 * (TARGET_COUNT / 2 - 1), z: 0,
@@ -274,6 +490,7 @@ export function runComparison() {
         verdict: verdict('seeker', ranking(ace, row => row.outcome.hpDamagePerSecond, true)),
       },
     },
+    diagnostics: { movingAce },
   };
 }
 
