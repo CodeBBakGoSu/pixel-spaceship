@@ -182,9 +182,9 @@
 .alt-scale { position: absolute; inset: 37px 0 8px; background: rgba(12, 35, 33, .86); }
 .alt-scale i { position: absolute; top: 0; bottom: 0; right: 7px; width: 1px; background: #588273; }
 .alt-scale small { position: absolute; left: 2px; right: 6px; border-bottom: 1px solid #496b61; color: #91baa7; font-size: 8px; line-height: 8px; transform: translateY(-100%); }
-.alt-scale small:nth-of-type(1) { top: 18.18%; }
-.alt-scale small:nth-of-type(2) { top: 50%; }
-.alt-scale small:nth-of-type(3) { top: 81.82%; }
+.alt-scale small:nth-of-type(1) { top: 27.62%; }
+.alt-scale small:nth-of-type(2) { top: 58.01%; }
+.alt-scale small:nth-of-type(3) { top: 85.64%; }
 .alt-scale b { position: absolute; right: 1px; color: #a2ffc5; font-size: 13px; line-height: 10px; transform: translateY(-50%); }
 .experience[data-view="overhead"] .alt-scale { display: none; }
 

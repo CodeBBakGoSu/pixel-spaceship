@@ -58,7 +58,7 @@ test('Swarm Rack launches twelve rockets for an engaged carrier and fits two vol
 test('Prism Lance charges and strikes along exactly one terrain-clipped ray per band', () => {
   const state = setup('rail', 'prism-lance');
   state.player.altitude = mid + 8;
-  const altitudes = [...BANDS, 65];
+  const altitudes = [...BANDS, 49];
   const leading = altitudes.map(alt => contact(state, 0, 69, alt));
   const obscuredLow = contact(state, 0, 130, low);
   const flyingIn = contact(state, 0, 65, high);

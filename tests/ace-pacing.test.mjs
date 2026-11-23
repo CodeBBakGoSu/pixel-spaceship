@@ -30,7 +30,7 @@ test('a distant pilot gets a local Ace intercept and cover after leaving the ori
   const state = stage('?mode=survivors&autoplay=1');
   const p = state.player;
   Object.assign(p, { x: -4200, z: 2875, yaw: 0 });
-  state.rally = { x: 160, z: -128, alt: 110 };
+  state.rally = { x: 160, z: -128, alt: 125 };
   state.tick = RUN_BOSS_TICK - 1;
   stepStage(state, {}, ground);
   const ace = state.boss;
@@ -154,7 +154,7 @@ test('the Ace descends into SKIM and follows the changing terrain while turning'
   open.tell = null;
   state.player.x += 110;
   state.player.skim = 'land';
-  state.player.altitude = terrain(state.player.x, state.player.z) + 30;
+  state.player.altitude = terrain(state.player.x, state.player.z) + 14;
   const heading = open.yaw;
   for (let i = 0; i < 120; i++) {
     state.tick++;
@@ -162,7 +162,7 @@ test('the Ace descends into SKIM and follows the changing terrain while turning'
   }
   assert.equal(open.band, SKIM_BAND);
   const clearance = open.alt - terrain(open.x, open.z);
-  assert.ok(clearance >= 25 && clearance <= 35);
+  assert.ok(clearance >= 10 && clearance <= 18);
   assert.notEqual(open.yaw, heading);
   assert.ok(Math.abs(open.bank) > 0);
 });
@@ -170,10 +170,10 @@ test('the Ace descends into SKIM and follows the changing terrain while turning'
 test('the Ace keeps its own full-bank cruise speed and vertical band-change rate', () => {
   const state = stage('?mode=survivors&t=0');
   const ace = state.boss = makeAce(state, state.player.x - 300, state.player.z, ground);
-  Object.assign(ace, { bank: 1.5, bankDrive: 1, yaw: 0, band: 2, alt: 110 });
+  Object.assign(ace, { bank: 1.5, bankDrive: 1, yaw: 0, band: 2, alt: 125 });
   advanceAce(state, ground);
   assert.ok(Math.abs(Math.hypot(ace.vx, ace.vz) - 53.508) < 1e-9);
-  assert.ok(Math.abs((ace.alt + ace.bankDrop - 110) * 60 - 32) < 1e-9);
+  assert.ok(Math.abs((ace.alt + ace.bankDrop - 125) * 60 - 48) < 1e-9);
 });
 
 test('Ace defeat spins the craft down before paying the victory cache', () => {

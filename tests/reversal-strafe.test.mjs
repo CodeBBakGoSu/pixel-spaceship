@@ -8,7 +8,7 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const calm = () => 0;
 
-function flight(altitude = 110) {
+function flight(altitude = 125) {
   const state = createStage(parseStageOptions('?fixture=flare'));
   state.player.altitude = altitude;
   state.enemies.length = 0;
@@ -153,9 +153,9 @@ test('basic downward strafe fires at two distinct targets on a 0.55 s cadence', 
 
 test('strafe clamps acquisition to a single lower band and a 38-degree forward lane', () => {
   for (const [altitude, x, z, band, fires] of [
-    [145, 0, 28, 1, true], [110, 0, 135, 0, true], [145, 0, 70, 0, false],
-    [75, 0, 70, 1, false], [145, 0, 27, 1, false], [145, 0, 136, 1, false],
-    [145, 50, 70, 1, true], [145, 63, 70, 1, false], [130, 0, 70, 1, false],
+    [180, 0, 28, 1, true], [125, 0, 135, 0, true], [180, 0, 70, 0, false],
+    [75, 0, 70, 1, false], [180, 0, 27, 1, false], [180, 0, 136, 1, false],
+    [180, 50, 70, 1, true], [180, 63, 70, 1, false], [130, 0, 70, 1, false],
   ]) {
     const state = flight(altitude);
     contact(state, scaleTravel(x), scaleTravel(z), band);
@@ -165,7 +165,7 @@ test('strafe clamps acquisition to a single lower band and a 38-degree forward l
 });
 
 test('strafe intercepts an approaching craft faster than the bolt and skips a receding craft', () => {
-  const state = flight(145);
+  const state = flight(180);
   const target = contact(state, 0, scaleTravel(110), 1);
   target.vz = scaleTravel(300);
   combat.acquireAndFire(state);
@@ -178,7 +178,7 @@ test('strafe intercepts an approaching craft faster than the bolt and skips a re
 });
 
 test('descending strafe catches a contact entering its height window mid-tick', () => {
-  const state = flight(145), target = contact(state, 0, 70, 1);
+  const state = flight(180), target = contact(state, 0, 70, 1);
   combat.acquireAndFire(state);
   const [strafe] = state.shots;
   assert.equal(strafe?.kind, 'strafe');
@@ -190,7 +190,7 @@ test('descending strafe catches a contact entering its height window mid-tick', 
 });
 
 test('terrain intersecting the descending path stops the strafe before an aircraft', () => {
-  const state = flight(145), target = contact(state, 0, 70, 1);
+  const state = flight(180), target = contact(state, 0, 70, 1);
   combat.acquireAndFire(state);
   const [strafe] = state.shots;
   assert.equal(strafe?.kind, 'strafe');
@@ -202,12 +202,12 @@ test('terrain intersecting the descending path stops the strafe before an aircra
 });
 
 test('a missed strafe remains limited to aircraft in its selected lower band', () => {
-  const state = flight(145);
+  const state = flight(180);
   state.boss = createStage(parseStageOptions('?fixture=boss')).boss;
   const ace = state.boss;
   const target = contact(state, 0, 73, 1);
-  target.alt = 103;
-  Object.assign(ace, { x: target.x, z: target.z, alt: 97.9 });
+  target.alt = 118;
+  Object.assign(ace, { x: target.x, z: target.z, alt: 112.9 });
   combat.acquireAndFire(state);
   const [strafe] = state.shots;
   assert.equal(strafe?.kind, 'strafe');
@@ -215,21 +215,21 @@ test('a missed strafe remains limited to aircraft in its selected lower band', (
 
   state.enemies.length = 0;
   const outsideBand = contact(state, 0, 73, 1), twoDown = contact(state, 0, 114, 0);
-  outsideBand.alt = 97.9;
+  outsideBand.alt = 112.9;
   sweep(state, 60);
   assert.equal(outsideBand.hp, 2);
   assert.equal(twoDown.hp, 2);
   assert.equal(ace.hp, ace.maxHp);
-  assert.ok(Math.abs(strafe.alt - 98) < 1e-6);
+  assert.ok(Math.abs(strafe.alt - 113) < 1e-6);
   assert.equal(state.shots.length, 0);
 });
 
 test('a strafe swept through the selected band can clip the Ace', () => {
-  const state = flight(145);
+  const state = flight(180);
   state.boss = createStage(parseStageOptions('?fixture=boss')).boss;
   const ace = state.boss;
   const target = contact(state, 0, 73, 1);
-  target.alt = 103;
+  target.alt = 118;
   Object.assign(ace, { x: target.x, z: target.z, alt: target.alt });
   combat.acquireAndFire(state);
   assert.equal(state.shots[0]?.kind, 'strafe');

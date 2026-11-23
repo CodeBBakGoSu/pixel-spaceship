@@ -554,7 +554,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
     if ((enemy.kind === 'hound' || enemy.kind === 'interceptor') && (range <= ROSTER.hound.bandFollowRange || enemy.maneuver)) {
       followPlayerBand(state, enemy, ground, events);
     }
-    if (enemy.kind === 'harrier' && moveBetweenBands(state, enemy, ground, 29)) enemy.maneuverAt = state.tick + 360;
+    if (enemy.kind === 'harrier' && moveBetweenBands(state, enemy, ground, ROSTER.harrier.bandSpeed)) enemy.maneuverAt = state.tick + 360;
     const intercept = enemy.kind === 'interceptor' && range < ROSTER.interceptor.tailRange
       && dx * fx + dz * fz >= range * Math.cos(ROSTER.interceptor.tailHalfAngle);
     if (course) {

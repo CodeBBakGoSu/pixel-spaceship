@@ -79,10 +79,10 @@ test('Vector Thrusters multiply uncapped vertical speed', () => {
 
 test('the ceiling, minimum altitude and terrain floor progressively reduce inward speed and pitch', () => {
   for (const [ground, limit, climb, angle] of [
-    [lowGround, 165, 1, 32],
-    [lowGround, 55, -1, -38],
-    // A light dive stays below the SKIM command threshold over the raised terrain.
-    [() => 78, 100, -0.1, -3.8],
+    [lowGround, 230, 1, 32],
+    // A light dive stays below the SKIM command threshold over the sea floor and raised terrain.
+    [lowGround, 49, -0.1, -3.8],
+    [() => 78, 92, -0.1, -3.8],
   ]) {
     const direction = Math.sign(climb);
     const samples = [13, 7, 2].map(distance => {
@@ -112,10 +112,10 @@ test('the ceiling, minimum altitude and terrain floor progressively reduce inwar
 test('the terrain hard stop preserves clearance when the ground rises within one tick', () => {
   const state = start();
   const startZ = state.player.z;
-  const ridge = (_x, z) => z > startZ + 1 ? 104 : 0;
+  const ridge = (_x, z) => z > startZ + 1 ? 115 : 0;
   state.player.pitch = radians(-15);
   stepStage(state, {}, ridge);
-  close(state.player.altitude, 126);
+  close(state.player.altitude, 129);
 });
 
 test('bank sink is added to the measured altitude change independently of flight-path pitch', () => {
@@ -166,10 +166,10 @@ test('a held dive still enters SKIM and drops its pitch before the next climb', 
   assert.equal(state.player.pitch, 0);
   stepStage(state, { climb: -1 }, ground);
   assert.equal(state.speed, 104);
-  assert.equal(state.player.altitude, 65);
+  assert.equal(state.player.altitude, 49);
   for (let tick = 0; tick < 20; tick++) stepStage(state, { climb: 1 }, ground);
   assert.equal(state.player.skim, undefined);
-  assert.ok(state.player.pitch > 0 && state.player.altitude > 65);
+  assert.ok(state.player.pitch > 0 && state.player.altitude > 49);
 });
 
 test('flares inherit the measured climb or dive rate while rear bombs hold their launch altitude', () => {
@@ -180,7 +180,7 @@ test('flares inherit the measured climb or dive rate while rear bombs hold their
     stepStage(state, { climb, flare: true, bomb: true }, lowGround);
     const launchAltitude = state.player.altitude;
     const verticalSpeed = (launchAltitude - altitude) * 60;
-    const flareRate = Math.min(-6, Math.max(-12, verticalSpeed * 0.2 - 7));
+    const flareRate = Math.min(-9, Math.max(-18, verticalSpeed * 0.2 - 10.5));
     assert.ok(state.flares.length > 0);
     for (const flare of state.flares) close(flare.vy, flareRate);
     stepStage(state, { climb }, lowGround);

@@ -110,11 +110,11 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, agility: 
     const vv = vx * vx + vz * vz;
     const closest = vv > 0 ? clamp(-(x * vx + z * vz) / vv, 0, BOT_POLICY.lookaheadMax) : 0;
     if (Math.hypot(x + vx * closest, z + vz * closest) >= radius) return;
-    if (mode === 'top') return p.altitude >= 120 ? -1 : 1;
+    if (mode === 'top') return p.altitude >= BANDS[1] + 10 ? -1 : 1;
     const terrain = ground?.(p.x + ownX * closest, p.z + ownZ * closest) ?? WORLD_TERRAIN.seaLevel;
     const floor = Math.max(MIN_ALTITUDE, terrain + FLY_IN_WORLD.clearance);
     if (!crossesThreatBand(state, threat.alt, climb, Math.max(closest, 0.2), terrain, floor, agility)) return;
-    const up = floor > threat.alt - 12 || threat.alt < 86 || (threat.alt <= 150 && p.altitude >= threat.alt);
+    const up = floor > threat.alt - 12 || threat.alt < 86 || (threat.alt <= MAX_ALTITUDE - 15 && p.altitude >= threat.alt);
     const safe = threat.alt + (up ? 12 : -12);
     return up ? clamp((safe - p.altitude) / 2, 0, 1) : clamp((safe - p.altitude) / 2, -1, 0);
   };

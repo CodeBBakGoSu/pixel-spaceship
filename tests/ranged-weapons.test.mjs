@@ -42,7 +42,7 @@ test('Seeker fires three guided missiles and climbs one band, leaving two-band t
   assert.ok(state.shots.every(shot => shot.kind === 'seeker' && shot.targetId === adjacent.id));
   projectiles(state, 30);
   assert.ok(state.shots.every(shot => shot.alt > low && shot.alt < mid));
-  projectiles(state, 110);
+  projectiles(state, 125);
   assert.ok(adjacent.hp < 12);
   assert.equal(outOfBand.hp, 12);
 });
@@ -51,7 +51,7 @@ test('Seeker can line up a close target on an adjacent band', () => {
   const state = setup('seeker', 1, low);
   const adjacent = contact(state, 0, 18, mid);
   advanceRangedWeapons(state, ground);
-  projectiles(state, 110);
+  projectiles(state, 125);
   assert.ok(adjacent.hp < 12);
 });
 

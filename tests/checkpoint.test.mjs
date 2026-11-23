@@ -66,7 +66,7 @@ test('a pre-Ace 8:00 checkpoint deploys the new fighter while preserving the sor
   const { target } = restored.boss.entry;
   assert.ok(Math.hypot(target.x - player.x, target.z - player.z) <= 760);
   assert.equal(restored.boss.band, SKIM_BAND);
-  assert.equal(target.alt, 77);
+  assert.equal(target.alt, 61);
   assert.equal(restored.boss.x, restored.boss.entry.origin.x);
   assert.equal(restored.phaseNotice.phase, 'ace');
   stepStage(restored, {}, terrain);
@@ -106,7 +106,7 @@ test('a v1 checkpoint upgrades skimmer volleys, turret flak and the world when r
   skimmer.tell = { kind: 'strafe', started: before.tick - 26, until: before.tick + 1 };
   const turret = makeEnemy(before, x + 15, z + 70, 1, 'turret');
   turret.alt = 40;
-  turret.tell = { kind: 'flak', x, z: z + 52, alt: 110, until: before.tick + 1 };
+  turret.tell = { kind: 'flak', x, z: z + 52, alt: 125, until: before.tick + 1 };
   before.enemies = [skimmer, turret];
   delete before.worldRegion;
   delete before.worldSites;
@@ -117,9 +117,9 @@ test('a v1 checkpoint upgrades skimmer volleys, turret flak and the world when r
   assert.equal(restored.enemies[0].skim, true);
   assert.equal(restored.enemies[1].alt, 40);
   assert.equal(restored.enemies[1].skim, true);
-  assert.equal(restored.enemies[1].tell.alt, 65);
+  assert.equal(restored.enemies[1].tell.alt, 49);
   stepStage(restored, {}, ground);
-  assert.equal(restored.enemies[0].alt, 65);
-  assert.deepEqual(restored.shots.filter(shot => shot.kind === 'hostile').map(shot => shot.alt), [65, 65]);
-  assert.equal(restored.effects.find(effect => effect.kind === 'flak').alt, 65);
+  assert.equal(restored.enemies[0].alt, 49);
+  assert.deepEqual(restored.shots.filter(shot => shot.kind === 'hostile').map(shot => shot.alt), [49, 49]);
+  assert.equal(restored.effects.find(effect => effect.kind === 'flak').alt, 49);
 });

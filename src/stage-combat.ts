@@ -2,8 +2,9 @@ import type { Ace, AceTell, Effect, Enemy, Flare, Ground, KillCredit, Point, Pos
   StageState } from './stage-types.ts';
 import { ACE } from './data/ace.ts';
 import { aegisBlocks } from './data/roster.ts';
+import { scaleClimb } from './data/speed.ts';
 import { BOOST_SPEED } from './flight.ts';
-import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
+import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, skimAltitude, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIUS, HOSTILE_IFRAME_TICKS, hostileShape,
   MINE_RADIUS, type HostileSourceKind } from './data/hostile-fire.ts';
@@ -21,9 +22,9 @@ export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
 export { BANDS } from './bands.ts';
 export const HIT_WINDOW = 8;
-export const MIN_ALTITUDE = 55;
-export const MAX_ALTITUDE = 165;
-export const VERTICAL_SPEED = 40;
+export const MIN_ALTITUDE = skimAltitude();
+export const MAX_ALTITUDE = 230;
+export const VERTICAL_SPEED = scaleClimb(40);
 export const WIPE_DURATION = 0.15;
 export const BOLT_SPEED = PLAYER_PROJECTILES.boltSpeed;
 export const SHOT_LIMIT = 192;
@@ -37,7 +38,7 @@ export const MAX_FLARES = 3;
 export const FLARE_COOLDOWN_TICKS = 36;
 export const FLARE_RELOAD_TICKS = 420;
 export const FLARE_LIFE_TICKS = 120;
-export const FLARE_GRAVITY = 14;
+export const FLARE_GRAVITY = scaleClimb(14);
 export const REAR_GLIMPSE_TICKS = 84;
 const REAR_IMPACT_TICKS = 45;
 const FLARE_HIT_RADIUS = 4.5;
@@ -47,7 +48,7 @@ const FLARE_CONFIRM_TICKS = 72;
 const FLARE_FAN = [-2, -1, 0, 1, 2];
 const BOMB_DROP_TICKS = 24;
 const BOMB_HOLD_TICKS = 27;
-const BOMB_FALL_SPEED = 24;
+const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
 const TWIN_CONE = Math.PI / 6;
@@ -512,7 +513,7 @@ function launchFlares(state: StageState, vx: number, vz: number, fan: readonly n
   // Keep boosted flares close enough to catch a tail while still inheriting launch momentum.
   const { aftOffset, kick: minimumKick, fanSpacing, lateralSpeed } = REAR_ORDNANCE.flare;
   const kick = Math.max(minimumKick, (vx * fx + vz * fz) * 0.89);
-  const vy = clamp(state.climbRate * 0.2 - 7, -12, -6);
+  const vy = clamp(state.climbRate * 0.2 - scaleClimb(7), -scaleClimb(12), -scaleClimb(6));
   const tuning = WEAPONS.phoenix.tuning;
   const bonus = phoenixLevel ? tuning.lifeBonusTicks[phoenixLevel - 1] : 0;
   const firebird = phoenixLevel && state.run?.evolutions.phoenix;
@@ -675,7 +676,7 @@ export function advanceEnemyHazards(state: StageState, ground: Ground, events?: 
   const p = state.player;
   let alive = 0;
   for (const mine of state.enemyMines) {
-    mine.alt = Math.max(BANDS[0], mine.alt - 14 * STEP);
+    mine.alt = Math.max(BANDS[0], mine.alt - scaleClimb(14) * STEP);
     if (state.tick - mine.born >= 6 * TICKS_PER_SECOND || mine.alt <= ground(mine.x, mine.z)) continue;
     if (inBand(mine.alt, p.altitude) && Math.hypot(mine.x - p.x, mine.z - p.z) <= MINE_RADIUS) {
       hurtPlayer(state, mine, events);

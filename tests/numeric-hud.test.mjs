@@ -12,7 +12,7 @@ test('the HUD distinguishes low and critical hull and warns below thirty percent
 });
 
 test('the HUD names the current altitude band in English and Korean', () => {
-  const keys = [75, 92.5, 92.6, 110, 127.5, 127.6, 145].map(altitude => altitudeBandKey({ altitude }));
+  const keys = [75, 100, 100.1, 125, 152.5, 152.6, 180].map(altitude => altitudeBandKey({ altitude }));
   assert.deepEqual(keys.map(key => createTranslator('en')(key)), ['LOW', 'LOW', 'MID', 'MID', 'MID', 'HIGH', 'HIGH']);
   assert.deepEqual(keys.map(key => createTranslator('ko')(key)), ['저', '저', '중', '중', '중', '고', '고']);
 });
@@ -20,9 +20,9 @@ test('the HUD names the current altitude band in English and Korean', () => {
 test('the HUD reports terrain-following SKIM even at the altitude of a fixed band', () => {
   const en = createTranslator('en'), ko = createTranslator('ko');
   assert.equal(en(altitudeBandKey({ altitude: 32, skim: 'water' })), 'SKIM');
-  assert.equal(en(altitudeBandKey({ altitude: 110, skim: 'land' })), 'SKIM');
-  assert.equal(ko(altitudeBandKey({ altitude: 110, skim: 'land' })), '초저');
-  assert.equal(en(altitudeBandKey({ altitude: 110 })), 'MID');
+  assert.equal(en(altitudeBandKey({ altitude: 125, skim: 'land' })), 'SKIM');
+  assert.equal(ko(altitudeBandKey({ altitude: 125, skim: 'land' })), '초저');
+  assert.equal(en(altitudeBandKey({ altitude: 125 })), 'MID');
 });
 
 test('the sortie clock counts elapsed seconds up to the correct mode duration', () => {

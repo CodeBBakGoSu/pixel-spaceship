@@ -54,7 +54,7 @@ test('first levy uses the inclusive altitude window and requires three kills in 
   beat(state, 60);
   kill(state);
   kill(state);
-  state.player.altitude = 145;
+  state.player.altitude = 180;
   kill(state, 2);
   kill(state, 1);
   assert.equal(state.bills.active.progress, 2);
@@ -96,13 +96,13 @@ test('Rear Guard counts engaged rear-threat kills credited to rear equipment', (
 test('High Recovery counts physical high-band orb collections', () => {
   const state = game();
   beat(state, 345);
-  const pickup = { id: 60, x: 0, z: 0, alt: 110, xp: 50, born: 0 };
+  const pickup = { id: 60, x: 0, z: 0, alt: 125, xp: 50, born: 0 };
   noteBillPickup(state, pickup);
   assert.equal(state.bills.active.progress, 0);
-  for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: 145 });
+  for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: 180 });
   assert.equal(state.bills.active.progress, 9);
   assert.equal(finishBillTick(state), null);
-  noteBillPickup(state, { ...pickup, id: 10, alt: 145 });
+  noteBillPickup(state, { ...pickup, id: 10, alt: 180 });
   assert.deepEqual(finishBillTick(state), { definition: BILLS[3], paid: true });
 });
 
@@ -200,7 +200,7 @@ test('Seeker credits a homing lock on its target and leaves splash kills uncredi
   const splash = makeEnemy(state, x + 8, z + 25, 1);
   state.enemies.push(target, splash);
   state.shots.push({ kind: 'seeker', weapon: 'seeker', targetId: target.id, sourceBand: 1,
-    x, z: z + 23, alt: 110, vx: 0, vy: 0, vz: 86, damage: 3, radius: 12,
+    x, z: z + 23, alt: 125, vx: 0, vy: 0, vz: 86, damage: 3, radius: 12,
     life: 1, volley: 1, nearMiss: false, lockId: null });
   advanceShots(state, () => 35);
   assert.equal(target.hp, 0);

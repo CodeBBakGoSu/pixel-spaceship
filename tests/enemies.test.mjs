@@ -17,7 +17,7 @@ test('a Skimmer follows the water surface in SKIM and fires two planar darts', (
   assert.equal(state.enemies[0]?.kind, 'skimmer');
   const skimmer = state.enemies[0];
   assert.equal(skimmer.hp, 2);
-  const launchAlt = ground(skimmer.x, skimmer.z) + 30;
+  const launchAlt = ground(skimmer.x, skimmer.z) + 14;
   skimmer.shotAt = state.tick + 1;
   advance(state, 1);
   assert.equal(skimmer.tell?.kind, 'strafe');
@@ -28,7 +28,7 @@ test('a Skimmer follows the water surface in SKIM and fires two planar darts', (
   assert.equal(shots.length, 2);
   assert.ok(shots.every(shot => shot.alt === launchAlt));
   advance(state, 85, { turn: 1 });
-  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 30);
+  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 14);
   assert.equal(skimmer.skim, true);
   assert.ok(ground(skimmer.x, skimmer.z) <= 39);
 });
@@ -54,9 +54,9 @@ test('a Spotter charges a fixed shot for 0.8 s and buffs a nearby Hound by 20%',
   const aim = spotter.tell.target;
   advance(state, 47);
   assert.deepEqual(spotter.tell.target, aim);
-  assert.equal(state.shots.filter(shot => shot.alt === 145 && shot.kind === 'hostile').length, 0);
+  assert.equal(state.shots.filter(shot => shot.alt === 180 && shot.kind === 'hostile').length, 0);
   advance(state, 1);
-  const shots = state.shots.filter(shot => shot.alt === 145 && shot.kind === 'hostile');
+  const shots = state.shots.filter(shot => shot.alt === 180 && shot.kind === 'hostile');
   assert.equal(shots.length, 1);
   const [shot] = shots;
   assert.ok(Math.abs((aim.x - shot.x) * shot.vz - (aim.z - shot.z) * shot.vx) < 1e-6);
@@ -69,7 +69,7 @@ test('Flankers hold to the side at their assigned weapon height', () => {
   advance(state, 180);
   const angle = Math.abs(Math.atan2(flanker.x - state.player.x, flanker.z - state.player.z));
   assert.ok(angle >= 70 * Math.PI / 180 && angle <= 100 * Math.PI / 180);
-  assert.ok([75, 145].includes(flanker.alt));
+  assert.ok([75, 180].includes(flanker.alt));
 });
 
 test('a rear Harrier telegraphs one adjacent hop in answer to an Immelmann', () => {
@@ -85,7 +85,7 @@ test('a rear Harrier telegraphs one adjacent hop in answer to an Immelmann', () 
   advance(state, 75);
   assert.equal(harrier.maneuver?.phase, 'diving');
   advance(state, 75);
-  assert.equal(harrier.alt, 145);
+  assert.equal(harrier.alt, 180);
   assert.equal(harrier.maneuver, null);
 });
 
@@ -97,7 +97,7 @@ test('a Diver flashes for 1.2 s and fires one three-way fan during its plunge', 
   advance(state, 1);
   assert.equal(diver.maneuver?.diveAt - state.tick, 72);
   advance(state, 72);
-  assert.ok(diver.alt < 145);
+  assert.ok(diver.alt < 180);
   assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
   for (let i = 0; i < 65 && !state.shots.some(shot => shot.kind === 'hostile'); i++) advance(state, 1);
   assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 3);
@@ -115,7 +115,7 @@ test('a Bomber has two patrol escorts and its mines fall from CRUISE to LOW', ()
   advance(state, bomber.tell.until - state.tick);
   assert.equal(state.enemyMines.length, 1);
   const mine = state.enemyMines[0];
-  assert.ok(mine.alt > 109 && mine.alt <= 110);
+  assert.ok(mine.alt > 109 && mine.alt <= 125);
   advance(state, 160, { turn: 1 });
   assert.equal(mine.alt, 75);
 });
@@ -158,7 +158,7 @@ test('an aft fighter passes a wingtip and sweeps across the nose through a gentl
       const dx = fighter.x - p.x, dz = fighter.z - p.z, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
       const ahead = dx * fx + dz * fz, side = dx * fz - dz * fx;
       assert.equal(fighter.band, 2);
-      assert.equal(fighter.alt, 148);
+      assert.equal(fighter.alt, 183);
       assert.ok(Math.hypot(fighter.x - x, fighter.z - z) < 3);
       if (Math.abs(ahead) <= 6) wingtip ||= fighter.flyby?.phase === 'overtake' && side >= 48;
       if (priorSide > 0 && side <= 0) acrossTheNose ||= fighter.flyby?.phase === 'cross' && ahead >= 96 && ahead <= 200;
@@ -172,7 +172,7 @@ test('an aft fighter passes a wingtip and sweeps across the nose through a gentl
 test('opening patrols arrive far enough out to read before their slower-than-boost bolts fire', () => {
   const state = createStage(parseStageOptions('?autoplay=1'));
   state.twinAt = state.podsAt = state.strafeAt = Infinity;
-  state.player.altitude = 145;
+  state.player.altitude = 180;
   advance(state, 120);
   const engaged = state.enemies.filter(enemy => !enemy.entry);
   assert.equal(engaged.length, 2);
@@ -227,7 +227,7 @@ test('an airborne straggler re-enters the forward quarter only after staying far
   assert.ok(range >= 350 && range <= 450);
   assert.equal(patrol.hp, 1);
   assert.equal(patrol.band, 2);
-  assert.equal(patrol.alt, 143);
+  assert.equal(patrol.alt, 178);
   assert.equal(state.pickups.length, 0);
 });
 
@@ -249,18 +249,18 @@ test('the old rim leaves re-entry open while nearby flanking and pursuit contact
 
 test('a Split-S does not pull a water-only Skimmer through a sea stack', () => {
   const state = fixture('skimmer');
-  Object.assign(state.player, { x: 288, z: 308, yaw: 0, altitude: 110 });
+  Object.assign(state.player, { x: 288, z: 308, yaw: 0, altitude: 125 });
   const skimmer = state.enemies[0];
   Object.assign(skimmer, { x: 288, z: 208 });
   advance(state, 90, { maneuver: 'split-s' });
-  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 30);
+  assert.equal(skimmer.alt, ground(skimmer.x, skimmer.z) + 14);
   assert.ok(ground(skimmer.x, skimmer.z) <= 39);
 });
 
 test('a far turret transfers to a local ground site ahead and keeps its HP', () => {
   const state = fixture('turret');
   const turret = state.enemies[0];
-  Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 145 });
+  Object.assign(state.player, { x: -5, z: 278, yaw: Math.PI / 2, altitude: 180 });
   Object.assign(turret, { x: state.player.x - 450, z: state.player.z, farTicks: 155, hp: 2 });
   advance(state, 1);
   const { x, z } = state.player;
@@ -345,7 +345,7 @@ test('an enemy holds its terrain escape heading when its requested course clears
   Object.assign(state.player, { x: 0, z: 100, yaw: 0 });
   state.enemies = [patrol];
 
-  advanceEnemies(state, (x, z) => Math.abs(x) < 6 && z >= 10 ? 110 : 0);
+  advanceEnemies(state, (x, z) => Math.abs(x) < 6 && z >= 10 ? 125 : 0);
   const escape = patrol.terrainTurn;
   assert.ok(escape);
   state.tick++;

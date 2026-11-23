@@ -90,7 +90,7 @@ test('Collector Swarm adds a fourth drone and draws salvage into drones beyond p
   const state = start();
   evolve(state, 'drones', 'collector-swarm');
   const { x, z } = state.player;
-  const pickup = { id: 42, x, z: z + scaleTravel(33), alt: 110, xp: 1, born: 0 };
+  const pickup = { id: 42, x, z: z + scaleTravel(33), alt: 125, xp: 1, born: 0 };
   state.pickups.push(pickup);
   for (let i = 0; i < 12 && !pickup.collected; i++) {
     state.tick++;
@@ -145,9 +145,9 @@ test('three ballistic weapons give ordinary Twin and Pod bolts one additional pi
 test('three ordnance weapons increase the automatic bomb blast radius', () => {
   const state = start();
   Object.assign(state.run.weaponLevels, { seeker: 1, phoenix: 1, 'bomb-bay': 1 });
-  state.player.altitude = 145;
+  state.player.altitude = 180;
   advanceAutoOrdnance(state, false);
-  state.rearBombs[0].alt = 110;
+  state.rearBombs[0].alt = 125;
   contact(state, 0, 0);
   advanceRearBombs(state, sea);
   const blast = state.effects.find(effect => effect.kind === 'bomb-blast');

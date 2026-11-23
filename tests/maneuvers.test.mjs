@@ -20,10 +20,10 @@ test('pursuit fixture starts with a three-band group aft', () => {
   const state = createStage(parseStageOptions('?fixture=pursuit'));
   assert.equal(state.phase, 'playing');
   assert.equal(state.view, 'chase');
-  assert.equal(state.player.altitude, 110);
+  assert.equal(state.player.altitude, 125);
   assert.equal(state.enemies.length, 4);
   assert.ok(state.enemies.every(enemy => enemy.z < state.player.z - 50));
-  assert.deepEqual([...new Set(state.enemies.map(enemy => enemy.alt))].sort((a, b) => a - b), [75, 110, 145]);
+  assert.deepEqual([...new Set(state.enemies.map(enemy => enemy.alt))].sort((a, b) => a - b), [75, 125, 180]);
 });
 
 test('full autoplay uses a charged J-turn against a distant level pursuer', () => {
@@ -32,9 +32,9 @@ test('full autoplay uses a charged J-turn against a distant level pursuer', () =
 });
 
 for (const [kind, flipTick, ticks, altitude, yaw, cooldown] of [
-  ['immelmann', 78, 252, 145, Math.PI, 240],
+  ['immelmann', 78, 252, 180, Math.PI, 240],
   ['split-s', 98, 272, 75, Math.PI, 240],
-  ['j-turn', 1, 52, 110, Math.PI, 420],
+  ['j-turn', 1, 52, 125, Math.PI, 420],
 ]) {
   test(`${kind} finishes on tick ${ticks} and starts its cooldown at the flip`, () => {
     const state = empty();
@@ -122,7 +122,7 @@ test('J-turn snaps its flight heading, traces a displaced U and lets the view ca
   assert.ok(Math.abs(wrapped(moves.maneuverViewYaw(state) - state.player.yaw)) < 1e-6);
 });
 
-for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['split-s', 98, 75]]) {
+for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 180], ['split-s', 98, 75]]) {
   test(`${kind} carries flight forward before spending 2.5 seconds level and inverted`, () => {
     const state = empty();
     const start = { ...state.player };
@@ -156,7 +156,7 @@ for (const [kind, flipTick, expectedAltitude] of [['immelmann', 78, 145], ['spli
 }
 
 test('a loop at the extreme band returns to its launch height and marks the limit', () => {
-  for (const [maneuver, altitude] of [['immelmann', 151], ['split-s', 65]]) {
+  for (const [maneuver, altitude] of [['immelmann', 186], ['split-s', 49]]) {
     const state = empty();
     state.player.altitude = altitude;
     if (maneuver === 'split-s') state.player.skim = 'water';
@@ -173,9 +173,9 @@ test('Split-S from LOW clears raised terrain and settles into SKIM', () => {
   run(state, 1, { maneuver: 'split-s' }, () => 49);
   for (let tick = 2; tick <= moves.MANEUVERS['split-s'].ticks; tick++) {
     run(state, 1, {}, () => 49);
-    assert.ok(state.player.altitude >= 71);
+    assert.ok(state.player.altitude >= 63);
   }
-  assert.equal(state.player.altitude, 79);
+  assert.equal(state.player.altitude, 63);
   assert.equal(state.player.skim, 'land');
 });
 
@@ -197,11 +197,11 @@ test('pause freezes maneuvers and preserves view-independent flight on resume', 
 
 test('after boost the Immelmann brings the high-band rear contact into a forward volley while inverted', () => {
   const state = pursuit();
-  const high = state.enemies.find(enemy => enemy.alt === 145);
+  const high = state.enemies.find(enemy => enemy.alt === 180);
   run(state, 30, { boost: true });
   run(state, 1, { maneuver: 'immelmann' });
   run(state, moves.MANEUVERS.immelmann.flipTick - 1);
-  assert.equal(state.player.altitude, 145);
+  assert.equal(state.player.altitude, 180);
   assert.ok(moves.formerPursuer(state, moves.activeTrail(state), high));
   run(state, 135);
   assert.equal(moves.maneuverAttitude(state.maneuver).inverted, true);
@@ -230,7 +230,7 @@ test('the inverted flight accepts live steering and climb commands', () => {
 });
 
 function placeContact(state) {
-  const contact = pursuit().enemies.find(enemy => enemy.alt === 110);
+  const contact = pursuit().enemies.find(enemy => enemy.alt === 125);
   const { x, z, altitude: alt } = state.player;
   Object.assign(contact, { x, z, alt, shotAt: Infinity, maneuverAt: Infinity, hp: 50,
     course: { target: { x, z }, speed: 0, until: state.tick + 2 } });
@@ -276,14 +276,14 @@ test('rear bomb coasts at its release altitude and falls after 27 ticks', () => 
   assert.equal(state.bombs, 2);
   const bomb = state.rearBombs[0];
   assert.ok(bomb.z < state.player.z - scaleTravel(8));
-  assert.equal(bomb.alt, 110);
+  assert.equal(bomb.alt, 125);
   const z = bomb.z;
   run(state, 1, { maneuver: 'j-turn' });
   run(state, 26);
-  assert.equal(bomb.alt, 110);
+  assert.equal(bomb.alt, 125);
   assert.ok(bomb.z < z);
   run(state, 1);
-  assert.ok(Math.abs(bomb.alt - 109.6) < 1e-9);
+  assert.ok(Math.abs(bomb.alt - 124.4) < 1e-9);
   run(state, 200);
   assert.equal(state.rearBombs.length, 0);
 });
@@ -299,19 +299,19 @@ test('falling bomb damage is altitude gated and clears only nearby hostile shots
     Object.assign(target, { x: bomb.x, z: bomb.z, shotAt: state.tick + 200 });
   }
   state.enemies = targets;
-  const hostile = { x: bomb.x, z: bomb.z, alt: 145, vx: 0, vz: 0, kind: 'hostile', life: 2, damage: 2 };
+  const hostile = { x: bomb.x, z: bomb.z, alt: 180, vx: 0, vz: 0, kind: 'hostile', life: 2, damage: 2 };
   const outside = { ...hostile, x: bomb.x + scaleTravel(41) };
   state.shots.push(hostile, outside);
   run(state, 1);
   assert.equal(state.rearBombs.length, 0);
-  assert.deepEqual(state.enemies.map(enemy => enemy.alt), [110, 145]);
+  assert.deepEqual(state.enemies.map(enemy => enemy.alt), [125, 180]);
   assert.deepEqual(state.shots.filter(shot => shot.kind === 'hostile'), [outside]);
 });
 
 test('a falling bomb detonates when it reaches the Ace’s altitude damage window', () => {
   const state = createStage(parseStageOptions('?fixture=boss'));
   const ace = state.boss;
-  const bomb = { x: ace.x, z: ace.z, alt: ace.alt + HIT_WINDOW + 1, vx: 0, vz: 0, born: state.tick - 27 };
+  const bomb = { x: ace.x, z: ace.z, alt: ace.alt + HIT_WINDOW + 1.5, vx: 0, vz: 0, born: state.tick - 27 };
   state.rearBombs.push(bomb);
   for (let tick = 0; tick < 2; tick++) {
     state.tick++;

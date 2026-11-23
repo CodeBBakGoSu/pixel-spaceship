@@ -13,10 +13,10 @@ export const WORLD_TERRAIN = {
 export const WORLD_AIRSPACE = { x: 0, z: 0, radius: 1792 } as const;
 
 export const REACH_LANDMARKS = {
-  ridge: { x: -240, z: 96, alt: 110 },
+  ridge: { x: -240, z: 96, alt: 125 },
   strait: { x: -128, z: -320, alt: 75 },
-  stacks: { x: 288, z: 240, alt: 145 },
-  atoll: { x: 160, z: -128, alt: 110 },
+  stacks: { x: 288, z: 240, alt: 180 },
+  atoll: { x: 160, z: -128, alt: 125 },
 } as const;
 
 export const REACH_STACKS = [
@@ -38,7 +38,7 @@ export const WORLD_SITES = {
 
 export const FLY_IN_WORLD = {
   minApproachDistance: scaleTravel(640),
-  transitAltitude: 150,
+  transitAltitude: 195,
   clearance: 22,
 } as const;
 
