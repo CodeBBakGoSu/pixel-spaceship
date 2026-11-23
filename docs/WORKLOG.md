@@ -21,6 +21,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ## Log
 
 ### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
+- Survivors growth on `devin/1795406694-aster-growth`: make upgrade choices and weapon rank gains tangible in flight. Areas: progression, player weapon patterns and upgrade/HUD feedback; coordinate shared replay goldens separately.
+- State: in progress (데븐 봇). No enemy density, rendering capacity or Stage C recovery/vertical rates.
+
+### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
 - Vampire Survivors-style hordes: far more enemies on screen (swarm caps, gnat/regular spawn rates, horde behavior) and keeping 60 fps with them, on branch `devin/1795400000-survivors-horde`. Files: `src/data/phases.ts`, `src/swarm.ts`, `src/spawn-director.ts`, gnat movement in `src/stage-enemies.ts`, enemy instancing in `src/scene.ts`/`src/roster-visuals.ts`, related tests, golden hashes.
 - State: in progress (데븐 봇). Not touching Stage C leftovers (recovery score thresholds, weapon climb/descent rates).
 
