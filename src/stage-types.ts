@@ -3,7 +3,7 @@ import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
 import type { LandmarkId, WorldSite } from './reach.ts';
 import type { FlightBand } from './bands.ts';
 import type { ChestId, DraftChoiceId, EvolutionId, GearId, WeaponId } from './data/items.ts';
-import type { RunPhase } from './data/phases.ts';
+import type { GnatVariant, RunPhase } from './data/phases.ts';
 import type { ChestState } from './chests.ts';
 import type { BillState } from './bills.ts';
 import type { Profile, RunMetrics, hangarLoadout } from './meta.ts';
@@ -105,6 +105,7 @@ export type FlyIn = {
 export type Enemy = Position & {
   id: number;
   kind: EnemyKind;
+  gnatVariant?: GnatVariant;
   hp: number;
   yaw: number;
   vx: number;

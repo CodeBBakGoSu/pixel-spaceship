@@ -1,7 +1,7 @@
-import { GNAT, type RunPhase, type SwarmFormation } from './data/phases.ts';
+import { GNAT, gnatVariantAt, type RunPhase, type SwarmFormation } from './data/phases.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import { BANDS, TICKS_PER_SECOND } from './stage-combat.ts';
-import { beginEnemyFlyIn, makeEnemy } from './stage-enemies.ts';
+import { beginEnemyFlyIn, makeGnat } from './stage-enemies.ts';
 import { random } from './stage-random.ts';
 import type { Band, Ground, Point, StageState } from './stage-types.ts';
 
@@ -70,7 +70,7 @@ export function spawnSwarm(state: StageState, phase: RunPhase, members: number, 
     const layout = packSites(ground, projected, pack.direction, pack.band, formation, pack.size);
     if (!layout) continue;
     for (const { x, z } of layout.sites) {
-      const gnat = makeEnemy(state, x, z, pack.band, 'gnat');
+      const gnat = makeGnat(state, x, z, pack.band, gnatVariantAt(phase, random(rng)));
       const anchor = formation === 'encircle' ? projected
         : { x: x + layout.fx * GNAT.range, z: z + layout.fz * GNAT.range };
       beginEnemyFlyIn(state, gnat, ground, anchor, 0.16);

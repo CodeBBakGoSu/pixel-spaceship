@@ -1,6 +1,6 @@
 import type { createTranslator } from './i18n.ts';
 import { NAV_MAP_RANGE, RADAR_RANGE, TAIL_MIN_CLOSING_SPEED, TAIL_TRACK_RANGE } from './data/navigation.ts';
-import type { EnemyKind } from './enemy-kinds.ts';
+import { isBodyHazard, type EnemyKind } from './enemy-kinds.ts';
 import { activeTrail, formerPursuer } from './maneuvers.ts';
 import { LANDMARKS, type LandmarkId, type WorldSite } from './reach.ts';
 import { activeAce, beaconTick } from './stage.ts';
@@ -188,7 +188,7 @@ function findRearDanger(state: StageState, fx: number, fz: number): RearDanger |
 
   const bodyFrom = Math.max(STEP, (state.bodyGraceUntil + 1 - state.tick) * STEP);
   for (const enemy of state.enemies) {
-    if (enemy.hp <= 0 || enemy.entry || enemy.kind === 'gnat') continue;
+    if (enemy.hp <= 0 || enemy.entry || !isBodyHazard(enemy)) continue;
     const seconds = impact(enemy, BODY_RADIUS, bodyFrom, Infinity);
     if (seconds < (closest?.seconds ?? Infinity)) {
       closest = { kind: 'contact', enemyId: enemy.id, x: enemy.x, z: enemy.z, alt: enemy.alt, seconds };

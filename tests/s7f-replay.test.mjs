@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes: persistent recycling hordes and Lv7 weapon rank growth, production terrain, full-view pilot.
+// Seed-1 terminal hashes: mixed Gnat hordes and Lv7 weapon growth, production terrain, full-view pilot.
 const terminalHashes = {
   legacy: 'cfe30ddaf2a97ef808244d507845819ea76ce2de6f2dd26661bc2e159ccf3903',
-  survivors: 'd0b796fa7db18d5bae954113cdc9d0683f6e80b3babbc6f2b63f066a31ce255a',
+  survivors: 'b42b33e970416668cc43d71f384364cc3a07446f8e3ade587e39747e1965c813',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

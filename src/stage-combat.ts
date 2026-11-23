@@ -85,10 +85,11 @@ export function hostileCanHit(altitude: number, state: Pick<StageState, 'player'
   return state.hull > 0 && state.invulnerability <= 0 && !rollBoltImmune(state.roll) && inBand(altitude, state.player.altitude);
 }
 
-export function hurtPlayer(state: StageState, source?: Position, events?: CombatEvents): void {
+export function hurtPlayer(state: StageState, source?: Position, events?: CombatEvents,
+  amount = state.run ? SURVIVOR_PLAYER_DAMAGE : 2): void {
   if (state.invulnerability > 0 || !state.hull) return;
   const p = state.player;
-  const damage = Math.min(state.hull, state.run ? SURVIVOR_PLAYER_DAMAGE : 2);
+  const damage = Math.min(state.hull, amount);
   state.hull -= damage;
   if (!state.hull && state.run && state.hangar.ejector && !state.ejectorUsed) {
     state.ejectorUsed = true;

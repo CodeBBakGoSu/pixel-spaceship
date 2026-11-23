@@ -10,7 +10,10 @@ export const RUN_END_SECONDS = RUN_BOSS_SECONDS + PHASE_SECONDS;
 export const SWARM_CAPS = { mobile: 120, desktop: 200 } as const;
 export const GNAT = {
   hp: 1, xp: 1, speed: scaleTravel(32), lifeSeconds: 12, range: scaleTravel(134), clearance: 22, spacing: scaleTravel(11),
+  armored: { hp: 3, xp: 3 }, sting: { contactDamage: 1 },
 } as const;
+
+export type GnatVariant = 'armored' | 'sting';
 
 export type SwarmFormation = 'ring' | 'line' | 'vee' | 'encircle';
 export type RegularSpawn = {
@@ -31,6 +34,7 @@ export type RunPhase = {
   enemies: readonly RegularSpawn[];
   gnatsPerMinute: number;
   gnatFloor: number;
+  gnatShare: Readonly<Record<GnatVariant, number>>;
   gnatStart: number;
   packSize: number;
   formations: readonly SwarmFormation[];
@@ -58,26 +62,31 @@ export const PHASES: readonly RunPhase[] = [
   {
     id: 'coast', starts: 0, ends: PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1,
     regularCap: 8, regularPerMinute: 14, enemies: coast, gnatFloor: 22,
+    gnatShare: { armored: 0, sting: 0 },
     gnatsPerMinute: 70, gnatStart: 20, packSize: 10, formations: ['vee', 'line'], bands: [1, 1, 0, 2], splitBands: false,
   },
   {
     id: 'skirmish', starts: PHASE_SECONDS, ends: 2 * PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1.12,
     regularCap: 16, regularPerMinute: 16, enemies: skirmish, gnatFloor: 44,
+    gnatShare: { armored: 0, sting: 0.10 },
     gnatsPerMinute: 160, gnatStart: 0, packSize: 18, formations: ['ring', 'line'], bands: [0, 1, 2], splitBands: false,
   },
   {
     id: 'siege', starts: 2 * PHASE_SECONDS, ends: 3 * PHASE_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 2,
     regularCap: 26, regularPerMinute: 19, enemies: siege, gnatFloor: 84,
+    gnatShare: { armored: 0.15, sting: 0.10 },
     gnatsPerMinute: 320, gnatStart: 0, packSize: 28, formations: ['line', 'vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'storm', starts: 3 * PHASE_SECONDS, ends: RUN_BOSS_SECONDS, lull: LULL_SECONDS, hpScale: 1.12 ** 3,
     regularCap: 30, regularPerMinute: 23, enemies: [...siege, harrier], gnatFloor: 130,
+    gnatShare: { armored: 0.25, sting: 0.15 },
     gnatsPerMinute: 480, gnatStart: 0, packSize: 36, formations: ['ring', 'vee', 'line', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
   {
     id: 'ace', starts: RUN_BOSS_SECONDS, ends: RUN_END_SECONDS, lull: 0, hpScale: 1.12 ** 3,
     regularCap: 34, regularPerMinute: 28, enemies: [patrol, interceptor, harrier], gnatFloor: 166,
+    gnatShare: { armored: 0.25, sting: 0.20 },
     gnatsPerMinute: 600, gnatStart: 0, packSize: 40, formations: ['vee', 'ring', 'encircle'], bands: [0, 1, 2], splitBands: true,
   },
 ];
@@ -85,4 +94,9 @@ export const PHASES: readonly RunPhase[] = [
 export function phaseAt(seconds: number): RunPhase {
   const index = Math.floor(seconds / PHASE_SECONDS);
   return PHASES[Math.min(PHASES.length - 1, Math.max(0, index))];
+}
+
+export function gnatVariantAt(phase: RunPhase, roll: number): GnatVariant | undefined {
+  const { sting, armored } = phase.gnatShare;
+  return roll < sting ? 'sting' : roll < sting + armored ? 'armored' : undefined;
 }
