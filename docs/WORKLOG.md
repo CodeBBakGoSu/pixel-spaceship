@@ -22,6 +22,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · renderer-proto integration
+- Fresh fetch found `origin/renderer-proto` unchanged at `0631118`; fast-forwarded local `renderer-proto` to the validated Candidate 4 tree at `81abe3a`. Gameplay/test/tool files match that tested tree exactly.
+- Candidate 4 is the XP-comparison baseline only: phone weak median kills **2,462**, a strict **38-kill miss**; active weak Skirmish/Siege **50/86** are diagnostic overruns (full medians **46/81** pass). XP and survival settings are unchanged.
+- `.github/workflows/deploy.yml` runs on pushes to `main` or manual dispatch, not `renderer-proto`; no branch CI is configured. State: local integration done; authorized remote update is limited to `renderer-proto`.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795418657-renderer-proto-density-xp (base `0bc1f99`)
 - Corrected the acceptance rule: Trial 1 phone weak at 2,401.5 is a strict 100-seed target miss; the 10-seed screen threshold does not relax the final target. Trial 2 changes only Storm mobile floor 92→104 and rate 480→600; PC and all other values remain at Trial 1.
 - Trial 2 phone 10-seed full-density medians pass, but weak kills are 2,197.5, 252.5 below the 2,450 screen gate; no Trial 2 phone 100-seed runs were started. Paired baseline→Trial 2 weak mean delta is −368.3 kills; its symmetric descriptive decomposition is −174.194994 duration / −194.105006 KPM. Paired 100-seed baseline→Trial 1 weak mean delta is +104.89, but its 2,401.5 median remains a strict miss. The tracked results JSON preserves 10-seed three-way per-seed kills/duration/KPM/outcomes and 100-seed baseline/Trial 1/candidate-3 weak actual duration, normalized survival, actual KPM, outcomes, and phase-kill distributions.
