@@ -11,16 +11,16 @@ test('each recipe requires its own max-level weapon and paired buff and evolves 
   for (const weapon of WEAPON_IDS) {
     const run = createProgression(9);
     const { buff, id } = EVOLUTIONS[weapon];
-    run.weaponLevels = { [weapon]: 4 };
+    run.weaponLevels = { [weapon]: 6 };
     run.buffLevels[buff] = 3;
     assert.equal(evolveWeapon(run, weapon), null);
-    run.weaponLevels[weapon] = 5;
+    run.weaponLevels[weapon] = 7;
     run.buffLevels = {};
     assert.deepEqual(availableEvolutions(run), []);
     run.buffLevels[buff] = 1;
     assert.deepEqual(availableEvolutions(run), [weapon]);
     assert.equal(evolveWeapon(run, weapon), id);
-    assert.deepEqual(run.weaponLevels, { [weapon]: 5 });
+    assert.deepEqual(run.weaponLevels, { [weapon]: 7 });
     assert.equal(run.buffLevels[buff], 1);
     assert.equal(evolveWeapon(run, weapon), null);
   }
@@ -58,7 +58,7 @@ test('bonus upgrades consume only their named RNG and do not spend XP or a draft
 test('only the two evolution crates evolve a valid recipe and the modal freezes active ticks', () => {
   const state = start();
   state.tick = 60 * 205;
-  state.run.weaponLevels.twin = 5;
+  state.run.weaponLevels.twin = 7;
   state.run.buffLevels['overdrive-coil'] = 1;
   state.phase = 'chest';
   state.chests.offer = 'coast-supply';

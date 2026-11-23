@@ -10,7 +10,7 @@ import { World } from '../src/world.ts';
 // Seed-1 terminal hashes: production terrain, full-view pilot (Survivors includes weapon rank growth).
 const terminalHashes = {
   legacy: '08be00a7bd57e95555ebdc92f6d27322071f10fcb60db0d7823520fede976da8',
-  survivors: '3df5579c4525b157987480df010d0a6ffa5cf968bbc89318d95b0e9b6ce9bbb6',
+  survivors: '317fe8c5120dbbdccf6652f3959ecb70026745044fa6fba558ebb95d81ecf45d',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

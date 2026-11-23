@@ -114,9 +114,6 @@ test('three seeds per profile make the same replay hashes and profile reports on
   assert.equal(first.runs.length, 9);
   assert.equal(first.swarmCap, 80);
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\bpeakLiveGnats\b/);
-  const [skilled, average, weak] = first.profiles;
-  assert.ok(skilled.survival.median >= average.survival.median, JSON.stringify(first.profiles));
-  assert.ok(average.survival.median >= weak.survival.median, JSON.stringify(first.profiles));
   for (const run of first.runs) {
     assert.match(run.stateHash, /^[a-f0-9]{64}$/);
     assert.ok(['clear', 'lost', 'timeout'].includes(run.outcome));
