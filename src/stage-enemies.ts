@@ -517,6 +517,10 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
         enemy.flightSpeed = enemy.entry.exitSpeed;
         if (enemy.kind === 'turret') enemy.bank = 0;
         if (enemy.kind === 'gnat') {
+          const dx = p.x - enemy.x, dz = p.z - enemy.z;
+          const speed = GNAT.speed / (Math.hypot(dx, dz) || 1);
+          enemy.vx = dx * speed;
+          enemy.vz = dz * speed;
           enemy.tell = { kind: 'gnat', started: state.tick, until: state.tick + ROSTER.gnat.warningTicks };
           if (!swarmHeard) events?.tell?.('gnat', enemy.x, enemy.z, enemy.alt);
           swarmHeard = true;

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBot } from '../src/bot.ts';
 import { BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
+import { SWARM_CAPS } from '../src/data/phases.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { fireHostile } from '../src/stage-combat.ts';
 import { parseSimArgs, runBatch, serializeSummaryCsv } from '../tools/sim.mjs';
@@ -27,7 +28,7 @@ test('three seeds per profile make the same replay hashes and profile reports on
   assert.equal(serializeSummaryCsv(first), serializeSummaryCsv(second));
   assert.deepEqual(first.profiles.map(row => row.profile), BOT_PROFILE_IDS);
   assert.equal(first.runs.length, 9);
-  assert.equal(first.swarmCap, 80);
+  assert.equal(first.swarmCap, SWARM_CAPS.desktop);
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\bpeakLiveGnats\b/);
   const [skilled, average, weak] = first.profiles;
   assert.ok(skilled.survival.median >= average.survival.median, JSON.stringify(first.profiles));

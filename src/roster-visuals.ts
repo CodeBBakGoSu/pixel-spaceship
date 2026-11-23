@@ -16,8 +16,8 @@ const SIGNAL_COLORS = {
   tail: 0xff8775, strafe: 0xace5ff, dive: 0xffd99b, mine: 0xffb978, aegis: 0x9ff8ff,
   carrier: 0xffda83, gnat: 0xffecbf,
 } as const;
-const DESKTOP_GNAT_MARKS = 8;
-const MOBILE_GNAT_MARKS = 4;
+const DESKTOP_GNAT_MARKS = 24;
+const MOBILE_GNAT_MARKS = 12;
 const RING_LIMIT = Math.max(...PHASES.map(phase => phase.regularCap)) + ENEMY_KINDS.diver.cap + DESKTOP_GNAT_MARKS + 1;
 const CUE_VERTEX_LIMIT = RING_LIMIT * 32;
 const SHIELD_RADIUS = 13;

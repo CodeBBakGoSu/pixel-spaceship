@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes: s8-flak ground AA + s8-forge flight-path model, production terrain, full-view pilot.
+// Seed-1 terminal hashes: horde caps, encirclement and fly-in pursuit, production terrain, full-view pilot.
 const terminalHashes = {
-  legacy: 'd90af0cd6c2a0f1870a5ef048e06b47a627bd4094c471f239a23fa6219f48ef2',
-  survivors: '21778f2848148fb697dc2991bc83f5d3fc4eb4c97ba14b7ac705669dbfcc0b33',
+  legacy: '99ceb9d711974517ada3b63dee361023844d22ecd1dc9b7555fa642bd6020df2',
+  survivors: '843a76c2218cf374bc7137d5e3e1faa2acebe45cfed4c2911ffc66124bb89c3b',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

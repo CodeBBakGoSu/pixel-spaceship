@@ -122,12 +122,14 @@ test('the detailed craft LOD fits the combined wave and Ace budgets', () => {
   }
   const atCap = cappedEnemyTriangles(true);
   const swarm = triangleCount(models.gnatGeometry(true)) * SWARM_CAPS.desktop;
+  const swarmBudget = 24 * SWARM_CAPS.desktop;
+  assert.ok(swarm <= swarmBudget, `swarm: ${swarm}`);
   const wave = player + atCap(enemyLimit({ boss: null, tick: Infinity })) + swarm;
   const boss = player + ace + atCap(enemyLimit({ boss: {} })) + swarm;
-  assert.ok(wave <= 17500, `wave with swarm: ${wave}`);
-  assert.ok(boss <= 16500, `Ace with swarm: ${boss}`);
+  assert.ok(wave <= 15580 + swarmBudget, `wave with swarm: ${wave}`);
+  assert.ok(boss <= 14580 + swarmBudget, `Ace with swarm: ${boss}`);
   // The profiling fixture stacks the Ace on the largest wave and swarm.
-  assert.ok(wave + ace <= 21000, `desktop max-load fixture: ${wave + ace}`);
+  assert.ok(wave + ace <= 19080 + swarmBudget, `desktop max-load fixture: ${wave + ace}`);
 });
 
 test('Flak warnings expand in their target altitude plane in one rear-visible cue batch', () => {
