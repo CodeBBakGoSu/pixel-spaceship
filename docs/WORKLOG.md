@@ -20,9 +20,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
-- Survivors growth on `devin/1795406694-aster-growth`: make upgrade choices and weapon rank gains tangible in flight. Areas: progression, player weapon patterns and upgrade/HUD feedback; coordinate shared replay goldens separately.
-- State: in progress (데븐 봇). No enemy density, rendering capacity or Stage C recovery/vertical rates.
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795406694-aster-growth → renderer-proto (`a36ff13`; merge `3da3980`)
+- Survivors weapon ranks raise damage and grow Twin Cannon from two bolts to a wider, piercing six-bolt volley. Draft cards show the gain before selection; flight confirms the selected upgrade.
+- Verification: `npm test` 513/513, build OK, desktop Chrome passed. Survivors replay goldens updated on the Stage C base (legacy unchanged). 100 seeds per pilot: skilled/average/weak clears 100%/73%/41%; median level-ups 29/30/28, before horde changes.
+- State: done. Balance handoff: damage scales 1/1.08/1.16/1.30/1.42, Twin bolts 2/2/4/4/6, outer yaw ±0.16 rad are placeholders. XP and evolution pacing unchanged; tune with the horde changes.
 
 ### 2026-11-23 · 데븐 봇 · renderer-proto (claim)
 - Vampire Survivors-style hordes: far more enemies on screen (swarm caps, gnat/regular spawn rates, horde behavior) and keeping 60 fps with them, on branch `devin/1795400000-survivors-horde`. Files: `src/data/phases.ts`, `src/swarm.ts`, `src/spawn-director.ts`, gnat movement in `src/stage-enemies.ts`, enemy instancing in `src/scene.ts`/`src/roster-visuals.ts`, related tests, golden hashes.
