@@ -1,6 +1,6 @@
 # 장비와 파일럿 도감
 
-[위키 홈](README.md) · [무기](#weapons) · [버프](#buffs) · [격납고](#hangar) · [해금 퀘스트](#quests)
+[위키 홈](README.md) · [무기](#weapons) · [버프](#buffs) · [격납고](#hangar) · [해금 퀘스트](#quests) · [HTML 그림 도감](ASTER-WING-무기-버프-도감.html) (별도 반영 예정)
 
 **개발판 기준:** [`81a0e2a`](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/81a0e2a). 무기와 버프는 이번 판의 빌드이고, 격납고 구매와 퀘스트 달성은 파일럿에게 남는다. 아래의 **기본 후보**는 첫 카드에 보장된다는 뜻이 아니다. Hawk의 실제 시작 무기는 쌍발 기관포 한 종이다.
 
