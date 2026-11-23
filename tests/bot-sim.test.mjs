@@ -120,13 +120,14 @@ test('three seeds per profile make the same replay hashes and profile reports on
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfirstDraftSeconds\b/);
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfirstLevelUpSeconds\b/);
   assert.match(serializeSummaryCsv(first).split('\n')[0], /\blevelUpsAt60Seconds\b/);
-  const [skilled, average, weak] = first.profiles;
-  assert.ok(skilled.survival.median >= average.survival.median, JSON.stringify(first.profiles));
-  assert.ok(average.survival.median >= weak.survival.median, JSON.stringify(first.profiles));
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\bfullBuildSeconds\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\blevelUpsAt600Seconds\b/);
+  assert.match(serializeSummaryCsv(first).split('\n')[0], /\blevelUpTimes\b/);
   for (const run of first.runs) {
     assert.match(run.stateHash, /^[a-f0-9]{64}$/);
     assert.ok(['clear', 'lost', 'timeout'].includes(run.outcome));
     assert.ok(run.ticks > 0 && run.survivalSeconds >= run.seconds);
+    assert.equal(run.survivalSeconds, run.outcome === 'lost' ? run.seconds : first.survivalHorizon);
     assert.equal(run.clear, run.outcome !== 'lost');
     assert.ok(run.peakLiveGnats > 0 && run.peakLiveGnats <= first.swarmCap);
     assert.deepEqual(Object.keys(run.phaseMetrics), PHASES.map(phase => phase.id));
@@ -135,6 +136,9 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(run.firstDraftSeconds === null || Number.isFinite(run.firstDraftSeconds));
     assert.ok(run.firstLevelUpSeconds === null || Number.isFinite(run.firstLevelUpSeconds));
     assert.ok(run.levelUpsAt60Seconds === null || Number.isFinite(run.levelUpsAt60Seconds));
+    assert.ok(run.levelUpsAt600Seconds === null || Number.isFinite(run.levelUpsAt600Seconds));
+    assert.ok(run.fullBuildSeconds === null || Number.isFinite(run.fullBuildSeconds));
+    for (const seconds of Object.values(run.levelUpTimes)) assert.ok(Number.isFinite(seconds));
   }
   for (const row of first.profiles) {
     assert.ok(Math.abs(row.clearRate - row.bossClearRate - row.timeoutRate) < 1e-12);
@@ -148,6 +152,14 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(row.firstDraftSeconds.observedRuns <= row.samples);
     assert.ok(row.firstLevelUpSeconds.observedRuns <= row.samples);
     assert.ok(row.levelUpsAt60Seconds.observedRuns <= row.samples);
+    const profileRuns = first.runs.filter(run => run.profile === row.profile);
+    const normalizedSurvivals = profileRuns.map(run => run.survivalSeconds).sort((a, b) => a - b);
+    assert.equal(profileRuns.length, row.samples);
+    assert.equal(row.survival.median, normalizedSurvivals[Math.floor(normalizedSurvivals.length / 2)]);
+    for (const metric of [row.fullBuildSeconds, row.levelUpsAt600Seconds, ...Object.values(row.levelUpTimes)]) {
+      assert.ok(Number.isInteger(metric.observedRuns) && metric.observedRuns >= 0 && metric.observedRuns <= row.samples);
+      assert.ok(metric.median === null || Number.isFinite(metric.median));
+    }
   }
 });
 

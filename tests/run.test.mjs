@@ -17,8 +17,8 @@ test('the phase sortie starts with one weapon, 3+3 slots and a fixed mobile cap'
   assert.equal(state.swarmCap, SWARM_CAPS.mobile);
   assert.deepEqual(state.run.weaponLevels, { twin: 1 });
   assert.deepEqual([state.run.weaponSlots, state.run.buffSlots], [3, 3]);
-  assert.equal(requiredXp(1, true), 16);
-  assert.equal(requiredXp(27, true), 79);
+  assert.equal(requiredXp(1, true), 3);
+  assert.equal(requiredXp(43, true), 169);
   state.phase = 'lost';
   stepStage(state, { start: true }, ground);
   assert.equal(state.swarmCap, SWARM_CAPS.mobile);
@@ -28,7 +28,7 @@ test('the phase sortie starts with one weapon, 3+3 slots and a fixed mobile cap'
 
 test('drafts consume recorded input, leave spawns untouched and preserve excess XP', () => {
   const state = start('seed=18');
-  state.xp = 32;
+  state.xp = 24;
   stepStage(state, {}, ground);
   assert.equal(state.phase, 'draft');
   assert.equal(state.draft.length, 3);
@@ -39,7 +39,7 @@ test('drafts consume recorded input, leave spawns untouched and preserve excess 
   stepStage(state, { pick: state.draft[0], turn: 1 }, ground);
   assert.equal(state.tick, tick);
   assert.equal(state.level, 2);
-  assert.equal(state.xp, 16);
+  assert.equal(state.xp, 21);
   assert.equal(JSON.stringify(state.streams), prior);
   assert.equal(state.phase, 'playing');
   assert.equal(state.picks.length, 1);

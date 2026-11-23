@@ -96,6 +96,7 @@ test('a saturated mobile or desktop wave makes room for a single-band, terrain-s
 test('recoveries sweep only the existing live orbs, preserving source-band rewards and normal collection', () => {
   for (const event of SWARM_EVENTS) {
     const state = start();
+    state.level = 2; // Keep the 3 collected XP below the next threshold of 23.
     state.tick = (event.start + event.duration) * 60 - 1;
     const high = orb(state, 180, 2), low = orb(state, 75);
     low.born -= 60 * 60 - 2; // Last live tick: must not expire during the pull.

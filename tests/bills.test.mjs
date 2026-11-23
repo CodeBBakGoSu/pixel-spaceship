@@ -130,6 +130,7 @@ test('legacy sorties have no Bills or salvage interest', () => {
 
 test('Bill interest reduces collected XP until the next live offer', () => {
   const state = game();
+  state.level = 2; // Keep 3/8 collected XP below the next threshold of 23.
   beat(state, 60);
   const ground = () => 35;
   state.tick = state.bills.active.deadline - 1;

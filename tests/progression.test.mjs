@@ -43,11 +43,21 @@ test('run starts with one weapon and 3+3 slots; time and rank gates unlock separ
   assert.deepEqual([run.weaponSlots, run.buffSlots], [4, 4], 'unlocked slots stay unlocked');
 });
 
-test('the XP curve has no short-sortie cap and places 26 to 28 upgrades near the design XP budget', () => {
+test('run XP costs stay positive and nondecreasing through the end-run growth knee', () => {
   const xpFor = n => Array.from({ length: n }, (_, i) => runXpCost(i + 1)).reduce((sum, cost) => sum + cost, 0);
-  assert.deepEqual([1, 10, 20, 27].map(runXpCost), [16, 38, 62, 79]);
-  assert.ok(xpFor(26) <= 1233 && xpFor(27) > 1233);
-  assert.ok(xpFor(28) <= 1233 * 1.15 && xpFor(29) > 1233 * 1.15);
+  assert.deepEqual([1, 2, 3, 4, 5].map(runXpCost), [3, 23, 26, 28, 28]);
+  assert.equal(xpFor(4), 80);
+  assert.equal(xpFor(5), 108);
+  assert.equal(xpFor(5), 16 + 19 + 21 + 24 + 26 + 2);
+  assert.equal(runXpCost(6), 28);
+  assert.deepEqual([8, 9, 10].map(runXpCost), [33, 37, 40]);
+  assert.deepEqual([41, 42, 43, 44].map(runXpCost), [138, 142, 169, 197]);
+
+  const costs = Array.from({ length: 120 }, (_, index) => runXpCost(index + 1));
+  assert.ok(costs.every(cost => Number.isInteger(cost) && cost > 0));
+  assert.ok(costs.every((cost, index) => index === 0 || cost >= costs[index - 1]));
+  assert.ok(runXpCost(100) > runXpCost(99));
+  assert.ok(runXpCost(120) > runXpCost(100));
 });
 
 test('three unique cards, at least one weapon on the first deal, and one legal pick per deal', () => {

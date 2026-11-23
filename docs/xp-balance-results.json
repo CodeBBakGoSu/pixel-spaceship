@@ -1,0 +1,3088 @@
+{
+  "schemaVersion": 1,
+  "generatedAtKst": "2026-11-23T19:48:33+09:00",
+  "simulator": {
+    "repository": "CodeBBakGoSu/pixel-spaceship",
+    "workingBranch": "devin/1795426514-xp-progression",
+    "curveCodeBase": "421ae441979bff5783eaef4d2603b9834046e9dd",
+    "seedStart": 1,
+    "heat": 0,
+    "profileOrder": [
+      "skilled",
+      "average",
+      "weak"
+    ],
+    "desktopSwarmCap": 200,
+    "mobileSwarmCap": 120,
+    "mobileInterpretation": "mobile-cap simulation, not a real-device or touch-control test",
+    "secondsSemantics": {
+      "actualDurationSeconds": "run duration in simulation seconds",
+      "normalizedSurvivalSeconds": "boss clears are counted through the 600s horizon; deaths use observed elapsed seconds"
+    }
+  },
+  "baselineProvenance": {
+    "expectedArchivePath": "/home/ubuntu/attachments/28ec6001-1554-4279-b1bd-2b3724d11b53/density-handoff-data.tar.gz",
+    "archivePresentAtReportTime": true,
+    "usedExtractedSnapshot": "/home/ubuntu/xp-progression-screen/base-input",
+    "metadataFile": "base-input/density-handoff-metadata.json",
+    "exactBaseCommit": "0bc1f99c9219a07792c9299f1469e14be99c44a5",
+    "baselineReportHead": "421ae441979bff5783eaef4d2603b9834046e9dd",
+    "acceptedUse": "Candidate 4 accepted as XP-comparison baseline only; strict all-profile kill target is not met.",
+    "baseline100Files": [
+      {
+        "path": "base-input/sim-out/newbase-final-skilled-100-from-1-heat-0-desktop.json",
+        "bytes": 251278,
+        "sha256": "ef274e6c5ffe12c836d6842bc520a0b6eea4f74b8ae8222cbd91f9593dcd70d8",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      },
+      {
+        "path": "base-input/sim-out/newbase-final-average-100-from-1-heat-0-desktop.json",
+        "bytes": 250611,
+        "sha256": "86ef20b8f76544a388e2215dde50befda1264281e55782805c6cdf6d9ab5b445",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      },
+      {
+        "path": "base-input/sim-out/newbase-final-weak-100-from-1-heat-0-desktop.json",
+        "bytes": 248376,
+        "sha256": "513450eba32d09cd455fae2ace40315839544e35b2bfe0a7cf8ffd4e367d472e",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      },
+      {
+        "path": "base-input/sim-out/newbase-final-skilled-100-from-1-heat-0-mobile.json",
+        "bytes": 250611,
+        "sha256": "cc78f9fdf57aead4bc6d6c35ce1fa87004bf45289de8e429aa5809c7e913b3c7",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      },
+      {
+        "path": "base-input/sim-out/newbase-final-average-100-from-1-heat-0-mobile.json",
+        "bytes": 250487,
+        "sha256": "6fd227c393c5122f0e839457f55371dc7a62f134355177609579e75275ab5ccf",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      },
+      {
+        "path": "base-input/sim-out/newbase-final-weak-100-from-1-heat-0-mobile.json",
+        "bytes": 247555,
+        "sha256": "4b6f662a51745d7d2107646b2b6ebdd9b7772bb91d44ffff130ed3a5f8751773",
+        "matchesMetadata": true,
+        "matchesArchive": true
+      }
+    ],
+    "allSixHashesMatchMetadata": true,
+    "archiveSha256": "e769b5d73d30f2e418461139418ef5df93873d9971a8d0b99260de36b5aab917",
+    "archiveBytes": 646353,
+    "archiveMemberCount": 61,
+    "baselineJsonMembers": [
+      "sim-out/newbase-final-average-100-from-1-heat-0-desktop.json",
+      "sim-out/newbase-final-average-100-from-1-heat-0-mobile.json",
+      "sim-out/newbase-final-skilled-100-from-1-heat-0-desktop.json",
+      "sim-out/newbase-final-skilled-100-from-1-heat-0-mobile.json",
+      "sim-out/newbase-final-weak-100-from-1-heat-0-desktop.json",
+      "sim-out/newbase-final-weak-100-from-1-heat-0-mobile.json"
+    ],
+    "allSixHashesMatchArchiveAndMetadata": true
+  },
+  "candidateDefinitions": {
+    "baseline100": "Candidate 4 baseline; 14 + round(2.4 * level).",
+    "A10": "Shared early costs [3,32], then baseline formula.",
+    "B10": "Shared early costs [3,23,26,28,28], baseline formula from level 6.",
+    "C10": "B plus round(0.8 * max(0, level - 8)); screened with a runtime-only override, not shipped.",
+    "D10": "B + C + round(12 * max(0, level - 42)); shipped D.",
+    "D100": "Same shipped D constants as D10; six 100-seed jobs.",
+    "E100": "B + C + round(24 * max(0, level - 42)); shipped E and six 100-seed jobs."
+  },
+  "results": {
+    "baseline100": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 24.583,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 75,
+            "rate": 0.75
+          },
+          "terminalRunEndLevelUps": {
+            "median": 53.0,
+            "n": 100,
+            "count": 8,
+            "rate": 0.08
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 3268,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 530.392,
+            "p10": 517.642,
+            "p90": 551.298
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-skilled-100-from-1-heat-0-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 24.8,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 84,
+            "rate": 0.84
+          },
+          "terminalRunEndLevelUps": {
+            "median": 54.0,
+            "n": 100,
+            "count": 9,
+            "rate": 0.09
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 3189,
+          "outcomes": {
+            "bossClearRate": 0.72,
+            "timeoutRate": 0,
+            "deathRate": 0.28
+          },
+          "actualDurationSeconds": {
+            "median": 538.775,
+            "p10": 514.225,
+            "p90": 565.617
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 514.225,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-average-100-from-1-heat-0-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 26.05,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 84,
+            "rate": 0.84
+          },
+          "terminalRunEndLevelUps": {
+            "median": 54.0,
+            "n": 100,
+            "count": 15,
+            "rate": 0.15
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 3071,
+          "outcomes": {
+            "bossClearRate": 0.02,
+            "timeoutRate": 0.29,
+            "deathRate": 0.69
+          },
+          "actualDurationSeconds": {
+            "median": 561.842,
+            "p10": 505.493,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 561.842,
+            "p10": 505.493,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-weak-100-from-1-heat-0-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 24.7,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 94,
+            "rate": 0.94
+          },
+          "terminalRunEndLevelUps": {
+            "median": 48.0,
+            "n": 100,
+            "count": 61,
+            "rate": 0.61
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 2625.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 526.608,
+            "p10": 516.54,
+            "p90": 546.42
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-skilled-100-from-1-heat-0-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 25.133,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 96,
+            "rate": 0.96
+          },
+          "terminalRunEndLevelUps": {
+            "median": 48.0,
+            "n": 100,
+            "count": 51,
+            "rate": 0.51
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 2564,
+          "outcomes": {
+            "bossClearRate": 0.73,
+            "timeoutRate": 0,
+            "deathRate": 0.27
+          },
+          "actualDurationSeconds": {
+            "median": 534.558,
+            "p10": 512.693,
+            "p90": 555.583
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 512.693,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-average-100-from-1-heat-0-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 27.75,
+            "n": 100,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": null,
+              "n": 0
+            },
+            "3": {
+              "median": null,
+              "n": 0
+            },
+            "4": {
+              "median": null,
+              "n": 0
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 63,
+            "rate": 0.63
+          },
+          "terminalRunEndLevelUps": {
+            "median": 49.0,
+            "n": 100,
+            "count": 41,
+            "rate": 0.41
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": null,
+            "recorded": false
+          },
+          "medianKills": 2462,
+          "outcomes": {
+            "bossClearRate": 0.04,
+            "timeoutRate": 0.31,
+            "deathRate": 0.65
+          },
+          "actualDurationSeconds": {
+            "median": 564.175,
+            "p10": 508.258,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 564.175,
+            "p10": 508.258,
+            "p90": 600
+          },
+          "rawSource": "base-input/sim-out/newbase-final-weak-100-from-1-heat-0-mobile.json"
+        }
+      }
+    },
+    "A10": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 33.575,
+              "n": 10
+            },
+            "4": {
+              "median": 45.292,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 54.0,
+            "n": 10,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 511.95,
+            "n": 6,
+            "rate": 0.6,
+            "recorded": true
+          },
+          "medianKills": 3426,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 522.8,
+            "p10": 513.55,
+            "p90": 543.553
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-a-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 35.45,
+              "n": 10
+            },
+            "4": {
+              "median": 47.692,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "terminalRunEndLevelUps": {
+            "median": 53.0,
+            "n": 10,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": 0.0,
+            "recorded": true
+          },
+          "medianKills": 3104.5,
+          "outcomes": {
+            "bossClearRate": 0.3,
+            "timeoutRate": 0,
+            "deathRate": 0.7
+          },
+          "actualDurationSeconds": {
+            "median": 516.242,
+            "p10": 506.925,
+            "p90": 551.003
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 516.242,
+            "p10": 506.925,
+            "p90": 600
+          },
+          "rawSource": "candidate-a-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 38.15,
+              "n": 10
+            },
+            "4": {
+              "median": 54.617,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 6,
+            "rate": 0.6
+          },
+          "terminalRunEndLevelUps": {
+            "median": 56.0,
+            "n": 10,
+            "count": 1,
+            "rate": 0.1
+          },
+          "levelUpsAt600Seconds": {
+            "median": 55.0,
+            "n": 2,
+            "count": 0,
+            "rate": 0.0,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 539.867,
+            "n": 5,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "medianKills": 3163,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.2,
+            "deathRate": 0.8
+          },
+          "actualDurationSeconds": {
+            "median": 537.042,
+            "p10": 513.585,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 537.042,
+            "p10": 513.585,
+            "p90": 600
+          },
+          "rawSource": "candidate-a-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 36.392,
+              "n": 10
+            },
+            "4": {
+              "median": 47.358,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.5,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 521.967,
+            "n": 1,
+            "rate": 0.1,
+            "recorded": true
+          },
+          "medianKills": 2672.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 527.3,
+            "p10": 514.19,
+            "p90": 536.375
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-a-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 39.133,
+              "n": 10
+            },
+            "4": {
+              "median": 53.275,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "terminalRunEndLevelUps": {
+            "median": 48.0,
+            "n": 10,
+            "count": 5,
+            "rate": 0.5
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 504.475,
+            "n": 2,
+            "rate": 0.2,
+            "recorded": true
+          },
+          "medianKills": 2546.5,
+          "outcomes": {
+            "bossClearRate": 0.5,
+            "timeoutRate": 0,
+            "deathRate": 0.5
+          },
+          "actualDurationSeconds": {
+            "median": 529.417,
+            "p10": 506.398,
+            "p90": 566.635
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 570.433,
+            "p10": 506.398,
+            "p90": 600
+          },
+          "rawSource": "candidate-a-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 41.15,
+              "n": 10
+            },
+            "4": {
+              "median": 58.433,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 6,
+            "rate": 0.6
+          },
+          "terminalRunEndLevelUps": {
+            "median": 50.0,
+            "n": 10,
+            "count": 1,
+            "rate": 0.1
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 548.217,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 2458.5,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0,
+            "deathRate": 1
+          },
+          "actualDurationSeconds": {
+            "median": 553.558,
+            "p10": 485.443,
+            "p90": 591.262
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 553.558,
+            "p10": 485.443,
+            "p90": 591.262
+          },
+          "rawSource": "candidate-a-mobile.json"
+        }
+      }
+    },
+    "B10": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 28.108,
+              "n": 10
+            },
+            "4": {
+              "median": 41.967,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 56.5,
+            "n": 10,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 520.75,
+            "n": 5,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "medianKills": 3694.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 531.775,
+            "p10": 515.195,
+            "p90": 554.032
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 31.342,
+              "n": 10
+            },
+            "4": {
+              "median": 44.717,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 55.0,
+            "n": 10,
+            "count": 0,
+            "rate": 0.0
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 527.9,
+            "n": 5,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "medianKills": 3500.5,
+          "outcomes": {
+            "bossClearRate": 0.9,
+            "timeoutRate": 0,
+            "deathRate": 0.1
+          },
+          "actualDurationSeconds": {
+            "median": 536.858,
+            "p10": 529.403,
+            "p90": 553.762
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 591.278,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 32.175,
+              "n": 10
+            },
+            "4": {
+              "median": 50.492,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 53.5,
+            "n": 10,
+            "count": 2,
+            "rate": 0.2
+          },
+          "levelUpsAt600Seconds": {
+            "median": 57.5,
+            "n": 2,
+            "count": 0,
+            "rate": 0.0,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 518.058,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 3147.5,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.2,
+            "deathRate": 0.8
+          },
+          "actualDurationSeconds": {
+            "median": 556.067,
+            "p10": 514.428,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 556.067,
+            "p10": 514.428,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 32.708,
+              "n": 10
+            },
+            "4": {
+              "median": 46.525,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 48.5,
+            "n": 10,
+            "count": 5,
+            "rate": 0.5
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 517.742,
+            "n": 2,
+            "rate": 0.2,
+            "recorded": true
+          },
+          "medianKills": 2726.5,
+          "outcomes": {
+            "bossClearRate": 0.9,
+            "timeoutRate": 0,
+            "deathRate": 0.1
+          },
+          "actualDurationSeconds": {
+            "median": 532.275,
+            "p10": 522.188,
+            "p90": 549.98
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 598.295,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 32.692,
+              "n": 10
+            },
+            "4": {
+              "median": 50.383,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 46.5,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 518.85,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 2448.5,
+          "outcomes": {
+            "bossClearRate": 0.7,
+            "timeoutRate": 0,
+            "deathRate": 0.3
+          },
+          "actualDurationSeconds": {
+            "median": 535.558,
+            "p10": 522.262,
+            "p90": 552.623
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 529.657,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 34.792,
+              "n": 10
+            },
+            "4": {
+              "median": 52.2,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "terminalRunEndLevelUps": {
+            "median": 49.0,
+            "n": 10,
+            "count": 3,
+            "rate": 0.3
+          },
+          "levelUpsAt600Seconds": {
+            "median": 52.0,
+            "n": 2,
+            "count": 0,
+            "rate": 0.0,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 525.417,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 2437.5,
+          "outcomes": {
+            "bossClearRate": 0.1,
+            "timeoutRate": 0.2,
+            "deathRate": 0.7
+          },
+          "actualDurationSeconds": {
+            "median": 566.617,
+            "p10": 508.242,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 567.508,
+            "p10": 508.242,
+            "p90": 600
+          },
+          "rawSource": "candidate-b-mobile.json"
+        }
+      }
+    },
+    "C10": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 28.108,
+              "n": 10
+            },
+            "4": {
+              "median": 41.967,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 49.0,
+            "n": 10,
+            "count": 4,
+            "rate": 0.4
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 525.1,
+            "n": 3,
+            "rate": 0.3,
+            "recorded": true
+          },
+          "medianKills": 3535,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 531.65,
+            "p10": 519.403,
+            "p90": 545.35
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 31.342,
+              "n": 10
+            },
+            "4": {
+              "median": 44.717,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 50.5,
+            "n": 10,
+            "count": 3,
+            "rate": 0.3
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 504.667,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 3346.5,
+          "outcomes": {
+            "bossClearRate": 0.9,
+            "timeoutRate": 0,
+            "deathRate": 0.1
+          },
+          "actualDurationSeconds": {
+            "median": 540.483,
+            "p10": 525.922,
+            "p90": 559.35
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 597,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 32.175,
+              "n": 10
+            },
+            "4": {
+              "median": 50.492,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.5,
+            "n": 10,
+            "count": 6,
+            "rate": 0.6
+          },
+          "levelUpsAt600Seconds": {
+            "median": 46,
+            "n": 3,
+            "count": 2,
+            "rate": 0.6667,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 515.5,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 3357.5,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.3,
+            "deathRate": 0.7
+          },
+          "actualDurationSeconds": {
+            "median": 576.817,
+            "p10": 543.418,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 576.817,
+            "p10": 543.418,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 32.708,
+              "n": 10
+            },
+            "4": {
+              "median": 46.525,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.5,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 520.417,
+            "n": 1,
+            "rate": 0.1,
+            "recorded": true
+          },
+          "medianKills": 2614,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 524.5,
+            "p10": 519.07,
+            "p90": 540.97
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 32.692,
+              "n": 10
+            },
+            "4": {
+              "median": 50.383,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 10,
+            "count": 6,
+            "rate": 0.6
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 532.142,
+            "n": 2,
+            "rate": 0.2,
+            "recorded": true
+          },
+          "medianKills": 2632.5,
+          "outcomes": {
+            "bossClearRate": 0.5,
+            "timeoutRate": 0,
+            "deathRate": 0.5
+          },
+          "actualDurationSeconds": {
+            "median": 545.567,
+            "p10": 508.317,
+            "p90": 571.23
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 590.325,
+            "p10": 508.317,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 34.792,
+              "n": 10
+            },
+            "4": {
+              "median": 52.2,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "terminalRunEndLevelUps": {
+            "median": 42.5,
+            "n": 10,
+            "count": 5,
+            "rate": 0.5
+          },
+          "levelUpsAt600Seconds": {
+            "median": 45,
+            "n": 5,
+            "count": 3,
+            "rate": 0.6,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 522.933,
+            "n": 5,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "medianKills": 2335,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.5,
+            "deathRate": 0.5
+          },
+          "actualDurationSeconds": {
+            "median": 582.875,
+            "p10": 479.432,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 582.875,
+            "p10": 479.432,
+            "p90": 600
+          },
+          "rawSource": "candidate-c-mobile.json"
+        }
+      }
+    },
+    "D10": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 28.108,
+              "n": 10
+            },
+            "4": {
+              "median": 41.967,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.5,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": null,
+            "n": 0,
+            "rate": 0.0,
+            "recorded": true
+          },
+          "medianKills": 3543.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 528.683,
+            "p10": 520.255,
+            "p90": 550.738
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 31.342,
+              "n": 10
+            },
+            "4": {
+              "median": 44.717,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.5,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 532.35,
+            "n": 1,
+            "rate": 0.1,
+            "recorded": true
+          },
+          "medianKills": 3195,
+          "outcomes": {
+            "bossClearRate": 0.6,
+            "timeoutRate": 0,
+            "deathRate": 0.4
+          },
+          "actualDurationSeconds": {
+            "median": 536.95,
+            "p10": 507.562,
+            "p90": 547.875
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 507.562,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 32.175,
+              "n": 10
+            },
+            "4": {
+              "median": 50.492,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 45.0,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "levelUpsAt600Seconds": {
+            "median": 43,
+            "n": 1,
+            "count": 1,
+            "rate": 1.0,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 513.775,
+            "n": 4,
+            "rate": 0.4,
+            "recorded": true
+          },
+          "medianKills": 3193,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.1,
+            "deathRate": 0.9
+          },
+          "actualDurationSeconds": {
+            "median": 544.908,
+            "p10": 512.998,
+            "p90": 597
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 544.908,
+            "p10": 512.998,
+            "p90": 597
+          },
+          "rawSource": "candidate-d-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.067,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.067,
+              "n": 10
+            },
+            "3": {
+              "median": 32.708,
+              "n": 10
+            },
+            "4": {
+              "median": 46.525,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 9,
+            "rate": 0.9
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.5,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 520.417,
+            "n": 1,
+            "rate": 0.1,
+            "recorded": true
+          },
+          "medianKills": 2642,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 528.833,
+            "p10": 519.098,
+            "p90": 552.008
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.033,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.033,
+              "n": 10
+            },
+            "3": {
+              "median": 32.692,
+              "n": 10
+            },
+            "4": {
+              "median": 50.383,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 10,
+            "count": 7,
+            "rate": 0.7
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 532.142,
+            "n": 2,
+            "rate": 0.2,
+            "recorded": true
+          },
+          "medianKills": 2634.5,
+          "outcomes": {
+            "bossClearRate": 0.7,
+            "timeoutRate": 0,
+            "deathRate": 0.3
+          },
+          "actualDurationSeconds": {
+            "median": 540.592,
+            "p10": 523.455,
+            "p90": 572.423
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 523.455,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            10
+          ],
+          "runs": 10,
+          "firstLevelUpSeconds": {
+            "median": 5.0,
+            "n": 10,
+            "count": 10,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.0,
+              "n": 10
+            },
+            "3": {
+              "median": 34.792,
+              "n": 10
+            },
+            "4": {
+              "median": 52.2,
+              "n": 10
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 10,
+            "count": 8,
+            "rate": 0.8
+          },
+          "terminalRunEndLevelUps": {
+            "median": 42.5,
+            "n": 10,
+            "count": 6,
+            "rate": 0.6
+          },
+          "levelUpsAt600Seconds": {
+            "median": 42,
+            "n": 3,
+            "count": 2,
+            "rate": 0.6667,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 523.667,
+            "n": 5,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "medianKills": 2350,
+          "outcomes": {
+            "bossClearRate": 0,
+            "timeoutRate": 0.3,
+            "deathRate": 0.7
+          },
+          "actualDurationSeconds": {
+            "median": 574.308,
+            "p10": 479.432,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 574.308,
+            "p10": 479.432,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-mobile.json"
+        }
+      }
+    },
+    "D100": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.092,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.092,
+              "n": 100
+            },
+            "3": {
+              "median": 28.242,
+              "n": 100
+            },
+            "4": {
+              "median": 40.358,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 84,
+            "rate": 0.84
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.0,
+            "n": 100,
+            "count": 78,
+            "rate": 0.78
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 514.733,
+            "n": 11,
+            "rate": 0.11,
+            "recorded": true
+          },
+          "medianKills": 3218.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 532.658,
+            "p10": 519.248,
+            "p90": 554.312
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-skilled-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.108,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.108,
+              "n": 100
+            },
+            "3": {
+              "median": 29.4,
+              "n": 100
+            },
+            "4": {
+              "median": 42.283,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 91,
+            "rate": 0.91
+          },
+          "terminalRunEndLevelUps": {
+            "median": 48.0,
+            "n": 100,
+            "count": 59,
+            "rate": 0.59
+          },
+          "levelUpsAt600Seconds": {
+            "median": 49.0,
+            "n": 2,
+            "count": 1,
+            "rate": 0.5,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 529.283,
+            "n": 21,
+            "rate": 0.21,
+            "recorded": true
+          },
+          "medianKills": 3239.5,
+          "outcomes": {
+            "bossClearRate": 0.72,
+            "timeoutRate": 0.02,
+            "deathRate": 0.26
+          },
+          "actualDurationSeconds": {
+            "median": 539.342,
+            "p10": 512.248,
+            "p90": 572.605
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 512.248,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-average-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.1,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.1,
+              "n": 100
+            },
+            "3": {
+              "median": 31.567,
+              "n": 100
+            },
+            "4": {
+              "median": 48.1,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 94,
+            "rate": 0.94
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.0,
+            "n": 100,
+            "count": 57,
+            "rate": 0.57
+          },
+          "levelUpsAt600Seconds": {
+            "median": 49,
+            "n": 25,
+            "count": 12,
+            "rate": 0.48,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 532.717,
+            "n": 34,
+            "rate": 0.34,
+            "recorded": true
+          },
+          "medianKills": 3156.5,
+          "outcomes": {
+            "bossClearRate": 0.01,
+            "timeoutRate": 0.25,
+            "deathRate": 0.74
+          },
+          "actualDurationSeconds": {
+            "median": 560.25,
+            "p10": 519.805,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 560.25,
+            "p10": 519.805,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-weak-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.092,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.092,
+              "n": 100
+            },
+            "3": {
+              "median": 28.808,
+              "n": 100
+            },
+            "4": {
+              "median": 43.308,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 93,
+            "rate": 0.93
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 100,
+            "count": 72,
+            "rate": 0.72
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 517.333,
+            "n": 20,
+            "rate": 0.2,
+            "recorded": true
+          },
+          "medianKills": 2576,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 528.992,
+            "p10": 517.682,
+            "p90": 550.347
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-skilled-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.108,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.108,
+              "n": 100
+            },
+            "3": {
+              "median": 31.033,
+              "n": 100
+            },
+            "4": {
+              "median": 46.658,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 99,
+            "rate": 0.99
+          },
+          "terminalRunEndLevelUps": {
+            "median": 44.0,
+            "n": 100,
+            "count": 72,
+            "rate": 0.72
+          },
+          "levelUpsAt600Seconds": {
+            "median": 44,
+            "n": 3,
+            "count": 2,
+            "rate": 0.6667,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 523.792,
+            "n": 16,
+            "rate": 0.16,
+            "recorded": true
+          },
+          "medianKills": 2524.5,
+          "outcomes": {
+            "bossClearRate": 0.7,
+            "timeoutRate": 0.03,
+            "deathRate": 0.27
+          },
+          "actualDurationSeconds": {
+            "median": 538.117,
+            "p10": 513.645,
+            "p90": 568.608
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 513.645,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-average-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.1,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.1,
+              "n": 100
+            },
+            "3": {
+              "median": 33.7,
+              "n": 100
+            },
+            "4": {
+              "median": 53.808,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 83,
+            "rate": 0.83
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 100,
+            "count": 68,
+            "rate": 0.68
+          },
+          "levelUpsAt600Seconds": {
+            "median": 45.0,
+            "n": 20,
+            "count": 16,
+            "rate": 0.8,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 534.542,
+            "n": 30,
+            "rate": 0.3,
+            "recorded": true
+          },
+          "medianKills": 2452.5,
+          "outcomes": {
+            "bossClearRate": 0.04,
+            "timeoutRate": 0.2,
+            "deathRate": 0.76
+          },
+          "actualDurationSeconds": {
+            "median": 559.117,
+            "p10": 501.425,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 559.117,
+            "p10": 501.425,
+            "p90": 600
+          },
+          "rawSource": "candidate-d-100-weak-mobile.json"
+        }
+      }
+    },
+    "E100": {
+      "desktop": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.092,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.092,
+              "n": 100
+            },
+            "3": {
+              "median": 28.242,
+              "n": 100
+            },
+            "4": {
+              "median": 40.358,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 84,
+            "rate": 0.84
+          },
+          "terminalRunEndLevelUps": {
+            "median": 46.0,
+            "n": 100,
+            "count": 84,
+            "rate": 0.84
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 526.833,
+            "n": 12,
+            "rate": 0.12,
+            "recorded": true
+          },
+          "medianKills": 3258,
+          "outcomes": {
+            "bossClearRate": 0.99,
+            "timeoutRate": 0,
+            "deathRate": 0.01
+          },
+          "actualDurationSeconds": {
+            "median": 531.792,
+            "p10": 518.01,
+            "p90": 556.092
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-skilled-desktop.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.108,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.108,
+              "n": 100
+            },
+            "3": {
+              "median": 29.4,
+              "n": 100
+            },
+            "4": {
+              "median": 42.283,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 91,
+            "rate": 0.91
+          },
+          "terminalRunEndLevelUps": {
+            "median": 47.0,
+            "n": 100,
+            "count": 74,
+            "rate": 0.74
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 529.9,
+            "n": 15,
+            "rate": 0.15,
+            "recorded": true
+          },
+          "medianKills": 3244,
+          "outcomes": {
+            "bossClearRate": 0.68,
+            "timeoutRate": 0,
+            "deathRate": 0.32
+          },
+          "actualDurationSeconds": {
+            "median": 542.792,
+            "p10": 517.193,
+            "p90": 570.025
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 517.313,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-average-desktop.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.1,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.1,
+              "n": 100
+            },
+            "3": {
+              "median": 31.567,
+              "n": 100
+            },
+            "4": {
+              "median": 48.1,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 94,
+            "rate": 0.94
+          },
+          "terminalRunEndLevelUps": {
+            "median": 46.0,
+            "n": 100,
+            "count": 73,
+            "rate": 0.73
+          },
+          "levelUpsAt600Seconds": {
+            "median": 46.0,
+            "n": 24,
+            "count": 17,
+            "rate": 0.7083,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 547.983,
+            "n": 29,
+            "rate": 0.29,
+            "recorded": true
+          },
+          "medianKills": 3173,
+          "outcomes": {
+            "bossClearRate": 0.02,
+            "timeoutRate": 0.24,
+            "deathRate": 0.74
+          },
+          "actualDurationSeconds": {
+            "median": 559.7,
+            "p10": 514,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 559.7,
+            "p10": 514,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-weak-desktop.json"
+        }
+      },
+      "mobile": {
+        "skilled": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.092,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.092,
+              "n": 100
+            },
+            "3": {
+              "median": 28.808,
+              "n": 100
+            },
+            "4": {
+              "median": 43.308,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 93,
+            "rate": 0.93
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 100,
+            "count": 74,
+            "rate": 0.74
+          },
+          "levelUpsAt600Seconds": {
+            "median": null,
+            "n": 0,
+            "count": 0,
+            "rate": null,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 515.817,
+            "n": 15,
+            "rate": 0.15,
+            "recorded": true
+          },
+          "medianKills": 2581.5,
+          "outcomes": {
+            "bossClearRate": 1,
+            "timeoutRate": 0,
+            "deathRate": 0
+          },
+          "actualDurationSeconds": {
+            "median": 529.933,
+            "p10": 517.095,
+            "p90": 551.647
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 600,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-skilled-mobile.json"
+        },
+        "average": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.108,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.108,
+              "n": 100
+            },
+            "3": {
+              "median": 31.033,
+              "n": 100
+            },
+            "4": {
+              "median": 46.658,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 4.0,
+            "n": 100,
+            "count": 99,
+            "rate": 0.99
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 100,
+            "count": 77,
+            "rate": 0.77
+          },
+          "levelUpsAt600Seconds": {
+            "median": 44,
+            "n": 3,
+            "count": 2,
+            "rate": 0.6667,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 521.467,
+            "n": 10,
+            "rate": 0.1,
+            "recorded": true
+          },
+          "medianKills": 2531,
+          "outcomes": {
+            "bossClearRate": 0.64,
+            "timeoutRate": 0.03,
+            "deathRate": 0.33
+          },
+          "actualDurationSeconds": {
+            "median": 539.3,
+            "p10": 513.77,
+            "p90": 569.888
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 600,
+            "p10": 513.77,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-average-mobile.json"
+        },
+        "weak": {
+          "seedRange": [
+            1,
+            100
+          ],
+          "runs": 100,
+          "firstLevelUpSeconds": {
+            "median": 5.1,
+            "n": 100,
+            "count": 100,
+            "rate": 1.0
+          },
+          "levelUpTimesSeconds": {
+            "2": {
+              "median": 5.1,
+              "n": 100
+            },
+            "3": {
+              "median": 33.7,
+              "n": 100
+            },
+            "4": {
+              "median": 53.808,
+              "n": 100
+            }
+          },
+          "levelUpsAt60Seconds": {
+            "median": 3.0,
+            "n": 100,
+            "count": 83,
+            "rate": 0.83
+          },
+          "terminalRunEndLevelUps": {
+            "median": 43.0,
+            "n": 100,
+            "count": 71,
+            "rate": 0.71
+          },
+          "levelUpsAt600Seconds": {
+            "median": 45.0,
+            "n": 16,
+            "count": 13,
+            "rate": 0.8125,
+            "recorded": true
+          },
+          "fullBuildSeconds": {
+            "median": 534.95,
+            "n": 26,
+            "rate": 0.26,
+            "recorded": true
+          },
+          "medianKills": 2448.5,
+          "outcomes": {
+            "bossClearRate": 0.05,
+            "timeoutRate": 0.16,
+            "deathRate": 0.79
+          },
+          "actualDurationSeconds": {
+            "median": 549.908,
+            "p10": 501.408,
+            "p90": 600
+          },
+          "normalizedSurvivalSeconds": {
+            "median": 549.908,
+            "p10": 501.408,
+            "p90": 600
+          },
+          "rawSource": "candidate-e-100-weak-mobile.json"
+        }
+      }
+    }
+  },
+  "caveats": [
+    "TerminalRunEndLevelUps is a run-end value and must not be called an exact-600s result.",
+    "levelUpsAt600Seconds includes only runs observed at tick 36000, including same-tick modal picks; n=0 is unobserved, not zero level-ups.",
+    "The baseline archive lacks exact-600s progression, level-2–4 timings, and strict full-build telemetry. Baseline fullBuildSeconds uses median=null, rate=null, n=0, recorded=false (unknown, not zero completions); this differs from recorded=true, n=0, rate=0.",
+    "Full build means exactly four equipped level-7 weapons and four level-3 buffs; report both n and n/100 rate.",
+    "Fresh simulated profile rank is 1, not 0; it is below buffUnlockRank 3, starts with three buff slots, and receives the fourth at the 480s Ace. No build/slot rule was changed.",
+    "The 450–480s strict full-build goal is not met when observed E medians are above 480s; no full-task acceptance is claimed.",
+    "E changes only xpEndRunGrowth from 12 to 24 at the existing level-42 knee; first-minute dynamics are unchanged by construction.",
+    "No XP income/pickup, enemy, spawn, density, survival, or slot settings were changed.",
+    "Survival and outcome differences are simulation observations; same seeds do not establish causal attribution.",
+    "The original phone-weak baseline median kills 2462 (38 below 2500); E must be compared to its actual 100-seed result.",
+    "E100 phone-weak median kills are 2448.5: 51.5 below 2500 and 13.5 below the archived baseline median 2462.",
+    "E10 was omitted because D10 passed; E changes only above level 42, so first-minute dynamics are identical by construction and six E100 jobs followed directly.",
+    "Observed E100 normalized-survival medians (skilled/average/weak) are desktop 600/600/559.70s and mobile 600/600/549.91s; descriptive only, not a guaranteed three-seed ordering."
+  ],
+  "rawArtifactsRoot": "/home/ubuntu/xp-progression-screen",
+  "finalCurve": {
+    "xpEarlyCosts": [
+      3,
+      23,
+      26,
+      28,
+      28
+    ],
+    "xpLateStartLevel": 8,
+    "xpLateGrowth": 0.8,
+    "xpEndRunStartLevel": 42,
+    "xpEndRunGrowth": 24,
+    "xpBase": 14,
+    "xpPerLevel": 2.4,
+    "runXpCostFormula": "(xpEarlyCosts[level - 1] ?? xpBase + round(xpPerLevel * level)) + round(xpLateGrowth * max(0, level - xpLateStartLevel)) + round(xpEndRunGrowth * max(0, level - xpEndRunStartLevel))"
+  },
+  "screeningNotes": {
+    "E10": "Omitted: D10 passed, and E changes only costs above level 42; proceeded directly to six E100 jobs because first-minute dynamics are unchanged by construction.",
+    "E100NormalizedSurvivalMediansSeconds": {
+      "desktop": {
+        "skilled": 600,
+        "average": 600,
+        "weak": 559.7
+      },
+      "mobile": {
+        "skilled": 600,
+        "average": 600,
+        "weak": 549.91
+      }
+    },
+    "survivalOrdering": "The 100-seed medians are observed sample evidence, not a guaranteed ordering for arbitrary three-seed samples."
+  }
+}
