@@ -14,9 +14,16 @@ const expected = {
   roll: { loop: false, samples: 30777 },
   warning: { loop: false, samples: 39929 },
   ace_alert: { loop: false, samples: 88309 },
+  impact_tick: { loop: false, samples: 6174 },
+  impact_body: { loop: false, samples: 7497 },
+  impact_spark: { loop: false, samples: 7938 },
+  cache_single: { loop: false, samples: 14333 },
+  cache_triple: { loop: false, samples: 23373 },
+  cache_jackpot: { loop: false, samples: 42336 },
+  cache_evolution: { loop: false, samples: 42777 },
 };
 
-test('the shipped SFX match the ten entries in the playback manifest', () => {
+test('the shipped SFX match the entries in the playback manifest', () => {
   const files = readdirSync(directory).filter(name => name.endsWith('.mp3')).sort();
   const manifest = JSON.parse(readFileSync(new URL('manifest.json', directory), 'utf8'));
   const keys = Object.keys(expected).sort();

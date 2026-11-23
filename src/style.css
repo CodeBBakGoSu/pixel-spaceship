@@ -658,7 +658,7 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 }
 .chest-reels:not([hidden]) {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--reel-count, 3), minmax(0, 1fr));
   gap: 7px;
   padding: 7px;
   border: 1px solid #60818d;
@@ -673,10 +673,20 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   border: 1px solid #50767d;
   background: linear-gradient(#0c1723, #17313a 21%, #1c3540 75%, #0c1723);
 }
-.chest-reel-strip { display: grid; grid-auto-rows: var(--reel-face); transform: translateY(calc(-6 * var(--reel-face))); }
-.rolling .chest-reel-strip {
-  animation: cache-reel-spin calc(480ms + var(--reel-order) * 170ms) cubic-bezier(.12,.52,.33,1) both;
+.chest-reel-strip {
+  --reel-end: calc(-1 * var(--reel-frames, 0) * var(--reel-face));
+  display: grid; grid-auto-rows: var(--reel-face); transform: translateY(var(--reel-end));
 }
+.rolling .chest-reel-strip {
+  animation: cache-reel-spin calc(230ms + var(--reel-order) * 145ms) cubic-bezier(.12,.52,.33,1) both;
+}
+[data-reveal="single"].rolling .chest-reel-strip { animation: cache-lock 250ms ease-out both; }
+[data-reveal="jackpot"].rolling .chest-reel-strip { animation-duration: calc(290ms + var(--reel-order) * 170ms); }
+[data-reveal="evolution"].rolling .chest-reel-strip { animation: cache-transform 760ms ease both; }
+[data-reveal="jackpot"].settled, [data-reveal="evolution"].settled { border-color: #e6b96a; }
+[data-reveal="jackpot"].settled .chest-reels, [data-reveal="jackpot"].settled .chest-extra li { border-color: #ffda83; }
+[data-reveal="jackpot"].settled #chest-kicker { color: #ffe3a0; }
+[data-reveal="jackpot"].rolling #chest-kicker { visibility: hidden; }
 .chest-reel-symbol, .chest-reel-label {
   display: grid; align-content: center; justify-items: center; min-width: 0; gap: 4px; padding: 4px; text-align: center;
 }
@@ -690,7 +700,6 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   box-shadow: inset 0 0 12px #ffd17d80, 0 0 10px #ffee8b80;
 }
 .chest-reel.evolution .chest-reel-label, .chest-reel.evolution .chest-reel-label small { color: #ffe3a0; }
-.evolution-reveal.settled { animation: cache-evolved 420ms ease-out; border-color: #e6b96a; }
 .chest-extra:not([hidden]) {
   list-style: none; display: flex; flex-wrap: wrap; gap: 5px; padding: 0; margin: 8px 0;
 }
@@ -698,16 +707,28 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 .chest-extra .chest-reel-label { grid-template-columns: 32px minmax(0, 1fr); text-align: left; justify-items: start; }
 .chest-extra .gear-icon { grid-row: span 2; }
 .chest-card .card-actions button { min-height: 44px; }
+.chest-card.settled #chest-action { margin-inline-start: auto; }
 .chest-card .card-actions #chest-skip { border-color: #829e9e; }
 @keyframes cache-reel-spin {
   from { transform: translateY(0); }
-  88% { transform: translateY(calc(-6 * var(--reel-face) - 3px)); }
-  to { transform: translateY(calc(-6 * var(--reel-face))); }
+  88% { transform: translateY(calc(var(--reel-end) - 3px)); }
+  to { transform: translateY(var(--reel-end)); }
 }
-@keyframes cache-evolved { from { box-shadow: 0 0 34px 9px #fff0ad; } to { box-shadow: 6px 6px #0a101a; } }
+@keyframes cache-lock {
+  0%, 36% { transform: translateY(0); }
+  42% { transform: translateY(var(--reel-end)); opacity: .4; }
+  100% { transform: translateY(var(--reel-end)); opacity: 1; }
+}
+@keyframes cache-transform {
+  0%, 40% { transform: translateY(0); filter: brightness(1); }
+  54% { transform: translateY(0); filter: brightness(1.65); }
+  55% { transform: translateY(var(--reel-end)); filter: brightness(1.65); }
+  100% { transform: translateY(var(--reel-end)); filter: brightness(1); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .rolling .chest-reel-strip, .evolution-reveal.settled, .gear-toast:not([hidden]) { animation: none; }
+  .chest-card.rolling .chest-reel-strip, .gear-toast:not([hidden]) { animation: none; }
 }
+.effects-off .gear-toast:not([hidden]) { animation: none; }
 .experience.phone-layout .draft-card { width: min(650px, 100%); }
 .experience.phone-layout .draft-options kbd { display: none; }
 
