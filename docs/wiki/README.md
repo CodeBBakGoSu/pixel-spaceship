@@ -4,9 +4,11 @@ Hawk로 10분 출격해 같은 고도의 적을 격추하고, 구슬을 모아 �
 
 **도감:** [무기 10종](CATALOG.md#weapons) · [버프 10종](CATALOG.md#buffs) · [격납고 강화 8종](CATALOG.md#hangar) · [해금 퀘스트 10종](CATALOG.md#quests)
 
-**찾아보기:** [HTML 그림 도감 파일](ASTER-WING-무기-버프-도감.html) · [시도와 결정 이력](HISTORY.md) · [두 봇의 작업 로그](../WORKLOG.md)
+**그림 도감:** [웹 도감 열기 (Devin 인증 필요)](https://aster-wing--9xv0plcv.preview.devinapps.com/docs/wiki/ASTER-WING-%EB%AC%B4%EA%B8%B0-%EB%B2%84%ED%94%84-%EB%8F%84%EA%B0%90.html) · [HTML 원본 보기 (Git)](ASTER-WING-무기-버프-도감.html)
 
-GitHub에서 HTML 코드가 보이면 **Download raw file**로 내려받아 브라우저에서 연다. 파일 하나로 동작하며, 다운로드 없이 읽으려면 위의 항목별 도감을 이용한다.
+인증 없이 그림 도감을 보려면 Git 원본에서 **Download raw file**로 내려받아 브라우저에서 연다. 설치나 다운로드 없이 읽으려면 위의 항목별 도감을 이용한다.
+
+**기록:** [시도와 결정 이력](HISTORY.md) · [두 봇의 작업 로그](../WORKLOG.md)
 
 <a id="versions"></a>
 

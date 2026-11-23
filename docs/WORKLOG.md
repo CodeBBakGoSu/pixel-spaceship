@@ -27,7 +27,8 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795439573-aster-wing-wiki (base `7d883ad`)
 - [HTML 도감 파일](wiki/ASTER-WING-무기-버프-도감.html)의 개발판 링크와 위키 복귀 링크를 확인했다. `69f81c8` 기준 장비 명칭·시작 풀·무기/버프 단계별 수치·진화 조합, 격납고 가격·효과·랭크, 퀘스트 조건·집계, 상자·계열 보너스를 코드에 대조했다.
 - [위키 홈](wiki/README.md)에서 현행 상세 기획·과거 원안 및 실험·기술 참고를 구분하고 각 문서에 돌아오는 길을 달았다. 옛 기록은 보존했다.
-- State: done (문서 검수·정리). Git 파일 확인이며 채팅 첨부 미리보기나 게임 배포 검증이 아니다.
+- [위키 홈](wiki/README.md)에서 인증이 필요한 웹 도감과 Git 원본을 구분했다. [웹 도감 네 탭 검증 영상](https://app.devin.ai/sessions/4278635e7a724fa497392840d7643666?testRecording=31df854a-fa53-4f2b-ab05-d1295ac749cc)은 Product Engineer의 브라우저 검증이며, 채팅 첨부 미리보기나 공개 게임 배포 검증은 아니다.
+- State: done (문서 검수·정리).
 
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
 - Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
