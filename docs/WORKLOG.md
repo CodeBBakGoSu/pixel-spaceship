@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR parent `1f8e649`)
+- Kept the Ace effects bus at 0.15 for the full audible tell, including pulse gaps, and restore it on fire/cancel/pause/mute/zero-volume/suspend; cue gain, master gain, headroom, limiter, cadence, dodge window, and controls are unchanged. Gun/missile HUD copy now says “DODGE WHEN THE TWO RINGS NEARLY OVERLAP” / “두 원이 거의 겹칠 때 회피”; current Ace plan copy matches.
+- Verification: focused audio/Ace-lock/chord/flight-audio/i18n tests passed 57/57; `npm run build` passed (120 modules, 2.59 s). Prior cockpit W/S+Space live-input pass was reported; the `d5801c6` listen failed the clarity bar (cues audible but partly masked by hit/clacking). Corrected English/Korean HUD screenshots: `/home/ubuntu/ace-hud-en-overlap-1f8e649.png`, `/home/ubuntu/ace-hud-ko-overlap-1f8e649.png`; new browser audio listen pending.
+- State: approved for commit to PR7 only; browser mix retest pending.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `d5801c6`; base `4bbf4c6`)
 - Brought the latest `renderer-proto` documentation into PR7 only; `git merge-tree` found only `docs/WORKLOG.md` conflicted, resolved by preserving the PR7 Ace entries and all base-side worklog entries. Changes since common base `b123ba6` are documentation; the P1 branch tip `96bd079` and PR8 branch tip `c070cad` are not ancestors of this base, and no gameplay/audio source was brought in from either.
 - Verification: actual Chrome/Pulse capture on `d5801c6` phase-2 chase heard the short high-pitched pulses and rising two-note accent around 0:01–0:03; they are audible but partly masked by loud effects/clacking (`/home/ubuntu/ace-phase2-d5801c6.wav`). Final merged UI check is pending. No P1/PR8 code was cherry-picked.

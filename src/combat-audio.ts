@@ -14,7 +14,7 @@ const TAU = 2 * Math.PI;
 const EXPLOSION_VOICES = 4;
 const ACE_LOCK_PULSE_TICKS = 12;
 const ACE_LOCK_WINDOW_TICKS = 6;
-const ACE_LOCK_EFFECTS_DUCK = 0.38;
+const ACE_LOCK_EFFECTS_DUCK = 0.15;
 
 const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
@@ -158,6 +158,7 @@ export class CombatAudio {
   private aceLockNextPulseTick = -1;
   private aceLockWindowPlayed = false;
   private aceLockVoice: AceLockVoice | undefined;
+  private aceLockEffectsDucked = false;
 
   constructor(debugSamples = false) {
     this.debugSamples = debugSamples;
@@ -302,18 +303,19 @@ export class CombatAudio {
 
     const key = `${boss.id}:${tell.kind}:${tell.since}:${tell.until}`;
     const windowTick = tell.until - ACE.lock.dodgeTicks;
+    const audible = active && !this.isMuted && this.level > 0 && !this.suspended
+      && !!this.output && this.output.context.state === 'running';
     if (key !== this.aceLockKey) {
-      this.stopAceLockVoice();
+      this.stopAceLockVoice(false);
       this.aceLockKey = key;
       this.aceLockLastTick = tell.since - 1;
       this.aceLockWindowPlayed = aceDodgeWindow(tell, state.tick);
       this.aceLockNextPulseTick = this.aceLockWindowPlayed ? state.tick + ACE_LOCK_WINDOW_TICKS : tell.since;
     }
 
+    this.setAceLockEffectsDuck(audible);
     const enteredWindow = !this.aceLockWindowPlayed && this.aceLockLastTick < windowTick && state.tick >= windowTick;
     const interval = this.aceLockInterval(tell, state.tick);
-    const audible = active && !this.isMuted && this.level > 0 && !this.suspended
-      && !!this.output && this.output.context.state === 'running';
     if (enteredWindow) {
       this.aceLockWindowPlayed = true;
       this.aceLockNextPulseTick = state.tick + ACE_LOCK_WINDOW_TICKS + 2;
@@ -348,14 +350,10 @@ export class CombatAudio {
     source.connect(gain);
     gain.connect(output.master);
     source.onended = () => {
-      if (this.aceLockVoice === voice) {
-        this.aceLockVoice = undefined;
-        this.restoreEffects(output, output.context.currentTime);
-      }
+      if (this.aceLockVoice === voice) this.aceLockVoice = undefined;
       source.disconnect();
       gain.disconnect();
     };
-    output.effects.gain.setTargetAtTime(ACE_LOCK_EFFECTS_DUCK, now, 0.004);
     this.aceLockVoice = voice;
     source.start(now + (replaced ? 0.006 : 0));
   }
@@ -363,13 +361,26 @@ export class CombatAudio {
   private stopAceLockVoice(restoreEffects = true): boolean {
     const voice = this.aceLockVoice;
     const output = this.output;
-    if (!voice || !output) return false;
-    this.aceLockVoice = undefined;
+    if (voice) {
+      this.aceLockVoice = undefined;
+      if (output) {
+        const now = output.context.currentTime;
+        voice.gain.gain.setTargetAtTime(0, now, 0.002);
+        voice.source.stop(now + 0.006);
+      }
+    }
+    if (restoreEffects) this.setAceLockEffectsDuck(false);
+    return !!voice && !!output;
+  }
+
+  private setAceLockEffectsDuck(ducked: boolean): void {
+    if (this.aceLockEffectsDucked === ducked) return;
+    this.aceLockEffectsDucked = ducked;
+    const output = this.output;
+    if (!output) return;
     const now = output.context.currentTime;
-    voice.gain.gain.setTargetAtTime(0, now, 0.002);
-    voice.source.stop(now + 0.006);
-    if (restoreEffects) this.restoreEffects(output, now);
-    return true;
+    if (ducked) output.effects.gain.setTargetAtTime(ACE_LOCK_EFFECTS_DUCK, now, 0.004);
+    else this.restoreEffects(output, now);
   }
 
   private restoreEffects(output: AudioOutput, now: number): void {

@@ -575,7 +575,7 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
   assert.deepEqual(limiter.outputs, [first.destination]);
 
   const { curve } = limiter;
-  const fullPeak = Math.max(effectsCeiling + flightCeiling, effectsCeiling * 0.38 + flightCeiling + lockCeiling)
+  const fullPeak = Math.max(effectsCeiling + flightCeiling, effectsCeiling * 0.15 + flightCeiling + lockCeiling)
     * headroom.gain.value;
   const defaultPeak = fullPeak * first.master.gain.value;
   assert.ok(fullPeak > 1, 'cover a mixed peak that would clip at full volume');
@@ -708,7 +708,7 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   const lockVoice = voicesFor(context, pulse).at(-1);
   assert.equal(lockVoice.outputs[0].outputs[0], context.master, 'the lock cue bypasses the effects bus only');
   const effects = context.master.inputs.find(node => node.kind === 'gain');
-  assert.equal(effects.gain.value, 0.38);
+  assert.equal(effects.gain.value, 0.15);
   const lockGain = lockVoice.outputs[0];
   audio.play('hit');
   const hitVoice = context.nodes.filter(node => node.kind === 'buffer-source').at(-1);
@@ -717,7 +717,14 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   assert.equal(hitEffects.outputs[0], context.master);
 
   lockVoice.onended();
-  assert.equal(effects.gain.value, 1, 'the effects duck restores when the lock voice ends');
+  assert.equal(effects.gain.value, 0.15, 'the effects duck stays active after the pulse ends');
+  const gapVoiceCount = context.started.length;
+  audio.updateAceLock(aceLockState(101), true);
+  assert.equal(context.started.length, gapVoiceCount, 'no cue is needed to keep the tell ducked between pulses');
+  assert.equal(effects.gain.value, 0.15);
+  const fired = aceLockState(160);
+  audio.updateAceLock({ ...fired, boss: { ...fired.boss, tell: null } }, true);
+  assert.equal(effects.gain.value, 1, 'the effects bus restores when the tell fires');
   assert.deepEqual(lockVoice.outputs, []);
   assert.deepEqual(lockGain.outputs, []);
 });
@@ -742,31 +749,42 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   const pausedVoice = voicesFor(context, pulse).at(-1);
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161, paused: true }), false);
   assert.equal(pausedVoice.stopped, true, 'pause stops the active lock voice');
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'pause restores the effects bus');
   const resumedCount = context.started.length;
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.equal(context.started.length, resumedCount, 'resume does not replay the paused pulse');
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15, 'the active tell re-ducks effects on resume');
 
   audio.setMuted(true);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'mute restores effects even between pulses');
   const mutedCount = context.started.length;
   audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   audio.setMuted(false);
   audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.equal(context.started.length, mutedCount, 'unmute skips pulses that became due while muted');
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
+  audio.setVolume(0);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'zero volume restores effects');
+  audio.setVolume(0.30);
+  audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
 
   audio.updateAceLock(aceLockState(200, { since: 200, until: 260 }), true);
   const suspendedCount = context.started.length;
   audio.setSuspended(true);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'suspension restores effects');
   audio.updateAceLock(aceLockState(212, { since: 200, until: 260 }), false);
   audio.setSuspended(false);
   audio.updateAceLock(aceLockState(212, { since: 200, until: 260 }), true);
   assert.equal(context.started.length, suspendedCount, 'resume does not replay a suspended cue');
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.15);
 
   audio.updateAceLock(aceLockState(300, { since: 300, until: 360 }), true);
   const activeVoice = voicesFor(context, pulse).at(-1);
   const activeGain = activeVoice.outputs[0];
   audio.updateAceLock(aceLockState(301, { active: false }), false);
   assert.equal(activeVoice.stopped, true, 'tell cancellation promptly stops the active voice');
-  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1);
+  assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'cancellation promptly restores effects');
   activeVoice.onended();
   assert.deepEqual(activeVoice.outputs, []);
   assert.deepEqual(activeGain.outputs, []);
