@@ -175,15 +175,26 @@ test('Ordnance Rack expands manual stores, recharge and blast reach', () => {
   assert.equal(state.bombs, 6);
 });
 
-test('Twin Cannon level five fires paired bolts with a single penetration and more damage', () => {
-  const state = start();
-  const { x, z } = state.player;
-  state.run.weaponLevels.twin = 5;
-  state.enemies = [makeEnemy(state, x, z + 75, 1, 'patrol', 0)];
-  acquireAndFire(state);
-  assert.equal(state.shots.length, 4);
-  assert.equal(state.twinAt, 18);
-  assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.pierce.remaining === 2 && shot.damage === 1.15));
+test('Twin Cannon grows at every rank and the final fan hits flank contacts', () => {
+  for (const [i, damage] of [1, 1.08, 1.16, 1.30, 1.42].entries()) {
+    const state = start();
+    const { x, z } = state.player;
+    state.run.weaponLevels.twin = i + 1;
+    const center = makeEnemy(state, x, z + 70, 1, 'patrol', 0);
+    const left = makeEnemy(state, x - 16, z + 100, 1, 'patrol', 0);
+    const right = makeEnemy(state, x + 16, z + 100, 1, 'patrol', 0);
+    state.enemies = [center, left, right];
+    for (const enemy of state.enemies) enemy.hp = 12;
+    acquireAndFire(state);
+    assert.equal(state.shots.length, [2, 2, 4, 4, 6][i]);
+    assert.equal(state.twinAt, i === 0 ? 21 : 18);
+    assert.ok(state.shots.every(shot => shot.kind === 'twin' && shot.damage === damage));
+    if (i === 4) assert.ok(state.shots.every(shot => shot.pierce?.remaining === 2));
+    for (let tick = 0; tick < 15; tick++) advanceShots(state, ground);
+    assert.ok(center.hp < 12);
+    assert.equal(left.hp, i === 4 ? 12 - damage : 12);
+    assert.equal(right.hp, i === 4 ? 12 - damage : 12);
+  }
 });
 
 test('Wing Pods add a rear bolt at level five and keep their same-band restriction', () => {

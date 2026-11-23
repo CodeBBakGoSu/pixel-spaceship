@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Seed-1 terminal hashes: s8-flak ground AA + s8-forge flight-path model, production terrain, full-view pilot.
+// Seed-1 terminal hashes: production terrain, full-view pilot (Survivors includes weapon rank growth).
 const terminalHashes = {
   legacy: '08be00a7bd57e95555ebdc92f6d27322071f10fcb60db0d7823520fede976da8',
-  survivors: 'b8cbb9fc980f3e8e4a37a97498585f06a95a3a7babf446632220406c1446bc2d',
+  survivors: '3df5579c4525b157987480df010d0a6ffa5cf968bbc89318d95b0e9b6ce9bbb6',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);
