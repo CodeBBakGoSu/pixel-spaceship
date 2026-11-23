@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `e104198`; review `4666747118`)
+- Draft refills revalidate kept cards as well as new offers, replacing Flare Bay/Ordnance Rack when their unowned Phoenix/Bomb Bay is banished; an owned paired weapon keeps its valid buff. Replacements remain unique.
+- Verification: focused progression/evolutions/chest/stage tests 48/48; `npm run build` passed (119 modules). State: done; awaiting UI verification.
+
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`8824cfc`; merged `2e9770d`, `cc77357`)
 - C normalizes nonzero combined steering to its sign and uses the remembered/default sign when neutral; stepStage regressions cover weak opposite input and neutral C. Shift+Space ailerons and W/S+Space selectors remain unchanged; the global roll threshold is untouched.
 - Merged the docs-only `renderer-proto` updates, preserving its additive worklog and history. Verification: focused tests 65/65 and build passed on `8824cfc`; post-merge `git diff --check` passed. State: UI verification pending; PR branch integration.

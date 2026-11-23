@@ -92,6 +92,41 @@ test('weapon-specific buffs are offered only when their weapon is owned or can s
   }
 });
 
+test('banishing an unowned paired weapon removes its displayed buff and replaces it without duplicates', () => {
+  for (const [weapon, buff] of [['phoenix', 'flare-bay'], ['bomb-bay', 'ordnance-rack']]) {
+    const run = createProgression(116, { weapons: [weapon], buffs: [buff], banishes: 1 });
+    const initial = openRunDraft(run);
+    assert.ok(initial.some(card => card.id === weapon));
+    assert.ok(initial.some(card => card.id === buff));
+    const otherIds = initial.filter(card => card.id !== weapon && card.id !== buff).map(card => card.id);
+
+    assert.equal(banishRunCard(run, weapon), true);
+    assert.ok(!run.cards.some(card => card.id === weapon));
+    assert.ok(!run.cards.some(card => card.id === buff));
+    assert.ok(otherIds.every(id => run.cards.some(card => card.id === id)));
+    assert.equal(run.cards.length, DRAFT_RULES.cardCount);
+    assert.equal(new Set(run.cards.map(card => card.id)).size, run.cards.length);
+  }
+});
+
+test('banishing an owned weapon upgrade keeps its valid paired buff in the draft', () => {
+  for (const [weapon, buff] of [['phoenix', 'flare-bay'], ['bomb-bay', 'ordnance-rack']]) {
+    const run = createProgression(116, { weapons: [weapon], buffs: [buff], banishes: 1 });
+    run.weaponLevels[weapon] = 1;
+    const initial = openRunDraft(run);
+    assert.ok(initial.some(card => card.id === weapon));
+    assert.ok(initial.some(card => card.id === buff));
+    const otherIds = initial.filter(card => card.id !== weapon && card.id !== buff).map(card => card.id);
+
+    assert.equal(banishRunCard(run, weapon), true);
+    assert.ok(!run.cards.some(card => card.id === weapon));
+    assert.ok(run.cards.some(card => card.id === buff));
+    assert.ok(otherIds.every(id => run.cards.some(card => card.id === id)));
+    assert.equal(run.cards.length, DRAFT_RULES.cardCount);
+    assert.equal(new Set(run.cards.map(card => card.id)).size, run.cards.length);
+  }
+});
+
 test('sealed pool falls back to all three legal overflow choices at max damage', () => {
   const run = createProgression(22, { weapons: ['twin'], buffs: [] });
   run.weaponLevels.twin = 7;
