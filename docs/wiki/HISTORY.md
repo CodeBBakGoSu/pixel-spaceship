@@ -31,4 +31,16 @@
 | [자동 플레어·폭탄, C 배럴롤 #8](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/8) | 열림 · 개발판 대상 | 장착했을 때만 자동 투하하는 후보. 통합 전에는 기존 조작과 폭장 랙 해금 조건이 유효하다. |
 | [P1 타격음·상자 릴·탄 잔상 #9](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/9) | 열림 · [검증본 fb6412a](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/fb6412a) | [플레이 녹화](https://app.devin.ai/sessions/64ee5b09bb3f456bb9bf04ba1b3767f1?testRecording=b479b0cb-3404-4584-b72d-27ec5b47ba12)는 후보 버전의 검증이다. 높은 타격음 레이어 청감은 미검수. |
 
+<a id="p1-96bd079"></a>
+
+### P1 상자 연출: 밸런스 봇 검증 (11/23 22:21 KST 인계)
+
+대상은 [`96bd079`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/96bd079)이며, 근거는 [밸런스 봇의 검증 녹화](https://app.devin.ai/sessions/4877fabcbb3c41a1a271bf5723afd5d6?testRecording=a6a95869-3df8-4aca-b729-b3552c353cd2)다. 이 결과는 위의 `fb6412a`, 개발 통합판, 공개판의 검증 결과가 아니다.
+
+| 항목 | 이 커밋에서 확인한 결과 |
+|---|---|
+| 보상·재개 | 상자 5종 모두 연출 켜기·끄기·건너뛰기에서 보상이 같았고, 전투 재개 120틱 뒤 상태도 일치했다. |
+| 소리·문구 | 시드 18에서 첫 클릭으로 음원이 시작됐다. 한국어 ‘잭팟’ 표시는 실패했다. |
+| 성능·가독성 | 소프트웨어 렌더링 PC 6.58 FPS, 모바일 에뮬레이션 16.55 FPS. 실제 기기 FPS와 전 구간 가독성은 확인하지 않았다. |
+
 추가할 때는 당시 근거를 덮어쓰지 않는다. 예: `날짜 | 시도·커밋/PR | 채택/보류/폐기 및 이유 | 재검토 조건 또는 검증 링크`. 병합·배포처럼 상태가 바뀌면 새 근거와 날짜를 붙인다.
