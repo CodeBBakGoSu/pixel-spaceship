@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ed7a423`, based on `838e0dd`)
+- Capped catch-up steps now use the accepted elapsed interval's prefix from the preceding frame/audio sync anchor, then rebase after audio update so discarded frame tails do not shift queued inputs. Same-step due flight actions drain together with prior C/roll-over-maneuver priority; future inputs remain queued.
+- Added repeated 250ms/12-step low-FPS coverage, C at cue+2ms reaching the dodge window and canceling with a due J-turn, pause/reset clock rebase, and due/future arbitration checks. Focused tests passed 33/33; build passed (120 modules, 3.19s). Full suite and runtime UI/audio verification remain deferred.
+- State: implementation and focused verification complete; pushing with this log update.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ca9d716`, based on `c37631e`)
 - Late Shift now resolves at the saved 80ms chord deadline; timestamp-ordered flight actions preserve earlier maneuvers, and C flushes an expired chord before queuing itself while retaining its pending-Space grace until consumption. The five-tick grace and 18-tick dodge window are unchanged.
 - Focused tests passed 57/57; build passed (120 modules, 2.34s). Sound audit: `hit`/roster SFX route through the ducked effects bus (.06 tell/.02 window; harness hit at tick 28836 measured .02); active `FlightAudio.bus` and the Ace cue itself connect directly to master. In the supplied 0.95s prefire WAV, mixed RMS/peak were -24.64/-13.33dBFS; exact-frequency projections at WAV offsets 0.65s (1650Hz) and 0.715s (2200Hz) measured -17.44/-17.65dBFS against local mixed RMS -18.13/-18.26. The 11.98s overlap WAV measured -30.35/-13.29dBFS RMS/peak and repeats the same cue bands. Adjacent windows had little energy at those frequencies. These measurements are from mixed PCM, not isolated stems, apply only to the supplied captures, and do not establish universal audibility or source-isolated levels. No gain/timbre edit made.
