@@ -1032,9 +1032,14 @@ window.addEventListener('keydown', event => {
   if (code === 'KeyR' && state.rank) pendingStart = true;
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
+function updateAceLockAndRebaseFlightClock(active: boolean): void {
+  audio.updateAceLock(state, active);
+  previousTime = performance.now();
+}
+
 function syncAudioPause(): void {
   audio.setSuspended(!graphics.canAdvance || (touch && (document.hidden || interrupted)));
-  audio.updateAceLock(state, false);
+  updateAceLockAndRebaseFlightClock(false);
 }
 
 function interruptFlight(reason: 'focus' | 'graphics' = 'focus'): void {
@@ -1424,7 +1429,7 @@ function render(now: number): boolean {
   }
   const audioActive = graphics.canAdvance && effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
   if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass, audioActive);
-  audio.updateAceLock(state, audioActive);
+  updateAceLockAndRebaseFlightClock(audioActive);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -1569,7 +1574,7 @@ function animate(now: number): void {
       syncAudioPause();
       dirty = true;
     }
-    previousTime = now;
+    previousTime = performance.now();
     requestAnimationFrame(animate);
     return;
   }
@@ -1596,10 +1601,10 @@ function animate(now: number): void {
       break;
     }
   }
-  audio.updateAceLock(state, graphics.canAdvance && effectsEnabled && !document.hidden && !guide
+  updateAceLockAndRebaseFlightClock(graphics.canAdvance && effectsEnabled && !document.hidden && !guide
     && state.phase === 'playing' && !state.paused);
   if (graphics.recovering) {
-    previousTime = now;
+    previousTime = performance.now();
     requestAnimationFrame(animate);
     return;
   }
@@ -1618,7 +1623,6 @@ function animate(now: number): void {
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   drawDamageFeedback();
   if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
-  previousTime = now;
   requestAnimationFrame(animate);
 }
 
