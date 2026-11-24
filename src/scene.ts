@@ -3,7 +3,7 @@ import {
   InstancedBufferAttribute, InstancedMesh, Object3D,
   Mesh, MeshBasicMaterial, NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry,
   RingGeometry, Scene, TorusGeometry, Vector3, WebGLRenderer, WebGLRenderTarget,
-  type BufferGeometry, type Camera,
+  Vector4, type BufferGeometry, type Camera,
 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
 import { batchBursts, gnatBursts } from './combat-feedback.ts';
@@ -107,6 +107,28 @@ export function makeChestBatch(): InstancedMesh {
 }
 
 type Projection = { x: number; y: number };
+
+export function clipProjectSortieSegment(camera: Camera, width: number, height: number,
+  from: Position, to: Position): { from: Projection; to: Projection } | null {
+  const a = new Vector4(from.x, from.alt, -from.z, 1)
+    .applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+  const b = new Vector4(to.x, to.alt, -to.z, 1)
+    .applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+  let enter = 0, exit = 1;
+  const clip = (fromDistance: number, toDistance: number): boolean => {
+    if (fromDistance < 0 && toDistance < 0) return false;
+    if (fromDistance < 0) enter = Math.max(enter, fromDistance / (fromDistance - toDistance));
+    if (toDistance < 0) exit = Math.min(exit, fromDistance / (fromDistance - toDistance));
+    return enter <= exit;
+  };
+  if (!clip(a.z + a.w, b.z + b.w) || !clip(a.w - a.z, b.w - b.z)) return null;
+  const clippedFrom = a.clone().lerp(b, enter), clippedTo = a.clone().lerp(b, exit);
+  if (!clippedFrom.w || !clippedTo.w) return null;
+  return {
+    from: { x: (clippedFrom.x / clippedFrom.w + 1) * width / 2, y: (1 - clippedFrom.y / clippedFrom.w) * height / 2 },
+    to: { x: (clippedTo.x / clippedTo.w + 1) * width / 2, y: (1 - clippedTo.y / clippedTo.w) * height / 2 },
+  };
+}
 const TOP_FLIGHT = 152;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const GNAT_LIVERY = {
@@ -740,7 +762,8 @@ export class FlightScene {
   drawSortieVfx(ctx: CanvasRenderingContext2D, state: StageState, mode: SortieVfxMode, nowMs: number): void {
     const boss = mode === 'flight' && state.boss?.hp ? this.projectAirframe(state, 'boss') : null;
     this.sortieVfx.draw(ctx, state, point => this.project(point), (x, z) => this.world.height(x, z), boss,
-      this.reducedMotion.matches, mode, nowMs);
+      this.reducedMotion.matches, mode, nowMs,
+      (from, to) => clipProjectSortieSegment(this.camera, this.framing.width, this.framing.height, from, to));
   }
 
   clearSortieVfx(): void { this.sortieVfx.clear(); }

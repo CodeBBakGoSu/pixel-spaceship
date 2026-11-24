@@ -335,6 +335,39 @@ test('dive-warning mask follows its target altitude without requiring player pro
     && operation.path.some(command => command[0] === 'arc' && command[1] === 80 && command[2] === targetY)));
 });
 
+test('rail and arc fire draw camera-clipped segments for behind-camera and offscreen endpoints', () => {
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.lookAt(0, 0, -1);
+  camera.updateMatrixWorld(true);
+  const project = point => {
+    const projected = new Vector3(point.x, point.alt, -point.z).project(camera);
+    if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1) return null;
+    return { x: (projected.x + 1) * 500, y: (1 - projected.y) * 500 };
+  };
+  const scenarios = [
+    { position: { x: 0, z: -1, alt: 0 }, source: { x: 0, z: -1, alt: 0 }, target: { x: 0.5, z: 10, alt: 0 } },
+    { position: { x: 20, z: 10, alt: 0 }, source: { x: 0, z: 10, alt: 0 }, target: { x: 20, z: 10, alt: 0 } },
+  ];
+  for (const weapon of ['rail', 'arc']) for (const [index, scenario] of scenarios.entries()) {
+    const vfx = new SortieVfx(TICKS_PER_SECOND);
+    vfx.fire(weapon, { tick: 1, position: scenario.position, source: scenario.source, target: scenario.target });
+    const segment = clipProjectSortieSegment(camera, 1000, 1000, scenario.source, scenario.target);
+    assert.ok(segment);
+    if (index === 0) assert.ok(segment.from.x >= 0 && segment.from.x <= 1000);
+    else assert.ok(segment.to.x > 1000);
+
+    const rendered = context();
+    vfx.draw(rendered, state(1), project, () => 0, null, false, 'flight', 0,
+      (from, to) => clipProjectSortieSegment(camera, 1000, 1000, from, to));
+    const strokes = rendered.operations.filter(operation => operation.type === 'stroke'
+      && operation.path.some(command => command[0] === 'lineTo'));
+    assert.ok(strokes.some(operation => operation.path.some(command => command[0] === 'moveTo'
+      && Math.abs(command[1] - segment.from.x) < 1 && Math.abs(command[2] - segment.from.y) < 1)));
+    assert.ok(strokes.some(operation => operation.path.some(command => command[0] === 'lineTo'
+      && Math.abs(command[1] - segment.to.x) < 1 && Math.abs(command[2] - segment.to.y) < 1)));
+  }
+});
+
 test('actual Ace defeat VFX continues on render time after the simulation clock freezes', () => {
   const vfx = new SortieVfx(TICKS_PER_SECOND), position = { x: 3, z: 4, alt: 5 };
   vfx.bossDefeated({ id: 9, tick: 10, position });

@@ -54,6 +54,10 @@ type Cue = {
 
 type ScreenPoint = { x: number; y: number };
 export type SortieProjection = (point: Position) => ScreenPoint | null;
+export type SortieSegmentProjection = (from: Position, to: Position) => {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+} | null;
 export type SortieVfxMode = 'flight' | 'defeat';
 export function sortieVfxMode(state: Pick<StageState, 'phase' | 'paused' | 'boss'>, blocked = false): SortieVfxMode | null {
   if (blocked) return null;
@@ -262,7 +266,8 @@ export class SortieVfx {
 
   draw(ctx: CanvasRenderingContext2D, state: StageState, project: SortieProjection,
     groundAt: (x: number, z: number) => number, bossArea: { x: number; y: number; radius: number } | null,
-    reducedMotion = false, mode: SortieVfxMode = 'flight', nowMs = 0): void {
+    reducedMotion = false, mode: SortieVfxMode = 'flight', nowMs = 0,
+    projectSegment?: SortieSegmentProjection): void {
     let renderTick = state.tick;
     if (mode === 'defeat') {
       if (state.boss?.defeatedAt === null || state.boss?.defeatedAt === undefined) {
@@ -286,11 +291,16 @@ export class SortieVfx {
       if (!cue.active) continue;
       if (mode === 'defeat' && cue.effect !== 'D04') continue;
       if (renderTick >= cue.until) { cue.active = false; continue; }
-      const origin = project(cue.position);
-      if (!origin) continue;
+      const hasLineSegment = cue.effect === 'W04-F' || cue.effect === 'W10-F';
+      const segment = hasLineSegment && cue.hasSource && cue.hasTarget
+        ? projectSegment?.(cue.source, cue.target) ?? null
+        : null;
+      const projectedOrigin = project(cue.position);
+      if (!projectedOrigin && !segment) continue;
+      const origin = projectedOrigin ?? segment!.from;
       const progress = clamp((renderTick - cue.born) / cue.duration, 0, 1);
-      const source = cue.hasSource ? project(cue.source) : null;
-      const target = cue.hasTarget ? project(cue.target) ?? origin : origin;
+      const source = segment?.from ?? (cue.hasSource ? project(cue.source) : null);
+      const target = segment?.to ?? (cue.hasTarget ? project(cue.target) ?? origin : origin);
       const protectedBoss = bossArea && cue.effect !== 'D04'
         && Math.hypot(origin.x - bossArea.x, origin.y - bossArea.y) < bossArea.radius + 12 * unit;
       const detail = reducedMotion ? 0.25 : protectedBoss ? density * 0.38 : density;
