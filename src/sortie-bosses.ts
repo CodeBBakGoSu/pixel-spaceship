@@ -1,4 +1,4 @@
-import { MAX_ALTITUDE, STEP, TICKS_PER_SECOND, angleTo, clamp, fireHostile } from './stage-combat.ts';
+import { HIT_WINDOW, MAX_ALTITUDE, STEP, TICKS_PER_SECOND, TWIN_CONE, angleTo, clamp, fireHostile } from './stage-combat.ts';
 import { CARRIER_TUNING } from './data/chest-tuning.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { HOSTILE_SHOT_LIMIT } from './data/run-balance.ts';
@@ -175,6 +175,13 @@ function desiredVelocity(state: StageState, boss: SortieMiniboss, actor: Enemy):
   const right = { x: forward.z, z: -forward.x, alt: 0 };
   if (boss.cue.id === 'armored-transport') {
     if (boss.phase === 'cross') return add3d(base, scale3d(right, scaleTravel(42)));
+    if (boss.phase === 'turn') {
+      const target = arenaPosition(state, add3d(playerPoint(state), scale3d(forward, ACE_RETURN_DISTANCE)));
+      const delta = { x: target.x - actor.x, z: target.z - actor.z, alt: 0 };
+      const distance = Math.hypot(delta.x, delta.z);
+      const speed = Math.max(scaleTravel(120), Math.hypot(base.x, base.z) + scaleTravel(16));
+      return distance > 0.001 ? scale3d(normalize3d(delta), speed) : base;
+    }
     return base;
   }
   if (boss.phase === 'charge') return add3d(base, scale3d(right, -boss.side * scaleTravel(120)));
@@ -191,7 +198,8 @@ const ACE_RETURN_DISTANCE = scaleTravel(75);
 
 function moveActor(state: StageState, boss: SortieMiniboss, actor: Enemy, ground: Ground): void {
   const wanted = desiredVelocity(state, boss, actor);
-  const acceleration = scaleTravel(boss.phase === 'recover' ? 180 : 45) * STEP;
+  const acceleration = scaleTravel(boss.phase === 'recover'
+    || (boss.cue.id === 'armored-transport' && boss.phase === 'turn') ? 180 : 45) * STEP;
   const previous = { x: actor.x, z: actor.z };
   actor.vx += clamp(wanted.x - actor.vx, -acceleration, acceleration);
   actor.vz += clamp(wanted.z - actor.vz, -acceleration, acceleration);
@@ -225,7 +233,9 @@ function advancePhase(state: StageState, boss: SortieMiniboss, actor: Enemy): vo
       boss.phase = 'turn';
       boss.phaseStartedAt = state.tick;
     } else if (boss.phase === 'turn' && elapsed >= DURATION.turn
-      && distance3d(actor, playerPoint(state)) <= scaleTravel(WEAPON_RANGE)) enterLine(state, boss);
+      && distance3d(actor, playerPoint(state)) <= scaleTravel(WEAPON_RANGE)
+      && Math.abs(angleTo(state.player.yaw, actor.x - state.player.x, actor.z - state.player.z)) <= TWIN_CONE
+      && Math.abs(actor.alt - state.player.altitude) <= HIT_WINDOW) enterLine(state, boss);
     else if (boss.phase === 'line' && boss.lineUntil !== null && state.tick >= boss.lineUntil) {
       boss.phase = 'turn';
       boss.phaseStartedAt = state.tick;

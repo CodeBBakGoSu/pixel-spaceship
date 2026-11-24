@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { autopilotInput } from '../src/autoplay.ts';
 import { CARRIER_TUNING } from '../src/data/chest-tuning.ts';
+import { WEAPONS } from '../src/data/items.ts';
 import { HEAT_TIERS } from '../src/data/meta.ts';
-import { MAX_ALTITUDE, advanceShots, hurtEnemy, TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { MAX_ALTITUDE, HIT_WINDOW, TICKS_PER_SECOND, TWIN_CONE, advanceShots, angleTo, hurtEnemy } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies } from '../src/stage-enemies.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
+import { World } from '../src/world.ts';
 
 const ground = () => 0;
 
@@ -125,6 +128,43 @@ test('the armored transport crosses into a real four-second, in-range firing lin
   assert.equal(activeTicks, 4 * TICKS_PER_SECOND);
   assert.equal(state.tick - lineStart, 4 * TICKS_PER_SECOND);
   assert.ok(Math.hypot(actor.x - state.arena.x, actor.z - state.arena.z) <= state.arena.radius - 128 + 1e-6);
+});
+
+test('seed-1 autoplay transport rejoin sustains a real twin firing arc without actor relocation', () => {
+  const options = parseStageOptions('?mode=survivors&autoplay=1&seed=1');
+  const world = new World(options.seed);
+  const terrain = (x, z) => world.height(x, z);
+  const hooks = { ...STANDALONE_SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
+  const state = createStage(options, terrain);
+  const cue = SORTIE_MINIBOSS_CUES[0];
+  let weaponsDisabled = false;
+  while (state.tick < cue.startTick) {
+    if (!weaponsDisabled && state.tick === cue.startTick - TICKS_PER_SECOND) {
+      state.twinAt = state.podsAt = state.strafeAt = Number.MAX_SAFE_INTEGER;
+      for (const key of Object.keys(state.weaponFireAt ?? {})) state.weaponFireAt[key] = Number.MAX_SAFE_INTEGER;
+      state.shots = [];
+      weaponsDisabled = true;
+    }
+    stepStage(state, autopilotInput(state, 'full', terrain), terrain, undefined, undefined, hooks);
+  }
+
+  const boss = state.sortieBoss;
+  const actor = state.enemies.find(enemy => enemy.id === boss.actorId);
+  const initial = { x: actor.x, z: actor.z, alt: actor.alt };
+  let streak = 0, longest = 0;
+  for (let i = 0; i < cue.maxDurationTicks && !boss.outcome; i++) {
+    stepStage(state, {}, terrain, undefined, undefined, hooks);
+    const dx = actor.x - state.player.x, dz = actor.z - state.player.z;
+    const inTwinArc = Math.hypot(dx, dz) <= WEAPONS.twin.tuning.range
+      && Math.abs(angleTo(state.player.yaw, dx, dz)) <= TWIN_CONE
+      && Math.abs(actor.alt - state.player.altitude) <= HIT_WINDOW;
+    streak = boss.phase === 'line' && inTwinArc ? streak + 1 : 0;
+    longest = Math.max(longest, streak);
+  }
+
+  assert.notDeepEqual({ x: actor.x, z: actor.z, alt: actor.alt }, initial, 'the seeded flight advances the actor naturally');
+  assert.ok(longest >= 3 * TICKS_PER_SECOND,
+    `expected a sustained line with actual Twin range, cone and altitude geometry; got ${longest} ticks`);
 });
 
 test('transport escorts are damageable enemies and only living escort hulls source volleys', () => {

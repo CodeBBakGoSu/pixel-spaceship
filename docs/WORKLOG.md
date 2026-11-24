@@ -24,15 +24,19 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; pending commit)
+### 2026-11-25 00:24 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0004; pending commit)
+- Replayed seed 1 through the 205s cue with `autopilotInput`, then held the natural player course straight without moving the actor; baseline entered a `line` state at 214s but sustained actual Twin range/cone/same-altitude geometry for only 110 ticks, not 3 seconds. The UI note's “no line” state-label detail was not reproduced; the firing opportunity gap was.
+- Transport turn now steers to a player-local forward rejoin point and enters `line` only when Twin range/cone/altitude geometry is valid. `tests/sortie-bosses.test.mjs` passed 13/13, including the natural seed-1 flight; `git diff --check` is clean. HP/firepower unchanged.
+
+### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; eab27c6)
 - Reproduced seed 1 at the 205s cue with the pilot outside (x=2393, edge=1792): the transport spawned clipped near x=1653, 765 units from the pilot. `arenaPosition` now preserves player-local coordinates outside the arena and retains the existing in-arena clamp.
 - Added an external-pilot spawn regression; `tests/sortie-bosses.test.mjs` passed 12/12 and `git diff --check` was clean. No balance values changed; findings 0004–0005 remain in progress.
 
-### 2026-11-25 00:20 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0002; pending commit)
+### 2026-11-25 00:20 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0002; 406c2bd)
 - Reproduced an outside-arena pilot (x=2392, arena edge=1792): after ten seconds of approach Ace remained at x=1761 with 631-unit separation because the rejoin target was clamped back inside. Approach now clamps only while the pilot is in-arena; existing in-arena bound coverage is retained.
-- Added the external-pilot regression; Ace/reengagement/checkpoint regressions passed 50/50 and `git diff --check` was clean. No balance values changed; findings 0003–0005 remain in progress.
+- Added the external-pilot regression; Ace/reengagement/checkpoint regressions passed 50/50 and `git diff --check` was clean. No balance values changed; findings 0004–0005 remained in progress.
 
-### 2026-11-25 00:18 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0001; pending commit)
+### 2026-11-25 00:18 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0001; 866deba)
 - Reproduced a far transport receiving a generic fly-in entry after 156 far ticks; `advanceEnemies` skipped the sortieBoss entry for 240 ticks and `hurtEnemy` left HP unchanged. `relocateStragglers` now skips dedicated sortie-boss actors.
 - Added a regression asserting far-actor recycling cannot leave the boss invulnerable; `tests/sortie-bosses.test.mjs` passed 11/11 and `git diff --check` was clean. No balance values changed; remaining review findings are still in progress.
 
