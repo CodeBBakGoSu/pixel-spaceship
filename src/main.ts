@@ -806,8 +806,9 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
     if (projectedTarget.depth > 0.05 && projectedPlayer.depth > 0.05) {
       const reserved = aegisCueSlot ? [aegisCueSlot] : [];
+      const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
       const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, TOUCH_THREAT_CUE_SIZE,
-        8, phone.controls, reserved, touchThreatCueSlot);
+        8, occlusion, reserved, touchThreatCueSlot);
       if (cue) {
         setRect('touch-threat-cue', cue.rect);
         touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);

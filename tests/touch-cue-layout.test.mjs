@@ -99,6 +99,12 @@ test('full touch backdrop occlusion includes safe-inset edges and reserves the v
     width: 44,
     height: 44,
   });
+  const [aegis, threat] = findTouchCueRects(layout, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]);
+  assert.ok(aegis && threat);
+  const cue = touchOcclusionCue(layout, { x: 195, y: layout.controls.y - 80 }, target,
+    TOUCH_THREAT_CUE_SIZE, 8, backdrop, [aegis], threat);
+  assert.ok(cue);
+  assert.deepEqual(cue.rect, threat);
 });
 
 test('obstacle-edge search finds distinct Aegis and dive cue slots in short portrait cockpits', () => {
