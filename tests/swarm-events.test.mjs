@@ -94,7 +94,7 @@ test('a saturated mobile or desktop wave makes room for a single-band, terrain-s
   }
 });
 
-test('wave-end recovery notice leaves pickups untouched and does not sweep map salvage', () => {
+test('wave-end recovery state leaves pickups untouched and does not sweep map salvage', () => {
   for (const event of SWARM_EVENTS) {
     const state = start();
     state.tick = (event.start + event.duration) * 60 - 1;
@@ -123,6 +123,18 @@ test('wave-end recovery notice leaves pickups untouched and does not sweep map s
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice, undefined);
   }
+});
+
+test('legacy recovery still couples its notice to recent pickup recovery', () => {
+  const state = start('legacy');
+  const event = SWARM_EVENTS[0];
+  state.tick = (event.start + event.duration) * 60;
+  const pickup = orb(state, 180);
+  state.pickups.push(pickup);
+  assert.equal(advanceSwarmEvent(state, flat), true);
+  assert.equal(state.swarmNotice?.kind, 'recovery');
+  assert.equal(pickup.pulling, true);
+  assert.ok(pickup.recovery);
 });
 
 test('full pickup pool remains ordinary salvage at a wave end', () => {
