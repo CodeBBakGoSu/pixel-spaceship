@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795498866-all-features-playtest (claim; base `2d543dd`)
+- Integrating the inspected P1 combat-feedback candidate (`2bad3c4`…`61154f5`); the latest base already contains the horde, Armored/Sting Gnats, and swarm/recovery features.
+- Seeker balance tuning and P2 are excluded. Preview/browser verification is assigned to the testing agent; tests/build pending.
+- State: in progress.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2cc10e4`, based on `7da5db6`)
 - Strengthened the 120Hz fire-tick regression: C must leave an accepted roll and zero hostile projectiles, while the deterministic phase-2 no-C twin reaches the same tick, clears the tell normally, and spawns both Ace missiles.
 - Focused fire-tick test passed 1/1; test-only change, so no full-suite, build, or UI rerun.
