@@ -27,6 +27,8 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (기준 `ae1b94c`, commit `b71acc7`)
 - Matched the renderer to PR #13's continuous-flight verdict: radial bounds `radius ± halfWidth` and altitude bounds `player.alt ± halfWidth`; added transparent boundary rings and supports without changing collision or simulation state.
 - Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
+- PR #10 compatibility review: not cherry-picked to its remote branch (`fa45f64`) because its Aegis verdict uses `hitWindow(state)` vertically, while PR #13's continuous-run verdict uses `player.alt ± halfWidth`; rendering the PR #13 outline there would misstate the judged bounds. No separate PR was opened pending approval.
+- State: done on the pushed PR #13-derived renderer branch (`c742880`); collision, balance, and simulation remain unchanged.
 
 ### 2026-11-24 23:37 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
 - Isolated the Legacy replay against detached `09e2890`: the first serialized-state difference at tick 0 was only the progress-metric schema (`multibandWithinFive`/`bandsKilled` vs `heightSpreadWithinFive`/`verticalKills`). Removing profile/daily/run metrics from the behavioral projection produced identical seed-1 simulation state through tick 6770/`clear` on both trees. Added mode-scoped Legacy metric creation/normalization; the Legacy golden is unchanged.
