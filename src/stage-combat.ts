@@ -824,8 +824,9 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
     let hit: Enemy | null = null;
     const ace = activeAce(state);
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow)) continue;
-      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+      if (!enemy.hp || enemy.entry || (!enemy.sortieBoss
+        && !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow))) continue;
+      const time = enemyImpactTime(shot, dx, dz, dy, enemy, window);
       if (time < first) {
         first = time;
         hit = enemy;
@@ -863,7 +864,7 @@ function advancePiercingShot(
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id)) continue;
       if (shot.kind === 'strafe') {
-        if (!strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
+        if (!enemy.sortieBoss && !strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
       } else if (!enemy.sortieBoss && !dy
         && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
         continue;

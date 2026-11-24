@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { autopilotInput } from '../src/autoplay.ts';
+import { fixedBand } from '../src/bands.ts';
 import { CARRIER_TUNING } from '../src/data/chest-tuning.ts';
 import { WEAPONS } from '../src/data/items.ts';
 import { HEAT_TIERS } from '../src/data/meta.ts';
@@ -181,6 +182,29 @@ test('piercing Twin edge hits use the same 3D miniboss hull as ordinary shots', 
 
   assert.equal(actor.hp, hp - 1, 'a piercing shot grazing the 3D hull edge still damages the boss');
   assert.deepEqual(bolt.hits, [actor.id]);
+});
+
+test('ordinary and piercing dive Twin segments use the same 3D miniboss hull', () => {
+  for (const piercing of [false, true]) {
+    const state = startEncounter(0);
+    const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+    for (const enemy of state.enemies) if (enemy.id !== actor.id) enemy.hp = 0;
+    const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+    const hp = actor.hp;
+    const bolt = { remaining: 1, hits: [] };
+    const shot = {
+      kind: 'strafe', targetBand: fixedBand(actor.alt), targetAltitude: actor.alt,
+      x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt + 20,
+      vx: 1800, vz: 0, vy: -1200, life: 1, damage: 1, volley: 78,
+      nearMiss: false, lockId: null, ...(piercing ? { pierce: bolt } : {}),
+    };
+    state.shots = [shot];
+
+    advanceShots(state, ground);
+
+    assert.equal(actor.hp, hp - 1, `${piercing ? 'piercing' : 'ordinary'} dive Twin hits the 3D hull edge`);
+    if (piercing) assert.deepEqual(bolt.hits, [actor.id]);
+  }
 });
 
 test('seed-1 autoplay transport rejoin sustains a real twin firing arc without actor relocation', () => {
