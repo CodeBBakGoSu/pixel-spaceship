@@ -586,7 +586,7 @@ function updateHud(readout: RadarReadout): void {
   const notice = state.phaseNotice, swarm = state.swarmNotice, banner = $('#phase-banner');
   banner.hidden = (!notice && !swarm) || state.phase !== 'playing' || state.paused;
   if (swarm && !banner.hidden) {
-    setText('#phase-banner', swarm.kind === 'recovery' ? t('phase.recovery') : t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }));
+    setText('#phase-banner', swarm.kind === 'rest' ? t('phase.rest') : t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }));
   } else if (notice && !banner.hidden) {
     const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.aceInbound') : t(`phase.${notice.phase}`);
     const lull = notice.kind === 'lull'

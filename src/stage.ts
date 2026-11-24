@@ -14,6 +14,7 @@ import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS
 import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
+import { advancePhaseDirector } from './phase-director.ts';
 import { rngStream } from './stage-random.ts';
 import { GNAT, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
@@ -30,6 +31,8 @@ import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
 import { advanceSwarmEvent } from './swarm-events.ts';
+import { createMidbossSchedule, midbossSpawnsBlocked } from './midboss-schedule.ts';
+import { createThreatBudget } from './threat-budget.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
@@ -216,7 +219,8 @@ function applyGearEffects(state: StageState, card: DraftCard): void {
 }
 
 const fixtureBands: Record<NewEnemyKind, Band> = {
-  skimmer: 0, spotter: 2, hound: 1, flanker: 2, harrier: 1, diver: 2, bomber: 1, turret: 1,
+  skimmer: 0, spotter: 2, hound: 1, 'twin-chaser': 1, flanker: 2, crosswing: 1,
+  harrier: 1, diver: 2, manta: 2, mender: 1, bomber: 1, turret: 1,
 };
 
 function applyFixture(state: StageState, options: StageOptions, ground: Ground): void {
@@ -329,7 +333,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
     run, profile, daily, hangar, metrics: createRunMetrics(), killBandTicks: [-1, -1, -1],
-    ejectorUsed: false, summary: null, phaseNotice: null, bills: createBillState(), lastHitTick: -1,
+    ejectorUsed: false, summary: null, phaseNotice: null, phaseRepairMask: 0, bills: createBillState(), lastHitTick: -1,
+    ...(run ? { threatBudget: createThreatBudget(), midbossSchedule: createMidbossSchedule() } : {}),
     chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
     aceRank: rank,
@@ -778,7 +783,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground);
-    if (!advanceSwarmEvent(state, ground, observeSwarm)) advancePhaseSpawns(state, ground, observeSwarm);
+    if (!advanceSwarmEvent(state, ground, observeSwarm) && !midbossSpawnsBlocked(state)) {
+      if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
+    }
   } else {
     const wave = WAVES[state.nextWave];
     if (wave && state.tick >= wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) {

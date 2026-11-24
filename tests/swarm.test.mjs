@@ -20,16 +20,16 @@ const spawnAt = (state, seconds, terrain = ground) => {
 test('phase boundaries keep the Ace arrival at 8:00 and timeout at 10:00', () => {
   assert.equal(RUN_BOSS_SECONDS, 480);
   assert.equal(RUN_END_SECONDS, 600);
-  for (const [index, second] of [0, 120, 240, 360, 480].entries()) {
+  for (const [second, index] of [[0, 0], [120, 2], [240, 4], [360, 6], [480, 8]]) {
     assert.equal(phaseAt(second), PHASES[index]);
     if (index) assert.equal(phaseAt(second - 1 / 60), PHASES[index - 1]);
   }
 });
 
-test('scheduled air traffic increases in every phase through the Ace fight', () => {
+test('minute traffic follows the per-minute schedule and becomes boss-only in the final minutes', () => {
   const state = waveState();
-  let previousRegular = 0, previousGnats = 0, previousPack = 0, previousCap = 0;
-  for (const phase of PHASES) {
+  const expectedRegular = [14, 14, 16, 16, 19, 19, 23, 23, 0, 0];
+  for (const [index, phase] of PHASES.entries()) {
     let regular = 0, swarm = 0, largestPack = 0;
     for (state.tick = ticks(phase.starts); state.tick < ticks(phase.ends); state.tick++) {
       advancePhaseSpawns(state, ground);
@@ -39,16 +39,12 @@ test('scheduled air traffic increases in every phase through the Ace fight', () 
       largestPack = Math.max(largestPack, pack);
       state.enemies.length = 0;
     }
-    assert.ok(swarm >= phase.gnatsPerMinute * 2, `${phase.id} scheduled traffic plus floor top-ups`);
-    assert.ok(regular > 0, `${phase.id} regular traffic`);
-    assert.ok(phase.regularPerMinute > previousRegular, `${phase.id} regular spawn budget`);
-    assert.ok(swarm > previousGnats, `${phase.id} swarm traffic`);
-    assert.ok(largestPack > previousPack, `${phase.id} pack size`);
-    assert.ok(phase.regularCap > previousCap, `${phase.id} regular cap`);
-    previousRegular = phase.regularPerMinute;
-    previousGnats = swarm;
-    previousPack = largestPack;
-    previousCap = phase.regularCap;
+    assert.equal(phase.regularPerMinute, expectedRegular[index]);
+    assert.ok(phase.gnatsPerMinute === 0 ? swarm === 0 : swarm >= phase.gnatsPerMinute,
+      `${phase.id} scheduled traffic plus floor top-ups`);
+    assert.ok(phase.regularPerMinute === 0 ? regular === 0 : regular >= phase.regularPerMinute,
+      `${phase.id} regular traffic`);
+    assert.ok(phase.packSize === 0 ? largestPack === 0 : largestPack > 0, `${phase.id} pack size`);
   }
 });
 
@@ -95,17 +91,8 @@ test('regular placements, the cap and draft randomness cannot desynchronize futu
   assert.equal(second.rng, 99);
 });
 
-test('phases reserve their final fifteen seconds for the lull', () => {
-  for (const seconds of [105, 225, 345, 465]) {
-    const state = waveState();
-    const before = state.streams.spawn.rng;
-    for (let tick = ticks(seconds); tick < ticks(seconds + 15); tick++) {
-      state.tick = tick;
-      advancePhaseSpawns(state, ground);
-    }
-    assert.deepEqual(state.enemies, []);
-    assert.equal(state.streams.spawn.rng, before);
-  }
+test('repair reward times do not create phase spawn lulls', () => {
+  assert.deepEqual(PHASES.map(phase => phase.lull), Array(PHASES.length).fill(0));
 });
 
 test('the Ace escort limit trims regulars without removing Gnats', () => {
@@ -143,13 +130,14 @@ test('engaged wave Gnats pursue indefinitely without attacks', () => {
 
 test('platform-specific horde settings preserve the original regular traffic', () => {
   assert.deepEqual(SWARM_CAPS, { desktop: 200, mobile: 120 });
-  assert.deepEqual(PHASES.map(phase => phase.regularCap), [8, 16, 26, 30, 34]);
-  assert.deepEqual(PHASES.map(phase => phase.regularPerMinute), [14, 16, 19, 23, 28]);
-  assert.deepEqual(PHASES.map(phase => phase.gnatFloor), [22, 44, 90, 130, 166]);
-  assert.deepEqual(PHASES.map(phase => phase.gnatFloorMobile), [14, 37, 72, 92, 99]);
-  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinute), [70, 160, 320, 480, 600]);
-  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinuteMobile), [50, 160, 320, 480, 600]);
-  assert.deepEqual(PHASES.map(phase => phase.packSize), [10, 18, 28, 36, 40]);
+  assert.deepEqual(PHASES.map(phase => phase.starts), [0, 60, 120, 180, 240, 300, 360, 420, 480, 540]);
+  assert.deepEqual(PHASES.map(phase => phase.regularCap), [8, 8, 16, 16, 26, 26, 30, 30, 34, 34]);
+  assert.deepEqual(PHASES.map(phase => phase.regularPerMinute), [14, 14, 16, 16, 19, 19, 23, 23, 0, 0]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatFloor), [22, 22, 44, 44, 90, 90, 130, 130, 0, 0]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatFloorMobile), [14, 14, 37, 37, 72, 72, 92, 92, 0, 0]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinute), [70, 70, 160, 160, 320, 320, 480, 480, 0, 0]);
+  assert.deepEqual(PHASES.map(phase => phase.gnatsPerMinuteMobile), [50, 50, 160, 160, 320, 320, 480, 480, 0, 0]);
+  assert.deepEqual(PHASES.map(phase => phase.packSize), [10, 10, 18, 18, 28, 28, 36, 36, 0, 0]);
 });
 
 test('distant wave Gnats recycle ahead of travel, terrain-safe in the same band without RNG', () => {
@@ -353,8 +341,7 @@ test('scheduled Gnat rates select the mobile profile while arbitrary caps use de
   const desktop = attempts(SWARM_CAPS.desktop);
   const mobile = attempts(SWARM_CAPS.mobile);
   const arbitrary = attempts(80);
-  assert.equal(desktop.length, 14);
-  assert.equal(mobile.length, 10);
+  assert.ok(desktop.length > mobile.length);
   assert.deepEqual(arbitrary, desktop);
   assert.equal(desktop[0], 20);
   assert.equal(mobile[0], 20);

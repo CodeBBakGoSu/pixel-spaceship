@@ -21,40 +21,18 @@ function ringSlots(state: StageState, event: SwarmEvent, open: Band, ground: Gro
   return slots;
 }
 
-function crossingSlots(state: StageState, event: SwarmEvent, preferred: Band, sign: number, ground: Ground): Slot[] {
-  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  const speed = sign * tuning.crossingTravel / event.duration;
-  const flight = { x: fz * speed, z: -fx * speed };
-  const slots: Slot[] = [];
-  for (let rank = 0; rank < tuning.crossingRanks; rank++) {
-    for (let file = -tuning.crossingWing; file <= tuning.crossingWing; file++) {
-      const side = -sign * (tuning.crossingTravel / 2 + (Math.abs(file) * 0.7 + rank * 1.5) * tuning.fileSpacing);
-      const depth = tuning.crossingLead + file * tuning.fileSpacing;
-      slots.push({ x: p.x + fx * depth + fz * side, z: p.z + fz * depth - fx * side, band: preferred, flight });
-    }
-  }
-  // Lift the entire V together rather than losing half a wing to a ridge.
-  const floor = Math.max(...slots.map(slot => ground(slot.x, slot.z))) + GNAT.clearance;
-  const band = ([0, 1, 2] as const).find(band => band >= preferred && BANDS[band] >= floor);
-  if (band === undefined) return [];
-  for (const slot of slots) slot.band = band;
-  return slots;
-}
-
 function launch(state: StageState, event: SwarmEvent, ground: Ground, observe?: SwarmObserver): void {
   const rng = rngStream(state.seed, `swarm-event:${event.start}`);
   const p = state.player, preferred = fixedBand(p.altitude);
   const open: Band = preferred === 0 ? 1 : preferred === 2 ? 1 : 0;
-  const ring = event.kind === 'ring';
-  const slots = ring ? ringSlots(state, event, open, ground)
-    : crossingSlots(state, event, preferred, random(rng) < 0.5 ? -1 : 1, ground);
+  const slots = ringSlots(state, event, open, ground);
   const live = state.enemies.filter(enemy => enemy.kind === 'gnat' && enemy.hp > 0);
   const requested = Math.min(state.swarmCap, slots.length);
   // Reserve event slots without awarding kills or touching regular contacts/carriers.
   const distance = (enemy: Point) => (enemy.x - p.x) ** 2 + (enemy.z - p.z) ** 2;
-  live.sort((a, b) => Number(ring && b.band === open) - Number(ring && a.band === open)
+  live.sort((a, b) => Number(b.band === open) - Number(a.band === open)
     || distance(b) - distance(a) || b.id - a.id);
-  const retire = new Set(live.filter((enemy, i) => i < live.length + requested - state.swarmCap || ring && enemy.band === open));
+  const retire = new Set(live.filter((enemy, i) => i < live.length + requested - state.swarmCap || enemy.band === open));
   if (retire.size) state.enemies = state.enemies.filter(enemy => !retire.has(enemy));
   const phase = phaseAt(event.start), until = (event.start + event.duration) * TICKS_PER_SECOND;
   for (const { x, z, band, flight } of slots.slice(0, requested)) {
@@ -63,7 +41,7 @@ function launch(state: StageState, event: SwarmEvent, ground: Ground, observe?: 
     enemy.leaveAt = until;
     state.enemies.push(enemy);
   }
-  state.swarmNotice = { kind: event.kind, band: ring ? open : slots[0]?.band ?? preferred, until };
+  state.swarmNotice = { kind: 'ring', band: open, until };
   observe?.(live.length - retire.size + requested, state.swarmCap, slots.length > state.swarmCap - live.length);
 }
 
@@ -74,12 +52,7 @@ export function advanceSwarmEvent(state: StageState, ground: Ground, observe?: S
   if (!event) return false;
   if (state.tick === event.start * TICKS_PER_SECOND) launch(state, event, ground, observe);
   if (state.tick === (event.start + event.duration) * TICKS_PER_SECOND) {
-    for (const pickup of state.pickups) {
-      if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
-      pickup.recovery = { until: state.tick + tuning.magnetTicks, sourceAlt: pickup.alt };
-      pickup.pulling = true;
-    }
-    state.swarmNotice = { kind: 'recovery', until: state.tick + tuning.recoverySeconds * TICKS_PER_SECOND };
+    state.swarmNotice = { kind: 'rest', until: state.tick + tuning.restSeconds * TICKS_PER_SECOND };
   }
   return true;
 }

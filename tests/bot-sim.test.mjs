@@ -129,7 +129,7 @@ test('three seeds per profile make the same replay hashes and profile reports on
     assert.ok(run.ticks > 0 && run.survivalSeconds >= run.seconds);
     assert.equal(run.clear, run.outcome !== 'lost');
     assert.ok(run.peakLiveGnats > 0 && run.peakLiveGnats <= first.swarmCap);
-    assert.deepEqual(Object.keys(run.phaseMetrics), PHASES.map(phase => phase.id));
+    assert.deepEqual(Object.keys(run.phaseMetrics), [...new Set(PHASES.map(phase => phase.id))]);
     assert.equal(Object.values(run.phaseMetrics).reduce((sum, phase) => sum + (phase.kills ?? 0), 0), run.kills);
     assert.ok(run.firstXpGainSeconds === null || Number.isFinite(run.firstXpGainSeconds));
     assert.ok(run.firstDraftSeconds === null || Number.isFinite(run.firstDraftSeconds));

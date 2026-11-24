@@ -24,7 +24,7 @@ test('all ten weapons have one distinct buff recipe and a family, with localized
     }
   }
   assert.deepEqual(CHESTS.map(chest => [chest.second, chest.kind]), [[100, 'supply'], [205, 'evolution'], [310, 'supply'], [400, 'evolution']]);
-  assert.deepEqual(BILLS.map(bill => [bill.second, bill.duration]), [[60, 40], [150, 30], [255, 30], [345, 30], [435, 30]]);
+  assert.deepEqual(BILLS.map(bill => [bill.second, bill.duration]), [[60, 40], [150, 30], [255, 30], [345, 30], [450, 20]]);
 });
 
 test('run starts with one weapon and 3+3 slots; time and rank gates unlock separately', () => {

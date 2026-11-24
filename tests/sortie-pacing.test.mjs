@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { advancePhasePacing } from '../src/sortie-pacing.ts';
 import { createProfile, dailySeed } from '../src/meta.ts';
 import { STARTER_BUFFS, STARTER_WEAPONS } from '../src/data/meta.ts';
 
 const start = options => createStage({ ...parseStageOptions('?mode=survivors&t=0&seed=42'), ...options });
 
-test('four lulls each repair two hull once and never exceed capacity', () => {
+test('repair-only boundaries preserve the existing repair amount without a rest announcement', () => {
   const state = start();
   assert.equal(state.hull, 10);
   for (const seconds of [105, 225, 345, 465]) {
@@ -14,8 +15,22 @@ test('four lulls each repair two hull once and never exceed capacity', () => {
     state.hull = 8;
     for (let i = 0; i < 3; i++) stepStage(state);
     assert.equal(state.hull, 10);
-    assert.equal(state.phaseNotice.kind, 'lull');
-    assert.equal(state.phaseNotice.repaired, 2);
+    assert.notEqual(state.phaseNotice?.kind, 'lull');
+  }
+});
+
+test('repair-only boundaries are idempotent when the same tick is processed again', () => {
+  const state = start();
+  for (const seconds of [105, 225, 345, 465]) {
+    state.tick = seconds * 60;
+    state.hull = 8;
+    state.phaseNotice = null;
+    advancePhasePacing(state);
+    assert.equal(state.hull, 10);
+    assert.equal(state.phaseNotice, null);
+    state.hull = 8;
+    advancePhasePacing(state);
+    assert.equal(state.hull, 8);
   }
 });
 

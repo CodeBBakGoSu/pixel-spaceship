@@ -82,6 +82,11 @@ const enemyAirframes: Record<NewEnemyKind, Airframe> = {
     rows: ['.....b.....', '.....C.....', '....bCb....', '....bbb....', '...AbbbA...',
       '...wbbbw...', '.wwwbbbwww.', 'wwwwbbbwwww', '..wwbAbww..', '....AAA....'],
   },
+  'twin-chaser': {
+    size: 1.26, palette: [[0, 0, 0], [38, 45, 59], [202, 92, 74], [255, 190, 112], [183, 224, 232]],
+    details: [[3, 4, 3, 1, 1, 1], [7, 4, 3, 1, 1, 1], [3, 7, 4, 1, 2, 3], [7, 7, 4, 1, 2, 3]],
+    rows: ['...b...b...', '...C...C...', '..bb...bb..', '.wbb...bbw.', 'wwbbb.bbbww', '.wwb...bww.', '...b...b...', '....AAA....'],
+  },
   flanker: {
     size: 1.38, palette: [[0, 0, 0], [53, 89, 114], [48, 174, 204], [118, 239, 250], [198, 250, 234], [219, 250, 255]],
     // A short central fuselage leaves open channels between the cyan engine booms.
@@ -89,6 +94,11 @@ const enemyAirframes: Record<NewEnemyKind, Airframe> = {
       [1, 8, 2, 2, 1, 5], [10, 8, 2, 2, 1, 5]],
     rows: ['......b......', '.....bCb.....', '.....bbb.....', '.bb..bbb..bb.', '.bAwwbbbwwAb.',
       'wwAwwbbbwwAww', '.bA..bbb..Ab.', '.bA..bbb..Ab.', '.bb.......bb.'],
+  },
+  crosswing: {
+    size: 1.38, palette: [[0, 0, 0], [44, 72, 93], [71, 174, 206], [247, 196, 104], [202, 245, 251]],
+    details: [[2, 4, 3, 1, 1, 1], [10, 4, 3, 1, 1, 1], [1, 6, 2, 2, 1, 3], [10, 6, 2, 2, 1, 3]],
+    rows: ['......b......', '.....bCb.....', '..ww.bbb.ww..', '.ww..bbb..ww.', 'ww...bAb...ww', '.ww..bbb..ww.', '..ww.bbb.ww..', '.....AAA.....'],
   },
   harrier: {
     size: 1.36, palette: [[0, 0, 0], [76, 70, 102], [207, 213, 230], [151, 130, 233], [140, 198, 213], [233, 200, 255]],
@@ -106,6 +116,16 @@ const enemyAirframes: Record<NewEnemyKind, Airframe> = {
       [0, 6, 2, 2, 1, 3], [11, 6, 2, 2, 1, 3], [5, 8, 2, 3, 1, 5], [6, 7, 5, 1, 2, 3]],
     rows: ['......b......', '.....bCb.....', '....bbCbb....', '...wwbbbww...', '..wwwbbbwww..',
       '.wwwwbAbwwww.', 'wwwwbbbbbwwww', 'ww...bAb...ww', '.....AAA.....'],
+  },
+  manta: {
+    size: 1.54, palette: [[0, 0, 0], [42, 51, 78], [107, 125, 187], [245, 184, 82], [216, 236, 249]],
+    details: [[3, 3, 2, 2, 1, 3], [14, 3, 2, 2, 1, 3], [7, 4, 3, 2, 2, 4]],
+    rows: ['.........b.........', '........bCb........', '.......bbbbb.......', '.....wwbbbbbww.....', '..wwwwwbbbbbwwwww..', 'wwwwwwwbbbbbwwwwwww', '..wwwwwwbbbwwwwww..', '.......bAAAb.......', '.......AAAAA.......'],
+  },
+  mender: {
+    size: 1.22, palette: [[0, 0, 0], [53, 76, 75], [83, 176, 143], [185, 244, 175], [255, 226, 125]],
+    details: [[3, 3, 4, 2, 1, 3], [8, 3, 4, 2, 1, 3], [5, 4, 4, 3, 2, 4]],
+    rows: ['......b......', '....bbCbb....', '...b.....b...', '..bb..A..bb..', '..b...b...b..', '...b..b..b...', '....bbbbb....', '.....AAA.....'],
   },
   bomber: {
     size: 1.62, palette: [[0, 0, 0], [56, 65, 66], [136, 156, 88], [235, 113, 177], [209, 232, 205], [255, 188, 226]],

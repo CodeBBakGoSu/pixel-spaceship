@@ -24,6 +24,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795524682-minute-waves-enemies (independent candidate based on `09e2890`)
+- Review fixes: deterministic isolated introductions and 6:00–9:00 cleanup; only Crosswing pairs; continuous-altitude Manta; delayed/interrupted 3D Mender repair with dotted tether; reservation-first Diver; danger-interval threat budgets; increasing elite Aegis share/volley without changing Gnat HP.
+- Delivery fixes: Manta captures player height, warns on a frozen 3D crossing, and exits horizontally at that altitude. Intro isolation cancels other tells/volleys, removes prior intro types, and retains an intro actor until its first accepted attack. Minute-six Crosswing/Twin Chaser warnings share a serialized slot even when threat reservation is delayed. Repair-only compatibility remains 2 hull at 105/225/345/465 seconds; those ticks no longer create phase spawn lulls or lull announcements.
+- Replay terminal hashes were rebaselined for the intentional phase-spawn cadence change; the existing fidelity-on/off parity checks remain in the suite.
+- Midboss call order: after the fixed tick advances and before regular spawns, the external owner polls `consumeMidbossCue(state)`; on a cue it starts the encounter, then calls `finishMidbossEncounter(state, {id, endedAt, outcome})` exactly once on the actual terminal tick. The owner checks `midbossSpawnsBlocked(state)` while the 15-second post-result rest runs. Threat callers pass `activeFromTick`/`activeUntilTick` for their tell and danger span; the API default covers the 3.75-second bolt lifetime. No carrier/reward path was changed.
+- Red Kite is the Ace: first encounter remains 8:00 and its reengagement intensifies at 9:00; there is no boss-timing conflict.
+- Verification: focused regressions 41/41; `npm test` 647/647; `npm run build` `✓ 124 modules transformed.` / `✓ built in 3.01s` (non-blocking >500 kB chunk advisory); `git diff --check` clean.
+- Renderer visuals/screenshots, balance simulation, external cue consumption, and balance-bot handoff remain unverified. No merge or deployment.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.

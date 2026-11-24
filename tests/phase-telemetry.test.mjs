@@ -43,7 +43,7 @@ test('an unchanged tick from a draft or chest contributes no sample or kills', (
   assert.equal(observed.kills, 0);
 });
 
-test('active occupancy excludes the initial Gnat start and final lull', () => {
+test('active occupancy excludes the initial Gnat start without excluding repair-only time', () => {
   const tracker = telemetry();
   sample(tracker, 20 * 60 - 1, 0, [['patrol', 1]]);
   sample(tracker, 20 * 60, 0, [['patrol', 1], ['gnat', 1]]);
@@ -52,10 +52,10 @@ test('active occupancy excludes the initial Gnat start and final lull', () => {
 
   const coast = tracker.finish().coast;
   assert.equal(coast.observedSeconds, 4 / 60);
-  assert.equal(coast.activeObservedSeconds, 2 / 60);
+  assert.equal(coast.activeObservedSeconds, 3 / 60);
   assert.equal(coast.liveMedian, 2.5);
   assert.equal(coast.liveMax, 4);
-  assert.equal(coast.activeLiveMedian, 2.5);
+  assert.equal(coast.activeLiveMedian, 3);
 });
 
 test('run summaries take the median of per-run medians and leave unreached phases null', () => {

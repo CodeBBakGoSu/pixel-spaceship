@@ -13,6 +13,9 @@ import { enemyLimit } from './spawn-director.ts';
 import { angleTo, clamp, fireAceSalvo, HIT_WINDOW, impactTime, inBand, STEP, VERTICAL_SPEED } from './stage-combat.ts';
 import { makeEnemy, spawnEscortGnats } from './stage-enemies.ts';
 import { random, rngStream } from './stage-random.ts';
+import { TICKS_PER_SECOND } from './simulation-time.ts';
+import { HOSTILE_BOLT_LIFE } from './data/hostile-fire.ts';
+import { THREAT_BUDGET, trySpendThreat } from './threat-budget.ts';
 import type { Ace, AceTell, Ground, Position, StageState } from './stage-types.ts';
 import type { SwarmObserver } from './swarm.ts';
 
@@ -167,6 +170,19 @@ function incomingFire(state: StageState, ace: Ace): boolean {
 }
 
 export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], target: Position, events?: CombatEvents): void {
+  if (kind !== 'roll' && !trySpendThreat(state, {
+    tick: state.tick + ACE[kind].warningTicks,
+    activeFromTick: state.tick,
+    activeUntilTick: state.tick + ACE[kind].warningTicks + Math.ceil(
+      (kind === 'gun' ? HOSTILE_BOLT_LIFE : ACE.missile.life) * TICKS_PER_SECOND,
+    ),
+    source: 'ace',
+    points: 2,
+    bearing: Math.atan2(ace.x - state.player.x, ace.z - state.player.z),
+  })) {
+    ace.attackAt = state.tick + THREAT_BUDGET.spacingTicks;
+    return;
+  }
   ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks };
   events?.tell?.(kind, ace.x, ace.z, ace.alt);
 }

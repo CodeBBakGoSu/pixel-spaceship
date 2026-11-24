@@ -142,25 +142,46 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
   }
   for (const member of wave.members) {
     const { kind } = member;
-    const slots = kind === 'bomber' ? SPAWN_WORLD.bomberFormationSize : 1;
-    if (occupied + slots > cap || (counts.get(kind) ?? 0) >= ENEMY_KINDS[kind].cap) continue;
+    const pair = kind === 'crosswing';
+    const slots = kind === 'bomber' ? SPAWN_WORLD.bomberFormationSize : pair ? 2 : 1;
+    if (occupied + slots > cap || (counts.get(kind) ?? 0) + slots > ENEMY_KINDS[kind].cap) continue;
     const band = member.band === 'flank' ? random(rng) < 0.5 ? 0 : 2 : member.band;
     const offset = (random(rng) - 0.5) * (kind === 'patrol' || kind === 'interceptor' ? 12 : 8);
-    const yaw = p.yaw + member.bearing * mirror + rotation;
+    const bearingYaw = p.yaw + member.bearing * mirror + rotation;
     const turns = Math.abs(member.bearing) > Math.PI * 0.66 ? AFT_TURNS : ENTRY_TURNS;
-    const position = engagementSite(state, ground, kind, BANDS[band] + offset, yaw, member.range, escape, turns, projected);
+    const position = engagementSite(state, ground, kind, BANDS[band] + offset, bearingYaw, member.range, escape, turns, projected);
     if (!position) continue;
-    const enemy = makeEnemy(state, position.x, position.z, band, kind, offset);
-    placeSkimEnemy(enemy, ground);
-    enemy.yaw = Math.atan2(projected.x - position.x, projected.z - position.z);
-    enemy.shotAt += Math.floor(random(rng) * 21);
     const first = enemies.length;
-    enemies.push(enemy);
-    if (kind === 'bomber') addBomberEscort(state, enemy, ground);
+    const yaw = Math.atan2(projected.x - position.x, projected.z - position.z);
+    if (pair) {
+      const separation = scaleTravel(kind === 'crosswing' ? 14 : 9);
+      const members = ([-1, 1] as const).map(side => {
+        const enemy = makeEnemy(state,
+          position.x + Math.cos(yaw) * side * separation,
+          position.z - Math.sin(yaw) * side * separation,
+          band, kind, offset);
+        enemy.yaw = yaw;
+        enemy.shotAt += Math.floor(random(rng) * 21);
+        return enemy;
+      });
+      if (kind === 'crosswing') {
+        members[0].crosswing = { mate: members[1].id, side: -1 };
+        members[1].crosswing = { mate: members[0].id, side: 1 };
+      }
+      enemies.push(...members);
+    } else {
+      const enemy = makeEnemy(state, position.x, position.z, band, kind, offset);
+      placeSkimEnemy(enemy, ground);
+      enemy.yaw = yaw;
+      enemy.shotAt += Math.floor(random(rng) * 21);
+      enemies.push(enemy);
+      if (kind === 'bomber') addBomberEscort(state, enemy, ground);
+    }
     for (let i = first; i < enemies.length; i++) {
       const incoming = enemies[i];
       counts.set(incoming.kind, (counts.get(incoming.kind) ?? 0) + 1);
       incoming.hp = Math.round(incoming.hp * hpScale) * heatArmor;
+      if (state.run && incoming.kind === 'aegis') incoming.maxHp = incoming.hp;
       incoming.shotAt += WAVE_FLY_IN_TICKS;
       incoming.maneuverAt += WAVE_FLY_IN_TICKS;
       beginEnemyFlyIn(state, incoming, ground, projected, mirror * 0.32);
@@ -204,7 +225,7 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
   const from = phase.starts * TICKS_PER_SECOND;
   const until = (phase.ends - phase.lull) * TICKS_PER_SECOND;
   const minutes = (phase.ends - phase.starts) / 60;
-  const isOpening = phase.id === 'coast';
+  const isOpening = phase.starts === 0;
   const regularStart = isOpening ? COAST_OPENING_END : from;
   const regularCount = phase.regularPerMinute * minutes - (isOpening ? COAST_OPENING_TOTAL : 0);
   if (isOpening && state.tick < regularStart) {
@@ -214,10 +235,12 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
     const rng = beatStream(state.streams.spawn);
     const { kind, band, bearing, range } = regularPick(phase.enemies, rng);
     const member = { kind, band, bearing: bearing * Math.PI / 180, range };
+    const before = state.nextId;
     spawnWave(state, { time: state.tick / TICKS_PER_SECOND, members: [member] }, ground, rng, phase.hpScale);
+    if (kind === 'aegis') for (const enemy of state.enemies) if (enemy.id > before && enemy.kind === 'aegis') enemy.elite = true;
   }
   const gnatCount = gnatsPerMinute * minutes;
-  const packs = Math.ceil(gnatCount / phase.packSize);
+  const packs = phase.packSize > 0 ? Math.ceil(gnatCount / phase.packSize) : 0;
   const pack = groupAt(state.tick, from + phase.gnatStart * TICKS_PER_SECOND, until, packs);
   if (pack >= 0) {
     const members = Math.floor(gnatCount * (pack + 1) / packs) - Math.floor(gnatCount * pack / packs);
