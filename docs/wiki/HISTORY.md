@@ -1,4 +1,9 @@
 # 시도와 결정 이력
+## dev1.0 통합 후보 (2026-11-24)
+
+[현재 기준 `dev1.0` · 6c66fc0](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/6c66fc07d1560495a96aa3b9fcab395d45ab88db)은 22개 원격 브랜치 tip 중 18개가 이미 포함된 `dab3f46` 후보에서 이어졌다. 남은 고유 작업은 워프 비컨 상점 문서, XP 진행 후보, P0 무기 역할 후보, P0 기준선 도구였다. 문서는 별도 설계로 보존하고, 현재 코드에는 P0 기준선 도구와 일반 XP 관측 계측만 들어갔다.
+
+XP 곡선, Seeker의 잠정 조준/피해/속도, Twin Lv7 피해 1.988→2 변경은 기본 게임플레이에 적용하지 않았다. 통합 담당은 P1 표시·음향 후보의 [플레이 미리보기](https://aster-wing--61hvcert.preview.devinapps.com/?seed=1&view=chase&lang=ko) 서버가 6c66fc0으로 갱신되고 제공 모듈 5개가 일치하며, 로컬 브라우저에서 첫 화면→출격을 확인했다고 보고했다. 로그인 후 외부 플레이와 실기기 FPS는 미검증이다. 통합 담당 보고: `npm test` 645/645 및 빌드 성공; 이 문서 갱신에서는 해당 검증을 재실행하지 않았다.
 
 [위키 홈](README.md) · [전체 작업 로그](../WORKLOG.md#log) · [측정 원본](../BALANCE_NOTES.md)
 

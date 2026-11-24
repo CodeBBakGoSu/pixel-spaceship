@@ -13,9 +13,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Current state
 - [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
-- P0 Seeker balance remains with 밸런스 봇; P1 hit audio, cache reveals, and projectile trails are in the separate playtest candidate below; P2 hangar progression and expanded ordinary-weapon pool are unimplemented. The current candidate's preview/browser check is assigned to the testing agent; the earlier UI result on `9d677b5` predates P1.
-- Current playtest candidate `devin/1795498866-all-features-playtest` is based on `renderer-proto` `2d543dd`, which already contains weapon Lv7/Ace, PR7/8, the 200/120-cap horde, variants, and swarm/recovery features. This branch adds only the inspected P1 presentation/audio candidate; public `main` is unchanged.
-- Candidate validation: `npm test` passed 639/639, including Ace replay seeds 1/11/27/42/128/2026; `npm run build` passed (123 modules, 3.45 s). No fresh 100-seed simulation was run for the presentation/audio-only P1 integration; the horde results below are historical and not measurements of this candidate. Current-candidate browser verification and real-hardware FPS remain unverified.
+- P0 Seeker balance remains with the balance owner. Core persistent Hangar purchases and quest display/persistence are wired; remaining P2 work is first-win/economy validation and any expanded ordinary-weapon pool. P1 hit audio, cache reveals, and projectile trails are in the `dev1.0` playtest candidate. Integrator reports the preview server updated to `6c66fc0`, five served modules matching, and local title→sortie verification; authenticated playback from the external address and real-device FPS remain unverified.
+- Current `dev1.0` tip is `6c66fc07` (based on `renderer-proto` `2d543dd`); it contains PR7/8 and the P1 candidate. P0 baseline diagnostics and generic XP observation telemetry were extracted; XP curve/runtime, P0 Seeker changes, and Twin Lv7 1.988→2 remain unapplied. Public `main` is unchanged.
+- Integrator-reported validation: `npm test` 645/645; build 123 modules in 3.93s. No fresh 100-seed simulation was run; detailed P1 acceptance and real-hardware FPS remain unverified.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
 - Historical feature-branch results: `82c19c6` variant run and `77163bc` swarm run are separately scoped in the log below, not reruns on integrated `0bc1f99`. The `77163bc` desktop Heat 0, 100-seed average median kills were **3,167.5**, within 2,500–3,500; this does not establish phase density or whole survival acceptance.
 - The damage-feedback fixture measured **36.44 fps** in a SwiftShader VM after High→Low fallback; this software-renderer sample is not current hardware/device performance. The 100-seed simulations do not measure rendered FPS or phase density.
@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-24 (KST) · 데븐 봇 · dev1.0 (`6c66fc07`)
+- Synced the root README/wiki/catalog to code baseline `dev1.0` `6c66fc07`, aligned the preview disclosure, corrected automatic Flare/Bomb Bay effects and the Bomb Bay quest metric, retained XP/Seeker/Twin experiments as non-default, and added the shop proposal as planning-only. No game source files changed.
+- Checks: `check_docs.py` (16 files, 0 errors/warnings), focused data/source/link audit, standalone HTML offline-assets audit, and final-package static render. The integrator-reported 645-test/build result was not rerun for this docs-only update. State: complete.
 
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795498866-all-features-playtest (base `2d543dd`, P1 `2bad3c4`…`61154f5`)
 - Integrated the inspected P1 candidate: batched actual-hit audio, reveals only already-awarded cache rewards, and Twin/Rack projectile trails with static SFX and Korean jackpot glyphs. Latest renderer-proto gameplay/regressions are preserved; Seeker balance and P2 are excluded.

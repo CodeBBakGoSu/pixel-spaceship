@@ -1,6 +1,6 @@
 # ASTER WING
 
-**[한국어 위키](docs/wiki/README.md)** · [무기·버프·격납고·해금 퀘스트](docs/wiki/CATALOG.md) · [개발판과 공개판의 차이](docs/wiki/README.md#versions). 아래 실행·조작 안내는 `renderer-proto` 개발판 기준입니다.
+**[현재 개발 기준: dev1.0](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/6c66fc07d1560495a96aa3b9fcab395d45ab88db)** · **[한국어 위키](docs/wiki/README.md)** · [무기·버프·격납고·해금 퀘스트](docs/wiki/CATALOG.md) · [개발판과 공개판의 차이](docs/wiki/README.md#versions). 아래 실행·조작 안내는 `renderer-proto` 개발판 기준입니다.
 
 > Bots working on this repo log what they did in [docs/WORKLOG.md](docs/WORKLOG.md). Read it before starting, add an entry after finishing.
 
