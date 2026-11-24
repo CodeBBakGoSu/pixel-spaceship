@@ -133,11 +133,15 @@ export type Enemy = Position & {
   crosswing?: {
     mate: number;
     side: -1 | 1;
-    sideYaw?: number;
-    phase?: 'warning' | 'crossing' | 'recovery' | 'cancelled';
+    phase?: 'warning' | 'crossing' | 'exit' | 'finished' | 'recovery' | 'cancelled';
     until?: number;
     isolationUntil?: number;
+    start?: Point;
+    crossingPoint?: Point;
     target?: Point;
+    crossed?: boolean;
+    finishedAt?: number;
+    exitYaw?: number;
   };
   elite?: true;
   eliteVolley?: { started: number; secondAt: number };

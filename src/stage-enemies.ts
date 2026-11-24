@@ -53,6 +53,12 @@ function suppressForIntro(state: StageState, enemy: Enemy, until: number): void 
     enemy.crosswing.phase = 'cancelled';
     enemy.crosswing.until = until;
     enemy.crosswing.isolationUntil = until;
+    delete enemy.crosswing.start;
+    delete enemy.crosswing.crossingPoint;
+    delete enemy.crosswing.target;
+    delete enemy.crosswing.crossed;
+    delete enemy.crosswing.finishedAt;
+    delete enemy.crosswing.exitYaw;
   }
   enemy.maneuver = null;
   enemy.shotAt = Math.max(enemy.shotAt, until);
@@ -404,16 +410,40 @@ function startCrosswing(state: StageState, first: Enemy, second: Enemy): boolean
     director.sixCrosswingStarted = true;
     director.sixTellUntil = state.tick + 48;
   }
-  const p = state.player, yaw = first.crosswing?.sideYaw ?? p.yaw;
-  const fx = Math.sin(yaw), fz = Math.cos(yaw);
-  const sx = Math.cos(yaw), sz = -Math.sin(yaw);
-  const center = { x: p.x + fx * scaleTravel(24), z: p.z + fz * scaleTravel(24) };
-  for (const fighter of [first, second]) {
+  const firstStart = { x: first.x, z: first.z };
+  const secondStart = { x: second.x, z: second.z };
+  const center = { x: (firstStart.x + secondStart.x) / 2, z: (firstStart.z + secondStart.z) / 2 };
+  const p = state.player;
+  let forwardX = first.vx + second.vx, forwardZ = first.vz + second.vz;
+  let forwardLength = Math.hypot(forwardX, forwardZ);
+  if (forwardLength <= 0.001) {
+    forwardX = p.x - center.x;
+    forwardZ = p.z - center.z;
+    forwardLength = Math.hypot(forwardX, forwardZ);
+  }
+  if (forwardLength <= 0.001) {
+    forwardX = Math.sin(first.yaw);
+    forwardZ = Math.cos(first.yaw);
+    forwardLength = 1;
+  }
+  forwardX /= forwardLength;
+  forwardZ /= forwardLength;
+  const separation = Math.hypot(firstStart.x - secondStart.x, firstStart.z - secondStart.z);
+  const advance = Math.max(scaleTravel(140), separation * 1.5);
+  const crossingPoint = { x: center.x + forwardX * advance / 2, z: center.z + forwardZ * advance / 2 };
+  const plans = [
+    [first, firstStart, { x: secondStart.x + forwardX * advance, z: secondStart.z + forwardZ * advance }],
+    [second, secondStart, { x: firstStart.x + forwardX * advance, z: firstStart.z + forwardZ * advance }],
+  ] as const;
+  for (const [fighter, start, target] of plans) {
     const pair = fighter.crosswing!;
-    const target = { x: center.x - sx * pair.side * scaleTravel(92), z: center.z - sz * pair.side * scaleTravel(92) };
     pair.phase = 'warning';
     pair.until = state.tick + 48;
+    pair.start = start;
+    pair.crossingPoint = crossingPoint;
     pair.target = target;
+    pair.crossed = false;
+    pair.exitYaw = Math.atan2(target.x - start.x, target.z - start.z);
     fighter.tell = { kind: 'crossing', started: state.tick, until: pair.until, target: { ...target, alt: fighter.alt } };
   }
   completeIntroAttack(state, [first, second]);
@@ -424,48 +454,90 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
   const pair = enemy.crosswing;
   if (!pair) return;
   const mate = state.enemies.find(candidate => candidate.id === pair.mate && candidate.hp > 0);
-  if (!mate) {
-    if (pair.phase === 'warning') {
-      pair.phase = 'cancelled';
-      delete enemy.tell;
-    }
-    steer(state, enemy, ground, angle + pair.side * 0.45, ENEMY_KINDS.crosswing.speed);
-    return;
-  }
   if (pair.phase === 'cancelled' && pair.isolationUntil !== undefined && state.tick >= pair.isolationUntil) {
     pair.phase = undefined;
     delete pair.isolationUntil;
     delete pair.until;
+    delete pair.start;
+    delete pair.crossingPoint;
     delete pair.target;
+    delete pair.crossed;
+    delete pair.finishedAt;
+    delete pair.exitYaw;
   }
-  if (!pair.phase && range <= scaleTravel(152) && state.tick >= enemy.maneuverAt) startCrosswing(state, enemy, mate);
+  if (!mate && (pair.phase === 'warning' || pair.phase === 'crossing') && !pair.crossed) {
+    pair.phase = 'cancelled';
+    delete enemy.tell;
+  }
+  if (!pair.phase && mate && range <= scaleTravel(152) && state.tick >= enemy.maneuverAt) startCrosswing(state, enemy, mate);
   if (pair.phase === 'warning') {
+    const target = pair.crossingPoint!;
+    steer(state, enemy, ground, Math.atan2(target.x - enemy.x, target.z - enemy.z), scaleTravel(36));
     if (state.tick >= (pair.until ?? 0)) {
-      for (const fighter of [enemy, mate]) {
-        fighter.crosswing!.phase = 'crossing';
-        fighter.crosswing!.until = state.tick + 102;
-        delete fighter.tell;
-      }
-    } else {
-      const target = pair.target!;
-      steer(state, enemy, ground, Math.atan2(target.x - enemy.x, target.z - enemy.z), scaleTravel(36));
-      return;
+      pair.phase = 'crossing';
+      delete enemy.tell;
     }
+    return;
   }
   if (pair.phase === 'crossing') {
+    const target = pair.crossingPoint!;
+    if (Math.hypot(target.x - enemy.x, target.z - enemy.z) <= scaleTravel(4)) {
+      enemy.x = target.x;
+      enemy.z = target.z;
+      pair.crossed = true;
+      pair.phase = 'exit';
+      steer(state, enemy, ground, pair.exitYaw!, scaleTravel(92));
+    } else {
+      steer(state, enemy, ground, Math.atan2(target.x - enemy.x, target.z - enemy.z), scaleTravel(92));
+    }
+    return;
+  }
+  if (pair.phase === 'exit') {
     const target = pair.target!;
-    steer(state, enemy, ground, Math.atan2(target.x - enemy.x, target.z - enemy.z), scaleTravel(92));
-    if (Math.hypot(target.x - enemy.x, target.z - enemy.z) <= scaleTravel(10) || state.tick >= (pair.until ?? 0)) {
+    if (Math.hypot(target.x - enemy.x, target.z - enemy.z) <= scaleTravel(4)) {
+      enemy.x = target.x;
+      enemy.z = target.z;
+      pair.phase = 'finished';
+      pair.finishedAt = state.tick;
+      if (mate?.crosswing?.phase === 'finished') {
+        for (const fighter of [enemy, mate]) {
+          fighter.crosswing!.phase = 'recovery';
+          fighter.crosswing!.until = state.tick + 60;
+        }
+      } else if (!mate) {
+        pair.phase = 'recovery';
+        pair.until = state.tick + 60;
+      }
+      steer(state, enemy, ground, pair.exitYaw!, ENEMY_KINDS.crosswing.speed);
+    } else {
+      steer(state, enemy, ground, Math.atan2(target.x - enemy.x, target.z - enemy.z), scaleTravel(92));
+    }
+    return;
+  }
+  if (pair.phase === 'finished') {
+    if (mate?.crosswing?.phase === 'finished') {
       for (const fighter of [enemy, mate]) {
         fighter.crosswing!.phase = 'recovery';
         fighter.crosswing!.until = state.tick + 60;
       }
     }
+    steer(state, enemy, ground, pair.exitYaw ?? enemy.yaw, ENEMY_KINDS.crosswing.speed);
     return;
   }
   if (pair.phase === 'recovery') {
-    if (state.tick >= (pair.until ?? 0)) pair.phase = 'cancelled';
-    else return;
+    if (state.tick >= (pair.until ?? 0)) {
+      pair.phase = 'cancelled';
+      delete pair.until;
+      delete pair.start;
+      delete pair.crossingPoint;
+      delete pair.target;
+      delete pair.crossed;
+      delete pair.finishedAt;
+      delete pair.exitYaw;
+    } else {
+      steer(state, enemy, ground, pair.exitYaw ?? enemy.yaw, ENEMY_KINDS.crosswing.speed);
+      return;
+    }
   }
   steer(state, enemy, ground, angle + pair.side * 0.45, ENEMY_KINDS.crosswing.speed);
 }

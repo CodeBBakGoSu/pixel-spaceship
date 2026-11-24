@@ -155,19 +155,19 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
     const yaw = Math.atan2(projected.x - position.x, projected.z - position.z);
     if (pair) {
       const separation = scaleTravel(kind === 'crosswing' ? 14 : 9);
-      const sideYaw = kind === 'crosswing' ? p.yaw : yaw;
+      const formationYaw = kind === 'crosswing' ? p.yaw : yaw;
       const members = ([-1, 1] as const).map(side => {
         const enemy = makeEnemy(state,
-          position.x + Math.cos(sideYaw) * side * separation,
-          position.z - Math.sin(sideYaw) * side * separation,
+          position.x + Math.cos(formationYaw) * side * separation,
+          position.z - Math.sin(formationYaw) * side * separation,
           band, kind, offset);
         enemy.yaw = yaw;
         enemy.shotAt += Math.floor(random(rng) * 21);
         return enemy;
       });
       if (kind === 'crosswing') {
-        members[0].crosswing = { mate: members[1].id, side: -1, sideYaw };
-        members[1].crosswing = { mate: members[0].id, side: 1, sideYaw };
+        members[0].crosswing = { mate: members[1].id, side: -1 };
+        members[1].crosswing = { mate: members[0].id, side: 1 };
       }
       enemies.push(...members);
     } else {
