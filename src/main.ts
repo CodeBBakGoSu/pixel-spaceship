@@ -35,7 +35,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { touchOcclusionCue } from './touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -76,6 +76,8 @@ const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
 const touchThreatCue = $('#touch-threat-cue');
+let touchAegisCueSlot: Rect | null = null;
+let touchThreatCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -444,6 +446,9 @@ function setRect(name: string, box: Rect): void {
 function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
+  const cueSlots = phone ? findTouchCueRects(phone, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]) : [];
+  touchAegisCueSlot = cueSlots[0] ?? null;
+  touchThreatCueSlot = cueSlots[1] ?? null;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
@@ -715,6 +720,8 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
+  const diveWarning = state.enemies.find(enemy => isDescendingDiveWarning(enemy.maneuver, enemy.band)
+    && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -735,14 +742,17 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  if ((message === 'hud.enemyDive' || message === 'hud.interceptorDive') && touch && phone && scene
-    && state.phase === 'playing' && !state.paused && warning?.maneuver?.phase === 'warning') {
-    const target = { x: warning.x, z: warning.z, alt: BANDS[warning.maneuver.band] };
+  const diveBand = diveWarning?.maneuver?.band;
+  if (diveWarning && diveBand !== undefined && touch && phone && scene && touchThreatCueSlot
+    && state.phase === 'playing' && !state.paused) {
+    const target = { x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] };
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact(target, projectedTarget);
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
-    if (projectedTarget.depth > 0.05 && projectedPlayer.depth > 0.05) {
-      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, { width: 48, height: 40 });
+    if (projectedTarget.depth > 0.05) {
+      const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
+      const reserved = touchAegisCueSlot ? [touchAegisCueSlot] : [];
+      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
       if (cue) {
         setRect('touch-threat-cue', cue.rect);
         touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);

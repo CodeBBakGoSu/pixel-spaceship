@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, pointBehindTouchControls, screenArrowRotation,
-  TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, isDescendingDiveWarning, pointBehindTouchControls,
+  screenArrowRotation, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -86,4 +86,12 @@ test('obstacle-edge search finds distinct Aegis and dive cue slots in short port
       }
     }
   }
+});
+
+test('descending warning state is independent of HUD message selection', () => {
+  assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 1 }, 2), true);
+  assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 2 }, 2), false);
+  assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 3 }, 2), false);
+  assert.equal(isDescendingDiveWarning({ phase: 'attack', band: 1 }, 2), false);
+  assert.equal(isDescendingDiveWarning(undefined, 2), false);
 });
