@@ -35,7 +35,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from './touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect,
+  touchCueScreenReference, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -752,7 +753,8 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     if (projectedTarget.depth > 0.05) {
       const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
       const reserved = touchAegisCueSlot ? [touchAegisCueSlot] : [];
-      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
+      const reference = touchCueScreenReference(projectedPlayer, phone);
+      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
       if (cue) {
         setRect('touch-threat-cue', cue.rect);
         touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);

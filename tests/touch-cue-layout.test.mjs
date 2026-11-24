@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
 import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, isDescendingDiveWarning, pointBehindTouchControls,
-  screenArrowRotation, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+  screenArrowRotation, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -94,4 +94,14 @@ test('descending warning state is independent of HUD message selection', () => {
   assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 3 }, 2), false);
   assert.equal(isDescendingDiveWarning({ phase: 'attack', band: 1 }, 2), false);
   assert.equal(isDescendingDiveWarning(undefined, 2), false);
+});
+
+test('cockpit cue direction uses the aiming reference when the player is behind the camera', () => {
+  const layout = phoneLayout(390, 844, { top: 0, right: 0, bottom: 0, left: 0 }, 'cockpit', true);
+  const reference = touchCueScreenReference({ x: 12, y: 34, depth: -0.2 }, layout);
+  assert.deepEqual(reference, {
+    x: layout.cockpit.aiming.x + layout.cockpit.aiming.width / 2,
+    y: layout.cockpit.aiming.y + layout.cockpit.aiming.height * 0.72,
+  });
+  assert.deepEqual(touchCueScreenReference({ x: 14, y: 18, depth: 3 }, layout), { x: 14, y: 18 });
 });
