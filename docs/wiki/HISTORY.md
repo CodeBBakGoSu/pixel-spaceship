@@ -13,6 +13,7 @@ XP 곡선, Seeker의 잠정 조준/피해/속도, Twin Lv7 피해 1.988→2 변�
 
 | 시기 (KST) | 시도 → 결정 | 이유·근거 |
 |---|---|---|
+| 11/24 | `dev1.0` `4dcddfd` 데스크톱 Heat 0, 시드 1–100 시뮬을 재실행 | 숙련/평균/초보 클리어 **100%/74%/44%**, Ace **100%/74%/4%**, 격추 중앙값 **3,199.5/3,195.5/2,979**. [`9d677b5`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/9d677b5) 대비 초보 클리어는 시간 초과로 올랐고(Ace는 4%), 격추 중앙값은 약 400–500 줄었다. [작업 로그](../WORKLOG.md#log) |
 | 11/18–20 | [Courier Run 공개](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/801ff22) / [Survivors 개발 시작](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/ee94755) | 기존 3뷰 아케이드 루프를 공개판에 유지했다. 개발판은 한 출격 안에서 무기 조합과 성장을 느끼는 3D 복셀 생존 슈팅으로 분기했다. |
 | 11/21–22 | 비행·고도 읽기, Red Kite, 스트리밍 지형 → [Forge 카메라·지형 통합](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/8265c4e) | 상승·하강과 기울기가 CHASE·콕핏에서 보이도록 카메라·그림자·지형 재질을 조정했다. [당시 비행기게임봇 기록](../WORKLOG.md#log) |
 | 11/23 | [Stage C 고도 모델](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/1) 채택. Seeker 수직 속도 34→51 m/s는 보류 | 3개 밴드와 저공 비행을 분리했다. Seeker 속도만 바꿔도 기존 시드 128의 승리가 패배로 뒤집혀 [후속 통합](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/211e757)에서는 34를 유지했다. |

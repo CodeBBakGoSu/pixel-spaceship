@@ -15,7 +15,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
 - P0 Seeker balance remains with the balance owner. Core persistent Hangar purchases and quest display/persistence are wired; remaining P2 work is first-win/economy validation and any expanded ordinary-weapon pool. P1 hit audio, cache reveals, and projectile trails are in the `dev1.0` playtest candidate. Integrator reports the preview server updated to `6c66fc0`, five served modules matching, and local title→sortie verification; authenticated playback from the external address and real-device FPS remain unverified.
 - Current `dev1.0` tip is `6c66fc07` (based on `renderer-proto` `2d543dd`); it contains PR7/8 and the P1 candidate. P0 baseline diagnostics and generic XP observation telemetry were extracted; XP curve/runtime, P0 Seeker changes, and Twin Lv7 1.988→2 remain unapplied. Public `main` is unchanged.
-- Integrator-reported validation: `npm test` 645/645; build 123 modules in 3.93s. No fresh 100-seed simulation was run; detailed P1 acceptance and real-hardware FPS remain unverified.
+- 비행기게임봇 재검증 (2026-11-24 KST, tip `4dcddfd`): `npm test` 645/645, build 123 modules in 1.25s. Desktop Heat 0, seeds 1–100: skilled / average / weak clear **100%/74%/44%**, Ace kills **100%/74%/4%**, timeout **0%/0%/40%**, median kills **3,199.5/3,195.5/2,979**, median survival **600.0/600.0/586.9 s**, peak live Gnats **200**. Versus pre-variant `9d677b5` (100/75/26, Ace 99/72/2, median kills 3,677.5/3,591/3,373.5), average clear is essentially unchanged, weak clear rose via timeouts (Ace kills stay rare), and median kills fell ~400–500 into the 2,500–3,500 planning band. Real-device FPS remains unverified. Tailnet preview: `http://100.92.76.1:5181/` (vite preview of this build). Highlight video is local-only and was not committed.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
 - Historical feature-branch results: `82c19c6` variant run and `77163bc` swarm run are separately scoped in the log below, not reruns on integrated `0bc1f99`. The `77163bc` desktop Heat 0, 100-seed average median kills were **3,167.5**, within 2,500–3,500; this does not establish phase density or whole survival acceptance.
 - The damage-feedback fixture measured **36.44 fps** in a SwiftShader VM after High→Low fallback; this software-renderer sample is not current hardware/device performance. The 100-seed simulations do not measure rendered FPS or phase density.
@@ -23,6 +23,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-24 (KST) · 비행기게임봇 · dev1.0 (`4dcddfd`)
+- 4090 작업 트리를 `origin/dev1.0` `4dcddfd`로 맞추고, 병합이 끝난 PR1 워크트리·5185 미리보기를 정리한 뒤 `npm ci` / `npm test` 645/645 / `npm run build`(123 modules, 1.25s)를 재실행했다. 5181 미리보기를 이 빌드로 갱신했다.
+- 데스크톱 Heat 0, 시드 1–100 시뮬을 skilled/average/weak로 돌렸다. 클리어 100%/74%/44%, Ace 100%/74%/4%, 시간 초과 0%/0%/40%, 격추 중앙값 3,199.5/3,195.5/2,979, 생존 중앙값 600.0/600.0/586.9초, 최대 생존 Gnat 200. `9d677b5` 대비 평균 클리어는 거의 같고, 초보 클리어 상승분은 거의 전부 10분 생존(Ace는 4%), 격추 중앙값은 약 400–500 줄었다.
+- 시드 15 자동비행으로 37.9초 하이라이트(1280×720, H.264, 60fps, 무음)를 찍어 상자 영상은 커밋하지 않았다. 구성: 섬 상공 상승·하강(추격, 0:00–0:03) · 6:43 횡단 스웜 대량 격추(0:03–0:11) · 오로라 개틀링 진화 릴(0:11–0:17) · 잭팟 ×5(0:17–0:23) · 8:00 Ace 등장(0:23–0:29) · 콕핏 락온·고도 맞추기(0:29–0:38).
+- 검증: 위 테스트·빌드·100시드 시뮬. 하이라이트는 1280×720 yuv420p 37.9초·2274프레임이며 검은 화면은 없었다. 소프트웨어 WebGL(SwiftShader)이라 스웜·Ace 구간 게임 FPS가 20대로 떨어질 수 있고, 실기기 FPS는 여전히 미계측이다. 미리보기: http://100.92.76.1:5181/
+- State: done. main은 그대로이며 배포하지 않았다.
 
 ### 2026-11-24 (KST) · 데븐 봇 · dev1.0 (`6c66fc07`)
 - Synced the root README/wiki/catalog to code baseline `dev1.0` `6c66fc07`, aligned the preview disclosure, corrected automatic Flare/Bomb Bay effects and the Bomb Bay quest metric, retained XP/Seeker/Twin experiments as non-default, and added the shop proposal as planning-only. No game source files changed.
