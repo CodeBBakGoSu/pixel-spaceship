@@ -485,6 +485,11 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
     delete pair.finishedAt;
     delete pair.exitYaw;
   }
+  if (pair.phase === 'finished' && !mate) {
+    pair.phase = 'recovery';
+    pair.until = state.tick + 60;
+    delete pair.pathUntil;
+  }
   if (pair.pathUntil !== undefined && state.tick >= pair.pathUntil
     && (pair.phase === 'warning' || pair.phase === 'crossing' || pair.phase === 'exit' || pair.phase === 'finished')) {
     cancelCrosswingPath(enemy, mate);

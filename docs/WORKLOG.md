@@ -428,6 +428,12 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - Reviewed the repo blueprint (`npm install` maintenance); no dependency or setup changes were made. Visual/UI rendering was not checked.
 - State: independent candidate only; no merge or deployment.
 
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (Crosswing termination review)
+- Reproduced the terrain stall with safe terrain until one fighter reached `finished` and its mate remained in `exit` (tick 108), then blocked the route; both phases remained `finished`/`exit` through tick 508. Reproduced mate-loss stall at the same split: after the exiting mate died, the finished survivor remained `finished` for 100 ticks.
+- Added a finite path deadline aligned with the existing 258-tick threat window; a blocked attack aborts both active FSM paths instead of leaving a finished partner waiting forever. A finished fighter now enters its 60-tick recovery when its mate is absent.
+- Focused Crosswing regressions: 4/4, including blocked-terrain abort and dead-mate recovery.
+- State: independent candidate only; no merge or deployment.
+
 ### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (Crosswing geometry and minute-six resume)
 - Replaced Crosswing side-frame targets with tell-time position snapshots, one shared crossing point, and fixed opposite exits. Fighters now follow the warned crossing path, finish independently, and enter pair recovery only after both exit; a fighter whose mate dies before the shared point cancels its path.
 - Seed-4 regression uses the natural seed-4 stage spawn and full `stepStage` loop, traces actual per-tick fighter segments, and asserts the traces intersect. Trace: reservation tick 8400 (140s), actual spawn tick 8400, first warning tick 8550 (142.5s), finish ticks 8666/8672, pair recovery tick 8672. Friendly weapons are disabled in this regression only so the pair survives long enough to exercise both paths.

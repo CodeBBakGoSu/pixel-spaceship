@@ -137,3 +137,30 @@ test('terrain-blocked Crosswing paths abort at the shared threat-window deadline
   assert.equal(first.crosswing.pathUntil, undefined);
   assert.equal(second.crosswing.pathUntil, undefined);
 });
+
+test('a finished Crosswing recovers when its still-exiting mate dies', () => {
+  const ground = () => 35;
+  const { state, first, second } = asymmetricPair(ground);
+  let finished, exiting;
+  for (let frame = 0; frame < 180; frame++) {
+    state.tick++;
+    advanceEnemies(state, ground);
+    finished = [first, second].find(enemy => enemy.crosswing.phase === 'finished');
+    exiting = [first, second].find(enemy => enemy.crosswing.phase === 'exit');
+    if (finished && exiting) break;
+  }
+  assert.ok(finished && exiting, 'one fighter should finish before its mate exits');
+
+  exiting.hp = 0;
+  state.tick++;
+  advanceEnemies(state, ground);
+  assert.equal(finished.crosswing.phase, 'recovery');
+  assert.equal(finished.crosswing.pathUntil, undefined);
+  assert.equal(finished.crosswing.until, state.tick + 60);
+
+  for (let frame = 0; frame < 60; frame++) {
+    state.tick++;
+    advanceEnemies(state, ground);
+  }
+  assert.equal(finished.crosswing.phase, 'cancelled');
+});
