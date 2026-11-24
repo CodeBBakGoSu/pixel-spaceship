@@ -15,9 +15,9 @@ export function simulationStepTimesForFrame(frameStart: number, elapsed: number,
   const frameEnd = frameStart + elapsed * 1000;
   let pending = carry + elapsed;
   const times: number[] = [];
-  while (pending >= step) {
+  while (pending + 1e-9 >= step) {
     times.push(simulationStepTime(frameEnd, pending, step));
-    pending -= step;
+    pending = Math.max(0, pending - step);
   }
   return { times, carry: pending };
 }
@@ -51,6 +51,11 @@ export function takeDueActionsAtTick<T>(pending: readonly TimedAction<T>[], tick
   const index = pending.findIndex(action => action.at > tickTime);
   const dueCount = index < 0 ? pending.length : index;
   return { actions: [...pending.slice(0, dueCount)], pending: [...pending.slice(dueCount)] };
+}
+
+export function consumesSpaceRequest<T extends object>(actions: readonly T[], requestedAt: number | undefined): boolean {
+  return requestedAt !== undefined
+    && actions.some(action => 'spaceAt' in action && action.spaceAt === requestedAt);
 }
 
 export function barrelRollForKey(code: string, turn: number, lastTurn = 1): number | undefined {

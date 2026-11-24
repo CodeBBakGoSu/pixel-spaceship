@@ -4,7 +4,7 @@ import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
 import {
-  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
   simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
@@ -260,6 +260,41 @@ test('Space grace survives until C is consumed after the fire tick', () => {
   assert.deepEqual(pending, []);
   assert.equal(state.roll?.elapsed, 0);
   assert.equal(state.boss.tell, null, 'C is applied on its later tick inside the pending-space grace');
+});
+
+test('cooldown-blocked C does not consume newer W+Space grace before its chord deadline', () => {
+  const state = duel(), until = state.boss.tell.until;
+  while (state.tick < until - 1) step(state);
+  state.boost = 100;
+  state.maneuverReadyAt = until;
+  state.rollReadyAt = until + 60;
+  const request = { action: { kind: maneuverForKey('Space', 0, 1), turn: 0 }, at: 1190 };
+  const chord = new FlightChord();
+  chord.pressSpace(request.at, false);
+  const queued = enqueueTimedAction([], {
+    action: { kind: 'roll', turn: barrelRollForKey('KeyC', 1) }, at: 1175,
+  });
+  const due = takeDueActionsAtTick(queued, 1200);
+  const consumes = consumesSpaceRequest(due.actions.map(input => input.action), request.at);
+  assert.equal(consumes, false, 'the older C does not own the newer Space grace');
+  assert.ok(request.action.kind);
+  step(state, {
+    roll: true,
+    rollTurn: 1,
+    spacePending: actionDueAt(request, 1200) && !consumes ? request.action.kind : undefined,
+  });
+  assert.equal(state.tick, until);
+  assert.equal(state.boss.tell?.dodgeGraceUntil, until + Math.ceil(ROLL_CHORD_MS * 60 / 1000));
+  assert.equal(state.roll, undefined, 'the old C input is blocked by cooldown');
+  assert.equal(chord.flush(1250), undefined, 'W+Space remains pending before its 1270ms deadline');
+
+  for (const tickTime of [1216, 1233, 1250]) {
+    step(state, {
+      spacePending: actionDueAt(request, tickTime) && !consumes ? request.action.kind : undefined,
+    });
+    assert.ok(state.boss.tell, 'pending W+Space keeps the grace alive through the fire frame');
+  }
+  assert.deepEqual(chord.flush(1270), { action: 'reversal', at: 1270 });
 });
 
 test('late Shift resolves Space at its saved deadline before a later catch-up input', () => {

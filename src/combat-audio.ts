@@ -174,6 +174,7 @@ export class CombatAudio {
   private aceLockSuppressedThroughTick = -1;
   private aceLockScheduleAnchorTick = 0;
   private aceLockScheduleAnchorTime = 0;
+  private aceLockScheduleAnchorPerformanceTime: number | undefined;
   private readonly aceLockVoices: AceLockVoice[] = [];
   private aceLockEffectsDucked = false;
 
@@ -183,6 +184,18 @@ export class CombatAudio {
 
   get muted(): boolean { return this.isMuted; }
   get volume(): number { return this.level; }
+
+  aceLockPerformanceTimeForTick(tick: number): number | undefined {
+    if (this.aceLockScheduleAnchorPerformanceTime === undefined) return undefined;
+    return this.aceLockScheduleAnchorPerformanceTime
+      + (tick - this.aceLockScheduleAnchorTick) * ACE_LOCK_TICK_SECONDS * 1000;
+  }
+
+  aceLockPerformanceTimeForAudioTime(audioTime: number): number | undefined {
+    if (this.aceLockScheduleAnchorPerformanceTime === undefined) return undefined;
+    return this.aceLockScheduleAnchorPerformanceTime
+      + (audioTime - this.aceLockScheduleAnchorTime) * 1000;
+  }
 
   setMuted(muted: boolean): void {
     if (this.isMuted === muted) return;
@@ -305,7 +318,7 @@ export class CombatAudio {
     this.nextPlayAt[voice] = now + (voice === 'graze' || voice === 'hit' ? cooldown : Math.max(cooldown, buffer.duration));
   }
 
-  updateAceLock(state: StageState, active: boolean): void {
+  updateAceLock(state: StageState, active: boolean, performanceTime = performance.now()): void {
     const boss = state.boss;
     const tell = boss?.tell;
     if (!boss || boss.hp <= 0 || boss.entry || boss.defeatedAt != null || state.phase !== 'playing'
@@ -317,6 +330,7 @@ export class CombatAudio {
       this.aceLockCueSchedulePending = false;
       this.aceLockInitialPulsePending = false;
       this.aceLockSuppressedThroughTick = -1;
+      this.aceLockScheduleAnchorPerformanceTime = undefined;
       return;
     }
 
@@ -338,6 +352,7 @@ export class CombatAudio {
     if (!audible) {
       this.aceLockSuppressedThroughTick = Math.max(this.aceLockSuppressedThroughTick, state.tick);
       this.stopAceLockVoice();
+      this.aceLockScheduleAnchorPerformanceTime = undefined;
       return;
     }
     this.setAceLockEffectsDuck(true, false, keyChanged);
@@ -351,7 +366,7 @@ export class CombatAudio {
         this.aceLockCueSchedulePending = true;
       }
     }
-    if (this.aceLockCueSchedulePending) this.scheduleAceLockCues(tell, state.tick, windowTick);
+    if (this.aceLockCueSchedulePending) this.scheduleAceLockCues(tell, state.tick, windowTick, performanceTime);
   }
 
   finishAceLockFire(): void {
@@ -379,12 +394,13 @@ export class CombatAudio {
     return cues;
   }
 
-  private scheduleAceLockCues(tell: AceTell, stateTick: number, windowTick: number): void {
+  private scheduleAceLockCues(tell: AceTell, stateTick: number, windowTick: number, performanceTime: number): void {
     const output = this.output;
     if (!output) return;
     const now = output.context.currentTime;
     this.aceLockScheduleAnchorTick = stateTick;
     this.aceLockScheduleAnchorTime = now;
+    this.aceLockScheduleAnchorPerformanceTime = performanceTime;
     if (stateTick <= tell.until) {
       const windowAt = now + Math.max(0, windowTick - stateTick) * ACE_LOCK_TICK_SECONDS;
       output.effects.gain.setTargetAtTime(ACE_LOCK_WINDOW_EFFECTS_DUCK, windowAt, 0.004);

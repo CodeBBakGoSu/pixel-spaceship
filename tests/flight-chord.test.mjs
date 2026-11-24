@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
   simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 
@@ -93,6 +93,21 @@ test('capped 4fps step times use the accepted interval prefix and rebase each fr
   assert.deepEqual(takeDueActionsAtTick([], pausedAt), { actions: [], pending: [] });
 });
 
+test('4ms render cost does not make a 60Hz RAF timeline lose simulation steps', () => {
+  const step = 1 / 60;
+  let previousRaf = 0, flightClock = 0, carry = 0, ticks = 0;
+  for (let frame = 1; frame <= 600; frame++) {
+    const now = frame * 1000 / 60;
+    const elapsed = (now - previousRaf) / 1000;
+    previousRaf = now;
+    const result = simulationStepTimesForFrame(flightClock, elapsed, carry, step);
+    ticks += result.times.length;
+    carry = result.carry;
+    flightClock = now + 4;
+  }
+  assert.equal(ticks, 600);
+});
+
 test('all due inputs drain together, with future inputs retained for a later tick', () => {
   const pending = enqueueTimedAction(
     enqueueTimedAction([], { action: 'earlier maneuver', at: 1001 }),
@@ -104,6 +119,12 @@ test('all due inputs drain together, with future inputs retained for a later tic
   assert.deepEqual(takeDueActionsAtTick(enqueueTimedAction([], { action: 'future', at: 1006 }), 1005), {
     actions: [], pending: [{ action: 'future', at: 1006 }],
   });
+});
+
+test('only the action carrying the matching spaceAt consumes the pending Space request', () => {
+  assert.equal(consumesSpaceRequest([{ kind: 'roll', turn: 1 }], 1190), false);
+  assert.equal(consumesSpaceRequest([{ kind: 'roll', turn: 1, spaceAt: 1180 }], 1190), false);
+  assert.equal(consumesSpaceRequest([{ kind: 'roll', turn: 1, spaceAt: 1190 }], 1190), true);
 });
 
 test('C after an expired Space chord queues the deadline reversal first', () => {

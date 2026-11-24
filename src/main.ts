@@ -19,7 +19,8 @@ import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import {
-  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, simulationStepTimesForFrame, takeDueActionsAtTick,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, simulationStepTimesForFrame,
+  takeDueActionsAtTick,
   type SpaceAction, type TimedAction,
 } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
@@ -229,7 +230,7 @@ let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
-let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
+let previousTime = 0, flightClockTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
 const REVERSAL_HITSTOP_MS = 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const cockpitLayer = $('#cockpit-display');
@@ -1033,8 +1034,9 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
 function updateAceLockAndRebaseFlightClock(active: boolean): void {
-  audio.updateAceLock(state, active);
-  previousTime = performance.now();
+  const performanceTime = performance.now();
+  audio.updateAceLock(state, active, performanceTime);
+  flightClockTime = audio.aceLockPerformanceTimeForTick(state.tick) ?? performanceTime;
 }
 
 function syncAudioPause(): void {
@@ -1261,10 +1263,11 @@ function advance(tickTime: number): void {
   const inputAtTick = takeDueActionsAtTick(pendingFlightInputs, tickTime);
   const dueInputs = inputAtTick.actions.map(input => input.action);
   const queuedInput = dueInputs.find(input => input.kind === 'roll') ?? dueInputs[0];
+  const consumesRequestedSpace = consumesSpaceRequest(dueInputs, requestedSpace?.at);
   const maneuverInput = queuedInput?.kind === 'maneuver' ? queuedInput.press : undefined;
   const rollInput = queuedInput?.kind === 'roll' ? queuedInput.turn : undefined;
   const spacePending = requestedSpace && actionDueAt(requestedSpace, tickTime)
-    && dueInputs.length === 0
+    && !consumesRequestedSpace
     ? requestedSpace.action.kind : undefined;
   stepStage(state, {
     ...control,
@@ -1288,7 +1291,7 @@ function advance(tickTime: number): void {
   pendingDraft = {};
   pendingChest = undefined;
   pendingFlightInputs = inputAtTick.pending;
-  if (dueInputs.length > 0) requestedSpace = undefined;
+  if (consumesRequestedSpace) requestedSpace = undefined;
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
@@ -1556,8 +1559,9 @@ function animate(now: number): void {
   aceFireCue = null;
   damageFeedback.beginFrame();
   frameNow = now;
-  const frameStart = previousTime;
-  const elapsed = Math.max(0, (now - frameStart) / 1000);
+  const frameStart = audio.aceLockPerformanceTimeForTick(state.tick) ?? flightClockTime;
+  const elapsed = Math.max(0, (now - previousTime) / 1000);
+  previousTime = now;
   if (scene?.contextLost) loseGraphics();
   if (scene && !forceUsed && forcedLossTick !== null && state.tick >= forcedLossTick) {
     forceUsed = true;
@@ -1574,7 +1578,6 @@ function animate(now: number): void {
       syncAudioPause();
       dirty = true;
     }
-    previousTime = performance.now();
     requestAnimationFrame(animate);
     return;
   }
@@ -1604,7 +1607,6 @@ function animate(now: number): void {
   updateAceLockAndRebaseFlightClock(graphics.canAdvance && effectsEnabled && !document.hidden && !guide
     && state.phase === 'playing' && !state.paused);
   if (graphics.recovering) {
-    previousTime = performance.now();
     requestAnimationFrame(animate);
     return;
   }
@@ -1663,6 +1665,7 @@ async function start(): Promise<void> {
   resize();
   applyLanguage();
   previousTime = performance.now();
+  flightClockTime = previousTime;
   // --- S7f lane ---
   if (flightFixture || fidelityFixture || rosterSheet) {
     frameNow = previousTime;

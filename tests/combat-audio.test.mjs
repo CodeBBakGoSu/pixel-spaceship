@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CombatAudio } from '../src/combat-audio.ts';
 import { FLIGHT_AUDIO } from '../src/data/flight-audio.ts';
 import { mapFlightAudio } from '../src/flight-audio.ts';
+import { simulationStepTimesForFrame } from '../src/flight-chord.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const gesture = { isTrusted: true };
@@ -736,6 +737,34 @@ test('Ace lock cue bank schedules pulse cadence and window onset at their exact 
   const count = shortContext.started.length;
   short.updateAceLock(aceLockState(101, { until: 119 }), true);
   assert.equal(shortContext.started.length, count, 'the same window edge cannot replay');
+});
+
+test('input step mapping follows the actual scheduled window source across double audio updates', t => {
+  for (const renderCost of [4, 20, 40]) {
+    const { instances, userActivation } = browserAudio(t);
+    userActivation.hasBeenActive = true;
+    const audio = new CombatAudio();
+    audio.unlock(gesture);
+    const [context] = instances;
+    const { window } = aceLockBuffers(context);
+    context.currentTime = 2.5;
+    const state = aceLockState(100, { until: 129 });
+    audio.updateAceLock(state, true, 5000);
+
+    context.currentTime += renderCost / 1000;
+    audio.updateAceLock(state, true, 5000 + renderCost);
+    const voice = context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === window).at(-1);
+    assert.ok(voice?.startTime !== undefined);
+    const cuePerformanceTime = audio.aceLockPerformanceTimeForAudioTime(voice.startTime);
+    const stepAnchor = audio.aceLockPerformanceTimeForTick(state.tick);
+    assert.ok(cuePerformanceTime !== undefined && stepAnchor !== undefined);
+    const eventTime = cuePerformanceTime + 2;
+    const steps = simulationStepTimesForFrame(stepAnchor, 0.2, 0, 1 / 60).times;
+    const consumedStep = steps.findIndex(time => time >= eventTime);
+    assert.ok(consumedStep >= 0, `${renderCost}ms render cost leaves C inside the accepted frame prefix`);
+    assert.ok(state.tick + consumedStep + 1 >= 111,
+      `${renderCost}ms render cost maps C after the scheduled dodge-window tick`);
+  }
 });
 
 test('first audible tell emits one overdue low pip unless the dodge window already has priority', t => {
