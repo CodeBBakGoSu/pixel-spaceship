@@ -89,6 +89,12 @@ export function touchControlOcclusionRect(layout: Pick<PhoneLayout, 'controls'>,
   const y = Math.max(0, Math.min(viewport.height, layout.controls.y));
   return { x: 0, y, width: Math.max(0, viewport.width), height: Math.max(0, viewport.height - y) };
 }
+
+export function isDescendingDiveWarning(maneuver: { phase: string; band: number } | undefined,
+  currentBand: number): boolean {
+  return maneuver?.phase === 'warning' && Number.isFinite(maneuver.band) && maneuver.band < currentBand;
+}
+
 export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number | null {
   const dx = to.x - from.x, dy = to.y - from.y;
   if (![dx, dy].every(Number.isFinite) || Math.hypot(dx, dy) < 0.001) return null;
@@ -96,9 +102,9 @@ export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number 
 }
 
 export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target: ScreenPoint,
-  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = []): TouchOcclusionCue | null {
+  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = [], preferredSlot?: Rect | null): TouchOcclusionCue | null {
   if (!pointBehindTouchControls(target, occlusion, margin)) return null;
-  const rect = findTouchCueRect(layout, size, 4, reserved);
+  const rect = preferredSlot === undefined ? findTouchCueRect(layout, size, 4, reserved) : preferredSlot;
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
 }
