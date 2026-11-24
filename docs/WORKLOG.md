@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:14 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (commit `54a2fd8`)
+- Replaced scaled unit Aegis toruses with inner/outer TorusGeometry at the actual judged radii and a fixed 0.15 world-unit tube radius; renderer outline data is precomputed once.
+- Verification: focused geometry suite 2/2, including rendered TorusGeometry bounds at both radii; `npm run build` (123 modules, 2.16s); `git diff --check` clean. State: done.
+
 ### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (기준 `ae1b94c`, commit `b71acc7`)
 - Matched the renderer to PR #13's continuous-flight verdict: radial bounds `radius ± halfWidth` and altitude bounds `player.alt ± halfWidth`; added transparent boundary rings and supports without changing collision or simulation state.
 - Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
