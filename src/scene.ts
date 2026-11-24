@@ -15,12 +15,13 @@ import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { FLIGHT_CAMERA, FLIGHT_FEEL } from './data/flight-feel.ts';
 import { WING_TRAIL } from './data/flight-world.ts';
 import type { HostileShape } from './data/hostile-fire.ts';
-import { CHESTS, WEAPONS } from './data/items.ts';
+import { CHESTS, WEAPONS, type WeaponId } from './data/items.ts';
 import { PHASES, SWARM_CAPS } from './data/phases.ts';
 // --- S7f lane ---
 import { DEFAULT_QUALITY, RENDER_QUALITY, type RenderQuality } from './data/render-quality.ts';
 import { renderBuffer } from './layout.ts';
 import { PickupVisuals } from './pickup-visuals.ts';
+import { SortieVfx, type PickupVisualEvent, type SortieVfxMode } from './sortie-vfx.ts';
 import { AdaptiveQuality } from './render-quality.ts';
 import { ROLLS } from './data/roll.ts';
 import { ENEMY_KINDS, NEW_ENEMY_KINDS, type EnemyKind } from './enemy-kinds.ts';
@@ -235,6 +236,7 @@ export class FlightScene {
   ];
   private detailedAirframes = false;
   private readonly pickupVisuals = new PickupVisuals();
+  private readonly sortieVfx = new SortieVfx(TICKS_PER_SECOND);
   private readonly chestMarkers = makeChestBatch();
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
   private readonly sparks = instances(new BoxGeometry(), 240);
@@ -386,6 +388,7 @@ export class FlightScene {
 
   dispose(): void {
     // Loss has already freed the GL allocations. Detach Three's canvas listeners and drop its caches.
+    this.sortieVfx.clear();
     this.renderer.dispose();
   }
 
@@ -718,6 +721,30 @@ export class FlightScene {
     };
   }
 
+  recordWeaponHit(weapon: WeaponId, position: Position, tick: number, source?: Position): void {
+    this.sortieVfx.hit(weapon, { tick, position, source });
+  }
+
+  recordEnemyDefeat(event: { id: number; tick: number; position: Position; formationId?: number; armored?: boolean }): void {
+    this.sortieVfx.enemyDefeated(event);
+  }
+
+  recordBossDefeat(event: { id: number; tick: number; position: Position }): void {
+    this.sortieVfx.bossDefeated(event);
+  }
+
+  recordPickupVfx(event: PickupVisualEvent): void {
+    this.sortieVfx.pickupEvent(event);
+  }
+
+  drawSortieVfx(ctx: CanvasRenderingContext2D, state: StageState, mode: SortieVfxMode, nowMs: number): void {
+    const boss = mode === 'flight' && state.boss?.hp ? this.projectAirframe(state, 'boss') : null;
+    this.sortieVfx.draw(ctx, state, point => this.project(point), (x, z) => this.world.height(x, z), boss,
+      this.reducedMotion.matches, mode, nowMs);
+  }
+
+  clearSortieVfx(): void { this.sortieVfx.clear(); }
+
   // Match the model size and the flattened TOP presentation, not its simulation altitude.
   projectAirframe(state: StageState, subject: 'boss' | 'player') {
     const boss = subject === 'boss', vehicle = boss ? state.boss : state.player;
@@ -905,7 +932,8 @@ export class FlightScene {
     upload(this.shadows, shadows);
 
     // --- S7f lane ---
-    this.pickupVisuals.update(state, flat ? TOP_FLIGHT + 5 : undefined, this.reducedMotion.matches);
+    this.pickupVisuals.update(state, flat ? TOP_FLIGHT + 5 : undefined, this.reducedMotion.matches,
+      this.sortieVfx.pickupTrailCapacity(state.tick));
 
     for (const drop of state.chests.drops) {
       const tint = chestDefinition(drop.id).kind === 'evolution' ? 0xffbd62 : 0x96e9d2;

@@ -585,7 +585,8 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
       ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill });
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
     if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
-    events?.destroyed?.(enemy.kind, !!enemy.carrier);
+    events?.destroyed?.(enemy.kind, !!enemy.carrier, enemy.id, { x: enemy.x, z: enemy.z, alt: enemy.alt }, state.tick,
+      enemy.formation?.leader, enemy.kind === 'aegis' || enemy.gnatVariant === 'armored');
   }
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
@@ -832,7 +833,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run && state.hull) applyBillReward(state);
   // --- S7e lane ---
   const defeated = state.hull > 0 && state.boss?.hp === 0;
-  if (defeated && state.boss) beginAceDefeat(state, state.boss, events);
+  const firstDefeat = defeated && state.boss?.defeatedAt === null;
+  if (defeated && state.boss) {
+    beginAceDefeat(state, state.boss, events);
+    if (firstDefeat) events?.aceDefeated?.({ id: state.boss.id,
+      position: { x: state.boss.x, z: state.boss.z, alt: state.boss.alt }, tick: state.tick, outcome: 'defeated' });
+  }
   const outcome = state.tick >= endTick(state) ? defeated ? 'clear' : 'timeout' : null;
   const cost = requiredXp(state.level, !!state.run);
   if (!state.hull) finish(state, 'lost');

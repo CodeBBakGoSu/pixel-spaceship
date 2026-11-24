@@ -45,6 +45,7 @@ import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
+import { sortieVfxMode } from './sortie-vfx.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
@@ -153,7 +154,9 @@ damageOption.addEventListener('change', () => {
   url.searchParams.delete('damageNumbers');
   history.replaceState(history.state, '', url);
 });
-observeDamage(state, (id, damage, critical, target) => {
+observeDamage(state, (id, damage, critical, target, weapon) => {
+  if (effectsEnabled && weapon) scene?.recordWeaponHit(weapon, target, state.tick,
+    { x: state.player.x, z: state.player.z, alt: state.player.altitude });
   if (damageNumbers && effectsEnabled) damageFeedback.hit(id, damage, critical, target, state.tick / 60);
 });
 const bulletFixture = demoBullets ? createHostileFixture(state, query, ground) : null;
@@ -285,9 +288,16 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
     }
   },
   aceTellFired: aceVisualEvents.aceTellFired,
-  destroyed(kind, elite) {
+  destroyed(kind, elite, id, position, tick, formationId, armored) {
     audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
+    if (id !== undefined && position && tick !== undefined) {
+      scene?.recordEnemyDefeat({ id, tick, position, formationId, armored });
+    }
   },
+  pickupDropped(event) { scene?.recordPickupVfx({ ...event, type: 'pickupDropped' }); },
+  pickupContacted(event) { scene?.recordPickupVfx({ ...event, type: 'pickupContacted' }); },
+  pickupCollected(event) { scene?.recordPickupVfx({ ...event, type: 'pickupCollected' }); },
+  aceDefeated(event) { scene?.recordBossDefeat(event); },
   aceArrival() { audio.play('ace_alert'); },
 } : undefined;
 let helpTimer = 0, lastHelp = '';
@@ -1628,17 +1638,20 @@ function animate(now: number): void {
     }
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
-  drawDamageFeedback();
+  drawDamageFeedback(now);
   if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
   requestAnimationFrame(animate);
 }
 
-function drawDamageFeedback(): void {
+function drawDamageFeedback(nowMs: number): void {
   if (damageCanvas.width !== innerWidth || damageCanvas.height !== innerHeight) {
     damageCanvas.width = innerWidth; damageCanvas.height = innerHeight;
   }
   const ctx = damageContext, now = state.tick / 60;
   ctx.clearRect(0, 0, damageCanvas.width, damageCanvas.height);
+  const mode = sortieVfxMode(state, !!guide || !!rosterSheet);
+  if (effectsEnabled && scene && mode) scene.drawSortieVfx(ctx, state, mode, nowMs);
+  else scene?.clearSortieVfx();
   const kills = damageFeedback.count(state.kills, now);
   const counter = $('#kill-counter');
   counter.hidden = state.phase !== 'playing' || kills === 0;

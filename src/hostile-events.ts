@@ -1,6 +1,10 @@
 import type { HostileShape } from './data/hostile-fire.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
-import type { AceTell, Shot } from './stage-types.ts';
+import type { AceTell, Position, Shot } from './stage-types.ts';
+
+export type PickupEvent = { pickupId: number; kind: 'salvage' | 'magnet'; position: Position; tick: number; sourceEventId?: number };
+export type PickupCollectedEvent = PickupEvent & { xp: number; credits: number; playerPosition: Position };
+export type AceDefeatEvent = { id: number; position: Position; tick: number; outcome: 'defeated' };
 
 // --- S7e lane ---
 export type CombatTell = 'snipe' | 'flak' | 'dive' | 'tail' | 'strafe' | 'mine' | 'aegis' | 'carrier' | 'gnat'
@@ -16,6 +20,10 @@ export type CombatEvents = {
   parry?(shot: Shot, x: number, z: number, alt: number): void;
   tell?(kind: CombatTell, x: number, z: number, alt: number): void;
   aceTellFired?(tell: AceTell): void;
-  destroyed?(kind: EnemyKind, elite: boolean): void;
+  destroyed?(kind: EnemyKind, elite: boolean, id?: number, position?: Position, tick?: number, formationId?: number, armored?: boolean): void;
+  pickupDropped?(event: PickupEvent): void;
+  pickupContacted?(event: PickupEvent): void;
+  pickupCollected?(event: PickupCollectedEvent): void;
+  aceDefeated?(event: AceDefeatEvent): void;
   aceArrival?(): void;
 };
