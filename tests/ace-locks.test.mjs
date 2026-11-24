@@ -3,7 +3,9 @@ import test from 'node:test';
 import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
-import { FlightChord, ROLL_CHORD_MS } from '../src/flight-chord.ts';
+import {
+  actionDueAt, barrelRollForKey, FlightChord, ROLL_CHORD_MS, simulationStepTime, takeActionAtTick,
+} from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
@@ -96,8 +98,8 @@ test('Space-first Shift chord crossing the fire tick resolves to one accepted ro
   assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
 
   const action = chord.pressShift(now + 20);
-  assert.equal(action, 'roll');
-  step(state, { roll: action === 'roll', rollTurn: 0 });
+  assert.deepEqual(action, { action: 'roll', at: now + 20 });
+  step(state, { roll: action?.action === 'roll', rollTurn: 0 });
   assert.equal(state.roll?.elapsed, 0);
   assert.equal(state.maneuver, null);
   assert.equal(state.boss.tell, null);
@@ -115,7 +117,7 @@ test('late W/S + Space resolves to an accepted maneuver and cancels only its sal
   }
   assert.equal(state.boss.tell?.dodgeGraceUntil, until + Math.ceil(ROLL_CHORD_MS * 60 / 1000));
   const action = chord.flush(now + ROLL_CHORD_MS);
-  assert.equal(action, 'reversal');
+  assert.deepEqual(action, { action: 'reversal', at: now + ROLL_CHORD_MS });
   step(state, { maneuver: splitS.maneuver, maneuverTurn: 0 });
   assert.equal(state.maneuver?.kind, splitS.maneuver);
   assert.equal(state.maneuverTrail?.startTick, state.tick);
@@ -134,6 +136,49 @@ test('cooldown-blocked pending Space does not defer or cancel the Ace salvo', ()
   assert.equal(state.maneuver, null);
   assert.equal(state.roll, undefined);
   assert.ok(state.shots.some(shot => shot.hostileKind === 'ace-missile'));
+});
+
+test('between-frame C input reaches its matching dodge tick and is not deferred when cooldown-blocked', () => {
+  const run = cooldownBlocked => {
+    const state = duel();
+    const windowTick = state.boss.tell.until - ACE.lock.dodgeTicks;
+    while (state.tick < windowTick - 3) step(state);
+    if (cooldownBlocked) state.rollReadyAt = windowTick + 60;
+
+    const frameTime = 2100, fixedStep = 1 / 60;
+    let carry = 4 * fixedStep;
+    const tickTimes = [];
+    while (carry >= fixedStep) {
+      tickTimes.push(simulationStepTime(frameTime, carry, fixedStep));
+      carry -= fixedStep;
+    }
+    const cueAt = tickTimes[2];
+    let pending = { action: barrelRollForKey('KeyC', 0), at: cueAt + 5 };
+    assert.equal(actionDueAt(pending, cueAt), false, 'the input is not retroactive to the cue tick');
+
+    for (let index = 0; index < tickTimes.length; index++) {
+      const queued = takeActionAtTick(pending, tickTimes[index]);
+      if (queued.action !== undefined) {
+        assert.equal(index, 3, 'the event is consumed at the first simulation boundary after the press');
+        step(state, { roll: true, rollTurn: queued.action });
+      } else step(state);
+      pending = queued.pending;
+    }
+    assert.equal(state.tick, windowTick + 1);
+    assert.equal(pending, undefined, 'the queued event is consumed once even if stage cooldown rejects it');
+    if (cooldownBlocked) {
+      assert.equal(state.roll, undefined);
+      assert.ok(state.boss.tell, 'a blocked roll does not cancel the Ace salvo');
+      for (let i = 0; i < 61; i++) step(state);
+      assert.equal(state.roll, undefined, 'the blocked input is not replayed after cooldown');
+    } else {
+      assert.equal(state.roll?.elapsed, 0);
+      assert.equal(state.boss.tell, null, 'the roll at the corresponding catch-up tick cancels the salvo');
+    }
+  };
+
+  run(false);
+  run(true);
 });
 
 test('gun aim drops on loss of bearing, altitude or range before release', () => {

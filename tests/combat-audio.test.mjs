@@ -738,6 +738,42 @@ test('Ace lock cue bank schedules pulse cadence and window onset at their exact 
   assert.equal(shortContext.started.length, count, 'the same window edge cannot replay');
 });
 
+test('first audible tell emits one overdue low pip unless the dodge window already has priority', t => {
+  const audible = browserAudio(t);
+  audible.userActivation.hasBeenActive = true;
+  const firstAudio = new CombatAudio();
+  firstAudio.unlock(gesture);
+  const [firstContext] = audible.instances;
+  const { pulses: firstPulses } = aceLockBuffers(firstContext);
+  firstContext.currentTime = 4;
+  firstAudio.updateAceLock(aceLockState(101), true);
+  const initialPips = voicesFor(firstContext, firstPulses[0]);
+  assert.equal(initialPips.length, 1);
+  assert.equal(initialPips[0].startTime, firstContext.currentTime);
+
+  const late = browserAudio(t);
+  late.userActivation.hasBeenActive = true;
+  const lateAudio = new CombatAudio();
+  lateAudio.unlock(gesture);
+  const [lateContext] = late.instances;
+  const { pulses: latePulses, window } = aceLockBuffers(lateContext);
+  lateContext.currentTime = 5;
+  lateAudio.updateAceLock(aceLockState(142), true);
+  assert.equal(voicesFor(lateContext, latePulses[0]).length, 0);
+  assert.equal(voicesFor(lateContext, window)[0].startTime, lateContext.currentTime,
+    'an already-open window plays its distinct cue instead');
+
+  const muted = browserAudio(t);
+  muted.userActivation.hasBeenActive = true;
+  const mutedAudio = new CombatAudio();
+  mutedAudio.unlock(gesture);
+  const [mutedContext] = muted.instances;
+  const { pulses: mutedPulses } = aceLockBuffers(mutedContext);
+  mutedAudio.updateAceLock(aceLockState(101), false);
+  mutedAudio.updateAceLock(aceLockState(101), true);
+  assert.equal(voicesFor(mutedContext, mutedPulses[0]).length, 0, 'an initially inaudible tell never replays its missed pip');
+});
+
 test('Ace lock low-frame-rate catch-up retains exact window and pulse start times', t => {
   const { instances, userActivation } = browserAudio(t);
   userActivation.hasBeenActive = true;
@@ -767,7 +803,7 @@ test('Ace lock cue timing rebases when audio time outruns simulated ticks', t =>
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const { window } = aceLockBuffers(context);
+  const { pulses: pulseBank, window } = aceLockBuffers(context);
   const origin = 2;
   context.currentTime = origin;
   audio.updateAceLock(aceLockState(100), true);
@@ -778,6 +814,7 @@ test('Ace lock cue timing rebases when audio time outruns simulated ticks', t =>
   context.currentTime = origin + 30 / 60;
   audio.updateAceLock(aceLockState(110), true);
   assert.equal(staleWindow.stopped, true, 'a delayed simulation cancels sources queued on the old clock');
+  assert.equal(voicesFor(context, pulseBank[0]).length, 1, 'rebasing does not replay the missed initial pip');
   const currentWindow = voicesFor(context, window).at(-1);
   assert.notEqual(currentWindow, staleWindow);
   assert.equal(currentWindow.startTime, context.currentTime + (142 - 110) / 60);
@@ -786,6 +823,61 @@ test('Ace lock cue timing rebases when audio time outruns simulated ticks', t =>
   assert.equal(effects.gain.value, 0.06, 'the cancelled old duck target cannot fire');
   context.currentTime = currentWindow.startTime;
   assert.equal(effects.gain.value, 0.02, 'the re-based target follows the current simulation tick');
+});
+
+test('late onended callback from a canceled same-tell cue cannot poison its replacement', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  const { window } = aceLockBuffers(context);
+  const origin = 2;
+  context.currentTime = origin;
+  audio.updateAceLock(aceLockState(100), true);
+  const canceledWindow = voicesFor(context, window)[0];
+
+  context.currentTime = origin + 12 / 60;
+  audio.setMuted(true);
+  audio.updateAceLock(aceLockState(109), true);
+  audio.setMuted(false);
+  audio.updateAceLock(aceLockState(109), true);
+  const resumedWindow = voicesFor(context, window).at(-1);
+  assert.notEqual(resumedWindow, canceledWindow);
+
+  context.currentTime = origin + 42 / 60 + 0.01;
+  canceledWindow.onended();
+  context.currentTime += 0.01;
+  audio.updateAceLock(aceLockState(112), true);
+  const replacement = voicesFor(context, window).at(-1);
+  assert.notEqual(replacement, resumedWindow, 'same-tell clock rebase keeps a future window queued');
+  assert.equal(replacement.startTime, context.currentTime + (142 - 112) / 60);
+});
+
+test('late onended callback from a prior tell cannot mark the new tell window played', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  const { window } = aceLockBuffers(context);
+  const origin = 3;
+  context.currentTime = origin;
+  audio.updateAceLock(aceLockState(100), true);
+  const oldTellWindow = voicesFor(context, window)[0];
+
+  context.currentTime = origin + 42 / 60 + 0.01;
+  audio.updateAceLock(aceLockState(142, { id: 18, since: 142, until: 202 }), true);
+  const newTellWindow = voicesFor(context, window).at(-1);
+  assert.notEqual(newTellWindow, oldTellWindow);
+
+  context.currentTime += 0.01;
+  oldTellWindow.onended();
+  context.currentTime = origin + 0.8;
+  audio.updateAceLock(aceLockState(143, { id: 18, since: 142, until: 202 }), true);
+  const replacement = voicesFor(context, window).at(-1);
+  assert.notEqual(replacement, newTellWindow, 'the current tell window is re-queued after the old callback');
+  assert.equal(replacement.startTime, context.currentTime + (184 - 143) / 60);
 });
 
 test('Ace lock cancellation stops future cues and cancels their window duck automation', t => {

@@ -170,6 +170,7 @@ export class CombatAudio {
   private aceLockWindowPlayed = false;
   private aceLockWindowScheduled = false;
   private aceLockCueSchedulePending = false;
+  private aceLockInitialPulsePending = false;
   private aceLockSuppressedThroughTick = -1;
   private aceLockScheduleAnchorTick = 0;
   private aceLockScheduleAnchorTime = 0;
@@ -314,6 +315,7 @@ export class CombatAudio {
       this.aceLockWindowPlayed = false;
       this.aceLockWindowScheduled = false;
       this.aceLockCueSchedulePending = false;
+      this.aceLockInitialPulsePending = false;
       this.aceLockSuppressedThroughTick = -1;
       return;
     }
@@ -329,6 +331,7 @@ export class CombatAudio {
       this.aceLockWindowPlayed = false;
       this.aceLockWindowScheduled = false;
       this.aceLockCueSchedulePending = true;
+      this.aceLockInitialPulsePending = true;
       this.aceLockSuppressedThroughTick = tell.since - 1;
     }
 
@@ -392,7 +395,9 @@ export class CombatAudio {
         if (cue.kind === 'window') this.aceLockWindowPlayed = true;
         continue;
       }
-      if (cue.tick < stateTick && (cue.kind !== 'window' || stateTick > tell.until)) continue;
+      const missedInitialPulse = cue.kind === 'pulse' && cue.tick === tell.since
+        && this.aceLockInitialPulsePending && stateTick < windowTick;
+      if (cue.tick < stateTick && !missedInitialPulse && (cue.kind !== 'window' || stateTick > tell.until)) continue;
       if (cue.kind === 'window' && (this.aceLockWindowPlayed || this.aceLockWindowScheduled)) continue;
       const when = now + Math.max(0, cue.tick - stateTick) * ACE_LOCK_TICK_SECONDS;
       let startAt = when;
@@ -408,6 +413,7 @@ export class CombatAudio {
       previous = voice;
     }
     this.aceLockCueSchedulePending = false;
+    this.aceLockInitialPulsePending = false;
   }
 
   private cancelFutureAceLockCues(now: number): void {
@@ -437,10 +443,12 @@ export class CombatAudio {
     gain.connect(output.master);
     source.onended = () => {
       const index = this.aceLockVoices.indexOf(voice);
-      if (index >= 0) this.aceLockVoices.splice(index, 1);
-      if (voice.kind === 'window') {
-        this.aceLockWindowScheduled = false;
-        if (output.context.currentTime >= voice.startAt) this.aceLockWindowPlayed = true;
+      if (index >= 0) {
+        this.aceLockVoices.splice(index, 1);
+        if (voice.kind === 'window') {
+          this.aceLockWindowScheduled = false;
+          if (output.context.currentTime >= voice.startAt) this.aceLockWindowPlayed = true;
+        }
       }
       source.disconnect();
       gain.disconnect();
@@ -454,6 +462,7 @@ export class CombatAudio {
     const voices = this.aceLockVoices.splice(0);
     const output = this.output;
     this.aceLockCueSchedulePending = true;
+    this.aceLockInitialPulsePending = false;
     if (output) {
       const now = output.context.currentTime;
       for (const voice of voices) {

@@ -18,7 +18,7 @@ import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
-import { barrelRollForKey, FlightChord, type SpaceAction } from './flight-chord.ts';
+import { actionDueAt, barrelRollForKey, FlightChord, simulationStepTime, takeActionAtTick, type SpaceAction, type TimedAction } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
 import { createGearIcon } from './gear-icons.ts';
 import { GraphicsRecovery } from './graphics-recovery.ts';
@@ -217,9 +217,9 @@ let pendingStart = false, pendingPause = false, pendingViews = 0;
 let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
 let pendingChest: StageInput['chestPick'];
 type ManeuverPress = { kind: ManeuverKind; turn: number };
-let pendingManeuver: ManeuverPress | undefined;
-let requestedSpace: ManeuverPress | undefined;
-let pendingRoll: number | undefined;
+let pendingManeuver: TimedAction<ManeuverPress> | undefined;
+let requestedSpace: TimedAction<ManeuverPress> | undefined;
+let pendingRoll: TimedAction<number> | undefined;
 let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
@@ -930,11 +930,10 @@ root.addEventListener('touchmove', event => {
   event.preventDefault();
 }, { passive: false });
 
-function resolveSpaceAction(action: SpaceAction | undefined, turn: number): void {
+function resolveSpaceAction(action: TimedAction<SpaceAction> | undefined, turn: number): void {
   if (!action) return;
-  if (action === 'roll') pendingRoll = turn;
-  else if (requestedSpace) pendingManeuver = requestedSpace;
-  requestedSpace = undefined;
+  if (action.action === 'roll') pendingRoll = { action: turn, at: action.at };
+  else if (requestedSpace) pendingManeuver = { action: requestedSpace.action, at: action.at };
 }
 
 function flushSpaceInput(): void {
@@ -1003,13 +1002,13 @@ window.addEventListener('keydown', event => {
       : undefined;
     if (barrel !== undefined) {
       flushSpaceInput();
-      pendingRoll = barrel;
+      pendingRoll = { action: barrel, at: event.timeStamp };
       return;
     }
     const kind = maneuverForKey(code, turn, climb);
     if (kind) {
       event.preventDefault();
-      requestedSpace = { kind, turn };
+      requestedSpace = { action: { kind, turn }, at: event.timeStamp };
       resolveSpaceAction(flightChord.pressSpace(event.timeStamp, event.shiftKey), turn);
     } else if (code === 'ShiftLeft' || code === 'ShiftRight') {
       resolveSpaceAction(flightChord.pressShift(event.timeStamp), turn);
@@ -1181,26 +1180,28 @@ touchLoop.addEventListener('pointerdown', event => {
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
   touchLoop.addEventListener(name, event => {
     if (!loopPointer || event.pointerId !== loopPointer.id) return;
-    if (name === 'pointerup' && menuKey === 'playing') pendingManeuver = loopPointer.press;
+    if (name === 'pointerup' && menuKey === 'playing') pendingManeuver = { action: loopPointer.press, at: event.timeStamp };
     loopPointer = null;
     touchLoop.classList.remove('held');
   });
 }
 touchLoop.addEventListener('click', event => {
-  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = { kind: chooseManeuver(stickX, stickY), turn: stickX };
+  if (event.detail === 0 && menuKey === 'playing') {
+    pendingManeuver = { action: { kind: chooseManeuver(stickX, stickY), turn: stickX }, at: event.timeStamp };
+  }
 });
-function bindPress(button: HTMLButtonElement, press: () => void): void {
+function bindPress(button: HTMLButtonElement, press: (at: number) => void): void {
   button.addEventListener('pointerdown', event => {
     if (event.button !== 0 || menuKey !== 'playing') return;
     event.preventDefault();
-    press();
+    press(event.timeStamp);
   });
   button.addEventListener('click', event => {
-    if (event.detail === 0 && menuKey === 'playing') press();
+    if (event.detail === 0 && menuKey === 'playing') press(event.timeStamp);
   });
 }
 bindPress(touchPause, () => { pendingPause = true; });
-bindPress(touchRoll, () => { pendingRoll = stickX; });
+bindPress(touchRoll, at => { pendingRoll = { action: stickX, at }; });
 bindPress($<HTMLButtonElement>('#touch-view'), () => { pendingViews++; });
 
 function keyboardAxes() {
@@ -1221,7 +1222,7 @@ function flightInput(): StageInput {
   };
 }
 
-function advance(): void {
+function advance(tickTime: number): void {
   if (!graphics.canAdvance || !scene || guide || (persistent && document.hidden)) return;
   if (query.get('fixture') === 'damage') { advanceDamageFixture(state); return; }
   if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
@@ -1237,17 +1238,22 @@ function advance(): void {
   if (launch && state.phase !== 'playing' && state.phase !== 'draft' && state.phase !== 'chest') world.seed = launch.seed;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   resolveSpaceAction(flightChord.flush(frameNow), 0);
+  const maneuverInput = takeActionAtTick(pendingManeuver, tickTime);
+  const rollInput = takeActionAtTick(pendingRoll, tickTime);
+  const spacePending = requestedSpace && actionDueAt(requestedSpace, tickTime)
+    && maneuverInput.action === undefined && rollInput.action === undefined
+    ? requestedSpace.action.kind : undefined;
   stepStage(state, {
     ...control,
     start: pendingStart,
     launch,
     retreat: pendingRetreat,
     pause: pendingPause,
-    maneuver: pendingRoll === undefined ? pendingManeuver?.kind ?? control.maneuver : undefined,
-    maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
-    spacePending: requestedSpace?.kind,
-    roll: pendingRoll !== undefined || control.roll,
-    rollTurn: pendingRoll ?? control.rollTurn,
+    maneuver: rollInput.action === undefined ? maneuverInput.action?.kind ?? control.maneuver : undefined,
+    maneuverTurn: maneuverInput.action?.turn ?? control.maneuverTurn,
+    spacePending,
+    roll: rollInput.action !== undefined || control.roll,
+    rollTurn: rollInput.action ?? control.rollTurn,
     toggleView: pendingViews > 0 || control.toggleView,
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
@@ -1258,8 +1264,9 @@ function advance(): void {
   if (pendingViews) pendingViews--;
   pendingDraft = {};
   pendingChest = undefined;
-  pendingManeuver = undefined;
-  pendingRoll = undefined;
+  pendingManeuver = maneuverInput.pending;
+  pendingRoll = rollInput.pending;
+  if (maneuverInput.action !== undefined || rollInput.action !== undefined) requestedSpace = undefined;
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
@@ -1557,7 +1564,7 @@ function animate(now: number): void {
       break;
     }
     const burst = state.reversal?.burstAt;
-    advance();
+    advance(simulationStepTime(now, carry, STEP));
     carry -= STEP;
     const nextBurst = state.reversal?.burstAt;
     if (nextBurst !== undefined && nextBurst !== burst) {
