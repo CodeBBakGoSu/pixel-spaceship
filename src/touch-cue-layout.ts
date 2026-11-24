@@ -5,9 +5,9 @@ export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
 type TouchLayout = Pick<PhoneLayout,
-  'controls' | 'playfield' | 'stick' | 'stickLabel' | 'loop' | 'roll' | 'boost' | 'view'>;
+  'controls' | 'playfield' | 'dashboard' | 'pause' | 'audio' | 'stick' | 'stickLabel' | 'loop' | 'roll' | 'boost' | 'view'>;
 
-const TOUCH_TARGETS = ['stick', 'stickLabel', 'loop', 'roll', 'boost', 'view'] as const;
+const TOUCH_TARGETS = ['pause', 'audio', 'stick', 'stickLabel', 'loop', 'roll', 'boost', 'view'] as const;
 
 function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x
@@ -20,7 +20,7 @@ function contains(outer: Rect, inner: Rect): boolean {
     && inner.y + inner.height <= outer.y + outer.height;
 }
 
-export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4): Rect | null {
+export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4, reserved: readonly Rect[] = []): Rect | null {
   const { controls } = layout;
   if (![size.width, size.height, gap].every(Number.isFinite) || size.width <= 0 || size.height <= 0 || gap < 0) return null;
   const centeredX = controls.x + (controls.width - size.width) / 2;
@@ -29,7 +29,7 @@ export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4): R
   const top = controls.y + gap, middle = controls.y + (controls.height - size.height) / 2;
   const bottom = controls.y + controls.height - size.height - gap;
   const yCandidates = [...new Set([top, middle, bottom])].sort((a, b) => a - b);
-  const targets = TOUCH_TARGETS.map(key => layout[key]);
+  const targets = [...TOUCH_TARGETS.map(key => layout[key]), ...(layout.dashboard ? [layout.dashboard] : []), ...reserved];
 
   for (const y of yCandidates) for (const x of xCandidates) {
     const rect = { x, y, width: size.width, height: size.height };
@@ -46,6 +46,13 @@ export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, mar
     && point.y >= controls.y - margin && point.y <= controls.y + controls.height + margin;
 }
 
+export function touchControlOcclusionRect(layout: Pick<PhoneLayout, 'controls'>,
+  viewport: { width: number; height: number }): Rect {
+  if (![layout.controls.y, viewport.width, viewport.height].every(Number.isFinite)) return { x: 0, y: 0, width: 0, height: 0 };
+  const y = Math.max(0, Math.min(viewport.height, layout.controls.y));
+  return { x: 0, y, width: Math.max(0, viewport.width), height: Math.max(0, viewport.height - y) };
+}
+
 export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number | null {
   const dx = to.x - from.x, dy = to.y - from.y;
   if (![dx, dy].every(Number.isFinite) || Math.hypot(dx, dy) < 0.001) return null;
@@ -53,9 +60,9 @@ export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number 
 }
 
 export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target: ScreenPoint,
-  size: CueSize, margin = 8): TouchOcclusionCue | null {
-  if (!pointBehindTouchControls(target, layout.controls, margin)) return null;
-  const rect = findTouchCueRect(layout, size);
+  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = []): TouchOcclusionCue | null {
+  if (!pointBehindTouchControls(target, occlusion, margin)) return null;
+  const rect = findTouchCueRect(layout, size, 4, reserved);
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
 }
