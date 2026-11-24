@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { findTouchCueRect, pointBehindTouchControls, screenArrowRotation, screenPointObscured, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { findTouchCueRect, pointBehindTouchControls, screenArrowRotation, screenPointObscured, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -69,7 +69,6 @@ test('direction follows hazard movement and rejects a zero-length direction', ()
   assert.ok(diagonal > 150 && diagonal < 160);
   assert.equal(screenArrowRotation({ x: 5, y: 5 }, { x: 5, y: 5 }), null);
 });
-
 test('projected bounds need a cue when outside the viewport or behind UI/ship/projectile overlays', () => {
   const viewport = { width: 390, height: 844 };
   const controls = { x: 0, y: 684, width: 390, height: 160 };
@@ -81,4 +80,18 @@ test('projected bounds need a cue when outside the viewport or behind UI/ship/pr
   assert.equal(screenPointObscured({ x: 195, y: 528, depth: 20 }, viewport, [projectile]), true);
   assert.equal(screenPointObscured({ x: 195, y: 400, depth: 20 }, viewport, []), false);
   assert.equal(screenPointObscured({ x: 195, y: 400, depth: -1 }, viewport, []), true);
+});
+
+test('full touch backdrop occlusion includes safe-inset edges and reserves the visible audio control', () => {
+  const layout = phoneLayout(390, 844, { top: 0, right: 12, bottom: 30, left: 12 }, 'chase', true);
+  const backdrop = touchControlOcclusionRect(layout, { width: 390, height: 844 });
+  const target = { x: 2, y: layout.controls.y + 10 };
+  assert.equal(pointBehindTouchControls(target, layout.controls), false);
+  assert.equal(pointBehindTouchControls(target, backdrop), true);
+  assert.deepEqual(layout.audio, {
+    x: layout.stick.x + layout.stick.width + 9,
+    y: layout.controls.y + 9,
+    width: 44,
+    height: 44,
+  });
 });
