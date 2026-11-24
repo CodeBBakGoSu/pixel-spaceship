@@ -1,6 +1,7 @@
 import type { PhoneLayout, Rect } from './layout.ts';
 
 export type ScreenPoint = { x: number; y: number };
+export type ProjectedScreenPoint = ScreenPoint & { depth: number };
 export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
@@ -44,6 +45,15 @@ export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, mar
   return Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(margin) && margin >= 0
     && point.x >= controls.x - margin && point.x <= controls.x + controls.width + margin
     && point.y >= controls.y - margin && point.y <= controls.y + controls.height + margin;
+}
+
+export function screenPointObscured(point: ProjectedScreenPoint, viewport: { width: number; height: number },
+  obstacles: readonly Rect[]): boolean {
+  if (![point.x, point.y, point.depth, viewport.width, viewport.height].every(Number.isFinite)
+    || point.depth <= 0.05 || viewport.width <= 0 || viewport.height <= 0) return true;
+  if (point.x < 0 || point.x >= viewport.width || point.y < 0 || point.y >= viewport.height) return true;
+  return obstacles.some(rect => point.x >= rect.x && point.x <= rect.x + rect.width
+    && point.y >= rect.y && point.y <= rect.y + rect.height);
 }
 
 export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number | null {

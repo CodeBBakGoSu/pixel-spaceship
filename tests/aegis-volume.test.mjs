@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CLOSE_EVOLUTIONS } from '../src/data/close-evolutions.ts';
 import { aegisVolumeOutline } from '../src/aegis-volume.ts';
 import {
-  AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_RING_TUBE_RADIUS, AEGIS_VOLUME_OUTLINE,
+  AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_RING_TUBE_RADIUS, AEGIS_VOLUME_CUE_OFFSETS, AEGIS_VOLUME_OUTLINE,
   createAegisRingGeometry,
 } from '../src/aegis-volume-render.ts';
 
@@ -67,4 +67,13 @@ test('rendered Aegis torus geometry keeps a fixed world-unit outline thickness',
     assert.ok(Math.abs(bounds.max.y - AEGIS_RING_TUBE_RADIUS) < epsilon);
     geometry.dispose();
   }
+});
+
+test('mobile Aegis visibility samples use the rendered inner, outer, upper, and lower bounds', () => {
+  const { radius, halfWidth } = CLOSE_EVOLUTIONS.aegis;
+  assert.equal(AEGIS_VOLUME_CUE_OFFSETS.length, 4 * 16);
+  assert.deepEqual([...new Set(AEGIS_VOLUME_CUE_OFFSETS.map(point => Math.hypot(point.x, point.z).toFixed(3)))].sort(),
+    [(radius - halfWidth).toFixed(3), (radius + halfWidth).toFixed(3)].sort());
+  assert.deepEqual([...new Set(AEGIS_VOLUME_CUE_OFFSETS.map(point => point.alt))].sort((a, b) => a - b),
+    [-halfWidth, halfWidth]);
 });

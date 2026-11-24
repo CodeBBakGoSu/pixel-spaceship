@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { findTouchCueRect, pointBehindTouchControls, screenArrowRotation, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { findTouchCueRect, pointBehindTouchControls, screenArrowRotation, screenPointObscured, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -10,7 +10,7 @@ const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x
 const contains = (outer, inner) => inner.x >= outer.x && inner.y >= outer.y
   && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
 
-for (const [width, height] of sizes) for (const cueSize of [{ width: 48, height: 40 }, { width: 136, height: 40 }]) {
+for (const [width, height] of sizes) for (const cueSize of [{ width: 48, height: 40 }, { width: 160, height: 44 }]) {
   test(`${cueSize.width}px cue uses a free control-panel slot at ${width}x${height}`, () => {
     const layout = phoneLayout(width, height, safe, 'chase', true);
     const cue = findTouchCueRect(layout, cueSize);
@@ -50,4 +50,15 @@ test('direction follows hazard movement and rejects a zero-length direction', ()
   const diagonal = screenArrowRotation({ x: 100, y: 100 }, { x: 150, y: 200 });
   assert.ok(diagonal > 150 && diagonal < 160);
   assert.equal(screenArrowRotation({ x: 5, y: 5 }, { x: 5, y: 5 }), null);
+});
+
+test('projected bounds need a cue when outside the viewport or behind UI/ship overlays', () => {
+  const viewport = { width: 390, height: 844 };
+  const controls = { x: 0, y: 684, width: 390, height: 160 };
+  const ship = { x: 175, y: 560, width: 40, height: 40 };
+  assert.equal(screenPointObscured({ x: 195, y: 700, depth: 20 }, viewport, [controls]), true);
+  assert.equal(screenPointObscured({ x: -1, y: 320, depth: 20 }, viewport, []), true);
+  assert.equal(screenPointObscured({ x: 195, y: 580, depth: 20 }, viewport, [ship]), true);
+  assert.equal(screenPointObscured({ x: 195, y: 400, depth: 20 }, viewport, []), false);
+  assert.equal(screenPointObscured({ x: 195, y: 400, depth: -1 }, viewport, []), true);
 });

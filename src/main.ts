@@ -14,6 +14,8 @@ import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { CombatAudio } from './combat-audio.ts';
+import { AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS } from './aegis-volume-render.ts';
+import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
@@ -35,6 +37,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
+import { findTouchCueRect, screenPointObscured } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -73,6 +76,9 @@ const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), gearToas
 const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
+const aegisVolumeCue = $('#aegis-volume-cue');
+const aegisVolumeInner = $('#aegis-volume-cue-inner');
+let aegisCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -308,6 +314,20 @@ function setText(selector: string, copy: string): void {
   if (node.textContent !== copy) node.textContent = copy;
 }
 
+function aegisBoundText(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+}
+
+function updateAegisVolumeLabels(): void {
+  const halfWidth = CLOSE_EVOLUTIONS.aegis.halfWidth;
+  const inner = aegisBoundText(AEGIS_INNER_RADIUS), outer = aegisBoundText(AEGIS_OUTER_RADIUS);
+  const half = aegisBoundText(halfWidth);
+  aegisVolumeInner.setAttribute('r', String(14 * AEGIS_INNER_RADIUS / AEGIS_OUTER_RADIUS));
+  setText('#aegis-volume-cue-radial', t('hud.aegisRadial', { inner, outer }));
+  setText('#aegis-volume-cue-altitude', t('hud.aegisAltitude', { half }));
+  aegisVolumeCue.setAttribute('aria-label', t('hud.aegisBounds', { inner, outer, half }));
+}
+
 function readPilot(): Profile {
   try {
     return normalizeProfile(JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null'));
@@ -375,6 +395,7 @@ function applyLanguage(): void {
     if (el.dataset.label) el.setAttribute('aria-label', t(el.dataset.label as MessageKey));
     if (el.dataset.tooltip) el.title = t(el.dataset.tooltip as MessageKey);
   });
+  updateAegisVolumeLabels();
   setText('#guide-boss-copy', state.run ? `${t('guide.sortieTiming', sortieTiming)} ${t('guide.bossHint')}` : t('guide.bossHint'));
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
   refreshAudioControl();
@@ -432,6 +453,9 @@ function setRect(name: string, box: Rect): void {
 function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
+  aegisCueSlot = phone ? findTouchCueRect(phone, { width: 160, height: 44 }) : null;
+  if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
+  aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
@@ -466,6 +490,27 @@ function layoutFlight(): void {
   root.classList.toggle('phone-portrait', phone?.orientation === 'portrait');
   root.classList.toggle('phone-landscape', phone?.orientation === 'landscape');
   dirty = true;
+}
+
+function aegisOutlineObscured(): boolean {
+  if (!phone || !scene) return false;
+  const obstacles: Rect[] = [phone.hud, phone.boss, phone.radio, phone.objective, phone.radar, phone.alt, phone.controls];
+  if (phone.dashboard) obstacles.push(phone.dashboard);
+  const aircraft = scene.projectAirframe(state, 'player');
+  if (aircraft && Number.isFinite(aircraft.radius)) {
+    const radius = aircraft.radius + 3;
+    obstacles.push({ x: aircraft.x - radius, y: aircraft.y - radius, width: radius * 2, height: radius * 2 });
+  }
+  const point = { x: 0, z: 0, alt: 0 }, projected = { x: 0, y: 0, depth: 0 };
+  const viewport = { width: innerWidth, height: innerHeight };
+  for (const offset of AEGIS_VOLUME_CUE_OFFSETS) {
+    point.x = state.player.x + offset.x;
+    point.z = state.player.z + offset.z;
+    point.alt = state.player.altitude + offset.alt;
+    scene.projectContact(point, projected);
+    if (screenPointObscured(projected, viewport, obstacles)) return true;
+  }
+  return false;
 }
 
 function layoutSortieHud(): void {
@@ -576,6 +621,8 @@ function updateRadio(): void {
 
 function updateHud(readout: RadarReadout): void {
   updateBillDisplay(state, t);
+  aegisVolumeCue.hidden = !(touch && phone && aegisCueSlot && state.run?.evolutions.pods
+    && state.phase === 'playing' && !state.paused && state.view !== 'overhead' && aegisOutlineObscured());
   sortieStrip.hidden = !state.run;
   billCount.hidden = !state.run;
   if (state.run) {
