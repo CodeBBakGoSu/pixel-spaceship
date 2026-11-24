@@ -24,7 +24,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-25 00:27 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (replay golden follow-up; pending commit)
+### 2026-11-25 00:27 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (replay golden follow-up; f884192)
 - The full suite exposed one Survivors replay-hash mismatch after the reviewed transport/collision changes (`c22dfa...` → `52ac4c...`); updated only the gameplay golden, with the legacy hash retained. Focused `tests/s7f-replay.test.mjs` passed 2/2; final `npm test` passed 649/649.
 - `npm run build` passed (122 modules, 4.43s; Vite reported its >500 kB chunk advisory); source did not change after that build. `git diff --check` is clean. No balance simulation or visual/UI check. All fixes are local; push and CI verification pending.
 
