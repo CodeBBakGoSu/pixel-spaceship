@@ -3,7 +3,6 @@ import { ACE } from './data/ace.ts';
 import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
 import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
 import { loadSfx, SFX_CUE_GAIN, type SfxCue, type SfxSamples } from './sfx-samples.ts';
-import { aceDodgeWindow } from './ace.ts';
 import type { AceTell, StageState } from './stage-types.ts';
 
 const MUTE_KEY = 'aster-wing.sfx-muted.v1';
@@ -14,7 +13,10 @@ const TAU = 2 * Math.PI;
 const EXPLOSION_VOICES = 4;
 const ACE_LOCK_PULSE_TICKS = 12;
 const ACE_LOCK_WINDOW_TICKS = 6;
+const ACE_LOCK_WINDOW_PULSE_DELAY_TICKS = ACE_LOCK_WINDOW_TICKS + 2;
+const ACE_LOCK_TICK_SECONDS = 1 / 60;
 const ACE_LOCK_EFFECTS_DUCK = 0.06;
+const ACE_LOCK_WINDOW_EFFECTS_DUCK = 0.02;
 const ACE_LOCK_PULSE_GAIN = 2.0;
 const ACE_LOCK_WINDOW_GAIN = 2.4;
 const ACE_LOCK_PULSE_FREQUENCIES = [640, 850, 1125, 1490, 1980] as const;
@@ -37,7 +39,15 @@ interface AudioOutput {
   flight?: FlightAudio;
 }
 
-type AceLockVoice = { source: AudioBufferSourceNode; gain: GainNode };
+type AceLockCueKind = 'pulse' | 'window';
+type AceLockVoice = {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  kind: AceLockCueKind;
+  startAt: number;
+  endAt: number;
+};
+type AceLockCueEvent = { tick: number; kind: AceLockCueKind; progress: number };
 
 function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
   const pulses = ACE_LOCK_PULSE_FREQUENCIES.map(frequency => synthesize(context, 0.04, (elapsed, progress) => {
@@ -49,7 +59,7 @@ function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
     const noteTime = second ? elapsed - 0.065 : elapsed;
     if (!second && elapsed >= 0.05 || second && noteTime >= 0.05) return 0;
     const envelope = Math.max(0, Math.min(1, noteTime / 0.004, (0.05 - noteTime) / 0.008));
-    return 0.46 * Math.sin(TAU * (second ? 1_450 : 1_050) * noteTime) * envelope;
+    return 0.46 * Math.sin(TAU * (second ? 2_200 : 1_650) * noteTime) * envelope;
   });
   return { pulses, window };
 }
@@ -157,10 +167,13 @@ export class CombatAudio {
   private readonly debugSamples: boolean;
   private detuneSeed = 0x3aa1197b;
   private aceLockKey: string | null = null;
-  private aceLockLastTick = -1;
-  private aceLockNextPulseTick = -1;
   private aceLockWindowPlayed = false;
-  private aceLockVoice: AceLockVoice | undefined;
+  private aceLockWindowScheduled = false;
+  private aceLockCueSchedulePending = false;
+  private aceLockSuppressedThroughTick = -1;
+  private aceLockScheduleAnchorTick = 0;
+  private aceLockScheduleAnchorTime = 0;
+  private readonly aceLockVoices: AceLockVoice[] = [];
   private aceLockEffectsDucked = false;
 
   constructor(debugSamples = false) {
@@ -296,11 +309,12 @@ export class CombatAudio {
     const tell = boss?.tell;
     if (!boss || boss.hp <= 0 || boss.entry || boss.defeatedAt != null || state.phase !== 'playing'
       || !tell || tell.kind === 'roll') {
-      this.aceLockKey = null;
-      this.aceLockNextPulseTick = -1;
-      this.aceLockWindowPlayed = false;
-      this.aceLockLastTick = state.tick;
       this.stopAceLockVoice();
+      this.aceLockKey = null;
+      this.aceLockWindowPlayed = false;
+      this.aceLockWindowScheduled = false;
+      this.aceLockCueSchedulePending = false;
+      this.aceLockSuppressedThroughTick = -1;
       return;
     }
 
@@ -308,30 +322,33 @@ export class CombatAudio {
     const windowTick = tell.until - ACE.lock.dodgeTicks;
     const audible = active && !this.isMuted && this.level > 0 && !this.suspended
       && !!this.output && this.output.context.state === 'running';
-    if (key !== this.aceLockKey) {
+    const keyChanged = key !== this.aceLockKey;
+    if (keyChanged) {
       this.stopAceLockVoice(false);
       this.aceLockKey = key;
-      this.aceLockLastTick = tell.since - 1;
-      this.aceLockWindowPlayed = aceDodgeWindow(tell, state.tick);
-      this.aceLockNextPulseTick = this.aceLockWindowPlayed ? state.tick + ACE_LOCK_WINDOW_TICKS : tell.since;
+      this.aceLockWindowPlayed = false;
+      this.aceLockWindowScheduled = false;
+      this.aceLockCueSchedulePending = true;
+      this.aceLockSuppressedThroughTick = tell.since - 1;
     }
 
-    this.setAceLockEffectsDuck(audible);
-    const enteredWindow = !this.aceLockWindowPlayed && this.aceLockLastTick < windowTick && state.tick >= windowTick;
-    const progress = this.aceLockProgress(tell, state.tick);
-    const interval = this.aceLockInterval(progress);
-    if (enteredWindow) {
-      this.aceLockWindowPlayed = true;
-      this.aceLockNextPulseTick = state.tick + ACE_LOCK_WINDOW_TICKS + 2;
-      if (audible) this.playAceLockCue('window');
-      else this.stopAceLockVoice();
-    } else if (state.tick >= this.aceLockNextPulseTick) {
-      this.aceLockNextPulseTick = state.tick + interval;
-      if (audible) this.playAceLockCue('pulse', progress);
-      else this.stopAceLockVoice();
-    } else if (!audible) this.stopAceLockVoice();
-
-    this.aceLockLastTick = state.tick;
+    if (!audible) {
+      this.aceLockSuppressedThroughTick = Math.max(this.aceLockSuppressedThroughTick, state.tick);
+      this.stopAceLockVoice();
+      return;
+    }
+    this.setAceLockEffectsDuck(true, false, keyChanged);
+    const now = this.output?.context.currentTime;
+    if (!this.aceLockCueSchedulePending && now !== undefined) {
+      const predictedTick = this.aceLockScheduleAnchorTick
+        + (now - this.aceLockScheduleAnchorTime) / ACE_LOCK_TICK_SECONDS;
+      if (Math.abs(state.tick - predictedTick) > 1.5) {
+        this.cancelFutureAceLockCues(now);
+        this.setAceLockEffectsDuck(true, false, true);
+        this.aceLockCueSchedulePending = true;
+      }
+    }
+    if (this.aceLockCueSchedulePending) this.scheduleAceLockCues(tell, state.tick, windowTick);
   }
 
   finishAceLockFire(): void {
@@ -339,63 +356,127 @@ export class CombatAudio {
     this.setAceLockEffectsDuck(false, true);
   }
 
-  private aceLockProgress(tell: AceTell, tick: number): number {
-    const windowTick = tell.until - ACE.lock.dodgeTicks;
-    const span = Math.max(1, windowTick - tell.since);
-    return Math.max(0, Math.min(1, (tick - tell.since) / span));
-  }
-
   private aceLockInterval(progress: number): number {
     return Math.round(ACE_LOCK_PULSE_TICKS - (ACE_LOCK_PULSE_TICKS - ACE_LOCK_WINDOW_TICKS) * progress);
   }
 
-  private playAceLockCue(kind: 'pulse' | 'window', progress = 0): void {
+  private aceLockCueTimeline(tell: AceTell, windowTick: number): AceLockCueEvent[] {
+    const cues: AceLockCueEvent[] = [];
+    const span = Math.max(1, windowTick - tell.since);
+    let tick = tell.since;
+    while (tick < windowTick) {
+      const progress = Math.max(0, Math.min(1, (tick - tell.since) / span));
+      cues.push({ tick, kind: 'pulse', progress });
+      tick += this.aceLockInterval(progress);
+    }
+    cues.push({ tick: windowTick, kind: 'window', progress: 1 });
+    for (tick = windowTick + ACE_LOCK_WINDOW_PULSE_DELAY_TICKS; tick <= tell.until; tick += ACE_LOCK_WINDOW_TICKS) {
+      cues.push({ tick, kind: 'pulse', progress: 1 });
+    }
+    return cues;
+  }
+
+  private scheduleAceLockCues(tell: AceTell, stateTick: number, windowTick: number): void {
     const output = this.output;
-    if (!output || output.context.state !== 'running') return;
+    if (!output) return;
     const now = output.context.currentTime;
-    const replaced = this.stopAceLockVoice(false);
+    this.aceLockScheduleAnchorTick = stateTick;
+    this.aceLockScheduleAnchorTime = now;
+    if (stateTick <= tell.until) {
+      const windowAt = now + Math.max(0, windowTick - stateTick) * ACE_LOCK_TICK_SECONDS;
+      output.effects.gain.setTargetAtTime(ACE_LOCK_WINDOW_EFFECTS_DUCK, windowAt, 0.004);
+    }
+    let previous = this.aceLockVoices.filter(voice => voice.endAt > now).pop();
+    for (const cue of this.aceLockCueTimeline(tell, windowTick)) {
+      if (cue.tick <= this.aceLockSuppressedThroughTick) {
+        if (cue.kind === 'window') this.aceLockWindowPlayed = true;
+        continue;
+      }
+      if (cue.tick < stateTick && (cue.kind !== 'window' || stateTick > tell.until)) continue;
+      if (cue.kind === 'window' && (this.aceLockWindowPlayed || this.aceLockWindowScheduled)) continue;
+      const when = now + Math.max(0, cue.tick - stateTick) * ACE_LOCK_TICK_SECONDS;
+      let startAt = when;
+      if (previous && previous.endAt > when) {
+        previous.gain.gain.setTargetAtTime(0, when, 0.002);
+        previous.source.stop(when + 0.006);
+        previous.endAt = when + 0.006;
+        startAt += 0.006;
+      }
+      const voice = this.playAceLockCue(cue.kind, cue.progress, startAt);
+      if (!voice) continue;
+      if (cue.kind === 'window') this.aceLockWindowScheduled = true;
+      previous = voice;
+    }
+    this.aceLockCueSchedulePending = false;
+  }
+
+  private cancelFutureAceLockCues(now: number): void {
+    for (let index = this.aceLockVoices.length - 1; index >= 0; index--) {
+      const voice = this.aceLockVoices[index];
+      if (voice.startAt <= now) continue;
+      this.aceLockVoices.splice(index, 1);
+      if (voice.kind === 'window') this.aceLockWindowScheduled = false;
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setTargetAtTime(0, now, 0.002);
+      voice.source.stop(now + 0.006);
+    }
+  }
+
+  private playAceLockCue(kind: AceLockCueKind, progress: number, startAt: number): AceLockVoice | undefined {
+    const output = this.output;
+    if (!output || output.context.state !== 'running') return undefined;
     const source = output.context.createBufferSource();
     const gain = output.context.createGain();
-    const voice: AceLockVoice = { source, gain };
-    source.buffer = kind === 'window'
+    const buffer = kind === 'window'
       ? output.aceLockCues.window
       : output.aceLockCues.pulses[Math.round(progress * (output.aceLockCues.pulses.length - 1))];
+    const voice: AceLockVoice = { source, gain, kind, startAt, endAt: startAt + buffer.duration };
+    source.buffer = buffer;
     gain.gain.value = kind === 'window' ? ACE_LOCK_WINDOW_GAIN : ACE_LOCK_PULSE_GAIN;
     source.connect(gain);
     gain.connect(output.master);
     source.onended = () => {
-      if (this.aceLockVoice === voice) this.aceLockVoice = undefined;
+      const index = this.aceLockVoices.indexOf(voice);
+      if (index >= 0) this.aceLockVoices.splice(index, 1);
+      if (voice.kind === 'window') {
+        this.aceLockWindowScheduled = false;
+        if (output.context.currentTime >= voice.startAt) this.aceLockWindowPlayed = true;
+      }
       source.disconnect();
       gain.disconnect();
     };
-    this.aceLockVoice = voice;
-    source.start(now + (replaced ? 0.006 : 0));
+    this.aceLockVoices.push(voice);
+    source.start(startAt);
+    return voice;
   }
 
-  private stopAceLockVoice(restoreEffects = true): boolean {
-    const voice = this.aceLockVoice;
+  private stopAceLockVoice(restoreEffects = true): void {
+    const voices = this.aceLockVoices.splice(0);
     const output = this.output;
-    if (voice) {
-      this.aceLockVoice = undefined;
-      if (output) {
-        const now = output.context.currentTime;
+    this.aceLockCueSchedulePending = true;
+    if (output) {
+      const now = output.context.currentTime;
+      for (const voice of voices) {
+        if (voice.kind === 'window') {
+          this.aceLockWindowScheduled = false;
+          if (voice.startAt <= now) this.aceLockWindowPlayed = true;
+        }
         voice.gain.gain.setTargetAtTime(0, now, 0.002);
         voice.source.stop(now + 0.006);
       }
     }
     if (restoreEffects) this.setAceLockEffectsDuck(false);
-    return !!voice && !!output;
   }
 
-  private setAceLockEffectsDuck(ducked: boolean, immediate = false): void {
-    if (this.aceLockEffectsDucked === ducked && !(immediate && !ducked)) return;
+  private setAceLockEffectsDuck(ducked: boolean, immediate = false, force = false): void {
+    if (this.aceLockEffectsDucked === ducked && !(immediate && !ducked) && !force) return;
     this.aceLockEffectsDucked = ducked;
     const output = this.output;
     if (!output) return;
     const now = output.context.currentTime;
+    output.effects.gain.cancelScheduledValues(now);
     if (ducked) output.effects.gain.setTargetAtTime(ACE_LOCK_EFFECTS_DUCK, now, 0.004);
     else if (immediate) {
-      output.effects.gain.cancelScheduledValues(now);
       output.effects.gain.setValueAtTime(1, now);
     } else this.restoreEffects(output, now);
   }

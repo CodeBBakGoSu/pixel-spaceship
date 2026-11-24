@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (UI report for `1b0518f`; tick-scheduled warning)
+- UI-agent report on `1b0518f`: outer radius 143→53px over the first 18 ticks, 27.5px at the dodge window, and 22px at fire; same-tick `1b652cd` baseline was 49.5px and inside the ship. W/S+Space, Shift+Space and C passed; 320/375px layouts passed. Pitch rise was heard, but injected hits partly masked clarity. The reported 5–8fps machine delayed the cue by 11 ticks; 60fps comparison was not verified. Automatic weapons were not runtime-tested. Full `npm test` on `1b0518f` passed 605/605.
+- Pre-scheduled Ace pulses and the dodge accent from simulation ticks, with clock-drift rebasing and cancellation of future sources/duck automation on pause, mute, cancellation and fire. The existing 40ms 640/850/1125/1490/1980Hz pulse bank, cadence, 18-tick window, cue gains, master/headroom/limiter, fire restore and gameplay are unchanged; the two-note accent is brighter (1650→2200Hz), and effects duck further to 0.02 only in the window. The schedule follows the logical tick; at low FPS the visible ring still waits for a rendered frame, so the audio can precede its first visible window frame by up to one frame.
+- Verification on this candidate: focused combat-audio/Ace tests passed 40/40; build passed (120 modules, 2.57 s). The full suite and a live browser/audio listen were not repeated; post-push tester retest is pending. The PR8 owner supplied the Phoenix fixture URL and a combined Phoenix Lv5/Bomb Bay Lv1 checkpoint recipe; neither runtime setup was browser-verified here. P1 remains separate; no base merge or deployment.
+- State: review and final audio/sync listening pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (reference-informed audio update)
 - The tester's Forge reference confirms an incoming warning that rises from approximately 640Hz to 1980Hz. Updated only the cached Ace incoming-lock pulse bank to five 40ms tones (640/850/1125/1490/1980Hz), selected by lock progress through the existing pre-window edge.
 - This is inspired by the incoming alarm's low-to-high urgency, not a literal copy of its 11Hz timing/rhythm and not the distinct player-target 990→1480Hz warble. Existing pulse cadence, 2.0 gain, 0.06 effects duck, separate 1050→1450Hz dodge-window cue, fire restoration, master/headroom/limiter and gameplay remain unchanged.
