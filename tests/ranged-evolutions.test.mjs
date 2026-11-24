@@ -8,6 +8,7 @@ import { advanceRangedShot, advanceRangedWeapons } from '../src/ranged-weapons.t
 import { BANDS } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
+import { pointSegmentDistanceSquared3d } from '../src/spatial.ts';
 
 const ground = () => 35;
 const [low, mid, high] = BANDS;
@@ -61,6 +62,8 @@ test('Prism Lance charges and strikes along a terrain-clipped three-ray 3D fan',
   state.player.altitude = mid + 8;
   const sourceAltitude = state.player.altitude;
   const leading = contact(state, 0, 69, sourceAltitude);
+  const overlapping = contact(state, 0, 10, sourceAltitude);
+  overlapping.hp = 500;
   const wrongHeight = contact(state, 0, 69, sourceAltitude + 80);
   const behindWall = contact(state, 0, 130, sourceAltitude);
   const flyingIn = contact(state, 0, 65, sourceAltitude);
@@ -83,6 +86,17 @@ test('Prism Lance charges and strikes along a terrain-clipped three-ray 3D fan',
   assert.equal(beams.length, 3);
   assert.deepEqual(beams.map(beam => beam.from.alt), [sourceAltitude, sourceAltitude, sourceAltitude]);
   assert.ok(beams.every(beam => beam.to.z < behindWall.z));
+  const afterglows = state.weaponFx.filter(fx => fx.kind === 'rail-glow');
+  assert.equal(afterglows.length, 3);
+  assert.ok(afterglows.every(glow => pointSegmentDistanceSquared3d(overlapping, glow.from, glow.to)
+    <= (glow.radius + 6) ** 2), 'the target overlaps all three afterglow beams');
+  const afterDirectHit = overlapping.hp;
+  state.tick++;
+  advanceRangedWeapons(state, ridge);
+  assert.equal(overlapping.hp, afterDirectHit - afterglows[0].damage,
+    'overlapping Prism afterglows damage a target only once per volley');
+  assert.strictEqual(afterglows[0].hits, afterglows[1].hits);
+  assert.strictEqual(afterglows[1].hits, afterglows[2].hits);
 });
 
 test('Skybreaker damages the bounded 3D blast volume and launches one generation of three secondary shells', () => {

@@ -179,6 +179,7 @@ function advanceRail(state: StageState, source: Position, level: number, ground:
   }
   if (repeat !== undefined || (charge !== null && state.tick >= charge)) {
     const damage = weaponDamage(state, 'rail', rail.damage);
+    const sharedAfterglowHits = state.run?.evolutions?.rail === 'prism-lance' ? [] : null;
     for (const target of contacts) {
       if (onRail(target)) hitTarget(state, target, damage, 'rail', source);
     }
@@ -186,7 +187,7 @@ function advanceRail(state: StageState, source: Position, level: number, ground:
       state.weaponFx.push({ kind: 'rail-beam', ...line, radius: width, until: state.tick + BEAM_TICKS });
       if (level >= rail.lingerAt) state.weaponFx.push({
         kind: 'rail-glow', ...line, radius: width, until: state.tick + rail.lingerTicks,
-        damage: damage * rail.lingerDamageScale, hits: [],
+        damage: damage * rail.lingerDamageScale, hits: sharedAfterglowHits ?? [],
       });
     }
     state.railChargeAt = null;
