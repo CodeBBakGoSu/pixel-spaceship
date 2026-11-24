@@ -274,6 +274,27 @@ test('reduced motion suppresses optional projectile, wake, orbit and flare movem
   assert.ok(normal.arcs.some(([x, y]) => x === 10 && y === 20));
 });
 
+test('ion wake strokes never bridge interleaved lanes', () => {
+  const observed = state(8);
+  observed.ionWake = [
+    { x: 1, z: 11, alt: 2, until: 40, lane: 0 },
+    { x: 2, z: 12, alt: 2, until: 40, lane: 1 },
+    { x: 3, z: 13, alt: 2, until: 40, lane: 0 },
+    { x: 4, z: 14, alt: 2, until: 40, lane: 0 },
+    { x: 5, z: 15, alt: 2, until: 40, lane: 1 },
+    { x: 6, z: 16, alt: 2, until: 40, lane: 1 },
+  ];
+  const rendered = context();
+  new SortieVfx(TICKS_PER_SECOND).draw(rendered, observed,
+    point => ({ x: point.x * 10, y: point.z * 10 }), () => 0, null);
+  const wakeStrokes = rendered.operations.filter(operation => operation.type === 'stroke'
+    && operation.path.some(command => command[0] === 'lineTo'));
+  assert.deepEqual(wakeStrokes.map(operation => operation.path), [
+    [['moveTo', 30, 130], ['lineTo', 40, 140]],
+    [['moveTo', 50, 150], ['lineTo', 60, 160]],
+  ]);
+});
+
 test('optional VFX are masked after drawing around hostile bullets, dive corridors and boss silhouette', () => {
   const vfx = new SortieVfx(TICKS_PER_SECOND), observed = state(1);
   observed.shots = [

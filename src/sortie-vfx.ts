@@ -403,7 +403,7 @@ export class SortieVfx {
     const start = Math.max(1, wake.length - Math.round(MAX_WAKE_SEGMENTS * density));
     for (let i = start; i < wake.length; i++) {
       const a = wake[i - 1], b = wake[i];
-      if (b.until < state.tick) continue;
+      if (a.lane !== b.lane || b.until < state.tick) continue;
       const from = project(a), to = project(b);
       if (!from || !to) continue;
       line(ctx, from.x, from.y, to.x, to.y, i % 2 ? '#71e0cc' : '#d4fff5', 2 * unit,
