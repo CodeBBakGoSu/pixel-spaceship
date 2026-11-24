@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`, `7a6adb5`; based on PR #10 `fa45f64`)
+- Added a direction-only cue to the unused safe touch-panel area when the live dive warning's projected target is covered; the world target ring and gameplay verdict remain unchanged.
+- Mobile layout/helper tests passed 57/57; build passed (122 modules, 2.64s; nonfatal chunk-size advisory). State: PR #10 visual QA pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`; based on PR #10 `fa45f64`)
 - Added shared touch-safe cue placement and screen-direction helpers with 390×844 / 844×390 regression coverage; PR #10 and #15 UI wiring remains in progress.
 - Mobile layout tests passed 57/57 and build passed (122 modules, 2.64s). State: in progress.
