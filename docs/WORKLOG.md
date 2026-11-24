@@ -24,6 +24,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`3e68ea0`, based on `444076d`)
+- Final UI report on `444076d`: at forced 4fps, the prior tick 28823 was before window tick 28834; trusted C arrived 2.4ms after the scheduled cue, and the next frame at tick 28835 canceled the tell with zero missiles. An output-compensated C about 5ms after estimated acoustic tick 28836 also canceled. Measured cue spacing was 398.896ms vs 398.866ms scheduled at normal rate and 433.708ms vs 433.696ms at 4fps. `getOutputTimestamp` estimates the acoustic window at +25.9ms normal / -23.3ms at 4fps relative to the first near-window frame; this is a one-frame estimate, not a microphone-calibrated AV offset.
+- In the overlap window, the 1650/2200Hz components measured -17.4dBFS against local residual levels of -44.7/-40.7dBFS; peak was -13.34dBFS with no clipping. The UI report described a neutral foreground chime and muffled background. Earlier automated listening disagreed, so this is capture-specific, not a universal audibility claim. W/S+Space, Shift+Space, C+Space grace, pause/mute/cancel/stale-source and initial 640Hz tests passed. Phoenix Lv5/Bomb Bay Lv1 no-key automatic spawning passed; unlock and bomb impact damage were not tested.
+- The registered 57s video is silent; the supplied WAV is separate and unsynchronized: [viewer](https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=2cdc221c-302e-435a-8a53-9f57e5962f8e).
+- Full `npm test` on `444076d` passed 628/628 (123.9s). The 120Hz regression was subsequently tightened from window-start to fire-tick cancellation and passed targeted 1/1; this changed tests only. No rebuild was needed: the production build on `444076d` passed (120 modules, 3.05s).
+- State: final UI evidence and full suite recorded; awaiting clean review. No base merge or deployment.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2005000`, based on `88fb590`)
 - Fixed the carry/anchor overlap: accepted rAF elapsed plus carry still determines the number of fixed steps, while active Ace audio maps step i directly to the retained schedule time for `state.tick + i + 1`. Without an audio anchor, step times retain the rAF-prefix and hitstop-floor mapping; elapsed/FPS timing and the 0.2s cap are unchanged.
 - Added the 120Hz zero-step/8.33ms-carry case: C at 1012.67ms now maps to 1016.67ms instead of the incorrect 1008.33ms and cancels at the fire tick. Tests also cover 90/144/240Hz counts, actual scheduled source timing at cue+2ms near fire, 4/20/40ms render costs, and retain the 4fps 12-step cap/cue regression.
