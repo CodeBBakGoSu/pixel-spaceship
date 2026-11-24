@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:02 KST · 데븐 봇 · review finding 0003
+- Reproduced level-five drone target acquisition across altitude: three bolts spawned at altitudes 110/120/130 toward a target 45 m above the player, but all had `vy=0` and the target remained at 100 HP after 90 ticks.
+- Survivors drone bolts now use a normalized 3D direction to the acquired target; Legacy keeps its horizontal shot path.
+- Verification: `node --test tests/drone-aim.test.mjs` passed 1/1; the existing level-five drone case in `tests/loadout.test.mjs` passed 1/1.
+
 ### 2026-11-24 23:59 KST · 데븐 봇 · review finding 0002
 - Reproduced with a Survivors state at the first Bill offer (tick 3600): weak bot seed 1 caused `state.bills.active` to become `null`; at the deadline `finishBillTick` returned `null`, interest stayed false, and XP scaling stayed 1. Weak seed 9 handled the Bill and correctly produced an unpaid expiry with interest and 0.75 XP scale, confirming the failure was on the ignored-Bill input path.
 - `perceive` returns the original state for Survivors, so assigning the hidden-Bill view to it mutated simulation state. The bot now gets a shallow observation copy with a hidden Bill; Legacy retains its existing band-filtered perception.
