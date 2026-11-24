@@ -76,6 +76,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Read `physics-tuning`, the open-game shared contract, and `projectile-hitscan`. Simulation keeps `{x,z,alt}`; VFX uses the existing Z inversion only at its renderer boundary. Keep pickup/drop events and magnet collection under their owner; high-recovery progress will count settled pickups only.
 - State: in progress; tests/build not run yet; no commit or push.
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795524682-minute-waves-enemies (independent candidate based on `09e2890`)
+- Review fixes: deterministic isolated introductions and 6:00–9:00 cleanup; only Crosswing pairs; continuous-altitude Manta; delayed/interrupted 3D Mender repair with dotted tether; reservation-first Diver; danger-interval threat budgets; increasing elite Aegis share/volley without changing Gnat HP.
+- Delivery fixes: Manta captures player height, warns on a frozen 3D crossing, and exits horizontally at that altitude. Intro isolation cancels other tells/volleys, removes prior intro types, and retains an intro actor until its first accepted attack. Minute-six Crosswing/Twin Chaser warnings share a serialized slot even when threat reservation is delayed. Repair-only compatibility remains 2 hull at 105/225/345/465 seconds; those ticks no longer create phase spawn lulls or lull announcements.
+- Replay terminal hashes were rebaselined for the intentional phase-spawn cadence change; the existing fidelity-on/off parity checks remain in the suite.
+- Midboss call order: after the fixed tick advances and before regular spawns, the external owner polls `consumeMidbossCue(state)`; on a cue it starts the encounter, then calls `finishMidbossEncounter(state, {id, endedAt, outcome})` exactly once on the actual terminal tick. The owner checks `midbossSpawnsBlocked(state)` while the 15-second post-result rest runs. Threat callers pass `activeFromTick`/`activeUntilTick` for their tell and danger span; the API default covers the 3.75-second bolt lifetime. No carrier/reward path was changed.
+- Red Kite is the Ace: first encounter remains 8:00 and its reengagement intensifies at 9:00; there is no boss-timing conflict.
+- Verification: focused regressions 41/41; `npm test` 647/647; `npm run build` `✓ 124 modules transformed.` / `✓ built in 3.01s` (non-blocking >500 kB chunk advisory); `git diff --check` clean.
+- Renderer visuals/screenshots, balance simulation, external cue consumption, and balance-bot handoff remain unverified. No merge or deployment.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.
@@ -462,3 +471,11 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - Ace-lock warning uses one 1125Hz, 32ms band-limited square-like beep; the pulse gaps shorten. The final 1650/2200Hz accent is unchanged.
 - Verification: focused audio/Ace/input tests 68/68; build 120 modules. Trusted C canceled the Ace attack with 0 shots. In the mixed WAV, the accent measures −17.4/−17.5dBFS with off-tone residual −45.9/−41.2dBFS; the preceding pulse ends 1.333ms before the accent, with peak −13.35dBFS and 0 clipped samples. Automated subjective flags for distortion/accent clarity were not corroborated by these measurements. The 57s viewer capture is silent; its separate WAV is unsynchronized: https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=ccdecfff-5e94-4857-9ae3-6fda9fb76db9
 - State: renderer-proto-only update; no PR, main merge, or deployment.
+
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (review corrections; base `8e1c805`)
+- Corrected candidate regressions: reset the phase director on restart; integrate escort clear-out movement; migrate legacy checkpoint threat/director/schedule/repair state; align Crosswing side frames and verify both paths cross; keep pending midboss cues from blocking spawns while preserving active/rest gates; and raise Manta above its captured player-height endpoint with terrain-aware climb ownership.
+- Seed-3 `stepStage` Manta trace: reservation 260s (tick 15600), actual spawn tick 15600, first pass warning/attack tick 16246 (270.77s); pass start altitude 249.12, captured endpoint altitude 189.12, horizontal exit starts tick 16325 and completes tick 16380 at the captured height. The regression uses the natural seed-3 spawn and full stage loop, with firing/crossfire suppressed after the scheduled spawn to isolate its flight path; scheduled intro time is not asserted as actual spawn/attack time.
+- Focused tests: new enemies 10/10, phase director 6/6, checkpoint 10/10, Crosswing path 1/1, midboss schedule 2/2, replay 2/2, swarm events 5/5.
+- Full `npm test`: 652/653 passed. Remaining failure is the bot-sim survival-order assertion (`average` median 515.23s, `weak` median 552.72s); no balance retuning or weakened assertion was applied. `npm run build`: 124 modules transformed, built in 4.25s; existing >500 kB chunk advisory remains. `git diff --check` is clean.
+- Reviewed the repo blueprint (`npm install` maintenance); no dependency or setup changes were made. Visual/UI rendering was not checked.
+- State: independent candidate only; no merge or deployment.

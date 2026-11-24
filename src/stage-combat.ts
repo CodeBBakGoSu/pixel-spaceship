@@ -20,7 +20,9 @@ import { advanceRangedShot } from './ranged-weapons.ts';
 import { rollBoltImmune, rollParryActive } from './roll.ts';
 import { distance3d, distanceSquared3d, dot3d, normalize3d, playerSpatialPoint, segmentSphereIntersection3d, spheresOverlap3d, subtract3d } from './spatial.ts';
 
-export const TICKS_PER_SECOND = 60;
+import { TICKS_PER_SECOND } from './simulation-time.ts';
+
+export { TICKS_PER_SECOND };
 export const STEP = 1 / TICKS_PER_SECOND;
 export { BANDS } from './bands.ts';
 export const HIT_WINDOW = 8;

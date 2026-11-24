@@ -10,7 +10,7 @@ const ground = () => 35;
 const start = (mode = 'survivors') => createStage(parseStageOptions(`?mode=${mode}&t=0`), ground);
 
 test('each phase replaces the designated shares of standard Gnats', () => {
-  const shares = [[0, 0], [0, 10], [15, 10], [25, 15], [25, 20]];
+  const shares = [[0, 0], [0, 0], [0, 10], [0, 10], [15, 10], [15, 10], [25, 15], [25, 15], [25, 20], [25, 20]];
   for (const [index, phase] of PHASES.entries()) {
     const rolls = Array.from({ length: 100 }, (_, i) => gnatVariantAt(phase, (i + 0.5) / 100));
     assert.deepEqual(['armored', 'sting'].map(v => rolls.filter(r => r === v).length), shares[index]);
@@ -21,8 +21,8 @@ test('each phase replaces the designated shares of standard Gnats', () => {
       for (let i = 0; i < cap; i += 10) spawnSwarm(state, phase, 12, ground, rng);
       assert.equal(state.enemies.length, cap);
       const seen = new Set(state.enemies.map(e => e.gnatVariant));
-      assert.equal(seen.has('armored'), index >= 2);
-      assert.equal(seen.has('sting'), index >= 1);
+      assert.equal(seen.has('armored'), shares[index][0] > 0);
+      assert.equal(seen.has('sting'), shares[index][1] > 0);
       assert.ok(state.enemies.every(e => e.kind === 'gnat' && e.hp === (e.gnatVariant === 'armored' ? 3 : 1)));
     }
   }

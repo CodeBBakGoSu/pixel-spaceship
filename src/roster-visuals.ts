@@ -15,6 +15,7 @@ const SIGNAL_COLORS = {
   gun: 0xffac85, missile: 0xff655d, roll: 0xe6a7ff, snipe: 0xff77ae, flak: 0xffca68,
   tail: 0xff8775, strafe: 0xace5ff, dive: 0xffd99b, mine: 0xffb978, aegis: 0x9ff8ff,
   carrier: 0xffda83, gnat: 0xffecbf,
+  charge: 0xffa36f, crossing: 0x8edcff, pass: 0xc1a7ff, repair: 0x9effba,
 } as const;
 const DESKTOP_GNAT_MARKS = Math.ceil(SWARM_CAPS.desktop / 10);
 const MOBILE_GNAT_MARKS = Math.ceil(SWARM_CAPS.mobile / 10);
@@ -174,6 +175,10 @@ export class RosterVisuals {
       const radius = tell.kind === 'carrier' ? 11 : tell.kind === 'gnat' ? 3.5 : 8;
       this.marker(enemy, alt, radius, flat);
       if ('target' in tell && tell.target) this.tracer(enemy, tell.target, flat ? alt : undefined);
+      if (tell.kind === 'repair') {
+        const target = state.enemies.find(candidate => candidate.id === tell.targetId && candidate.hp > 0);
+        if (target) this.tracer(enemy, target, flat ? alt : undefined, 10);
+      }
     }
   }
 

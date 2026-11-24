@@ -1,5 +1,7 @@
 import type { Segment } from './camera.ts';
 import type { EnemyKind, NewEnemyKind } from './enemy-kinds.ts';
+import type { MidbossScheduleState } from './midboss-schedule.ts';
+import type { ThreatBudgetState } from './threat-budget.ts';
 import type { LandmarkId, WorldSite } from './reach.ts';
 import type { FlightBand } from './bands.ts';
 import type { ChestId, DraftChoiceId, EvolutionId, GearId, WeaponId } from './data/items.ts';
@@ -108,6 +110,7 @@ export type Enemy = Position & {
   kind: EnemyKind;
   gnatVariant?: GnatVariant;
   hp: number;
+  maxHp?: number;
   yaw: number;
   vx: number;
   vz: number;
@@ -119,6 +122,8 @@ export type Enemy = Position & {
   offset: number;
   entry?: FlyIn;
   leaveAt?: number;
+  directorIntro?: true;
+  introAttackDone?: true;
   eventFlight?: Point;
   carrier?: ChestId;
   killCredit?: KillCredit;
@@ -127,6 +132,29 @@ export type Enemy = Position & {
   // --- S7e lane ---
   tell?: EnemyTell;
   formation?: { leader: number; side: number };
+  crosswing?: {
+    mate: number;
+    side: -1 | 1;
+    sideYaw?: number;
+    phase?: 'warning' | 'crossing' | 'recovery' | 'cancelled';
+    until?: number;
+    isolationUntil?: number;
+    target?: Point;
+  };
+  elite?: true;
+  eliteVolley?: { started: number; secondAt: number };
+  escortClearYaw?: number;
+  charge?: { phase: 'warning' | 'charging' | 'recovery'; yaw: number; target: Point; until: number };
+  manta?: {
+    phase: 'approach' | 'climb' | 'warning' | 'pass' | 'exit';
+    playerHeight: number;
+    passAltitude: number;
+    approach: Point;
+    passStart?: Position;
+    passEnd?: Position;
+    exitTarget?: Point;
+    until?: number;
+  };
   fanFired?: boolean;
   farTicks?: number;
   flightSpeed?: number;
@@ -152,6 +180,8 @@ export type Enemy = Position & {
 export type EnemyTell = { until: number; started?: number } & (
   { kind: 'snipe'; target?: Position } |
   { kind: 'gun' | 'strafe' | 'tail' | 'mine' | 'aegis' | 'carrier' | 'gnat' } |
+  { kind: 'charge' | 'crossing' | 'pass'; target: Position } |
+  { kind: 'repair'; targetId: number } |
   (Position & { kind: 'flak' })
 );
 export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true;
@@ -252,12 +282,19 @@ export type StageState = {
   daily: boolean;
   hangar: ReturnType<typeof hangarLoadout>;
   metrics: RunMetrics;
+  threatBudget?: ThreatBudgetState;
+  midbossSchedule?: MidbossScheduleState;
+  phaseDirector?: {
+    intro: number; six: boolean; seven: boolean; manta: boolean; isolationUntil: number; introIds: number[];
+    sixTellUntil: number; sixCrosswingStarted: boolean; sixTwinStarted: boolean;
+  };
   killBandTicks: [number, number, number];
   killAltitudeTicks?: { tick: number; alt: number }[];
   ejectorUsed: boolean;
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;
-  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'recovery'; until: number };
+  phaseRepairMask?: number;
+  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'rest'; until: number };
   bills: BillState;
   lastHitTick: number;
   chests: ChestState;

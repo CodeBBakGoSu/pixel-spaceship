@@ -49,12 +49,12 @@ test('the five Bills are offered on the design beats and expire at their exact d
   assert.deepEqual(state.streams, streams);
 });
 
-test('first levy counts three forward kills at any altitude and rejects rearward kills', () => {
+test('First Levy counts forward kills at every altitude, rejects rearward kills, and includes the deadline tick', () => {
   const state = game();
   beat(state, 60);
-  kill(state);
-  kill(state);
-  kill(state, 2, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z - 10 });
+  kill(state, 0);
+  kill(state, 2);
+  kill(state, 1, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z - 10 });
   assert.equal(state.bills.active.progress, 2);
   kill(state, 0, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z + 10 });
   assert.equal(state.bills.active.progress, 3);
@@ -124,24 +124,26 @@ test('Rear Guard skips a full non-rear loadout and advances to the next schedule
   assert.equal(withOpenSlot.bills.active?.id, BILLS[2].id);
 });
 
-test('High Recovery counts settled orb collections at any altitude', () => {
+test('High Recovery counts collected salvage with positive XP at any altitude', () => {
   const state = game();
   beat(state, 345);
-  noteBillPickup(state);
-  assert.equal(state.bills.active.progress, 1);
-  for (let id = 1; id <= 8; id++) noteBillPickup(state);
+  const pickup = { id: 60, x: 0, z: 0, alt: 125, xp: 50, born: 0 };
+  noteBillPickup(state, { ...pickup, xp: 0 });
+  assert.equal(state.bills.active.progress, 0);
+  for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: id % 2 ? 75 : 180 });
   assert.equal(state.bills.active.progress, 9);
   assert.equal(finishBillTick(state), null);
-  noteBillPickup(state);
+  noteBillPickup(state, { ...pickup, id: 10, alt: 180 });
+  assert.equal(state.bills.active.progress, 10);
   assert.deepEqual(finishBillTick(state), { definition: BILLS[3], paid: true });
 });
 
 test('Full Repayment requires both 25 kills and 20 seconds since the latest hit in the Bill', () => {
   const state = game();
-  beat(state, 435);
+  beat(state, 450);
   for (let i = 0; i < 25; i++) kill(state);
-  state.lastHitTick = state.tick + 5 * TICKS_PER_SECOND;
-  state.tick = state.lastHitTick + 20 * TICKS_PER_SECOND - 1;
+  state.lastHitTick = state.tick;
+  state.tick = state.bills.active.deadline - 1;
   assert.equal(finishBillTick(state), null);
   assert.equal(state.bills.active.progress, 25);
   assert.equal(state.bills.active.unharmedTicks, 20 * TICKS_PER_SECOND - 1);
@@ -185,7 +187,7 @@ test('a successful damage tick marks Full Repayment and Ejector revives once', (
   state.hangar = { ...state.hangar, ejector: true };
   state.maxHull = 11;
   state.hull = 1;
-  beat(state, 435);
+  beat(state, 450);
   hurtPlayer(state);
   assert.equal(state.lastHitTick, state.tick);
   assert.equal(state.hull, 6);

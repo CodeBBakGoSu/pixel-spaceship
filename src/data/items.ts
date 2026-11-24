@@ -179,16 +179,16 @@ export type ChestId = typeof CHESTS[number]['id'];
 
 export type BillDefinition = { id: string; second: number; duration: number; demand: BillDemand; reward: BillReward };
 type BillDemand =
-  | { kind: 'forward-kills' | 'ace-wipe' | 'pursuer-kills' | 'any-salvage'; count: number }
+  | { kind: 'front-kills' | 'ace-wipe' | 'pursuer-kills' | 'any-salvage'; count: number }
   | { kind: 'full-repayment'; kills: number; unharmedSeconds: number };
 type BillReward = { upgrades?: number; rerolls?: number; chestPicks?: number; repair?: number | 'full' };
 export const BILL_UNPAID_XP_SCALE = 0.75;
 export const BILLS = [
-  { id: 'first-levy', second: 60, duration: 40, demand: { kind: 'forward-kills', count: 3 }, reward: { upgrades: 1 } },
+  { id: 'first-levy', second: 60, duration: 40, demand: { kind: 'front-kills', count: 3 }, reward: { upgrades: 1 } },
   { id: 'ace-duty', second: 150, duration: 30, demand: { kind: 'ace-wipe', count: 3 }, reward: { rerolls: 1 } },
   { id: 'rear-guard', second: 255, duration: 30, demand: { kind: 'pursuer-kills', count: 3 }, reward: { chestPicks: 3 } },
   { id: 'high-recovery', second: 345, duration: 30, demand: { kind: 'any-salvage', count: 10 }, reward: { repair: 2, upgrades: 1 } },
-  { id: 'full-repayment', second: 435, duration: 30, demand: { kind: 'full-repayment', kills: 25, unharmedSeconds: 20 },
+  { id: 'full-repayment', second: 450, duration: 20, demand: { kind: 'full-repayment', kills: 25, unharmedSeconds: 20 },
     reward: { repair: 'full', upgrades: 2 } },
 ] as const satisfies readonly BillDefinition[];
 

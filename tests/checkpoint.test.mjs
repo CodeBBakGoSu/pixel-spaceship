@@ -5,6 +5,7 @@ import { SKIM_BAND } from '../src/bands.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
+import { trySpendThreat } from '../src/threat-budget.ts';
 
 const ground = () => 35;
 const stateAt = (tick, mode = 'survivors', input = {}) => {
@@ -160,7 +161,6 @@ test('old checkpoints carry manual bomb progress forward for the pilot and the c
   stepStage(restored, {}, ground);
   assert.equal(restored.metrics.bombsDropped, 5);
 });
-
 test('v1 checkpoints migrate altitude-task progress and retain partial Bill completion', () => {
   const envelope = JSON.parse(encodeCheckpoint(stateAt(7200)));
   envelope.version = 1;
@@ -183,4 +183,30 @@ test('v1 checkpoints migrate altitude-task progress and retain partial Bill comp
   assert.equal(restored.bills.active.progress, 2);
   assert.deepEqual(restored.killAltitudeTicks, [{ tick: 7200, alt: 75 }, { tick: 7200, alt: 125 }]);
   assert.equal(restored.bills.paid, 0);
+});
+
+test('a legacy checkpoint migrates combat runtime without replaying elapsed introductions', () => {
+  const envelope = JSON.parse(encodeCheckpoint(stateAt(240 * 60)));
+  delete envelope.state.threatBudget;
+  delete envelope.state.midbossSchedule;
+  delete envelope.state.phaseDirector;
+  delete envelope.state.phaseRepairMask;
+  const restored = decodeCheckpoint(JSON.stringify(envelope), ground);
+  assert.ok(restored.threatBudget);
+  assert.equal(restored.midbossSchedule.next, 1);
+  assert.equal(restored.phaseDirector.intro, 2);
+  assert.deepEqual(restored.phaseRepairMask, 3);
+
+  const spend = offset => trySpendThreat(restored, {
+    tick: restored.tick + offset, source: `resumed:${offset}`, points: 2, bearing: 0,
+  });
+  assert.equal(spend(60), true);
+  assert.equal(spend(120), true);
+  assert.equal(spend(180), true);
+  assert.equal(spend(240), false);
+
+  const nextId = restored.nextId;
+  stepStage(restored, {}, ground);
+  assert.equal(restored.phaseDirector.intro, 2);
+  assert.equal(restored.enemies.some(enemy => enemy.id > nextId && enemy.directorIntro), false);
 });

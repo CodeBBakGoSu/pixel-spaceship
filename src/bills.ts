@@ -1,6 +1,6 @@
 import { BILLS, BILL_UNPAID_XP_SCALE, type BillDefinition } from './data/items.ts';
 import { TICKS_PER_SECOND } from './stage-combat.ts';
-import type { Enemy, StageState } from './stage-types.ts';
+import type { Enemy, Pickup, StageState } from './stage-types.ts';
 
 export type BillId = typeof BILLS[number]['id'];
 export type ActiveBill = {
@@ -56,7 +56,7 @@ export function noteBillKill(state: StageState, enemy: Enemy): void {
   const bill = state.bills.active;
   if (!bill || state.tick > bill.deadline || !enemy.shotDown || enemy.entry) return;
   switch (billDefinition(bill.id).demand.kind) {
-    case 'forward-kills': {
+    case 'front-kills': {
       const dx = enemy.x - state.player.x, dz = enemy.z - state.player.z;
       if (dx * Math.sin(state.player.yaw) + dz * Math.cos(state.player.yaw) > 0) bill.progress++;
       break;
@@ -74,9 +74,9 @@ export function noteBillKill(state: StageState, enemy: Enemy): void {
 }
 
 // --- S7d lane ---
-export function noteBillPickup(state: StageState): void {
+export function noteBillPickup(state: StageState, pickup: Pick<Pickup, 'xp'>): void {
   const bill = state.bills.active;
-  if (bill?.id === 'high-recovery' && state.tick <= bill.deadline) bill.progress++;
+  if (bill?.id === 'high-recovery' && state.tick <= bill.deadline && pickup.xp > 0) bill.progress++;
 }
 
 export function billXpScale(state: StageState): number {
