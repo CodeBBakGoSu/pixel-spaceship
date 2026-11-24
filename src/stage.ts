@@ -587,6 +587,10 @@ function mergeSalvage(state: StageState): void {
     }
     closest.xp += added.xp;
     closest.born = Math.max(closest.born, added.born);
+    if (added.captureRequestTicks !== undefined) {
+      closest.captureRequestTicks = Math.min(closest.captureRequestTicks ?? added.captureRequestTicks, added.captureRequestTicks);
+      closest.pulling = true;
+    }
   }
 }
 
@@ -624,14 +628,17 @@ function reportPickupCollected(state: StageState, pickup: Pickup, events: Combat
 
 const SALVAGE_TRAIL_START = 0.75;
 
-function capturePickup(state: StageState, pickup: Pickup, range: number): void {
+function capturePickup(state: StageState, pickup: Pickup, range: number, requestedTicks?: number): void {
   const p = state.player;
   const wingX = Math.cos(p.yaw), wingZ = -Math.sin(p.yaw);
   const side = (pickup.x - p.x) * wingX + (pickup.z - p.z) * wingZ < 0 ? -1 : 1;
+  const ordinaryTicks = Math.max(1, Math.ceil(SALVAGE_CAPTURE_TICKS * Math.min(range, SALVAGE_RANGE.magnet) / SALVAGE_RANGE.magnet));
+  const durationTicks = Math.min(ordinaryTicks, Math.max(1, Math.trunc(requestedTicks ?? ordinaryTicks)));
   pickup.capture = { capturedAtTick: state.tick,
-    arriveAtTick: state.tick + Math.max(1, Math.ceil(SALVAGE_CAPTURE_TICKS * Math.min(range, SALVAGE_RANGE.magnet) / SALVAGE_RANGE.magnet)),
+    arriveAtTick: state.tick + durationTicks,
     origin: { x: pickup.x, z: pickup.z, alt: pickup.alt },
     curve: { x: wingX * side, z: wingZ * side, amount: Math.min(3.5, range * 0.06) } };
+  delete pickup.captureRequestTicks;
   pickup.pulling = false;
   delete pickup.collected;
 }
@@ -773,7 +780,7 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
       return false;
     }
     if (pickup.collected || pickup.pulling || range <= SALVAGE_RANGE.magnet * (magnet?.radiusScale ?? 1) * magnetScale) {
-      capturePickup(state, pickup, range);
+      capturePickup(state, pickup, range, pickup.captureRequestTicks);
       reportPickupContact(events, pickup, state.tick);
     }
     return true;

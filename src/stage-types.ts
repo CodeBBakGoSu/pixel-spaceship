@@ -158,7 +158,8 @@ export type EnemyTell = { until: number; started?: number } & (
   (Position & { kind: 'flak' })
 );
 export type Pickup = Position & { id: number; kind?: PickupKind; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean;
-  skim?: true; capture?: PickupCapture; source?: { eventId: number; kind: MagnetSourceKind }; recovery?: { until: number; sourceAlt: number } };
+  skim?: true; capture?: PickupCapture; captureRequestTicks?: number; source?: { eventId: number; kind: MagnetSourceKind };
+  recovery?: { until: number; sourceAlt: number } };
 type ShotCommon = Position & {
   vx: number;
   vz: number;

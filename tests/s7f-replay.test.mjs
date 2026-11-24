@@ -11,7 +11,7 @@ import { World } from '../src/world.ts';
 // Seed-1 terminal hashes cover survivor pickup rules, isolated magnet-drop state, swarm notices, production terrain, and the full-view pilot.
 const terminalHashes = {
   legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
-  survivors: 'ee1235bd057c4ea6741e9f0d058485ac592f5942bef6671d0d29c9acf88fa768',
+  survivors: '465e0a92fd1e4ff698a909312db62bec854941329a54225d1ba697edde1c6ae8',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

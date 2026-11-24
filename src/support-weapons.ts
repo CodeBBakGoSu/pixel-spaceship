@@ -181,6 +181,8 @@ function collectWithDrones(state: StageState, ground?: Ground): void {
       }
     }
     if (!closest) continue;
+    const contactTicks = Math.max(1, Math.ceil(Math.max(0, distance - tuning.pickupRange) / (tuning.pullSpeed * STEP)));
+    pickup.captureRequestTicks ??= contactTicks;
     pickup.pulling = true;
   }
 }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scaleClimb, scaleTravel } from '../src/data/speed.ts';
+import { CLOSE_EVOLUTIONS } from '../src/data/close-evolutions.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots, openReversal, STEP, FLARE_GRAVITY,
@@ -105,6 +106,37 @@ test('Collector Swarm requests timed salvage capture without moving or collectin
   while (state.tick < pickup.capture.arriveAtTick) stepStage(state, {}, sea);
   assert.equal(state.salvage, 1);
   assert.ok(!state.pickups.includes(pickup));
+});
+
+test('Collector Swarm uses its initial drone contact travel time without resetting a capture deadline', () => {
+  const ordinary = start(), collector = start();
+  for (const state of [ordinary, collector]) {
+    state.run.weaponLevels.drones = 3;
+    state.run.buffLevels['magnet-core'] = 1;
+    state.enemies = [];
+  }
+  evolve(collector, 'drones', 'collector-swarm');
+  const x = ordinary.player.x, z = ordinary.player.z;
+  const normalPickup = { id: 43, x, z: z + scaleTravel(42.5), alt: 125, xp: 1, born: 0 };
+  const collectorPickup = { ...normalPickup, id: 44 };
+  ordinary.pickups.push(normalPickup);
+  collector.pickups.push(collectorPickup);
+
+  stepStage(ordinary, {}, sea);
+  stepStage(collector, {}, sea);
+
+  assert.ok(normalPickup.capture);
+  assert.ok(collectorPickup.capture);
+  const droneDistance = Math.min(...collector.orbitDrones.map(drone => Math.hypot(drone.x - collectorPickup.x, drone.z - collectorPickup.z)));
+  const expectedTicks = Math.max(1, Math.ceil(Math.max(0, droneDistance - CLOSE_EVOLUTIONS.collector.pickupRange)
+    / (CLOSE_EVOLUTIONS.collector.pullSpeed * STEP)));
+  assert.equal(collectorPickup.capture.arriveAtTick - collectorPickup.capture.capturedAtTick, expectedTicks);
+  assert.ok(collectorPickup.capture.arriveAtTick < normalPickup.capture.arriveAtTick);
+  assert.equal(collectorPickup.captureRequestTicks, undefined);
+
+  const deadline = collectorPickup.capture.arriveAtTick;
+  for (let i = 0; i < 3; i++) stepStage(collector, {}, sea);
+  assert.equal(collectorPickup.capture.arriveAtTick, deadline);
 });
 
 test('Phoenix firebird scales per-tick ascent and descent, falling when no target remains', () => {
