@@ -65,14 +65,20 @@ function playerInArena(state: StageState): boolean {
   return Math.hypot(state.player.x - state.arena.x, state.player.z - state.arena.z) <= state.arena.radius;
 }
 
-function arenaPosition(state: StageState, point: SpatialPoint): SpatialPoint {
+function arenaPosition(state: StageState, point: SpatialPoint, previous?: SpatialPoint): SpatialPoint {
   if (!playerInArena(state)) return point;
   const offset = { x: point.x - state.arena.x, z: point.z - state.arena.z, alt: 0 };
   const distance = Math.hypot(offset.x, offset.z);
   const limit = Math.max(0, state.arena.radius - scaleTravel(64));
   if (distance <= limit || distance === 0) return point;
   const bounded = scale3d(normalize3d(offset), limit);
-  return { ...point, x: state.arena.x + bounded.x, z: state.arena.z + bounded.z };
+  const boundedPoint = { ...point, x: state.arena.x + bounded.x, z: state.arena.z + bounded.z };
+  if (previous) {
+    const correction = Math.hypot(point.x - boundedPoint.x, point.z - boundedPoint.z);
+    const movement = Math.hypot(point.x - previous.x, point.z - previous.z);
+    if (correction > movement + 1e-6) return point;
+  }
+  return boundedPoint;
 }
 
 function playerForward(state: StageState): SpatialVector {
@@ -86,7 +92,7 @@ function escortPosition(state: StageState, actor: Enemy, side: number, ground: G
   const forward = { x: Math.sin(actor.yaw), z: Math.cos(actor.yaw), alt: 0 };
   const right = { x: Math.cos(actor.yaw), z: -Math.sin(actor.yaw), alt: 0 };
   const offset = add3d(scale3d(right, scaleTravel(29) * side), scale3d(forward, -scaleTravel(14)));
-  const position = arenaPosition(state, add3d(actor, offset));
+  const position = arenaPosition(state, add3d(actor, offset), actor);
   const floor = Math.min(MAX_ALTITUDE, ground(position.x, position.z) + 22);
   return { ...position, alt: clamp(actor.alt, floor, MAX_ALTITUDE) };
 }
@@ -123,7 +129,7 @@ function moveEscorts(state: StageState, boss: SortieMiniboss, actor: Enemy, grou
     escort.vz += clamp(wanted.z - escort.vz, -acceleration, acceleration);
     const bounded = arenaPosition(state, {
       x: escort.x + escort.vx * STEP, z: escort.z + escort.vz * STEP, alt: escort.alt,
-    });
+    }, escort);
     escort.x = bounded.x;
     escort.z = bounded.z;
     escort.vx = (escort.x - previous.x) / STEP;
@@ -207,7 +213,7 @@ function moveActor(state: StageState, boss: SortieMiniboss, actor: Enemy, ground
     x: actor.x + actor.vx * STEP,
     z: actor.z + actor.vz * STEP,
     alt: actor.alt,
-  });
+  }, actor);
   actor.x = bounded.x;
   actor.z = bounded.z;
   const groundHeight = ground(actor.x, actor.z);

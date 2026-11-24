@@ -73,6 +73,39 @@ test('miniboss spawn stays player-local when an external pilot is outside the ar
   assert.ok(Math.hypot(actor.x - state.player.x, actor.z - state.player.z) < 400);
 });
 
+test('miniboss and escorts move continuously as an outside pilot re-enters the arena', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=1'), ground);
+  const cue = SORTIE_MINIBOSS_CUES[0];
+  state.tick = cue.startTick - 1;
+  state.chests.next = 1;
+  const edge = state.arena.x + state.arena.radius;
+  state.speed = 0;
+  Object.assign(state.player, {
+    x: edge + 1, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, altitude: 125,
+  });
+  stepStage(state, {}, ground);
+
+  const boss = state.sortieBoss;
+  const actors = [boss.actorId, ...boss.escortIds].map(id => state.enemies.find(enemy => enemy.id === id));
+  assert.ok(actors.every(actor => Math.hypot(actor.x - state.arena.x, actor.z - state.arena.z) > state.arena.radius));
+  const previous = actors.map(actor => ({ x: actor.x, z: actor.z }));
+
+  state.player.x = edge + 1;
+  state.player.z = state.arena.z;
+  state.player.vx = 0;
+  state.player.vz = 0;
+  state.player.x -= 2;
+  state.player.vx = -120;
+  state.tick++;
+  advanceSortieMiniboss(state, ground, STANDALONE_SORTIE_BOSS_HOOKS);
+
+  for (let index = 0; index < actors.length; index++) {
+    const displacement = Math.hypot(actors[index].x - previous[index].x, actors[index].z - previous[index].z);
+    assert.ok(displacement < 10, `actor ${actors[index].id} moves continuously across the boundary: ${displacement}`);
+  }
+});
+
 test('generic straggler recycling cannot strand a sortie boss in a skipped fly-in entry', () => {
   const state = startEncounter(0);
   const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);

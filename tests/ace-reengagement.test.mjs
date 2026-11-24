@@ -4,7 +4,7 @@ import { ACE } from '../src/data/ace.ts';
 import { TWIN_VOLLEYS, WEAPONS } from '../src/data/items.ts';
 import { CRUISE_SPEED } from '../src/flight.ts';
 import { aceReengagementCadence, advanceAce } from '../src/ace.ts';
-import { angleTo, BOLT_SPEED, HIT_WINDOW, hurtAce, MAX_ALTITUDE, TICKS_PER_SECOND, TWIN_CONE } from '../src/stage-combat.ts';
+import { acquireAndFire, advanceShots, angleTo, BOLT_SPEED, HIT_WINDOW, hurtAce, MAX_ALTITUDE, TICKS_PER_SECOND, TWIN_CONE } from '../src/stage-combat.ts';
 import { segmentSphereIntersection3d } from '../src/sortie-spatial-adapter.ts';
 import { createStage, parseStageOptions, RUN_BOSS_TICK, RUN_END_TICK, stepStage } from '../src/stage.ts';
 
@@ -46,7 +46,7 @@ function launchUnarmedAceNaturally() {
   return { state, ace: state.boss, spawnTick: state.tick };
 }
 
-function twinHitTime(state, spawnTick, groundFn = ground) {
+function twinCollisionOpportunityTime(state, spawnTick, groundFn = ground) {
   const ace = state.boss, player = state.player;
   if (!ace || ace.entry) return null;
   const dx = ace.x - player.x, dz = ace.z - player.z;
@@ -112,19 +112,19 @@ function advanceNaturalEncounter(state, ticks, spawnTick, groundFn = ground) {
   }
 }
 
-test('natural Ace flight gives the player a real twin hit opportunity within five seconds, then repeats through 9:00+', () => {
+test('natural Ace flight provides predicted Twin collision geometry within five seconds and repeats through 9:00+', () => {
   assert.equal(aceReengagementCadence(9 * 60 * TICKS_PER_SECOND - 1), 12 * TICKS_PER_SECOND);
   assert.equal(aceReengagementCadence(9 * 60 * TICKS_PER_SECOND), 10 * TICKS_PER_SECOND);
   const { state, ace, spawnTick } = launchUnarmedAceNaturally();
   const firstMinuteEnd = spawnTick + 60 * TICKS_PER_SECOND;
   const sampleEnd = spawnTick + 90 * TICKS_PER_SECOND;
   const windows = new Map();
-  let firstHit = null;
+  let firstOpportunity = null;
   const sampleWindow = () => {
     const plan = ace.reengagement;
     if (plan?.phase !== 'line') return;
-    const opportunity = twinHitTime(state, spawnTick);
-    if (opportunity !== null && firstHit === null) firstHit = { tick: state.tick, flightSeconds: opportunity };
+    const opportunity = twinCollisionOpportunityTime(state, spawnTick);
+    if (opportunity !== null && firstOpportunity === null) firstOpportunity = { tick: state.tick, flightSeconds: opportunity };
     const window = windows.get(plan.lineStartedAt) ?? { streak: 0, longest: 0 };
     if (opportunity === null) window.streak = 0;
     else {
@@ -139,15 +139,15 @@ test('natural Ace flight gives the player a real twin hit opportunity within fiv
     sampleWindow();
   }
 
-  assert.ok(firstHit !== null, 'natural reengagement puts an actual twin trajectory through the Ace hull');
-  assert.ok(firstHit.tick - spawnTick + Math.ceil(firstHit.flightSeconds * TICKS_PER_SECOND) <= 5 * TICKS_PER_SECOND,
-    `time from natural spawn to predicted hull contact is at most five seconds: ${JSON.stringify(firstHit)}`);
-  assert.equal(ace.hits, 0, 'the geometry probe does not apply damage');
+  assert.ok(firstOpportunity !== null, 'a predicted Twin segment intersects the Ace hull on the natural trajectory');
+  assert.ok(firstOpportunity.tick - spawnTick + Math.ceil(firstOpportunity.flightSeconds * TICKS_PER_SECOND) <= 5 * TICKS_PER_SECOND,
+    `time from natural spawn to predicted Twin contact is at most five seconds: ${JSON.stringify(firstOpportunity)}`);
+  assert.equal(ace.hits, 0, 'predicted geometry is not counted as an actual Twin hit');
   assert.equal(ace.hp, ace.maxHp);
 
   const firstMinute = [...windows].filter(([startedAt, window]) =>
     startedAt < firstMinuteEnd && window.longest >= 3 * TICKS_PER_SECOND).map(([startedAt]) => startedAt).sort((a, b) => a - b);
-  assert.ok(firstMinute.length >= 4, `expected four actual-twin windows in the first minute, got ${firstMinute.length}: ${JSON.stringify([...windows].map(([tick, window]) => [tick, window.longest]))}`);
+  assert.ok(firstMinute.length >= 4, `expected four geometric Twin windows in the first minute, got ${firstMinute.length}: ${JSON.stringify([...windows].map(([tick, window]) => [tick, window.longest]))}`);
   for (let i = 0; i < firstMinute.length; i++) {
     assert.ok(windows.get(firstMinute[i]).longest >= 3 * TICKS_PER_SECOND);
     if (i + 1 < firstMinute.length) {
@@ -159,12 +159,44 @@ test('natural Ace flight gives the player a real twin hit opportunity within fiv
 
   const afterNine = [...windows].filter(([startedAt, window]) =>
     startedAt >= firstMinuteEnd && window.longest >= 3 * TICKS_PER_SECOND).map(([startedAt]) => startedAt).sort((a, b) => a - b);
-  assert.ok(afterNine.length >= 2, `expected actual-twin windows after 9:00, got ${afterNine.length}`);
+  assert.ok(afterNine.length >= 2, `expected geometric Twin windows after 9:00, got ${afterNine.length}`);
   for (let i = 0; i + 1 < afterNine.length; i++) {
     const startedAt = afterNine[i];
     const cadence = aceReengagementCadence(startedAt + ACE.reengagement.lineSeconds * TICKS_PER_SECOND);
     assert.equal(afterNine[i + 1] - startedAt, cadence);
   }
+});
+
+test('natural Twin fire ticks, projectiles and Ace hits are measured separately', () => {
+  const { state, ace, spawnTick } = launchUnarmedAceNaturally();
+  state.shots = [];
+  state.twinAt = state.tick;
+  state.podsAt = Number.MAX_SAFE_INTEGER;
+  state.strafeAt = Number.MAX_SAFE_INTEGER;
+  const actualFireTicks = new Set();
+  let twinProjectiles = 0, aceHits = 0;
+
+  while (state.tick < spawnTick + 60 * TICKS_PER_SECOND) {
+    advanceNaturalPlayer(state, spawnTick);
+    state.tick++;
+    advanceAce(state, ground);
+    const existing = new Set(state.shots);
+    const hitsBefore = ace.hits;
+    acquireAndFire(state);
+    for (const shot of state.shots) {
+      if (!existing.has(shot) && shot.kind === 'twin') {
+        actualFireTicks.add(state.tick);
+        twinProjectiles++;
+      }
+    }
+    advanceShots(state, ground);
+    aceHits += ace.hits - hitsBefore;
+  }
+
+  assert.ok(actualFireTicks.size > 0, 'the live Twin path emitted actual firing ticks');
+  assert.ok(twinProjectiles >= actualFireTicks.size, 'projectiles are counted separately from firing ticks');
+  assert.ok(aceHits > 0, 'at least one live Twin projectile damaged the Ace');
+  assert.ok(aceHits <= twinProjectiles, 'actual Ace hits cannot exceed launched Twin projectiles');
 });
 
 test('phase changes and incoming roll threats preserve the window without exempting hostile tells from cancellation', () => {
@@ -247,6 +279,34 @@ test('Ace approach follows an outside-arena pilot without extending the in-arena
     advanceAce(state, ground);
   }
   assert.ok(ace.x > edge + 100, `outside pilot is reachable: Ace x=${ace.x}, arena edge=${edge}`);
+});
+
+test('Ace reengagement moves continuously as an outside pilot re-enters the arena', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  const edge = state.arena.x + state.arena.radius;
+  Object.assign(player, {
+    x: edge + 1, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, altitude: 125,
+  });
+  state.speed = 0;
+  delete ace.entry;
+  Object.assign(ace, {
+    x: edge + 100, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, alt: 125, tell: null, roll: null,
+    attackAt: Number.MAX_SAFE_INTEGER, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'approach', startedAt: state.tick, side: 1 },
+  });
+  const previous = { x: ace.x, z: ace.z };
+
+  player.x -= 2;
+  player.vx = -120;
+  state.tick++;
+  advanceAce(state, ground);
+
+  const displacement = Math.hypot(ace.x - previous.x, ace.z - previous.z);
+  assert.ok(displacement < 10, `Ace approach remains continuous across the boundary: ${displacement}`);
 });
 
 test('Ace damage remains available outside reengagement windows', () => {

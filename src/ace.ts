@@ -142,7 +142,8 @@ function playerInArena(state: StageState): boolean {
 }
 
 function keepReengagementInBounds(state: StageState, ace: Ace, previous: { x: number; z: number }): void {
-  if (!playerInArena(state)) {
+  const previousDistance = Math.hypot(previous.x - state.arena.x, previous.z - state.arena.z);
+  if (!playerInArena(state) || previousDistance > state.arena.radius) {
     ace.vx = (ace.x - previous.x) / STEP;
     ace.vz = (ace.z - previous.z) / STEP;
     return;
