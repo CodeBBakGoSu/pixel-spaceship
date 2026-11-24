@@ -38,7 +38,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRects, screenPointObscured, touchControlOcclusionRect,
+import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, screenPointObscured, touchControlOcclusionRect,
   TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
@@ -778,6 +778,8 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
+  const diveWarning = state.enemies.find(enemy => isDescendingDiveWarning(enemy.maneuver, enemy.band)
+    && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -798,9 +800,10 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  if ((message === 'hud.enemyDive' || message === 'hud.interceptorDive') && touch && phone && scene
-    && touchThreatCueSlot && state.phase === 'playing' && !state.paused && warning?.maneuver?.phase === 'warning') {
-    const target = { x: warning.x, z: warning.z, alt: BANDS[warning.maneuver.band] };
+  const diveBand = diveWarning?.maneuver?.band;
+  if (diveWarning && diveBand !== undefined && touch && phone && scene && touchThreatCueSlot
+    && state.phase === 'playing' && !state.paused) {
+    const target = { x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] };
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact(target, projectedTarget);
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
