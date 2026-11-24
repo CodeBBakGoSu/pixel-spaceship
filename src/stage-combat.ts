@@ -1063,7 +1063,10 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
           if (parry) {
             const x = shot.x + dx * playerHit, z = shot.z + dz * playerHit;
             // Keep the nearby reward at the front of the salvage pool so it is collected even at the pickup cap.
-            state.pickups.unshift({ id: ++state.nextId, x, z, alt: shot.alt, xp: ROLL_PARRY_XP, born: state.tick });
+            const pickup = { id: ++state.nextId, x, z, alt: shot.alt, xp: ROLL_PARRY_XP, born: state.tick };
+            state.pickups.unshift(pickup);
+            events?.pickupDropped?.({ pickupId: pickup.id, kind: 'salvage', position: { x, z, alt: shot.alt },
+              tick: state.tick, sourceEventId: shot.volley });
             events?.parry?.(shot, x, z, shot.alt);
           } else {
             // Use a point back along the trajectory even when the previous pose is already inside the hit radius.

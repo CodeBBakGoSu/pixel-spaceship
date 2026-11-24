@@ -77,7 +77,7 @@ function advanceWake(state: StageState, level: number): void {
   if (level >= tuning.salvageAt) {
     const pickupWindow = HIT_WINDOW + (state.run ? 0 : buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
     for (const pickup of state.pickups) {
-      if (inBand(p.altitude, pickup.alt, pickupWindow)
+      if (pickup.kind !== 'magnet' && inBand(p.altitude, pickup.alt, pickupWindow)
         && segments.some(lane => crossesWake(lane, pickup, width, pickupWindow, plasma, !!state.run))) pickup.pulling = true;
     }
   }
@@ -150,13 +150,34 @@ function advanceDrones(state: StageState, level: number): void {
 
 function collectWithDrones(state: StageState, ground?: Ground): void {
   const tuning = CLOSE_EVOLUTIONS.collector;
-  const window = HIT_WINDOW + (state.run ? 0 : buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
+  if (!state.run) {
+    const window = HIT_WINDOW + (buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
+    for (const pickup of state.pickups) {
+      if (pickup.collected || state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
+      let closest: Position | null = null;
+      let distance: number = tuning.magnetRange;
+      for (const drone of state.orbitDrones) {
+        if (!inBand(drone.alt, pickup.alt, window)) continue;
+        const range = Math.hypot(drone.x - pickup.x, drone.z - pickup.z);
+        if (range < distance) { closest = drone; distance = range; }
+      }
+      if (!closest) continue;
+      const travel = Math.min(tuning.pullSpeed * STEP, distance);
+      const amount = distance ? travel / distance : 0;
+      const x = pickup.x + (closest.x - pickup.x) * amount;
+      const z = pickup.z + (closest.z - pickup.z) * amount;
+      if (ground && (Math.max(ground(x, z), ground((x + pickup.x) / 2, (z + pickup.z) / 2)) >= pickup.alt)) continue;
+      pickup.x = x;
+      pickup.z = z;
+      if (distance - travel <= tuning.pickupRange) pickup.collected = true;
+    }
+    return;
+  }
   for (const pickup of state.pickups) {
-    if (pickup.collected || state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
+    if (pickup.kind === 'magnet' || pickup.capture || state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
     let closest: Position | null = null;
     let distance: number = tuning.magnetRange;
     for (const drone of state.orbitDrones) {
-      if (!inBand(drone.alt, pickup.alt, window)) continue;
       const range = Math.hypot(drone.x - pickup.x, drone.z - pickup.z);
       if (range < distance) {
         closest = drone;
@@ -164,14 +185,9 @@ function collectWithDrones(state: StageState, ground?: Ground): void {
       }
     }
     if (!closest) continue;
-    const travel = Math.min(tuning.pullSpeed * STEP, distance);
-    const amount = distance ? travel / distance : 0;
-    const x = pickup.x + (closest.x - pickup.x) * amount;
-    const z = pickup.z + (closest.z - pickup.z) * amount;
-    if (ground && (Math.max(ground(x, z), ground((x + pickup.x) / 2, (z + pickup.z) / 2)) >= pickup.alt)) continue;
-    pickup.x = x;
-    pickup.z = z;
-    if (distance - travel <= tuning.pickupRange) pickup.collected = true;
+    const contactTicks = Math.max(1, Math.ceil(Math.max(0, distance - tuning.pickupRange) / (tuning.pullSpeed * STEP)));
+    pickup.captureRequestTicks ??= contactTicks;
+    pickup.pulling = true;
   }
 }
 
@@ -196,13 +212,13 @@ function advanceAegis(state: StageState): void {
   ace.aegisReadyAt = next;
 }
 
-export function advanceSupportWeapons(state: StageState, ground?: Ground): void {
+export function advanceSupportWeapons(state: StageState, _ground?: Ground): void {
   const wake = state.run?.weaponLevels.ion, drones = state.run?.weaponLevels.drones;
   if (wake) advanceWake(state, wake);
   else state.ionWake.length = 0;
   if (drones) {
     advanceDrones(state, drones);
-    if (state.run?.evolutions.drones) collectWithDrones(state, ground);
+    if (state.run?.evolutions.drones) collectWithDrones(state, _ground);
   } else state.orbitDrones.length = 0;
   if (state.run?.evolutions.pods) advanceAegis(state);
 }

@@ -85,6 +85,31 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: focused regressions 41/41; `npm test` 647/647; `npm run build` `✓ 124 modules transformed.` / `✓ built in 3.01s` (non-blocking >500 kB chunk advisory); `git diff --check` clean.
 - Renderer visuals/screenshots, balance simulation, external cue consumption, and balance-bot handoff remain unverified. No merge or deployment.
 
+### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `85d3ebfc40fd280998568d3e44754666b641744e`: Survivors still retains the recovery state used to hold wave-spawn gating, but the HUD hides its inactive `RECOVERY · GLOBAL MAGNET` label; Legacy notice handling and translations remain available.
+- Renderer cadence now follows `pendingFinish.settlementTick` and marks the scene dirty as settlement advances, then returns to the unchanged terminal `state.tick` after finish. This addresses the supplied trace where pickup samples progressed while rendered frames remained gated by the frozen stage clock.
+- Added HUD-mode and render-cadence regressions; kept the Legacy recovery helper path covered. Verification: `npm test` passed 642/642; `npm run build` passed (122 modules); `git diff --check` passed. No fixture/server setup changed; no UI test or CI wait was run.
+
+### 2026-11-24 23:36 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `190d177db9ecf4bb9fd08786725d77c292ad7d9e`: Terminal capture settlement now handles pause/unpause before advancing. A blur/visibility pause one tick before arrival no longer pays or finalizes outside the normal frame path, where the profile is persisted.
+- Added a regression covering the pause-only call, remaining paused, resume, and later physical arrival; no enemy or spawn behavior changes.
+- Verification: `node --test tests/stage.test.mjs` passed 31/31; `npm run build` passed (120 modules); `git diff --check` passed. The PR `git_pr_checks` wait was canceled after 156 seconds without a result while the pause finding was handed off, so final CI status remains unknown. No UI tests or visual verification; no public deployment. State: candidate-only fix committed, push pending.
+
+### 2026-11-24 23:29 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `fef070aa13e7b35cdcd13cbade4953b9505c7a91`: Captured Survivors salvage advances during Ace defeat and through bounded capture-only terminal settlement; rewards pay at hull arrival while stage tick, outcome, and summary seconds stay at terminal time. Settlement does not simulate enemies or spawns, and captured pickups bypass terminal draft blocking.
+- `90ead934e69ce533ff410820e58ceaeb95d3fed1`: Collector Swarm's initial duration derives from existing drone distance, pickup range, and pull speed (minimum one tick, capped to ordinary capture); captured deadlines remain immutable, with no range or damage retune.
+- Verification: `npm test` passed 638/638; `npm run build` passed (120 modules); `git diff --check` passed. Updated the Survivors replay golden for the intentional settlement change; the legacy replay assertion remains unchanged. No UI tests or visual verification; PR #11 CI pending. State: candidate-only fixes complete, no public deployment.
+
+### 2026-11-24 22:35 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- Applied §3 review fixes for Survivors captures: global magnet now snapshots eligible salvage into fixed-deadline curved arrivals, rewards only at hull arrival, ordinary contact checks 3D distance, drone collection requests capture, and trails appear only in the final segment. Legacy recovery and pickup handling were separated where practical; public `main` is untouched.
+- Restored exact legacy pull/contact ordering and salvage object key order (the changed key order altered replay hashes despite identical field values); retained legacy drone altitude gating and trail lengths. Survivor timed captures remain run-scoped.
+- Verification: `npm test` passed 634/634; `npm run build` passed (120 modules); `git diff --check` passed. Candidate was committed and pushed as `309e649` before the PR review; no public deployment.
+
+### 2026-11-24 22:01 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (based on `09e2890`)
+- Implemented approved pickup §3 on the independent candidate: altitude-independent timed salvage, direct magnet drops and collection; public `main` remains untouched.
+- Verification: `npm test` (632 passed) and `npm run build` passed. The configurable 5% drop chance is a balance-review candidate, not final; the baseline has no midboss defeat hook, so `dropMagnet` is available to its future owner.
+- Candidate is uncommitted/unpushed; no public deployment.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.

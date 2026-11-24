@@ -64,7 +64,7 @@ test('taking Hull Plating through a real draft raises and repairs hull', () => {
   assert.equal(state.run.buffLevels['hull-plating'], card.nextLevel);
 });
 
-test('Magnet Core expands horizontal pickup reach without widening its altitude window', () => {
+test('Magnet Core expands planar pickup reach without widening its altitude window', () => {
   const without = start(), withMagnet = start();
   for (const state of [without, withMagnet]) {
     state.pickups.push(
@@ -76,9 +76,11 @@ test('Magnet Core expands horizontal pickup reach without widening its altitude 
   stepStage(without, {}, ground);
   stepStage(withMagnet, {}, ground);
   assert.notEqual(without.pickups[0].pulling, true);
-  assert.equal(withMagnet.pickups[0].pulling, true);
-  assert.notEqual(withMagnet.pickups[1].pulling, true);
-  assert.ok(withMagnet.pickups[0].z < without.pickups[0].z);
+  assert.equal(Boolean(without.pickups[0].capture), false);
+  assert.equal(Boolean(withMagnet.pickups[0].capture), true);
+  assert.equal(withMagnet.pickups[0].capture.origin.alt, withMagnet.player.altitude);
+  assert.equal(Boolean(withMagnet.pickups[1].capture), false);
+  assert.ok(withMagnet.pickups[0].capture.arriveAtTick > withMagnet.tick);
 });
 
 test('Salvage Beacon carries sub-unit XP across pickups and boosts run credits', () => {

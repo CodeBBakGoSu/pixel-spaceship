@@ -5,6 +5,7 @@ import { PHASE_REPAIR_SECONDS } from './data/run-balance.ts';
 import { TICKS_PER_SECOND } from './stage-combat.ts';
 import { BANDS } from './bands.ts';
 import { BILLS } from './data/items.ts';
+import { rngStream } from './stage-random.ts';
 import type { Ground, StageState } from './stage-types.ts';
 import { restoreWorldState } from './stage.ts';
 import { groundAt } from './world.ts';
@@ -33,8 +34,9 @@ export function decodeCheckpoint(raw: string | null, ground?: Ground): StageStat
     const { version, state } = JSON.parse(raw) as { version: number; state?: StageState };
     if ((version !== 1 && version !== VERSION) || !state || state.summary !== null || !phaseStarts.has(state.tick)) return null;
     if (state.phase !== 'playing' && state.phase !== 'draft' && state.phase !== 'chest') return null;
+    if (state.run && state.streams && !state.streams.magnetDrop) state.streams.magnetDrop = rngStream(state.seed, 'magnet-drop');
     if (!state.run?.weaponLevels || !state.run.buffLevels || !state.run.evolutions || !state.run.draftRng
-      || !state.streams?.spawn || !state.streams.chest || !state.streams.bills || !state.streams.combat
+      || !state.streams?.spawn || !state.streams.chest || !state.streams.bills || !state.streams.combat || !state.streams.magnetDrop
       || !state.profile || !state.bills || !state.chests || !state.player || !state.arena
       || ![state.enemies, state.shots, state.pickups, state.effects, state.draft, state.picks].every(Array.isArray)
       || ![state.seed, state.rng, state.player.x, state.player.z, state.player.altitude, state.hull, state.level].every(Number.isFinite)) return null;

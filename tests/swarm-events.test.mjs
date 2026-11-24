@@ -6,6 +6,7 @@ import { advanceEnemies, makeEnemy, spawnEscortGnats } from '../src/stage-enemie
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceSwarmEvent } from '../src/swarm-events.ts';
 import { decodeCheckpoint, encodeCheckpoint } from '../src/checkpoint.ts';
+import { rngStream } from '../src/stage-random.ts';
 
 const flat = () => 35;
 const start = (mode = 'survivors') => {
@@ -66,7 +67,7 @@ test('minute swarm events remain rings and do not mutate spawn streams', () => {
   }
 });
 
-test('swarm rest never pulls or collects pickups and leaves chest drops untouched', () => {
+test('Survivors rest never pulls or collects pickups and leaves chest drops untouched', () => {
   for (const event of SWARM_EVENTS) {
     const state = start();
     state.tick = (event.start + event.duration) * 60 - 1;
@@ -94,6 +95,38 @@ test('swarm rest never pulls or collects pickups and leaves chest drops untouche
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice, undefined);
   }
+});
+
+test('legacy recovery still couples its notice to recent pickup recovery', () => {
+  const state = start('legacy');
+  const event = SWARM_EVENTS[0];
+  state.tick = (event.start + event.duration) * 60;
+  const pickup = orb(state, 180);
+  state.pickups.push(pickup);
+  assert.equal(advanceSwarmEvent(state, flat), true);
+  assert.equal(state.swarmNotice?.kind, 'recovery');
+  assert.equal(pickup.pulling, true);
+  assert.ok(pickup.recovery);
+});
+
+test('full pickup pool remains ordinary salvage at a wave end', () => {
+  const state = start();
+  state.tick = 125 * 60 - 1;
+  for (let i = 0; i < 150; i++) state.pickups.push(orb(state, 180));
+  stepStage(state, {}, flat);
+  assert.equal(state.pickups.length, 150);
+  assert.ok(state.pickups.every(p => !p.recovery && !p.capture));
+  assert.equal(state.salvage, 0);
+});
+
+test('legacy checkpoints seed the isolated magnet-drop stream deterministically', () => {
+  const state = start();
+  state.tick = 120 * 60;
+  const encoded = encodeCheckpoint(state);
+  const legacy = JSON.parse(encoded);
+  delete legacy.state.streams.magnetDrop;
+  const restored = decodeCheckpoint(JSON.stringify(legacy), flat);
+  assert.equal(restored.streams.magnetDrop.rng, rngStream(state.seed, 'magnet-drop').rng);
 });
 
 test('pausing, leaving a chest uncollected, or resuming a phase checkpoint does not reschedule events', () => {

@@ -15,10 +15,11 @@ import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './
 import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { advancePhaseDirector } from './phase-director.ts';
-import { rngStream } from './stage-random.ts';
+import { random, rngStream } from './stage-random.ts';
 import { GNAT, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
-  REGULAR_SALVAGE_MULTIPLIER, RUN_BEACON_LEAD_SECONDS, SURVIVOR_START_HULL, SURVIVOR_XP_SCALE, WEAPON_FX_LIMIT } from './data/run-balance.ts';
+  MAGNET_DROP_CHANCE, REGULAR_SALVAGE_MULTIPLIER, RUN_BEACON_LEAD_SECONDS, SALVAGE_CAPTURE_TICKS,
+  SURVIVOR_START_HULL, SURVIVOR_XP_SCALE, WEAPON_FX_LIMIT } from './data/run-balance.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { BUFFS, CHESTS, DRAFT_RULES } from './data/items.ts';
 import { billXpScale, createBillState, finishBillTick, noteBillKill, noteBillPickup, startBillTick } from './bills.ts';
@@ -47,8 +48,8 @@ import {
   MIN_ALTITUDE,
   openReversal, STEP, TICKS_PER_SECOND, WIPE_DURATION,
 } from './stage-combat.ts';
-import type { AcePhase, Band, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome, Pickup,
-  StageInput, StageOptions, StageState } from './stage-types.ts';
+import type { AcePhase, Band, ChestReward, DraftId, Ground, MagnetSourceKind, Maneuver, ManeuverKind, Outcome, Pickup,
+  Position, StageInput, StageOptions, StageState } from './stage-types.ts';
 
 export { activeAce } from './stage-combat.ts';
 export const END_TICK = LEGACY_END_SECONDS * TICKS_PER_SECOND;
@@ -138,7 +139,11 @@ function finishDraft(state: StageState, id?: DraftId): void {
 function resumePlay(state: StageState): void {
   const pending = state.resultPending;
   const nextCost = requiredXp(state.level, !!state.run);
-  if (nextCost !== null && state.xp >= nextCost) {
+  const captured = state.run && state.pickups.some(pickup => pickup.capture);
+  if (pending && captured) {
+    state.resultPending = null;
+    finish(state, pending);
+  } else if (nextCost !== null && state.xp >= nextCost) {
     openDraft(state, pending);
   } else {
     state.resultPending = null;
@@ -347,7 +352,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     heat: daily ? 0 : normalizeHeat(options.heat),
     weaponFireAt: {}, railChargeAt: null, seekerEchoAt: -1, weaponFx: [], ionWake: [], orbitDrones: [], nextBayDrop: null,
     streams: { spawn: rngStream(options.seed, 'spawn'), chest: rngStream(options.seed, 'chest'),
-      bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat') },
+      bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat'),
+      ...(run ? { magnetDrop: rngStream(options.seed, 'magnet-drop') } : {}) },
     view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
     arena: { ...ARENA, radius: ARENA.radius * (survivor ? SURVIVOR_SPACE_SCALE : 1) }, boundaryWarning: false,
     player: { x, z, altitude: survivor ? ground(x, z) + 90 : Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0, pitch: 0 },
@@ -373,9 +379,18 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   return state;
 }
 
-function finish(state: StageState, outcome: Outcome): void {
+function finish(state: StageState, outcome: Outcome, terminalTick = state.tick): void {
+  if (state.run && state.pickups.some(pickup => pickup.capture)) {
+    state.pendingFinish = { outcome, terminalTick, settlementTick: terminalTick };
+    state.resultPending = null;
+    state.phase = 'playing';
+    state.boosting = false;
+    state.paused = false;
+    return;
+  }
   state.phase = outcome;
   state.boosting = false;
+  state.resultPending = null;
   const hits = state.hitsTaken;
   state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits === 3 ? 'B' : 'C';
   if (outcome === 'clear') state.score += ACE.defeat.score;
@@ -383,7 +398,7 @@ function finish(state: StageState, outcome: Outcome): void {
     const settlement = settleRun(state.profile, state.metrics, {
       outcome, score: state.score, credits: state.run.credits, heat: state.heat,
     });
-    state.summary = { seconds: state.tick / TICKS_PER_SECOND, aceCache: outcome === 'clear',
+    state.summary = { seconds: terminalTick / TICKS_PER_SECOND, aceCache: outcome === 'clear',
       credits: state.daily ? 0 : settlement.credits, unlocked: state.daily ? [] : settlement.unlocked };
     if (!state.daily) state.profile = settlement.profile;
   }
@@ -543,19 +558,40 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   state.climbRate = (p.altitude - prior) / STEP;
 }
 
+export function dropMagnet(state: StageState, source: { sourceEventId: number; sourceKind: MagnetSourceKind; position: Position },
+  events?: CombatEvents): Pickup | null {
+  const stream = state.streams.magnetDrop;
+  if (!state.run || !stream || random(stream) >= MAGNET_DROP_CHANCE) return null;
+  const pickup: Pickup = { ...source.position, id: ++state.nextId, kind: 'magnet', xp: 0, born: state.tick,
+    source: { eventId: source.sourceEventId, kind: source.sourceKind } };
+  state.pickups.push(pickup);
+  events?.pickupDropped?.(pickupEvent(pickup, state.tick));
+  return pickup;
+}
+
+function pickupEvent(pickup: Pickup, tick: number, sourceEventId?: number) {
+  const eventSource = sourceEventId ?? pickup.source?.eventId;
+  return { pickupId: pickup.id, kind: pickup.kind ?? 'salvage', position: { x: pickup.x, z: pickup.z, alt: pickup.alt }, tick,
+    ...(eventSource === undefined ? {} : { sourceEventId: eventSource }) };
+}
+
 function mergeSalvage(state: StageState): void {
   const pickups = state.pickups;
   while (pickups.length > PICKUP_LIMIT) {
-    let added = pickups.pop()!;
-    // If only the newest drop is outside the pulse, merge two old orbs to free its slot.
-    if (!pickups.some(pickup => !!pickup.recovery === !!added.recovery)) {
-      const lone = added;
-      added = pickups.pop()!;
-      pickups.push(lone);
+    let addedIndex = -1;
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      if (pickups[i].kind !== 'magnet' && !pickups[i].capture) {
+        addedIndex = i;
+        break;
+      }
     }
-    let closest = pickups[0], distance = Infinity;
+    if (addedIndex < 0) break;
+    const added = pickups[addedIndex];
+    if (!added) break;
+    pickups.splice(addedIndex, 1);
+    let closest: Pickup | undefined, distance = Infinity;
     for (const pickup of pickups) {
-      if (!!added.recovery !== !!pickup.recovery) continue;
+      if (pickup.kind === 'magnet' || pickup.capture || !!added.recovery !== !!pickup.recovery) continue;
       const range = (added.x - pickup.x) ** 2 + (added.z - pickup.z) ** 2
         + (added.alt - pickup.alt) ** 2 * SALVAGE_RANGE.altitudeWeight;
       if (range < distance) {
@@ -563,13 +599,22 @@ function mergeSalvage(state: StageState): void {
         distance = range;
       }
     }
+    if (!closest) {
+      pickups.splice(addedIndex, 0, added);
+      break;
+    }
     closest.xp += added.xp;
     closest.born = Math.max(closest.born, added.born);
+    if (added.captureRequestTicks !== undefined) {
+      closest.captureRequestTicks = Math.min(closest.captureRequestTicks ?? added.captureRequestTicks, added.captureRequestTicks);
+      closest.pulling = true;
+    }
   }
 }
 
 // --- S7d lane ---
-function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 'skim'>): void {
+function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 'skim'>,
+  tick = state.tick): { xp: number; credits: number } {
   const beacon = buffTuning(state, 'salvage-beacon');
   const xpScale = state.run ? SURVIVOR_XP_SCALE * billXpScale(state) * state.hangar.xpScale : 1;
   const adjusted = pickup.xp * (beacon?.xpScale ?? 1) * xpScale + state.xpRemainder;
@@ -577,36 +622,86 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
   state.xp += whole;
   state.xpRemainder = Math.max(0, adjusted - whole);
   state.salvage += pickup.xp;
+  const credits = state.run ? pickup.xp * (beacon?.creditScale ?? 1) : 0;
   if (state.run) {
-    state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
+    state.run.credits += credits;
     state.metrics.orbs++;
-    noteBillPickup(state);
+    noteBillPickup(state, pickup, tick);
   }
   const band = pickup.skim ? 0 : fixedBand(pickup.alt);
   state.salvageBands[band] += pickup.xp;
+  return { xp: whole, credits };
 }
 
-function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents): void {
+function reportPickupContact(events: CombatEvents | undefined, pickup: Pickup, tick: number): void {
+  events?.pickupContacted?.(pickupEvent(pickup, tick));
+}
+
+function reportPickupCollected(state: StageState, pickup: Pickup, events: CombatEvents | undefined,
+  sourceAlt = pickup.capture?.origin.alt ?? pickup.alt, tick = state.tick): void {
+  const reward = creditSalvage(state, { ...pickup, alt: sourceAlt }, tick);
+  events?.pickupCollected?.({ ...pickupEvent(pickup, tick), ...reward,
+    playerPosition: { x: state.player.x, z: state.player.z, alt: state.player.altitude } });
+}
+
+const SALVAGE_TRAIL_START = 0.75;
+
+function capturePickup(state: StageState, pickup: Pickup, range: number, requestedTicks?: number): void {
   const p = state.player;
-  for (const enemy of state.enemies) {
-    if (!enemy.shotDown) continue;
-    const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
-    const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
-      : ENEMY_KINDS[enemy.kind].xp * (state.run ? REGULAR_SALVAGE_MULTIPLIER : 1);
-    if (chest) dropCarrierChest(state, enemy, ground);
-    noteSortieKill(state, enemy);
-    if (state.run) noteBillKill(state, enemy);
-    state.kills++;
-    state.score += xp * 100;
-    state.pickups.push({ id: ++state.nextId, x: enemy.x, z: enemy.z,
-      alt: enemy.kind === 'turret' ? skimAltitude(ground(enemy.x, enemy.z)) : enemy.alt,
-      ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill });
-    state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
-    if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
-    events?.destroyed?.(enemy.kind, !!enemy.carrier);
+  const wingX = Math.cos(p.yaw), wingZ = -Math.sin(p.yaw);
+  const side = (pickup.x - p.x) * wingX + (pickup.z - p.z) * wingZ < 0 ? -1 : 1;
+  const ordinaryTicks = Math.max(1, Math.ceil(SALVAGE_CAPTURE_TICKS * Math.min(range, SALVAGE_RANGE.magnet) / SALVAGE_RANGE.magnet));
+  const durationTicks = Math.min(ordinaryTicks, Math.max(1, Math.trunc(requestedTicks ?? ordinaryTicks)));
+  pickup.capture = { capturedAtTick: state.tick,
+    arriveAtTick: state.tick + durationTicks,
+    origin: { x: pickup.x, z: pickup.z, alt: pickup.alt },
+    curve: { x: wingX * side, z: wingZ * side, amount: Math.min(3.5, range * 0.06) } };
+  delete pickup.captureRequestTicks;
+  pickup.pulling = false;
+  delete pickup.collected;
+}
+
+function advanceCapturedPickup(state: StageState, pickup: Pickup, events?: CombatEvents, tick = state.tick): boolean {
+  const p = state.player, { capturedAtTick, arriveAtTick, origin, curve } = pickup.capture!;
+  const duration = Math.max(1, arriveAtTick - capturedAtTick);
+  const progress = clamp((tick - capturedAtTick) / duration, 0, 1);
+  const arc = Math.sin(Math.PI * progress) * curve.amount;
+  pickup.x = origin.x + (p.x - origin.x) * progress + curve.x * arc;
+  pickup.z = origin.z + (p.z - origin.z) * progress + curve.z * arc;
+  pickup.alt = origin.alt + (p.altitude - origin.alt) * progress;
+  pickup.pulling = progress >= SALVAGE_TRAIL_START;
+  if (tick < arriveAtTick) return true;
+  pickup.x = p.x;
+  pickup.z = p.z;
+  pickup.alt = p.altitude;
+  reportPickupCollected(state, pickup, events, undefined, tick);
+  return false;
+}
+
+function advanceCapturedPickups(state: StageState, events?: CombatEvents, tick = state.tick): void {
+  state.pickups = state.pickups.filter(pickup => !pickup.capture || advanceCapturedPickup(state, pickup, events, tick));
+}
+
+function activateMagnet(state: StageState, magnets: Pickup[], events?: CombatEvents): void {
+  const ids = new Set(magnets.map(pickup => pickup.id));
+  for (const pickup of magnets) {
+    const event = pickupEvent(pickup, state.tick);
+    events?.pickupContacted?.(event);
+    events?.pickupCollected?.({ ...event, xp: 0, credits: 0,
+      playerPosition: { x: state.player.x, z: state.player.z, alt: state.player.altitude } });
   }
-  if (state.run) mergeSalvage(state);
-  state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
+  for (const pickup of state.pickups) {
+    if (ids.has(pickup.id)) continue;
+    if (pickup.kind === 'magnet' || pickup.capture) continue;
+    if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
+    capturePickup(state, pickup, Math.hypot(state.player.x - pickup.x, state.player.z - pickup.z));
+    reportPickupContact(events, pickup, state.tick);
+  }
+  state.pickups = state.pickups.filter(pickup => !ids.has(pickup.id));
+}
+
+function advanceLegacyPickups(state: StageState, ground: Ground): void {
+  const p = state.player;
   const horizontalSpeed = Math.hypot(p.vx ?? 0, p.vz ?? 0);
   const magnet = buffTuning(state, 'magnet-core');
   const magnetScale = (state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1)
@@ -646,6 +741,66 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
     if (pickup.collected || Math.hypot(p.x - pickup.x, p.z - pickup.z) <= SALVAGE_RANGE.collect) {
       creditSalvage(state, pickup);
       return false;
+    }
+    return true;
+  });
+}
+
+function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents): void {
+  const p = state.player;
+  for (const enemy of state.enemies) {
+    if (!enemy.shotDown) continue;
+    const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
+    const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
+      : ENEMY_KINDS[enemy.kind].xp * (state.run ? REGULAR_SALVAGE_MULTIPLIER : 1);
+    if (chest) dropCarrierChest(state, enemy, ground);
+    noteSortieKill(state, enemy);
+    if (state.run) noteBillKill(state, enemy);
+    state.kills++;
+    state.score += xp * 100;
+    const position = { x: enemy.x, z: enemy.z, alt: enemy.kind === 'turret' ? skimAltitude(ground(enemy.x, enemy.z)) : enemy.alt };
+    const id = ++state.nextId;
+    const salvage: Pickup = state.run
+      ? { ...position, id, kind: 'salvage', ...(enemy.skim ? { skim: true as const } : {}), xp, born: state.tick, reversal: enemy.reversalKill }
+      : { id, x: position.x, z: position.z, alt: position.alt, ...(enemy.skim ? { skim: true as const } : {}),
+        xp, born: state.tick, reversal: enemy.reversalKill };
+    state.pickups.push(salvage);
+    events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
+    if (state.run && enemy.carrier) {
+      dropMagnet(state, { sourceEventId: enemy.id, sourceKind: 'elite', position }, events);
+    }
+    state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
+    if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
+    events?.destroyed?.(enemy.kind, !!enemy.carrier);
+  }
+  if (state.run) mergeSalvage(state);
+  state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
+  if (!state.run) {
+    advanceLegacyPickups(state, ground);
+    return;
+  }
+  const magnet = buffTuning(state, 'magnet-core');
+  const magnetScale = (state.run ? state.hangar.magnetScale * HEAT_TIERS[state.heat].magnetScale : 1)
+    * (p.skim ? SKIM.magnetScale : 1);
+  const touchedMagnets = state.pickups.filter(pickup => pickup.kind === 'magnet' && state.tick - pickup.born < 60 * TICKS_PER_SECOND
+    && inBand(p.altitude, pickup.alt, HIT_WINDOW)
+    && Math.hypot(p.x - pickup.x, p.z - pickup.z) <= SALVAGE_RANGE.collect);
+  if (touchedMagnets.length) activateMagnet(state, touchedMagnets, events);
+  state.pickups = state.pickups.filter(pickup => {
+    if (pickup.kind === 'magnet') return state.tick - pickup.born < 60 * TICKS_PER_SECOND;
+    if (!pickup.capture && state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
+    if (pickup.capture) {
+      return advanceCapturedPickup(state, pickup, events);
+    }
+    const range = Math.hypot(p.x - pickup.x, p.z - pickup.z);
+    if (Math.hypot(p.x - pickup.x, p.z - pickup.z, p.altitude - pickup.alt) <= SALVAGE_RANGE.collect) {
+      reportPickupContact(events, pickup, state.tick);
+      reportPickupCollected(state, pickup, events);
+      return false;
+    }
+    if (pickup.collected || pickup.pulling || range <= SALVAGE_RANGE.magnet * (magnet?.radiusScale ?? 1) * magnetScale) {
+      capturePickup(state, pickup, range, pickup.captureRequestTicks);
+      reportPickupContact(events, pickup, state.tick);
     }
     return true;
   });
@@ -694,9 +849,25 @@ function advanceDestinations(state: StageState, ground: Ground): void {
   if (!state.rally && !state.boss && state.tick >= beaconTick(state)) state.rally = findRally(state, ground);
 }
 
-/** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
+/** Advance a stage tick or a capture-only terminal step; modals consume input without ticking the sortie. */
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
   observeSwarm?: SwarmObserver, events?: CombatEvents): void {
+  if (state.pendingFinish) {
+    if (input.pause) {
+      state.paused = !state.paused;
+      state.boosting = false;
+      return;
+    }
+    if (state.paused) return;
+    const pending = state.pendingFinish;
+    pending.settlementTick++;
+    advanceCapturedPickups(state, events, pending.settlementTick);
+    if (!state.pickups.some(pickup => pickup.capture)) {
+      delete state.pendingFinish;
+      finish(state, pending.outcome, pending.terminalTick);
+    }
+    return;
+  }
   if (state.phase === 'chest') {
     if (input.chestPick) resolveChest(state, input.chestPick);
     return;
@@ -744,6 +915,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     for (const effect of state.effects) effect.life -= STEP;
     state.effects = state.effects.filter(effect => effect.life > 0);
     advanceAce(state, ground);
+    advanceCapturedPickups(state, events);
     if (state.boss.crashed || state.tick >= endTick(state)) finish(state, 'clear');
     return;
   }
@@ -867,6 +1039,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.boosting = false;
     state.boostRelease = true;
   }
+  else if (outcome && state.run && state.pickups.some(pickup => pickup.capture)) finish(state, outcome);
   else if (cost !== null && state.xp >= cost) openDraft(state, outcome);
   else if (outcome) finish(state, outcome);
 }
