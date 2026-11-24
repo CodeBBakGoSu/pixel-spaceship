@@ -1010,6 +1010,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
     if (enemy.escortClearYaw !== undefined) {
       const speed = enemy.flightSpeed ?? (ENEMY_KINDS[enemy.kind] as { speed?: number }).speed ?? 1;
       steer(state, enemy, ground, enemy.escortClearYaw, speed);
+      advancePosition(enemy, ground);
       continue;
     }
     if (enemy.kind === 'gnat') {

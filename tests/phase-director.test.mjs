@@ -66,6 +66,20 @@ test('restarting a sortie clears the old director and allows the new introductio
   assert.equal(state.phaseDirector.intro, 1);
   assert.equal(state.enemies.some(enemy => enemy.kind === 'twin-chaser' && enemy.directorIntro), true);
 });
+
+test('escorts advance along their clear-out heading at the eight-minute boundary', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'), ground);
+  state.tick = tick(480);
+  const escort = makeEnemy(state, 0, 0, 1, 'aegis');
+  state.enemies.push(escort);
+  advancePhaseDirector(state, ground);
+  assert.equal(escort.leaveAt, tick(540));
+  assert.ok(Number.isFinite(escort.escortClearYaw));
+  const before = { x: escort.x, z: escort.z };
+  advanceEnemies(state, ground);
+  assert.ok(Math.hypot(escort.x - before.x, escort.z - before.z) > 0);
+});
+
 test('intro isolation cancels existing tells and pending volleys', () => {
   const state = createStage(parseStageOptions('?mode=survivors&t=0'), () => 0);
   state.tick = tick(70);
