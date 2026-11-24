@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ef94685`, based on `254d002`)
+- Flight-clock rebasing now samples `performance.now()` immediately after every `updateAceLock` call (including render and pause sync), pairing the input-step anchor with the same frame's AudioContext anchor instead of reusing the earlier rAF timestamp.
+- Focused tests passed 33/33; build passed (120 modules, 4.73s). Full suite and live UI/audio verification remain deferred.
+- State: shared-anchor follow-up verified; pushing with this log entry.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ed7a423`, based on `838e0dd`)
 - Capped catch-up steps now use the accepted elapsed interval's prefix from the preceding frame/audio sync anchor, then rebase after audio update so discarded frame tails do not shift queued inputs. Same-step due flight actions drain together with prior C/roll-over-maneuver priority; future inputs remain queued.
 - Added repeated 250ms/12-step low-FPS coverage, C at cue+2ms reaching the dodge window and canceling with a due J-turn, pause/reset clock rebase, and due/future arbitration checks. Focused tests passed 33/33; build passed (120 modules, 3.19s). Full suite and runtime UI/audio verification remain deferred.
