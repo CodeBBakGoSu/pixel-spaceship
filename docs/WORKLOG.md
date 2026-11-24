@@ -24,10 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; implementation commit `587683981def20f8554a2aa9df0a7321de35c581`)
 - Tightened Ace acceptance from natural 8:00 spawn: a real player twin trajectory reaches the Ace hull within five seconds, four first-minute windows sustain at least three seconds, and 9:00+ cadence is observed. The probe uses live range/cone/muzzle/lead/bolt-life/hull geometry on a forecast clone without damage or actor relocation; trimmed unused spatial exports while retaining used helper signatures.
 - Verification: Ace reengagement 6/6; `npm test` 644/644; `npm run build` `✓ 122 modules transformed.` / `✓ built in 2.00s` (source unchanged after build); `git diff --check` clean. No balance simulation or visual/UI check.
-- State: tests verified; implementation commit/push pending. A follow-up log-only commit will record the implementation hash.
+- State: tests verified; implementation commit `587683981def20f8554a2aa9df0a7321de35c581` recorded by this log-only follow-up; push pending.
 
 ### 2026-11-24 23:32 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
 - Review fixes: natural Ace player-hit opportunity and 12s→10s reengagement windows; arena bounds apply while the pilot is inside the arena, with terrain/ceiling checks. Added damageable escorts, repeating commander cross/recovery, rising-ground altitude guard, and consumed 3:35/6:45 swarms. Existing HP/firepower values are unchanged; Survivors replay golden updated.
