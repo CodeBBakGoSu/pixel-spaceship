@@ -95,6 +95,15 @@ export function isDescendingDiveWarning(maneuver: { phase: string; band: number 
   return maneuver?.phase === 'warning' && Number.isFinite(maneuver.band) && maneuver.band < currentBand;
 }
 
+export function touchCueScreenReference(projected: ScreenPoint & { depth: number },
+  layout: Pick<PhoneLayout, 'cockpit' | 'playfield'>): ScreenPoint {
+  if (projected.depth > 0.05 && Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
+    return { x: projected.x, y: projected.y };
+  }
+  const anchor = layout.cockpit?.aiming ?? layout.playfield;
+  return { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height * 0.72 };
+}
+
 export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number | null {
   const dx = to.x - from.x, dy = to.y - from.y;
   if (![dx, dy].every(Number.isFinite) || Math.hypot(dx, dy) < 0.001) return null;
