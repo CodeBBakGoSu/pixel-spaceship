@@ -93,6 +93,7 @@ test('descending warning state is independent of HUD message selection', () => {
   assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 2 }, 2), false);
   assert.equal(isDescendingDiveWarning({ phase: 'warning', band: 3 }, 2), false);
   assert.equal(isDescendingDiveWarning({ phase: 'attack', band: 1 }, 2), false);
+  assert.equal(isDescendingDiveWarning(null, 2), false);
   assert.equal(isDescendingDiveWarning(undefined, 2), false);
 });
 
