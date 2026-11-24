@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CLOSE_EVOLUTIONS } from '../src/data/close-evolutions.ts';
 import { aegisVolumeOutline } from '../src/aegis-volume.ts';
+import {
+  AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_RING_TUBE_RADIUS, AEGIS_VOLUME_OUTLINE,
+  createAegisRingGeometry,
+} from '../src/aegis-volume-render.ts';
 
 test('Aegis volume outlines the judged inner, outer, upper, and lower bounds', () => {
   const { radius, halfWidth } = CLOSE_EVOLUTIONS.aegis;
@@ -41,4 +45,26 @@ test('Aegis volume outlines the judged inner, outer, upper, and lower bounds', (
   }
   assert.equal(verticalSupports, 16);
   assert.equal(radialSupports, 16);
+});
+
+test('rendered Aegis torus geometry keeps a fixed world-unit outline thickness', () => {
+  const radii = [...new Set(AEGIS_VOLUME_OUTLINE.rings.map(ring => ring.radius))].sort((a, b) => a - b);
+  assert.deepEqual(radii, [AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS]);
+
+  for (const radius of radii) {
+    const geometry = createAegisRingGeometry(radius);
+    geometry.computeBoundingBox();
+    const bounds = geometry.boundingBox;
+    assert.ok(bounds);
+    assert.equal(geometry.parameters.radius, radius);
+    assert.equal(geometry.parameters.tube, AEGIS_RING_TUBE_RADIUS);
+    const epsilon = 1e-5;
+    assert.ok(Math.abs(bounds.min.x + radius + AEGIS_RING_TUBE_RADIUS) < epsilon);
+    assert.ok(Math.abs(bounds.max.x - radius - AEGIS_RING_TUBE_RADIUS) < epsilon);
+    assert.ok(Math.abs(bounds.min.z + radius + AEGIS_RING_TUBE_RADIUS) < epsilon);
+    assert.ok(Math.abs(bounds.max.z - radius - AEGIS_RING_TUBE_RADIUS) < epsilon);
+    assert.ok(Math.abs(bounds.min.y + AEGIS_RING_TUBE_RADIUS) < epsilon);
+    assert.ok(Math.abs(bounds.max.y - AEGIS_RING_TUBE_RADIUS) < epsilon);
+    geometry.dispose();
+  }
 });
