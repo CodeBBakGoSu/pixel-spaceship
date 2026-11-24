@@ -39,7 +39,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
 import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, screenPointObscured, touchControlOcclusionRect,
-  TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
+  touchCueScreenReference, TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -807,10 +807,11 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact(target, projectedTarget);
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
-    if (projectedTarget.depth > 0.05 && projectedPlayer.depth > 0.05) {
+    if (projectedTarget.depth > 0.05) {
       const reserved = aegisCueSlot ? [aegisCueSlot] : [];
       const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
-      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, TOUCH_THREAT_CUE_SIZE,
+      const reference = touchCueScreenReference(projectedPlayer, phone);
+      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE,
         8, occlusion, reserved, touchThreatCueSlot);
       if (cue) {
         setRect('touch-threat-cue', cue.rect);
