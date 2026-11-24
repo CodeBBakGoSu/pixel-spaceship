@@ -187,3 +187,19 @@ test('a legacy checkpoint migrates combat runtime without replaying elapsed intr
   assert.equal(restored.phaseDirector.intro, 2);
   assert.equal(restored.enemies.some(enemy => enemy.id > nextId && enemy.directorIntro), false);
 });
+
+test('a legacy checkpoint exactly at minute six leaves the combined formation pending', () => {
+  const legacy = createStage(parseStageOptions('?autoplay=1&mode=survivors&seed=11'), ground);
+  legacy.tick = 360 * 60;
+  const envelope = JSON.parse(encodeCheckpoint(legacy));
+  delete envelope.state.phaseDirector;
+  const restored = decodeCheckpoint(JSON.stringify(envelope), ground);
+  assert.equal(restored.phaseDirector.six, false);
+
+  const before = restored.nextId;
+  stepStage(restored, {}, ground);
+  assert.equal(restored.phaseDirector.six, true);
+  const formation = restored.enemies.filter(enemy => enemy.id > before);
+  assert.equal(formation.filter(enemy => enemy.kind === 'crosswing').length, 2);
+  assert.ok(formation.some(enemy => enemy.kind === 'twin-chaser'));
+});

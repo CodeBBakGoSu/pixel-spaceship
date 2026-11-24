@@ -116,7 +116,7 @@ export function advancePhaseDirector(state: StageState, ground: Ground): boolean
 export function createPhaseDirectorAtTick(tick: number): NonNullable<StageState['phaseDirector']> {
   return {
     intro: intros.filter(event => event.at * S <= tick).length,
-    six: tick >= 360 * S,
+    six: tick > 360 * S,
     seven: tick >= 420 * S,
     manta: tick >= 465 * S,
     isolationUntil: 0,

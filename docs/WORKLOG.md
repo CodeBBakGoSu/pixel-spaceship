@@ -427,3 +427,11 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - Full `npm test`: 652/653 passed. Remaining failure is the bot-sim survival-order assertion (`average` median 515.23s, `weak` median 552.72s); no balance retuning or weakened assertion was applied. `npm run build`: 124 modules transformed, built in 4.25s; existing >500 kB chunk advisory remains. `git diff --check` is clean.
 - Reviewed the repo blueprint (`npm install` maintenance); no dependency or setup changes were made. Visual/UI rendering was not checked.
 - State: independent candidate only; no merge or deployment.
+
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (Crosswing geometry and minute-six resume)
+- Replaced Crosswing side-frame targets with tell-time position snapshots, one shared crossing point, and fixed opposite exits. Fighters now follow the warned crossing path, finish independently, and enter pair recovery only after both exit; a fighter whose mate dies before the shared point cancels its path.
+- Seed-4 regression uses the natural seed-4 stage spawn and full `stepStage` loop, traces actual per-tick fighter segments, and asserts the traces intersect. Trace: reservation tick 8400 (140s), actual spawn tick 8400, first warning tick 8550 (142.5s), finish ticks 8666/8672, pair recovery tick 8672. Friendly weapons are disabled in this regression only so the pair survives long enough to exercise both paths.
+- Legacy checkpoint migration now leaves the minute-six combined formation pending at exactly 360 seconds; the regression resumes that boundary and verifies the Crosswing pair and Twin Chaser spawn.
+- Focused checks: Crosswing path 2/2; checkpoint 11/11. Full `npm test`: 655/655. `npm run build`: 124 modules transformed, built in 4.08s; the existing >500 kB chunk advisory remains. `git diff --check`: clean.
+- Bot-sim investigation: the prior average/weak median-order failure is absent with the unchanged assertion after this correction. Same-seed traces show no hull-hit event while a Crosswing is active; late hits occur after the pairs are gone. The indirect reason the deterministic profile medians changed remains unverified; no balance tuning or assertion change was made.
+- State: independent candidate only; no merge or deployment.
