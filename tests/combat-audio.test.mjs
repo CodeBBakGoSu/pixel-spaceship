@@ -162,6 +162,14 @@ async function finishDecoding() {
 }
 
 const voicesFor = (context, buffer) => context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === buffer);
+const ACE_LOCK_PULSE_HZ = [640, 850, 1125, 1490, 1980];
+
+function aceLockBuffers(context) {
+  const window = context.buffers.at(-1);
+  const pulses = context.buffers.slice(-ACE_LOCK_PULSE_HZ.length - 1, -1);
+  assert.equal(pulses.length, ACE_LOCK_PULSE_HZ.length);
+  return { pulses, window };
+}
 
 function aceLockState(tick, { id = 17, kind = 'gun', since = 100, until = 160, active = true, paused = false } = {}) {
   const tell = active ? Object.freeze({ kind, since, until }) : null;
@@ -550,7 +558,7 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
   const noiseLoop = first.nodes.find(node => node.loop).buffer;
   assert.ok(noiseLoop.duration >= 1);
   let effectsCeiling = 0;
-  const lockPulse = first.buffers.at(-2), lockWindow = first.buffers.at(-1);
+  const { pulses: lockPulses, window: lockWindow } = aceLockBuffers(first);
   for (let i = 0; i < first.buffers.length; i++) {
     const buffer = first.buffers[i], samples = buffer.getChannelData(0);
     assert.deepEqual(samples, second.buffers[i].getChannelData(0));
@@ -560,7 +568,7 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
       peak = Math.max(peak, Math.abs(value));
     }
     assert.ok(peak > 0.01 && peak <= 1);
-    if (buffer === noiseLoop || buffer === lockPulse || buffer === lockWindow) continue;
+    if (buffer === noiseLoop || lockPulses.includes(buffer) || buffer === lockWindow) continue;
     assert.equal(Math.abs(samples[0]), 0);
     assert.equal(Math.abs(samples.at(-1)), 0);
     effectsCeiling += peak;
@@ -569,7 +577,7 @@ test('flight and roster buffers are repeatable and the combined mix stays below 
   const flightCeiling = loudest.engineGain * (1 + FLIGHT_AUDIO.engine.noiseMix)
     + loudest.afterburnerGain + loudest.windGain + loudest.rushGain;
   const lockCeiling = Math.max(
-    Math.max(...lockPulse.getChannelData(0).map(Math.abs)) * 2.0,
+    ...lockPulses.map(pulse => Math.max(...pulse.getChannelData(0).map(Math.abs)) * 2.0),
     Math.max(...lockWindow.getChannelData(0).map(Math.abs)) * 2.4,
   );
   const [headroom] = first.master.outputs;
@@ -619,36 +627,45 @@ test('tail, missile lock and roster alerts play distinct cues with independent c
   assert.equal(context.started.at(-1), context.started[cues.indexOf('tell:missile')]);
 });
 
-test('Ace lock cue synthesis is short, enveloped and distinct from low generic warnings', t => {
+test('Ace lock pulse bank spans the reference pitch range and preserves the distinct window cue', t => {
   const { instances, userActivation } = browserAudio(t);
   userActivation.hasBeenActive = true;
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const pulse = context.buffers.at(-2), window = context.buffers.at(-1);
-  assert.ok(Math.abs(pulse.duration - 0.04) < 0.001);
+  const { pulses, window } = aceLockBuffers(context);
+  assert.equal(pulses.length, ACE_LOCK_PULSE_HZ.length);
+  const measuredPulseHz = pulses.map(pulse => {
+    assert.ok(Math.abs(pulse.duration - 0.04) < 0.001);
+    return positiveCrossingHz(pulse.getChannelData(0), pulse.sampleRate, 96, 864);
+  });
+  for (let i = 0; i < ACE_LOCK_PULSE_HZ.length; i++) {
+    assert.ok(Math.abs(measuredPulseHz[i] - ACE_LOCK_PULSE_HZ[i]) <= 40,
+      `pulse ${i} should be ${ACE_LOCK_PULSE_HZ[i]} Hz, got ${measuredPulseHz[i]}`);
+  }
   assert.ok(window.duration >= 0.1 && window.duration <= 0.14);
-  const pulseSamples = pulse.getChannelData(0);
   const windowSamples = window.getChannelData(0);
-  assert.ok(positiveCrossingHz(pulseSamples, pulse.sampleRate, 96, 864) >= 1100);
-  assert.ok(positiveCrossingHz(pulseSamples, pulse.sampleRate, 96, 864) <= 1400);
   assert.ok(positiveCrossingHz(windowSamples, window.sampleRate, 120, 1080) >= 950);
   assert.ok(positiveCrossingHz(windowSamples, window.sampleRate, 120, 1080) <= 1150);
   assert.ok(positiveCrossingHz(windowSamples, window.sampleRate, 1680, 2640) >= 1350);
   assert.ok(positiveCrossingHz(windowSamples, window.sampleRate, 1680, 2640) <= 1550);
-  assert.equal(Math.abs(pulseSamples[0]), 0);
-  assert.equal(Math.abs(pulseSamples.at(-1)), 0);
+  for (const pulse of pulses) {
+    const samples = pulse.getChannelData(0);
+    assert.equal(Math.abs(samples[0]), 0);
+    assert.equal(Math.abs(samples.at(-1)), 0);
+  }
   assert.equal(Math.abs(windowSamples[0]), 0);
   assert.equal(Math.abs(windowSamples.at(-1)), 0);
 });
 
-test('Ace lock pulses accelerate by tell tick and window entry replaces the pulse exactly once', t => {
+test('Ace lock pulse pitch follows tell progress without changing cadence or window entry', t => {
   const { instances, userActivation } = browserAudio(t);
   userActivation.hasBeenActive = true;
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const pulse = context.buffers.at(-2), window = context.buffers.at(-1);
+  const { pulses: pulseBank, window } = aceLockBuffers(context);
+  const cachedBufferCount = context.buffers.length;
   const cues = [];
   let started = context.started.length;
   for (let tick = 100; tick <= 160; tick++) {
@@ -657,19 +674,23 @@ test('Ace lock pulses accelerate by tell tick and window entry replaces the puls
     for (const buffer of context.started.slice(started)) cues.push({ tick, buffer });
     started = context.started.length;
   }
-  const pulses = cues.filter(cue => cue.buffer === pulse).map(cue => cue.tick);
+  const pulseCues = cues.filter(cue => pulseBank.includes(cue.buffer));
+  const pulseTicks = pulseCues.map(cue => cue.tick);
+  const pitchSteps = pulseCues.map(cue => pulseBank.indexOf(cue.buffer));
   const accents = cues.filter(cue => cue.buffer === window).map(cue => cue.tick);
-  assert.deepEqual(pulses, [100, 112, 122, 131, 139, 150, 156]);
+  assert.deepEqual(pulseTicks, [100, 112, 122, 131, 139, 150, 156]);
+  assert.deepEqual(pitchSteps, [0, 1, 2, 3, 4, 4, 4], 'pitches rise by tell progress and remain urgent in the window');
   assert.deepEqual(accents, [142], 'the one-shot accent lands at the exact dodge-window edge');
+  assert.equal(context.buffers.length, cachedBufferCount, 'scheduled pulses reuse the cached tone bank');
 
   const short = new CombatAudio();
   const other = browserAudio(t);
   other.userActivation.hasBeenActive = true;
   short.unlock(gesture);
   const [shortContext] = other.instances;
-  const shortPulse = shortContext.buffers.at(-2), shortWindow = shortContext.buffers.at(-1);
+  const { pulses: shortPulses, window: shortWindow } = aceLockBuffers(shortContext);
   short.updateAceLock(aceLockState(100, { until: 119 }), true);
-  const pulseVoice = voicesFor(shortContext, shortPulse).at(-1);
+  const pulseVoice = voicesFor(shortContext, shortPulses[0]).at(-1);
   assert.equal(pulseVoice.outputs[0].gain.value, 2.0, 'pulse starts at its requested cue gain');
   shortContext.currentTime = 1 / 60;
   short.updateAceLock(aceLockState(101, { until: 119 }), true);
@@ -687,13 +708,13 @@ test('Ace lock catch-up collapses missed pulses and gives a crossed window accen
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const pulse = context.buffers.at(-2), window = context.buffers.at(-1);
+  const { pulses: pulseBank, window } = aceLockBuffers(context);
   audio.updateAceLock(aceLockState(100), true);
   const before = context.started.length;
   context.currentTime = 35 / 60;
   audio.updateAceLock(aceLockState(135), true);
   assert.equal(context.started.length, before + 1, 'a multi-interval catch-up emits at most one cue');
-  assert.equal(context.started.at(-1), pulse);
+  assert.ok(pulseBank.includes(context.started.at(-1)));
   const afterPulse = context.started.length;
   audio.updateAceLock(aceLockState(135), true);
   assert.equal(context.started.length, afterPulse, 'rendering the same post-step tick cannot duplicate a pulse');
@@ -711,9 +732,9 @@ test('Ace lock audio uses the direct master path, ducks effects and cleans up it
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const pulse = context.buffers.at(-2);
+  const { pulses: pulseBank } = aceLockBuffers(context);
   audio.updateAceLock(aceLockState(100), true);
-  const lockVoice = voicesFor(context, pulse).at(-1);
+  const lockVoice = voicesFor(context, pulseBank[0]).at(-1);
   assert.equal(lockVoice.outputs[0].outputs[0], context.master, 'the lock cue bypasses the effects bus only');
   const effects = context.master.inputs.find(node => node.kind === 'gain');
   const lockGain = lockVoice.outputs[0];
@@ -796,7 +817,7 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
-  const pulse = context.buffers.at(-2);
+  const { pulses: pulseBank } = aceLockBuffers(context);
   const snapshot = aceLockState(100);
   const before = JSON.stringify(snapshot);
   audio.updateAceLock(snapshot, true);
@@ -804,10 +825,10 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   audio.updateAceLock(aceLockState(100, { id: 18, kind: 'missile' }), true);
   audio.updateAceLock(aceLockState(101, { id: 18, kind: 'missile', since: 101 }), true);
   audio.updateAceLock(aceLockState(101, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
-  assert.equal(voicesFor(context, pulse).length, 5, 'boss id, kind, since and until all identify a tell');
+  assert.equal(voicesFor(context, pulseBank[0]).length, 5, 'boss id, kind, since and until all identify a tell');
   assert.equal(JSON.stringify(snapshot), before, 'the presentation scheduler does not mutate StageState');
 
-  const pausedVoice = voicesFor(context, pulse).at(-1);
+  const pausedVoice = voicesFor(context, pulseBank[0]).at(-1);
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161, paused: true }), false);
   assert.equal(pausedVoice.stopped, true, 'pause stops the active lock voice');
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'pause restores the effects bus');
@@ -841,7 +862,7 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
 
   audio.updateAceLock(aceLockState(300, { since: 300, until: 360 }), true);
-  const activeVoice = voicesFor(context, pulse).at(-1);
+  const activeVoice = voicesFor(context, pulseBank[0]).at(-1);
   const activeGain = activeVoice.outputs[0];
   audio.updateAceLock(aceLockState(301, { active: false }), false);
   assert.equal(activeVoice.stopped, true, 'tell cancellation promptly stops the active voice');

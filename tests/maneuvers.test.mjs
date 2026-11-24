@@ -40,7 +40,7 @@ for (const [kind, flipTick, ticks, altitude, yaw, cooldown] of [
     const state = empty();
     const { x, z } = state.player;
     const startTick = state.tick;
-    const first = { maneuver: kind, turn: 1, climb: 1, boost: true, bomb: true };
+    const first = { maneuver: kind, turn: 1, climb: 1, boost: true };
     run(state, 1, first);
     if (kind === 'j-turn') {
       assert.ok(Math.abs(state.player.yaw) > 3.1);
@@ -60,7 +60,7 @@ for (const [kind, flipTick, ticks, altitude, yaw, cooldown] of [
     assert.equal(state.maneuver, null);
     assert.equal(state.player.altitude, altitude);
     assert.ok(Math.abs(Math.abs(state.player.yaw) - yaw) < 1e-9);
-    assert.equal(state.bombs, 3);
+    assert.equal(state.rearBombs.length, 0);
     assert.equal(state.maneuverReadyAt, readyAt);
     assert.equal(state.invulnerability, 0);
     assert.ok(Math.hypot(state.player.x - x, state.player.z - z) >= 10);
@@ -270,29 +270,11 @@ test('hostile shots still damage the player during body grace', () => {
   assert.equal(state.hull, state.maxHull - 2);
 });
 
-test('rear bomb coasts at its release altitude and falls after 27 ticks', () => {
-  const state = empty();
-  run(state, 1, { bomb: true });
-  assert.equal(state.bombs, 2);
-  const bomb = state.rearBombs[0];
-  assert.ok(bomb.z < state.player.z - scaleTravel(8));
-  assert.equal(bomb.alt, 125);
-  const z = bomb.z;
-  run(state, 1, { maneuver: 'j-turn' });
-  run(state, 26);
-  assert.equal(bomb.alt, 125);
-  assert.ok(bomb.z < z);
-  run(state, 1);
-  assert.ok(Math.abs(bomb.alt - 124.4) < 1e-9);
-  run(state, 200);
-  assert.equal(state.rearBombs.length, 0);
-});
-
 test('falling bomb damage is altitude gated and clears only nearby hostile shots at any height', () => {
   const state = empty();
   const targets = createStage(parseStageOptions('?fixture=stack')).enemies;
-  run(state, 1, { bomb: true });
-  const bomb = state.rearBombs[0];
+  const bomb = { x: state.player.x, z: state.player.z, alt: 125, vx: 0, vz: 0, born: state.tick, ceiling: 100, weapon: 'bomb-bay' };
+  state.rearBombs.push(bomb);
   run(state, 100);
   assert.ok(bomb.alt > 75 && bomb.alt < 83);
   for (const target of targets) {
@@ -323,27 +305,6 @@ test('a falling bomb detonates when it reaches the Ace’s altitude damage windo
   advanceRearBombs(state, () => 35);
   assert.equal(state.rearBombs.length, 0);
   assert.equal(ace.hp, ace.maxHp - 4);
-});
-
-test('rear stores enforce 24 ticks between drops and refill one charge every 450 active ticks', () => {
-  const state = empty();
-  const initialTick = state.tick;
-  run(state, 1, { bomb: true });
-  run(state, 23, { bomb: true });
-  assert.equal(state.bombs, 2);
-  run(state, 1, { bomb: true });
-  assert.equal(state.bombs, 1);
-  run(state, 1, { pause: true });
-  run(state, 500);
-  assert.equal(state.bombs, 1);
-  run(state, 1, { pause: true });
-  run(state, initialTick + 450 - state.tick);
-  assert.equal(state.bombs, 1);
-  run(state, 1);
-  assert.equal(state.bombs, 2);
-  run(state, 450);
-  assert.equal(state.bombs, 3);
-  assert.equal(state.bombReloadAt, null);
 });
 
 test('all three maneuvers cross the old rim and stay available in streamed airspace', () => {

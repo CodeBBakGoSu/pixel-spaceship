@@ -1,3 +1,4 @@
+import { normalizeMetrics } from './meta.ts';
 import { deployAce } from './ace.ts';
 import { PHASES, RUN_BOSS_SECONDS } from './data/phases.ts';
 import { TICKS_PER_SECOND } from './stage-combat.ts';
@@ -33,6 +34,8 @@ export function decodeCheckpoint(raw: string | null, ground?: Ground): StageStat
       || ![state.seed, state.rng, state.player.x, state.player.z, state.player.altitude, state.hull, state.level].every(Number.isFinite)) return null;
     if (state.player.pitch === undefined) state.player.pitch = 0;
     else if (!Number.isFinite(state.player.pitch)) return null;
+    state.profile.metrics = normalizeMetrics(state.profile.metrics);
+    state.metrics = normalizeMetrics(state.metrics);
     for (const enemy of state.enemies) migrateIonCooldown(enemy);
     if (state.boss?.kind === 'ace') migrateIonCooldown(state.boss);
     const oldWorld = !state.worldRegion;

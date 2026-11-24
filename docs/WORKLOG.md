@@ -24,6 +24,19 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (reference-informed audio update)
+- The tester's Forge reference confirms an incoming warning that rises from approximately 640Hz to 1980Hz. Updated only the cached Ace incoming-lock pulse bank to five 40ms tones (640/850/1125/1490/1980Hz), selected by lock progress through the existing pre-window edge.
+- This is inspired by the incoming alarm's low-to-high urgency, not a literal copy of its 11Hz timing/rhythm and not the distinct player-target 990→1480Hz warble. Existing pulse cadence, 2.0 gain, 0.06 effects duck, separate 1050→1450Hz dodge-window cue, fire restoration, master/headroom/limiter and gameplay remain unchanged.
+- Added regressions for all cached tone pitches/duration, progress selection, unchanged cadence/window timing, cache reuse, routing and lifecycle cleanup. Focused combat/flight audio tests passed 26/26; the production build passed (120 modules, 2.93 s). No browser capture or listening by this agent; the UI agent will retest the pushed tree. Logs: `/home/ubuntu/pixel-spaceship-ace-audio-final.log`, `/home/ubuntu/pixel-spaceship-ace-audio-build.log`.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (baseline `1b652cd`; renderer-proto `746f308`)
+- Merged the latest `renderer-proto` tree into the PR7 worktree only, retaining PR8's automatic Phoenix/Bomb Bay weapons, C barrel roll, Shift+Space and W/S+Space behavior. Kept both sides' worklog entries; no commit, push, base merge or deployment.
+- Revised only the Ace outer ring: the fixed reference ring keeps its existing radius; the large ring starts outside the projected aircraft when viewport space allows, contracts quickly early and eases more slowly toward the unchanged near-overlap/firing ticks. Added geometry coverage for ship enclosure, front-loaded contraction and viewport cap.
+- P1 tip `96bd079` is not an ancestor of this base and remains untouched/untested. The supplied TestFlight link opens Devin for iOS, not the game; the correct lock-on sound reference has now arrived at https://forge.ui8.ai/share/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24, and the UI agent's runtime/audio comparison is pending. No audio changes were made. Continuous play capture showing the ship-enclosing start, contraction and dodge cue remains pending for the tester.
+- Verification: the initial focused run passed 293/294; only the merged Survivors replay golden differed. After updating the combined-tree hash to `9534f369d842378f776a2e2d009492e105360270a1319b24084c293ae84438c6`, the merged focused suite passed 294/294 (18.58 s). `npm run build` passed (120 modules, 2.33 s). Full `npm test` was not run.
+- No browser recording or listening was performed. The logs are `/home/ubuntu/pixel-spaceship-pr7-merged-focused-final.log`, `/home/ubuntu/pixel-spaceship-pr7-merged-focused.log` and `/home/ubuntu/pixel-spaceship-pr7-merged-build.log`.
+- State: review pending; baseline revision `1b652cd4b05e1abf69389e6a04e866ed83161d9e` remains available for same-moment comparison.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (source `c06e3c9`; final delivery)
 - Retained verification on source `c06e3c9`: Korean HUD warning glyph coverage, English gun/missile fit at 320/375px, and cockpit W+Space/S+Space live-input pass.
 - The audio cue is identifiable; the delivered WAV measured true peak −13.3 dBFS with no clipping. Listening reports conflict: the original isolated prefire check reported unmasked, while the AV-derived extract showed material masking. No unqualified clarity pass; final user listening judgment is pending.
@@ -69,6 +82,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: focused tests 19/19; `npm run build` passed (120 modules); full `npm test` exited 0 (the retained output has no TAP count); `git diff --check HEAD` clean. The `renderer-proto` documentation changes and approved Ace-lock fixes are integrated with no unresolved conflicts.
 - State: in progress; browser/cockpit warning-position verification remains with the UI testing agent.
 
+### 2026-11-23 23:15 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `cf53220`; renderer-proto `c6d2d16`, `ee908d4`, `4bbf4c6`)
+- Merged the latest documentation-only renderer-proto delta into PR8, preserving additive worklog entries and upstream docs; no game source or test files changed.
+- Verification: `git diff --check`; source/tests/build-input comparison with `cf53220` is empty. State: done; final PR8 integration.
+
 ### 2026-11-23 23:10 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
 - [자동 폭장·C롤 실험](wiki/HISTORY.md#auto-countermeasures)에 조작·폭탄창 자동 투하 영상 두 건을 연결했다. 인계 당시 PR #8은 충돌 상태였으며, 실물 모바일·자연 해금·완주는 미검증이다.
 - State: done (실험 기록만 갱신). 개발판 조작과 해금 도감은 변경하지 않았다.
@@ -79,6 +96,23 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - [위키 홈](wiki/README.md)에서 인증이 필요한 웹 도감과 Git 원본을 구분했다. [웹 도감 네 탭 검증 영상](https://app.devin.ai/sessions/4278635e7a724fa497392840d7643666?testRecording=31df854a-fa53-4f2b-ab05-d1295ac749cc)은 Product Engineer의 브라우저 검증이며, 채팅 첨부 미리보기나 공개 게임 배포 검증은 아니다.
 - State: done (문서 검수·정리).
 
+### 2026-11-23 23:05 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (`264b23a`; Bomb Bay `e104198`; renderer-proto `69f81c8`, `f544ee2`, `7d883ad`)
+- UI session report for `264b23a`: Chrome keyboard/mouse weak-left and neutral C, Shift+Space, W/S+Space, twin-only no-rear-fire, inert X/K, and Phoenix auto-fire fixture passed; forced-touch Roll/Loop passed. Bomb Bay auto-fire passed at `e104198`; combat code is unchanged since.
+- [Final UI recording](https://app.devin.ai/sessions/7f15ccc7bd4c4b0ea3c7555fd75b88a2?testRecording=9b4b7f3e-18ba-4e5e-b6c3-ee6367b6e79b). Checks used checkpoints/fixtures and forced touch; no physical mobile or natural-unlock playthrough.
+- Merged docs-only renderer-proto updates, preserving additive worklog/history. Focused progression/evolutions/chests/stage tests passed 48/48 and build passed on `264b23a`; no rerun after docs-only integration. `git diff --check` passed. State: done; final UI evidence recorded.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `e104198`; review `4666747118`)
+- Draft refills revalidate kept cards as well as new offers, replacing Flare Bay/Ordnance Rack when their unowned Phoenix/Bomb Bay is banished; an owned paired weapon keeps its valid buff. Replacements remain unique.
+- Verification: focused progression/evolutions/chest/stage tests 48/48; `npm run build` passed (119 modules). State: done; UI evidence recorded in the latest entry.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`8824cfc`; merged `2e9770d`, `cc77357`)
+- C normalizes nonzero combined steering to its sign and uses the remembered/default sign when neutral; stepStage regressions cover weak opposite input and neutral C. Shift+Space ailerons and W/S+Space selectors remain unchanged; the global roll threshold is untouched.
+- Merged the docs-only `renderer-proto` updates, preserving its additive worklog and history. Verification: focused tests 65/65 and build passed on `8824cfc`; post-merge `git diff --check` passed. State: UI verification pending; PR branch integration.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`eb21d00`, merge `d8d34fd`; renderer-proto `a77502d`)
+- PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
+- Merged latest `renderer-proto` into the PR branch, preserving its three wiki docs and in-progress planning-bot entry; resolved only the additive worklog overlap.
+- Verification: focused regressions 57/57 and build passed; post-merge `npm test` 578/578 and `npm run build` passed (119 modules, 2.93 s). State: done locally; not pushed.
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
 - Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
 - Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
@@ -97,6 +131,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438662-ace-lock-dodge (base `81a0e2a`)
 - State: in progress. Ace 상호 락온 표식 및 발사 직전 배럴롤·반전 기동 회피 판정. 키 매핑·Seeker·P1 사운드는 변경하지 않는다.
 
+### 2026-11-23 (KST) · 기획 봇 · devin/1795438706-auto-countermeasures (`70204b0`, base `81a0e2a`)
+- 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.
+- 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.
+- 데스크톱 Heat 0, 시드 1–100: 숙련/평균/초보 생존(시간 종료 포함) 100%/69%/26%, 에이스 격추 100%/69%/1%, 격추 수 중앙값 3,155/3,193.5/2,806. State: done (구현·로컬 검증).
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).

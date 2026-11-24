@@ -17,6 +17,7 @@ const ACE_LOCK_WINDOW_TICKS = 6;
 const ACE_LOCK_EFFECTS_DUCK = 0.06;
 const ACE_LOCK_PULSE_GAIN = 2.0;
 const ACE_LOCK_WINDOW_GAIN = 2.4;
+const ACE_LOCK_PULSE_FREQUENCIES = [640, 850, 1125, 1490, 1980] as const;
 
 const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
@@ -31,7 +32,7 @@ interface AudioOutput {
   master: GainNode;
   effects: GainNode;
   buffers: Record<SynthSound, AudioBuffer>;
-  aceLockCues: { pulse: AudioBuffer; window: AudioBuffer };
+  aceLockCues: { pulses: readonly AudioBuffer[]; window: AudioBuffer };
   samples: SfxSamples;
   flight?: FlightAudio;
 }
@@ -39,10 +40,10 @@ interface AudioOutput {
 type AceLockVoice = { source: AudioBufferSourceNode; gain: GainNode };
 
 function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
-  const pulse = synthesize(context, 0.04, (elapsed, progress) => {
+  const pulses = ACE_LOCK_PULSE_FREQUENCIES.map(frequency => synthesize(context, 0.04, (elapsed, progress) => {
     const envelope = Math.max(0, Math.min(1, elapsed / 0.004, (1 - progress) / 0.2));
-    return 0.42 * Math.sin(TAU * 1_250 * elapsed) * envelope;
-  });
+    return 0.42 * Math.sin(TAU * frequency * elapsed) * envelope;
+  }));
   const window = synthesize(context, 0.13, elapsed => {
     const second = elapsed >= 0.065;
     const noteTime = second ? elapsed - 0.065 : elapsed;
@@ -50,7 +51,7 @@ function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
     const envelope = Math.max(0, Math.min(1, noteTime / 0.004, (0.05 - noteTime) / 0.008));
     return 0.46 * Math.sin(TAU * (second ? 1_450 : 1_050) * noteTime) * envelope;
   });
-  return { pulse, window };
+  return { pulses, window };
 }
 
 function storedMute(): boolean {
@@ -317,7 +318,8 @@ export class CombatAudio {
 
     this.setAceLockEffectsDuck(audible);
     const enteredWindow = !this.aceLockWindowPlayed && this.aceLockLastTick < windowTick && state.tick >= windowTick;
-    const interval = this.aceLockInterval(tell, state.tick);
+    const progress = this.aceLockProgress(tell, state.tick);
+    const interval = this.aceLockInterval(progress);
     if (enteredWindow) {
       this.aceLockWindowPlayed = true;
       this.aceLockNextPulseTick = state.tick + ACE_LOCK_WINDOW_TICKS + 2;
@@ -325,7 +327,7 @@ export class CombatAudio {
       else this.stopAceLockVoice();
     } else if (state.tick >= this.aceLockNextPulseTick) {
       this.aceLockNextPulseTick = state.tick + interval;
-      if (audible) this.playAceLockCue('pulse');
+      if (audible) this.playAceLockCue('pulse', progress);
       else this.stopAceLockVoice();
     } else if (!audible) this.stopAceLockVoice();
 
@@ -337,14 +339,17 @@ export class CombatAudio {
     this.setAceLockEffectsDuck(false, true);
   }
 
-  private aceLockInterval(tell: AceTell, tick: number): number {
+  private aceLockProgress(tell: AceTell, tick: number): number {
     const windowTick = tell.until - ACE.lock.dodgeTicks;
     const span = Math.max(1, windowTick - tell.since);
-    const progress = Math.max(0, Math.min(1, (tick - tell.since) / span));
+    return Math.max(0, Math.min(1, (tick - tell.since) / span));
+  }
+
+  private aceLockInterval(progress: number): number {
     return Math.round(ACE_LOCK_PULSE_TICKS - (ACE_LOCK_PULSE_TICKS - ACE_LOCK_WINDOW_TICKS) * progress);
   }
 
-  private playAceLockCue(kind: 'pulse' | 'window'): void {
+  private playAceLockCue(kind: 'pulse' | 'window', progress = 0): void {
     const output = this.output;
     if (!output || output.context.state !== 'running') return;
     const now = output.context.currentTime;
@@ -352,7 +357,9 @@ export class CombatAudio {
     const source = output.context.createBufferSource();
     const gain = output.context.createGain();
     const voice: AceLockVoice = { source, gain };
-    source.buffer = output.aceLockCues[kind];
+    source.buffer = kind === 'window'
+      ? output.aceLockCues.window
+      : output.aceLockCues.pulses[Math.round(progress * (output.aceLockCues.pulses.length - 1))];
     gain.gain.value = kind === 'window' ? ACE_LOCK_WINDOW_GAIN : ACE_LOCK_PULSE_GAIN;
     source.connect(gain);
     gain.connect(output.master);

@@ -4,11 +4,10 @@ import { HUD_ALTITUDE_BAND_KEYS, HUD_CRITICAL_HULL, HUD_LOW_BOOST, HUD_LOW_HULL 
 import { phaseAt } from './data/phases.ts';
 import { ROLL_COOLDOWN_TICKS } from './data/roll.ts';
 import type { createTranslator, MessageKey } from './i18n.ts';
-import { maneuverAllowsControl } from './maneuvers.ts';
 import { canRoll, rollBoltImmune } from './roll.ts';
 import { bossTick, endTick, requiredXp } from './stage.ts';
 import {
-  bombCapacity, bombReloadTicks, canDropFlare, clamp, flareCapacity, MAX_ALTITUDE, MIN_ALTITUDE, TICKS_PER_SECOND,
+  clamp, MAX_ALTITUDE, MIN_ALTITUDE, TICKS_PER_SECOND,
 } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 
@@ -57,10 +56,6 @@ export class NumericHud {
   private altitude = -1;
   private markerAltitude = -1;
   private band: MessageKey | null = null;
-  private bombs = -1;
-  private maxBombs = -1;
-  private flares = -1;
-  private maxFlares = -1;
   private level = -1;
   private xp = -1;
   private xpCost: number | null = null;
@@ -75,11 +70,9 @@ export class NumericHud {
       hull: get('hull-value'), hullMeter: get('hull-fill'), hullWarning: get('hull-warning'), shield: get('hull-shield'),
       boost: get('boost-value'), boostMeter: get('boost-bar'), speed: get('speed-value'),
       altitude: get('alt-number'), band: get('alt-band'), altMarker: get('alt-marker'),
-      bombs: get('bombs'), bombMeter: get('bomb-reload-bar'), flares: get('flare-stock'),
       level: get('xp-label'), xp: get('xp-value'), xpMeter: get('xp-bar'),
       timer: get('segment-timer'), phase: get('hud-phase'), view: get('view-label'),
       loop: get('loop-status'), roll: get('roll-status'), touchLoop: get('touch-loop'), touchRoll: get('touch-roll'),
-      touchBomb: get('touch-bomb'), touchFlare: get('touch-flare'),
     };
   }
 
@@ -147,7 +140,6 @@ export class NumericHud {
       el.altMarker.style.top = `${(MAX_ALTITUDE - markerAltitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
     }
 
-    this.updateStores(state, t, translated);
     this.updateProgress(state, t, translated);
     this.readiness(el.loop, el.touchLoop, loopReady, reversalCharge(state), 'control.loop', t, translated);
 
@@ -155,31 +147,6 @@ export class NumericHud {
     const rollCharge = state.maneuver || state.tick <= state.graceUntil ? 0
       : 1 - Math.max(0, (state.rollReadyAt ?? 0) - state.tick) / ROLL_COOLDOWN_TICKS;
     this.readiness(el.roll, el.touchRoll, rollReady, rollCharge, 'control.roll', t, translated);
-  }
-
-  private updateStores(state: StageState, t: Translate, translated: boolean): void {
-    const el = this.el;
-    const maxBombs = bombCapacity(state), maxFlares = flareCapacity(state);
-    if (translated || this.bombs !== state.bombs || this.maxBombs !== maxBombs) {
-      this.bombs = state.bombs;
-      this.maxBombs = maxBombs;
-      el.bombs.textContent = String(this.bombs);
-      el.touchBomb.setAttribute('aria-label', `${t('control.bomb')} · ${this.bombs}/${maxBombs}`);
-    }
-    const refill = state.bombReloadAt === null ? 1 : 1 - (state.bombReloadAt - state.tick) / bombReloadTicks(state);
-    this.fill(el.bombMeter, refill);
-    setDisabled(el.touchBomb, !!state.bombs && maneuverAllowsControl(state.maneuver)
-      && state.tick > state.graceUntil && state.tick >= state.bombReadyAt);
-
-    if (translated || this.flares !== state.flareCharges || this.maxFlares !== maxFlares) {
-      this.flares = state.flareCharges;
-      this.maxFlares = maxFlares;
-      el.flares.textContent = `${this.flares}/${maxFlares}`;
-      el.touchFlare.setAttribute('aria-label', `${t('control.flare')} · ${this.flares}/${maxFlares}`);
-    }
-    const flareReady = canDropFlare(state), ready = flareReady ? 'true' : 'false';
-    if (el.flares.dataset.ready !== ready) el.flares.dataset.ready = ready;
-    setDisabled(el.touchFlare, flareReady);
   }
 
   private updateProgress(state: StageState, t: Translate, translated: boolean): void {

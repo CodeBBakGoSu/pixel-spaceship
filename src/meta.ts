@@ -38,7 +38,7 @@ function bandCount(mask: number): number {
 export function createRunMetrics(): RunMetrics {
   return {
     weakPointHits: 0, multibandWithinFive: 0, maneuvers: 0, orbs: 0, peakAceWipe: 0, bandsKilled: 0,
-    boostTicks: 0, lockedKills: 0, rearFlareKills: 0, manualBombs: 0,
+    boostTicks: 0, lockedKills: 0, rearFlareKills: 0, bombsDropped: 0,
   };
 }
 
@@ -54,10 +54,20 @@ export function normalizeHeat(input: unknown, maximum: Heat = MAX_HEAT): Heat {
   return whole(input, maximum) as Heat;
 }
 
+export function normalizeMetrics(input: unknown): RunMetrics {
+  const saved = fields(input), metrics = createRunMetrics();
+  for (const metric of METRICS) {
+    // v1 profiles and checkpoints counted manual drops toward the same unlock.
+    const raw = metric === 'bombsDropped' ? saved.bombsDropped ?? saved.manualBombs : saved[metric];
+    const value = whole(raw, metric === 'multibandWithinFive' ? 3 : undefined);
+    metrics[metric] = metric === 'bandsKilled' ? value & 0b111 : value;
+  }
+  return metrics;
+}
+
 export function normalizeProfile(input: unknown): Profile {
   const saved = fields(input);
   const savedUpgrades = fields(saved.upgrades);
-  const savedMetrics = fields(saved.metrics);
   const profile = createProfile();
   profile.credits = whole(saved.credits);
   profile.aceScore = whole(saved.aceScore);
@@ -66,10 +76,7 @@ export function normalizeProfile(input: unknown): Profile {
     const level = whole(savedUpgrades[id], HANGAR[id].costs.length);
     if (level) profile.upgrades[id] = level;
   }
-  for (const metric of METRICS) {
-    const value = whole(savedMetrics[metric], metric === 'multibandWithinFive' ? 3 : undefined);
-    profile.metrics[metric] = metric === 'bandsKilled' ? value & 0b111 : value;
-  }
+  profile.metrics = normalizeMetrics(saved.metrics);
   return profile;
 }
 

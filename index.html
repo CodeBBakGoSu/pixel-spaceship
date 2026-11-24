@@ -54,13 +54,6 @@
         <span class="hud-caption" data-i18n="hud.altitude"></span>
         <span class="hud-altitude"><b id="alt-number"></b><small id="alt-band"></small></span>
       </div>
-      <div class="hud-readout hud-bombs">
-        <span class="hud-caption" data-i18n="hud.bombLabel" data-tooltip="hud.bombStock"></span><b id="bombs"></b>
-        <span class="hud-meter" aria-hidden="true"><i id="bomb-reload-bar"></i></span>
-      </div>
-      <div class="hud-readout">
-        <span class="hud-caption" data-i18n="hud.flareLabel"></span><b id="flare-stock"></b>
-      </div>
       <div class="hud-readout hud-xp">
         <span id="xp-label" class="hud-caption"></span><b id="xp-value"></b>
         <span class="hud-meter" aria-hidden="true"><i id="xp-bar"></i></span>
@@ -197,8 +190,6 @@
             <dt data-i18n="control.loop"></dt><dd data-i18n="guide.keysLoop"></dd>
             <dt data-i18n="control.roll"></dt><dd data-i18n="guide.keysRoll"></dd>
             <dt data-i18n="control.boost"></dt><dd data-i18n="guide.keysBoost"></dd>
-            <dt data-i18n="control.bomb"></dt><dd>X / K</dd>
-            <dt data-i18n="control.flare"></dt><dd>C</dd>
             <dt data-i18n="control.view"></dt><dd data-i18n="guide.keysView"></dd>
             <dt data-i18n="control.pause"></dt><dd>P</dd>
             <dt data-i18n="guide.start"></dt><dd>Enter</dd>
@@ -212,8 +203,6 @@
             <dt data-i18n="control.loop"></dt><dd data-i18n="guide.touchLoop"></dd>
             <dt data-i18n="control.roll"></dt><dd data-i18n="guide.touchRoll"></dd>
             <dt data-i18n="control.boost"></dt><dd data-i18n="guide.touchBoost"></dd>
-            <dt data-i18n="control.bomb"></dt><dd data-i18n="guide.touchBomb"></dd>
-            <dt data-i18n="control.flareShort"></dt><dd data-i18n="guide.touchFlare"></dd>
             <dt data-i18n="control.view"></dt><dd data-i18n="guide.touchView"></dd>
             <dt data-i18n="control.pause"></dt><dd data-i18n="guide.touchPause"></dd>
           </dl>
@@ -247,8 +236,6 @@
     <div class="stick" id="stick" data-label="aria.stick"><span id="stick-knob"></span><small data-i18n="control.climb"></small></div>
     <button class="touch-button loop" id="touch-loop" type="button" data-i18n="control.loop"></button>
     <button class="touch-button boost" id="touch-boost" type="button" data-i18n="control.boost"></button>
-    <button class="touch-button bomb" id="touch-bomb" type="button" data-i18n="control.bomb"></button>
-    <button class="touch-button flare" id="touch-flare" type="button" data-i18n="control.flareShort" data-label="control.flare"></button>
     <button class="touch-button view" id="touch-view" type="button" data-i18n="control.view"></button>
     <button class="touch-button roll" id="touch-roll" type="button" data-i18n="control.roll"></button>
   </div>

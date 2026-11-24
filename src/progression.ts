@@ -118,18 +118,33 @@ function overflowCard(run: RunProgression, id: typeof OVERFLOW_IDS[number]): Dra
 function eligibleGear(run: RunProgression, held: DraftChoiceId[] = []) {
   const canAddWeapon = Object.keys(run.weaponLevels).length < run.weaponSlots;
   const canAddBuff = Object.keys(run.buffLevels).length < run.buffSlots;
-  const eligible = (id: GearId, canAdd: boolean): boolean => {
-    const level = gearLevel(run, id);
-    return !held.includes(id) && !run.banished.includes(id) && level < maximumLevel(id) && (level > 0 || canAdd);
+  const pairedWeaponAvailable = (buff: BuffId): boolean => {
+    const weapon = buffPairs[buff];
+    return gearLevel(run, weapon) > 0 || canAddWeapon && run.weapons.includes(weapon) && !run.banished.includes(weapon);
   };
-  return { weapons: run.weapons.filter(id => eligible(id, canAddWeapon)), buffs: run.buffs.filter(id => eligible(id, canAddBuff)) };
+  const pairedBuffEligible = (id: GearId): boolean => {
+    if (!isBuffId(id) || id !== 'flare-bay' && id !== 'ordnance-rack') return true;
+    return pairedWeaponAvailable(id);
+  };
+  const eligible = (id: GearId, canAdd: boolean, heldIds: DraftChoiceId[] = held): boolean => {
+    const level = gearLevel(run, id);
+    return !heldIds.includes(id) && !run.banished.includes(id) && level < maximumLevel(id) && (level > 0 || canAdd)
+      && pairedBuffEligible(id);
+  };
+  const isEligible = (id: GearId): boolean => eligible(id, isWeaponId(id) ? canAddWeapon : canAddBuff, []);
+  return { weapons: run.weapons.filter(id => eligible(id, canAddWeapon)),
+    buffs: run.buffs.filter(id => eligible(id, canAddBuff)), isEligible };
 }
 
 function deal(run: RunProgression, keep: DraftCard[] = []): DraftCard[] {
-  const remaining = DRAFT_RULES.cardCount - keep.length;
-  const held = keep.map(card => card.id);
+  const { isEligible } = eligibleGear(run);
+  const cards = keep.filter(card => {
+    if (isWeaponId(card.id) || isBuffId(card.id)) return isEligible(card.id);
+    return true;
+  });
+  const remaining = DRAFT_RULES.cardCount - cards.length;
+  const held = cards.map(card => card.id);
   const { weapons, buffs } = eligibleGear(run, held);
-  const cards = [...keep];
   if (remaining > 0 && run.draftsResolved === 0 && weapons.length && !held.some(isWeaponId)) {
     cards.push(gearCard(run, pickRandom(run, weapons)));
   }

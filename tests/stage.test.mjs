@@ -39,7 +39,7 @@ test('recovered salvage uses band midpoints and SKIM overrides altitude', () => 
   }
 });
 
-test('the title launches a one-life sortie in cruise with both weapons and three bombs', () => {
+test('the title launches a one-life sortie in cruise with both weapons', () => {
   const state = stage('?seed=22');
   assert.equal(state.phase, 'title');
   run(state, 1, { start: true });
@@ -48,7 +48,7 @@ test('the title launches a one-life sortie in cruise with both weapons and three
   assert.equal(state.player.altitude, 125);
   assert.equal(state.hull, 8);
   assert.equal(state.boost, 1);
-  assert.equal(state.bombs, 3);
+  assert.equal(state.rearBombs.length, 0);
   assert.equal(state.twinRank, 1);
   assert.equal(state.podRank, 1);
 });
@@ -154,21 +154,21 @@ test('the three draft cards pause active time, apply once and keep three legal c
     assert.equal(state.phase, 'draft');
     assert.deepEqual(state.draft, ['twin-2', 'pods-2', 'twin-damage']);
     const { x, z } = state.player;
-    run(state, 120, { boost: true, bomb: true, toggleView: true, climb: 1 });
+    run(state, 120, { boost: true, toggleView: true, climb: 1 });
     assert.equal(state.tick, 45 * 60);
-    assert.deepEqual([state.player.x, state.player.z, state.bombs, state.boost], [x, z, 3, 1]);
+    assert.deepEqual([state.player.x, state.player.z, state.boost], [x, z, 1]);
     run(state, 1, { pick: 'twin-3' });
     assert.equal(state.phase, 'draft');
-    run(state, 1, { pick: state.draft[pick], boost: true, bomb: true, toggleView: true });
+    run(state, 1, { pick: state.draft[pick], boost: true, toggleView: true });
     assert.equal(state.phase, 'playing');
     assert.equal(state.level, 2);
     assert.equal(state.xp, 0);
     assert.equal(state.twinRank, pick === 0 ? 2 : 1);
     assert.equal(state.podRank, pick === 1 ? 2 : 1);
     assert.equal(state.twinDamage, pick === 2 ? 2 : 1);
-    run(state, 18, { boost: true, bomb: true, toggleView: true });
+    run(state, 18, { boost: true, toggleView: true });
     assert.equal(state.boost, 1);
-    assert.equal(state.bombs, 3);
+    assert.equal(state.rearBombs.length, 0);
     assert.equal(state.view, 'overhead');
     run(state, 1, { boost: true });
     assert.equal(state.boost, 1);
@@ -359,7 +359,6 @@ function radarOnlyPilot() {
       }
     }
 
-    pilot.bomb = false;
     if (state.tick >= nextDodge && state.invulnerability === 0) {
       for (const shot of state.shots) {
         if (shot.kind !== 'hostile') continue;
@@ -368,14 +367,9 @@ function radarOnlyPilot() {
         const vx = shot.vx - Math.sin(p.yaw) * state.speed, vz = shot.vz - Math.cos(p.yaw) * state.speed;
         const time = -(x * vx + z * vz) / (vx * vx + vz * vz);
         if (time < 0.18 || time > 0.55 || Math.hypot(x + vx * time, z + vz * time) > 9) continue;
-        if (state.hull <= 4 && state.bombs > 0) {
-          pilot.bomb = true;
-          nextDodge = state.tick + 45;
-        } else {
-          dodgeUntil = state.tick + Math.ceil((time + 0.06) * 60);
-          nextDodge = dodgeUntil + 25;
-          dodgeDirection = alt > 142 ? -1 : alt < 80 || climb >= 0 ? 1 : -1;
-        }
+        dodgeUntil = state.tick + Math.ceil((time + 0.06) * 60);
+        nextDodge = dodgeUntil + 25;
+        dodgeDirection = alt > 142 ? -1 : alt < 80 || climb >= 0 ? 1 : -1;
         break;
       }
     }

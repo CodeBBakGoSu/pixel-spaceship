@@ -18,13 +18,13 @@ function duel() {
 }
 
 function sightFrame(state, field = { x: 10, y: 20, width: 700, height: 400 },
-  canvas = { width: 800, height: 480 }, firedTell = null) {
+  canvas = { width: 800, height: 480 }, firedTell = null, playerRadius = 20) {
   const corners = [], rings = [], dashes = [];
   const ctx = { canvas, save() {}, restore() {}, beginPath() {}, stroke() {}, rect() {}, clip() {}, lineTo() {},
     moveTo(x, y) { corners.push([x, y]); }, arc(x, y, r) { rings.push([x, y, r]); },
     setLineDash(dash) { dashes.push([...dash]); } };
   const projection = { projectAirframe(_, subject) {
-    return { x: subject === 'boss' ? 450 : 350, y: subject === 'boss' ? 180 : 300, radius: 20 };
+    return { x: subject === 'boss' ? 450 : 350, y: subject === 'boss' ? 180 : 300, radius: subject === 'boss' ? 20 : playerRadius };
   } };
   drawAceLocks(ctx, state, projection, field, firedTell);
   return { corners, rings, dashes };
@@ -155,28 +155,39 @@ test('gun aim drops on loss of bearing, altitude or range before release', () =>
 
 test('sights converge two circles into the dodge window and preserve chase and cockpit anchors', () => {
   const state = duel(), tell = state.boss.tell;
-  const start = sightFrame(state);
+  const start = sightFrame(state, undefined, undefined, null, 70);
   const [startOuter, startReference] = start.rings;
   assert.equal(start.rings.length, 2);
   assert.deepEqual(startOuter.slice(0, 2), [350, 300]);
   assert.deepEqual(startReference.slice(0, 2), [350, 300]);
   assert.ok(startOuter[2] >= startReference[2] * 2);
+  assert.equal(startReference[2], 22, 'the fixed reference ring keeps its original radius');
+  assert.ok(startOuter[2] >= 74, 'the initial outer ring encloses the projected ship with clearance');
+  assert.ok(startOuter[2] <= Math.min(700, 400) * 0.28, 'the outer ring remains within its viewport radius limit');
   assert.equal(start.corners.length, 4, 'the Ace-target lock brackets remain unchanged');
   assert.deepEqual(start.dashes, [[9, 5], []]);
 
+  const preWindowTicks = Math.max(1, tell.until - tell.since - ACE.lock.dodgeTicks);
+  const halfwayState = { ...state, tick: tell.since + Math.floor(preWindowTicks / 2) };
+  const [halfwayOuter, halfwayReference] = sightFrame(halfwayState, undefined, undefined, null, 70).rings;
+  const [startOuterGap, halfwayOuterGap] = [startOuter[2] - startReference[2], halfwayOuter[2] - halfwayReference[2]];
+  assert.equal(halfwayReference[2], startReference[2]);
+
   while (state.tick < tell.until - ACE.lock.dodgeTicks - 1) step(state);
-  const beforeWindow = sightFrame(state);
+  const beforeWindow = sightFrame(state, undefined, undefined, null, 70);
   const [beforeOuter, beforeReference] = beforeWindow.rings;
   assert.equal(aceDodgeWindow(tell, state.tick), false);
   assert.ok(beforeOuter[2] - beforeReference[2] < startOuter[2] - startReference[2]);
 
   while (state.tick < tell.until - ACE.lock.dodgeTicks) step(state);
-  const window = sightFrame(state);
+  const window = sightFrame(state, undefined, undefined, null, 70);
   const [windowOuter, windowReference] = window.rings;
   assert.equal(aceDodgeWindow(tell, state.tick), true);
   assert.equal(windowReference[2], startReference[2], 'the reference radius stays fixed');
   assert.ok(windowOuter[2] > windowReference[2]);
   assert.ok(windowOuter[2] - windowReference[2] <= windowReference[2] * 0.3, 'the circles nearly overlap at window entry');
+  assert.ok(startOuterGap - halfwayOuterGap > halfwayOuterGap - (windowOuter[2] - windowReference[2]),
+    'the outer ring contracts faster in the first half of the tell');
   assert.ok(beforeOuter[2] - beforeReference[2] > windowOuter[2] - windowReference[2]);
   assert.ok(windowOuter[2] < beforeOuter[2]);
   assert.deepEqual(window.dashes, [[], []]);
@@ -213,8 +224,13 @@ test('dodge-circle overlap is phase-length invariant and scales with the viewpor
   assert.ok(Math.abs(ratios[0] - ratios[1]) < 0.001, 'gun and missile tell lengths enter the window at the same relative gap');
 
   const mobile = createStage(parseStageOptions('?fixture=ace&phase=2&live=1'), ground);
+  const mobileField = { x: 0, y: 0, width: 340, height: 600 };
+  mobile.tick = mobile.boss.tell.since;
+  const cappedStart = sightFrame(mobile, mobileField, { width: 360, height: 640 }, null, 120);
+  assert.equal(cappedStart.rings[0][2], Math.min(mobileField.width, mobileField.height) * 0.28,
+    'a large projected ship respects the smaller viewport limit');
   mobile.tick = mobile.boss.tell.until - ACE.lock.dodgeTicks;
-  const small = sightFrame(mobile, { x: 0, y: 0, width: 340, height: 600 }, { width: 360, height: 640 });
+  const small = sightFrame(mobile, mobileField, { width: 360, height: 640 });
   const [smallOuter, smallReference] = small.rings;
   assert.ok(Math.abs((smallOuter[2] - smallReference[2]) / smallReference[2] - ratios[1]) < 0.001,
     'window overlap scales with the viewport rather than warning duration');

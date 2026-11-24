@@ -13,7 +13,7 @@ import { altitudeDeltaText, RadarDisplay, type RadarReadout } from './instrument
 import { MANEUVERS, maneuverAttitude, maneuverViewYaw } from './maneuvers.ts';
 import { hudBoostTone, hudHullTone, hudPhaseKey, hudTimer, shieldActive } from './numeric-hud.ts';
 import { endTick, requiredXp } from './stage.ts';
-import { bombCapacity, flareCapacity, TICKS_PER_SECOND } from './stage-combat.ts';
+import { TICKS_PER_SECOND } from './stage-combat.ts';
 import type { StageState } from './stage-types.ts';
 import type { createTranslator, Language } from './i18n';
 import type { CockpitLayout, Rect } from './layout';
@@ -591,8 +591,8 @@ function weaponReadouts(state: StageState, t: Translate): WeaponReadout {
   const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
   const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
   return { gun: t('hud.weapon', { level: gunLevel }), pods: t('hud.pods', { level: podLevel }),
-    bombs: `${t('hud.bombLabel')} ${state.bombs}`,
-    flares: `${t('hud.flareLabel')} ${state.flareCharges}/${flareCapacity(state)}` };
+    bombs: `${t('hud.bombLabel')} ${state.run?.weaponLevels['bomb-bay'] ?? '–'}`,
+    flares: `${t('hud.flareLabel')} ${state.run?.weaponLevels.phoenix ?? '–'}` };
 }
 
 function drawWeapons(c: Context, r: Rect, weapons: WeaponReadout, level: number, compact: boolean, title: string,
@@ -875,8 +875,7 @@ export class CockpitDisplay {
     c.globalAlpha = flicker;
     const gunLevel = state.run?.weaponLevels.twin ?? state.twinRank;
     const podLevel = state.run ? state.run.weaponLevels.pods ?? 0 : state.podRank;
-    const weapon = ((((state.bombs * 7 + state.flareCharges) * 7 + bombCapacity(state)) * 7
-      + flareCapacity(state)) * 6 + podLevel) * 6 + gunLevel;
+    const weapon = (((state.run?.weaponLevels['bomb-bay'] ?? 0) * 8 + (state.run?.weaponLevels.phoenix ?? 0)) * 8 + podLevel) * 8 + gunLevel;
     const second = Math.floor(state.tick / TICKS_PER_SECOND), duration = endTick(state);
     if (weapon !== this.lastWeapon || flicker !== this.lastFlicker || state.level !== this.lastLevel
       || state.xp !== this.lastXp || second !== this.lastSecond || duration !== this.lastDuration) {

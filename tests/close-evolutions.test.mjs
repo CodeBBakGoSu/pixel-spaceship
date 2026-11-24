@@ -122,31 +122,28 @@ test('Phoenix firebird scales per-tick ascent and descent, falling when no targe
   }
 });
 
-test('Phoenix Rising steers its automatic firebird and preserves manual inventory', () => {
+test('Phoenix Rising steers its automatic firebird', () => {
   const state = start();
   evolve(state, 'phoenix', 'phoenix-rising');
   contact(state, scaleTravel(18), scaleTravel(-35));
-  const manualCharges = state.flareCharges;
   advanceAutoOrdnance(state, false);
   const flare = state.flares[0];
   assert.ok(flare.phoenix);
-  assert.equal(state.flareCharges, manualCharges);
   advanceFlares(state, sea);
   assert.ok(flare.vx > 0);
 });
 
-test('Carpet Annihilator deploys five collinear automatic bombs without touching manual stock', () => {
+test('Carpet Annihilator deploys five collinear automatic bombs', () => {
   const state = start();
   evolve(state, 'bomb-bay', 'carpet-annihilator');
   state.player.yaw = 0.7;
   advanceAutoOrdnance(state, false);
-  const stock = state.bombs;
   assert.equal(state.rearBombs.length, 5);
   assert.ok(state.rearBombs.every(bomb => bomb.carpet && bomb.born === state.tick));
   const p = state.player;
   assert.ok(state.rearBombs.every(bomb => Math.abs((bomb.x - p.x) * Math.cos(p.yaw) - (bomb.z - p.z) * Math.sin(p.yaw)) < 1e-9));
   assert.equal(new Set(state.rearBombs.map(bomb => bomb.z)).size, 5);
-  assert.equal(state.bombs, stock);
+  assert.equal(state.metrics.bombsDropped, 5);
   assert.equal(state.nextBayDrop, null);
 });
 

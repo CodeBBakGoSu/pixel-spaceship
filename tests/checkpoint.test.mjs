@@ -146,3 +146,17 @@ test('a v1 checkpoint upgrades skimmer volleys, turret flak and the world when r
   assert.deepEqual(restored.shots.filter(shot => shot.kind === 'hostile').map(shot => shot.alt), [49, 49]);
   assert.equal(restored.effects.find(effect => effect.kind === 'flak').alt, 49);
 });
+
+test('old checkpoints carry manual bomb progress forward for the pilot and the current flight', () => {
+  const old = JSON.parse(encodeCheckpoint(stateAt(7200)));
+  for (const [metrics, drops] of [[old.state.metrics, 4], [old.state.profile.metrics, 5]]) {
+    delete metrics.bombsDropped;
+    metrics.manualBombs = drops;
+  }
+  const restored = decodeCheckpoint(JSON.stringify(old), ground);
+  assert.equal(restored.metrics.bombsDropped, 4);
+  assert.equal(restored.profile.metrics.bombsDropped, 5);
+  restored.run.weaponLevels['bomb-bay'] = 1;
+  stepStage(restored, {}, ground);
+  assert.equal(restored.metrics.bombsDropped, 5);
+});

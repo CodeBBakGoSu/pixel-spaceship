@@ -4,7 +4,7 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots,
-  bombCapacity, dropFlares, dropRearBomb, flareCapacity, hurtEnemy, openReversal,
+  hurtEnemy, openReversal,
 } from '../src/stage-combat.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
 import { weaponCooldown, weaponDamage } from '../src/loadout.ts';
@@ -135,45 +135,35 @@ test('Fire Control shortens a real Ace lock and crits use only the combat RNG', 
   assert.deepEqual(sequence(), sequence());
 });
 
-test('Flare Bay increases stock, reload speed and burn duration', () => {
+test('Flare Bay shortens the equipped Phoenix cooldown and extends its burn', () => {
   const state = start();
   state.tick = 1;
   state.run.buffLevels['flare-bay'] = 3;
-  const capacity = flareCapacity(state);
-  state.flareCharges = capacity;
-  dropFlares(state, 0, 0);
-  assert.equal(capacity, 6);
-  assert.equal(state.flareCharges, 5);
-  assert.equal(state.flareReloadAt - state.tick, 273);
-  const flare = state.flares[2];
+  state.run.weaponLevels.phoenix = 1;
+  advanceAutoOrdnance(state, false);
+  assert.equal(state.weaponFireAt.phoenix - state.tick, 156);
+  const [flare] = state.flares;
   const enemy = makeEnemy(state, flare.x, flare.z, 1, 'interceptor', 0);
   state.enemies = [enemy];
   advanceFlares(state, ground);
   assert.equal(enemy.burnUntil - state.tick, 142);
-  state.tick = state.flareReloadAt;
-  advanceFlares(state, ground);
-  assert.equal(state.flareCharges, capacity);
 });
 
-test('Ordnance Rack expands manual stores, recharge and blast reach', () => {
+test('Ordnance Rack shortens the Bomb Bay cooldown and expands its blast', () => {
   const state = start();
   state.tick = 1;
   state.run.buffLevels['ordnance-rack'] = 3;
-  state.bombs = bombCapacity(state);
-  assert.equal(state.bombs, 6);
-  dropRearBomb(state);
+  state.run.weaponLevels['bomb-bay'] = 1;
+  advanceAutoOrdnance(state, false);
+  assert.equal(state.weaponFireAt['bomb-bay'] - state.tick, 234);
   const bomb = state.rearBombs[0];
-  assert.equal(state.bombs, 5);
-  assert.equal(state.bombReloadAt - state.tick, 293);
-  const trigger = makeEnemy(state, bomb.x, bomb.z, 1, 'patrol', 0);
-  const edge = makeEnemy(state, bomb.x + scaleTravel(42), bomb.z, 1, 'patrol', 0);
+  bomb.alt = 75;
+  const trigger = makeEnemy(state, bomb.x, bomb.z, 0, 'patrol', 0);
+  const edge = makeEnemy(state, bomb.x + scaleTravel(42), bomb.z, 0, 'patrol', 0);
   state.enemies = [trigger, edge];
   advanceRearBombs(state, ground);
   assert.equal(edge.hp, 0);
   assert.ok(state.effects.find(effect => effect.kind === 'bomb-blast').radius > scaleTravel(42));
-  state.tick = state.bombReloadAt;
-  advanceRearBombs(state, ground);
-  assert.equal(state.bombs, 6);
 });
 
 test('Twin Cannon grows at every rank and the final fan hits flank contacts', () => {
@@ -250,12 +240,11 @@ test('orbit drones damage same-altitude contacts, block enemy bolts, and shoot a
   assert.equal(state.hull, state.maxHull);
 });
 
-test('Phoenix Flares drop three automatic flares with spreading fire without spending a manual charge', () => {
+test('Phoenix Flares drop three automatic flares with spreading fire', () => {
   const state = start();
   state.tick = 100;
   state.run.weaponLevels.phoenix = 5;
   advanceAutoOrdnance(state, false);
-  assert.equal(state.flareCharges, 3);
   assert.equal(state.flares.length, 3);
   assert.equal(state.flares[1].lifeTicks, 180);
   const { x, z } = state.flares[1];
@@ -269,7 +258,7 @@ test('Phoenix Flares drop three automatic flares with spreading fire without spe
   assert.equal(above.burnUntil, undefined);
 });
 
-test('Bomb Bay double-drops at level three, detonates below launch band and leaves manual stock intact', () => {
+test('Bomb Bay double-drops at level three, detonates below launch band and counts both drops toward the rack', () => {
   const state = start();
   state.tick = 40;
   state.player.altitude = 180;
@@ -277,7 +266,7 @@ test('Bomb Bay double-drops at level three, detonates below launch band and leav
   advanceAutoOrdnance(state, false);
   state.tick = state.nextBayDrop;
   advanceAutoOrdnance(state, false);
-  assert.equal(state.bombs, 3);
+  assert.equal(state.metrics.bombsDropped, 2);
   assert.equal(state.rearBombs.length, 2);
   assert.ok(state.rearBombs.every(bomb => bomb.weapon === 'bomb-bay'));
   const [bomb] = state.rearBombs;

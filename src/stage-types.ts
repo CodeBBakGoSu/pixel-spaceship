@@ -72,8 +72,6 @@ export type StageInput = {
   roll?: boolean;
   rollTurn?: number;
   boost?: boolean;
-  bomb?: boolean;
-  flare?: boolean;
   toggleView?: boolean;
   start?: boolean;
   pause?: boolean;
@@ -87,7 +85,7 @@ export type StageInput = {
 };
 
 export type ChestReward = { kind: 'evolution'; id: EvolutionId } | { kind: 'upgrade'; id: DraftChoiceId; level?: number };
-export type KillCredit = { weapon?: WeaponId | 'manual-flare' | 'manual-bomb'; locked?: boolean; rear?: boolean };
+export type KillCredit = { weapon?: WeaponId; locked?: boolean; rear?: boolean };
 export type RunSummary = { seconds: number; credits: number; unlocked: GearId[]; aceCache: boolean };
 
 export type Point = { x: number; z: number };
@@ -305,14 +303,8 @@ export type StageState = {
   boost: number;
   boosting: boolean;
   boostTicks: number;
-  bombs: number;
-  bombReadyAt: number;
-  bombReloadAt: number | null;
   rearBombs: RearBomb[];
   flares: Flare[];
-  flareCharges: number;
-  flareReadyAt: number;
-  flareReloadAt: number | null;
   flareHit: { until: number } | null;
   rearGlimpse: RearGlimpse | null;
   enemyMines: EnemyMine[];

@@ -59,11 +59,14 @@ export function drawAceLocks(ctx: CanvasRenderingContext2D, state: StageState, p
       const dodgeTicks = Math.min(ACE.lock.dodgeTicks, duration);
       const remaining = Math.max(0, Math.min(duration, sightTell.until - state.tick));
       const referenceRadius = Math.min(limit, Math.max(4, Math.min(22, limit * 0.2)));
-      const maxGap = Math.max(0, Math.min(limit, referenceRadius * 2.25) - referenceRadius);
+      const enclosurePadding = Math.max(4, referenceRadius * 0.25);
+      const maxOuterRadius = Math.min(limit, Math.max(referenceRadius * 2.25, point.radius + enclosurePadding));
+      const maxGap = Math.max(0, maxOuterRadius - referenceRadius);
       const windowGap = Math.min(maxGap, Math.max(1.5, referenceRadius * 0.25));
       const preWindowTicks = Math.max(1, duration - dodgeTicks);
+      const preWindowProgress = duration > dodgeTicks ? (duration - remaining) / preWindowTicks : 1;
       const gap = remaining >= dodgeTicks
-        ? windowGap + (remaining - dodgeTicks) / preWindowTicks * (maxGap - windowGap)
+        ? windowGap + (1 - preWindowProgress) ** 2 * (maxGap - windowGap)
         : windowGap * remaining / dodgeTicks;
       const outerRadius = referenceRadius + gap;
       const dodge = aceDodgeWindow(sightTell, state.tick)
