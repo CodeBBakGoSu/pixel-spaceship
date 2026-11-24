@@ -24,6 +24,114 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2cc10e4`, based on `7da5db6`)
+- Strengthened the 120Hz fire-tick regression: C must leave an accepted roll and zero hostile projectiles, while the deterministic phase-2 no-C twin reaches the same tick, clears the tell normally, and spawns both Ace missiles.
+- Focused fire-tick test passed 1/1; test-only change, so no full-suite, build, or UI rerun.
+- State: ready pushed; no production change.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`3e68ea0`, based on `444076d`)
+- Final UI report on `444076d`: at forced 4fps, the prior tick 28823 was before window tick 28834; trusted C arrived 2.4ms after the scheduled cue, and the next frame at tick 28835 canceled the tell with zero missiles. An output-compensated C about 5ms after estimated acoustic tick 28836 also canceled. Measured cue spacing was 398.896ms vs 398.866ms scheduled at normal rate and 433.708ms vs 433.696ms at 4fps. `getOutputTimestamp` estimates the acoustic window at +25.9ms normal / -23.3ms at 4fps relative to the first near-window frame; this is a one-frame estimate, not a microphone-calibrated AV offset.
+- In the overlap window, the 1650/2200Hz components measured -17.4dBFS against local residual levels of -44.7/-40.7dBFS; peak was -13.34dBFS with no clipping. The UI report described a neutral foreground chime and muffled background. Earlier automated listening disagreed, so this is capture-specific, not a universal audibility claim. W/S+Space, Shift+Space, C+Space grace, pause/mute/cancel/stale-source and initial 640Hz tests passed. Phoenix Lv5/Bomb Bay Lv1 no-key automatic spawning passed; unlock and bomb impact damage were not tested.
+- The registered 57s video is silent; the supplied WAV is separate and unsynchronized: [viewer](https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=2cdc221c-302e-435a-8a53-9f57e5962f8e).
+- Full `npm test` on `444076d` passed 628/628 (123.9s). The 120Hz regression was subsequently tightened from window-start to fire-tick cancellation and passed targeted 1/1; this changed tests only. No rebuild was needed: the production build on `444076d` passed (120 modules, 3.05s).
+- State: final UI evidence and full suite recorded; awaiting clean review. No base merge or deployment.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2005000`, based on `88fb590`)
+- Fixed the carry/anchor overlap: accepted rAF elapsed plus carry still determines the number of fixed steps, while active Ace audio maps step i directly to the retained schedule time for `state.tick + i + 1`. Without an audio anchor, step times retain the rAF-prefix and hitstop-floor mapping; elapsed/FPS timing and the 0.2s cap are unchanged.
+- Added the 120Hz zero-step/8.33ms-carry case: C at 1012.67ms now maps to 1016.67ms instead of the incorrect 1008.33ms and cancels at the fire tick. Tests also cover 90/144/240Hz counts, actual scheduled source timing at cue+2ms near fire, 4/20/40ms render costs, and retain the 4fps 12-step cap/cue regression.
+- Focused Ace/flight/audio tests passed 68/68; build passed (120 modules, 3.05s); `git diff --check` was clean. Full suite and UI remain deferred until clean review; no base merge or deployment.
+- State: implementation and focused verification complete; pushing with this Worklog entry.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2bcfbe0`, based on `279f8bd`)
+- Kept `previousTime` on the rAF timeline and mapped input boundaries through the retained CombatAudio tick/AudioContext/performance anchor; an actual scheduled source-start regression covers two audio updates/frame and 4/20/40ms render costs with C at cue+2ms. The 60Hz/10s clock test now retains all 600 ticks.
+- A due action clears pending Space grace only when its `spaceAt` matches that request; C at 1175ms no longer consumes W+Space at 1190ms before the 1270ms chord deadline, preserving grace at fire tick 1200. Gameplay timing and the 0.2s elapsed cap are unchanged.
+- Focused Ace/flight/audio tests passed 64/64; build passed (120 modules, 4.23s); `git diff --check` was clean. Full suite and UI/audio retest remain deferred pending clean review; no base merge or deployment.
+- State: implementation and focused verification complete; pushing with this Worklog entry.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ef94685`, based on `254d002`)
+- Flight-clock rebasing now samples `performance.now()` immediately after every `updateAceLock` call (including render and pause sync), pairing the input-step anchor with the same frame's AudioContext anchor instead of reusing the earlier rAF timestamp.
+- Focused tests passed 33/33; build passed (120 modules, 4.73s). Full suite and live UI/audio verification remain deferred.
+- State: shared-anchor follow-up verified; pushing with this log entry.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ed7a423`, based on `838e0dd`)
+- Capped catch-up steps now use the accepted elapsed interval's prefix from the preceding frame/audio sync anchor, then rebase after audio update so discarded frame tails do not shift queued inputs. Same-step due flight actions drain together with prior C/roll-over-maneuver priority; future inputs remain queued.
+- Added repeated 250ms/12-step low-FPS coverage, C at cue+2ms reaching the dodge window and canceling with a due J-turn, pause/reset clock rebase, and due/future arbitration checks. Focused tests passed 33/33; build passed (120 modules, 3.19s). Full suite and runtime UI/audio verification remain deferred.
+- State: implementation and focused verification complete; pushing with this log update.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ca9d716`, based on `c37631e`)
+- Late Shift now resolves at the saved 80ms chord deadline; timestamp-ordered flight actions preserve earlier maneuvers, and C flushes an expired chord before queuing itself while retaining its pending-Space grace until consumption. The five-tick grace and 18-tick dodge window are unchanged.
+- Focused tests passed 57/57; build passed (120 modules, 2.34s). Sound audit: `hit`/roster SFX route through the ducked effects bus (.06 tell/.02 window; harness hit at tick 28836 measured .02); active `FlightAudio.bus` and the Ace cue itself connect directly to master. In the supplied 0.95s prefire WAV, mixed RMS/peak were -24.64/-13.33dBFS; exact-frequency projections at WAV offsets 0.65s (1650Hz) and 0.715s (2200Hz) measured -17.44/-17.65dBFS against local mixed RMS -18.13/-18.26. The 11.98s overlap WAV measured -30.35/-13.29dBFS RMS/peak and repeats the same cue bands. Adjacent windows had little energy at those frequencies. These measurements are from mixed PCM, not isolated stems, apply only to the supplied captures, and do not establish universal audibility or source-isolated levels. No gain/timbre edit made.
+- State: input fix and offline diagnosis complete; runtime listening/UI retest pending. Full suite deferred until UI retest.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ad09f1f`, based on `c81b644`)
+- Guarded Ace-window flags against callbacks from removed voices, replay the missed low pip only on first audible setup, and timestamp queued defensive inputs at fixed-step boundaries; 80ms chord timing and the existing dodge/grace windows are unchanged.
+- Tester’s `c81b644` sample measured the 1650Hz cue at 2.05s (scheduled 2.0527s), with the next visible window frame at 2.0898s and a preceding frame 41ms earlier (25–28fps). Focused tests passed 53/53 and `npm run build` passed (120 modules, 3.51s); both stale-callback regressions failed against `c81b644` before the guard. Full suite deferred until UI retest.
+- State: implementation and focused checks complete; runtime audio/masking, AV-frame quantization, and weapon verification remain pending.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (UI report for `1b0518f`; tick-scheduled warning)
+- UI-agent report on `1b0518f`: outer radius 143→53px over the first 18 ticks, 27.5px at the dodge window, and 22px at fire; same-tick `1b652cd` baseline was 49.5px and inside the ship. W/S+Space, Shift+Space and C passed; 320/375px layouts passed. Pitch rise was heard, but injected hits partly masked clarity. The reported 5–8fps machine delayed the cue by 11 ticks; 60fps comparison was not verified. Automatic weapons were not runtime-tested. Full `npm test` on `1b0518f` passed 605/605.
+- Pre-scheduled Ace pulses and the dodge accent from simulation ticks, with clock-drift rebasing and cancellation of future sources/duck automation on pause, mute, cancellation and fire. The existing 40ms 640/850/1125/1490/1980Hz pulse bank, cadence, 18-tick window, cue gains, master/headroom/limiter, fire restore and gameplay are unchanged; the two-note accent is brighter (1650→2200Hz), and effects duck further to 0.02 only in the window. The schedule follows the logical tick; at low FPS the visible ring still waits for a rendered frame, so the audio can precede its first visible window frame by up to one frame.
+- Verification on this candidate: focused combat-audio/Ace tests passed 40/40; build passed (120 modules, 2.57 s). The full suite and a live browser/audio listen were not repeated; post-push tester retest is pending. The PR8 owner supplied the Phoenix fixture URL and a combined Phoenix Lv5/Bomb Bay Lv1 checkpoint recipe; neither runtime setup was browser-verified here. P1 remains separate; no base merge or deployment.
+- State: review and final audio/sync listening pending.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (reference-informed audio update)
+- The tester's Forge reference confirms an incoming warning that rises from approximately 640Hz to 1980Hz. Updated only the cached Ace incoming-lock pulse bank to five 40ms tones (640/850/1125/1490/1980Hz), selected by lock progress through the existing pre-window edge.
+- This is inspired by the incoming alarm's low-to-high urgency, not a literal copy of its 11Hz timing/rhythm and not the distinct player-target 990→1480Hz warble. Existing pulse cadence, 2.0 gain, 0.06 effects duck, separate 1050→1450Hz dodge-window cue, fire restoration, master/headroom/limiter and gameplay remain unchanged.
+- Added regressions for all cached tone pitches/duration, progress selection, unchanged cadence/window timing, cache reuse, routing and lifecycle cleanup. Focused combat/flight audio tests passed 26/26; the production build passed (120 modules, 2.93 s). No browser capture or listening by this agent; the UI agent will retest the pushed tree. Logs: `/home/ubuntu/pixel-spaceship-ace-audio-final.log`, `/home/ubuntu/pixel-spaceship-ace-audio-build.log`.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (baseline `1b652cd`; renderer-proto `746f308`)
+- Merged the latest `renderer-proto` tree into the PR7 worktree only, retaining PR8's automatic Phoenix/Bomb Bay weapons, C barrel roll, Shift+Space and W/S+Space behavior. Kept both sides' worklog entries; no commit, push, base merge or deployment.
+- Revised only the Ace outer ring: the fixed reference ring keeps its existing radius; the large ring starts outside the projected aircraft when viewport space allows, contracts quickly early and eases more slowly toward the unchanged near-overlap/firing ticks. Added geometry coverage for ship enclosure, front-loaded contraction and viewport cap.
+- P1 tip `96bd079` is not an ancestor of this base and remains untouched/untested. The supplied TestFlight link opens Devin for iOS, not the game; the correct lock-on sound reference has now arrived at https://forge.ui8.ai/share/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24, and the UI agent's runtime/audio comparison is pending. No audio changes were made. Continuous play capture showing the ship-enclosing start, contraction and dodge cue remains pending for the tester.
+- Verification: the initial focused run passed 293/294; only the merged Survivors replay golden differed. After updating the combined-tree hash to `9534f369d842378f776a2e2d009492e105360270a1319b24084c293ae84438c6`, the merged focused suite passed 294/294 (18.58 s). `npm run build` passed (120 modules, 2.33 s). Full `npm test` was not run.
+- No browser recording or listening was performed. The logs are `/home/ubuntu/pixel-spaceship-pr7-merged-focused-final.log`, `/home/ubuntu/pixel-spaceship-pr7-merged-focused.log` and `/home/ubuntu/pixel-spaceship-pr7-merged-build.log`.
+- State: review pending; baseline revision `1b652cd4b05e1abf69389e6a04e866ed83161d9e` remains available for same-moment comparison.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (source `c06e3c9`; final delivery)
+- Retained verification on source `c06e3c9`: Korean HUD warning glyph coverage, English gun/missile fit at 320/375px, and cockpit W+Space/S+Space live-input pass.
+- The audio cue is identifiable; the delivered WAV measured true peak −13.3 dBFS with no clipping. Listening reports conflict: the original isolated prefire check reported unmasked, while the AV-derived extract showed material masking. No unqualified clarity pass; final user listening judgment is pending.
+- The registered session recording is video-only. The actual WAV was delivered separately and is not synchronized: [viewer](https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=f84a24ed-427b-410e-b514-7ef515659946).
+- P1/PR8 are not integrated or tested; no base merge or deployment. PR7 threads 4667752243 and 4667752482 are resolved.
+- State: final user listening judgment pending; this update is documentation only.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `3e07d43`; audio retest pending)
+- The latest isolated prefire listen still found the warning materially masked by repeated hit clacking at the 0.15 effects duck. Raising the tell-wide duck to 0.06 and lock cue gains to 2.0/2.4; cadence, buffers, timing, master volume, headroom/limiter, and immediate fire restore remain unchanged.
+- Verification: combat-audio/flight-audio tests passed 26/26; `npm run build` passed (120 modules, 1.98 s). The updated combined-mix headroom assertion passes at the new gains.
+- Current browser audio retest remains pending; no commit or push.
+- State: browser audio retest pending.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (base `2d1ccd6`; browser retest pending)
+- Regenerated the Galmuri11 subset from the documented `galmuri@2.40.3` source under the existing OFL, adding the missing Korean warning glyphs. Shortened English Ace warnings to “GUNS · DODGE AS RINGS NEARLY MEET” / “MISSILE · DODGE AS RINGS NEARLY MEET”; kept the Korean near-overlap copy and aligned the README instruction. No dependency manifests changed.
+- `aceTellFired` now restores the effects bus to unity immediately before the same-tick salvo muzzle callback; ordinary muzzle SFX still route through effects to master. The 0.15 tell duck, cadence, other lifecycle restores, rings, and controls are unchanged.
+- Verification: focused audio/lock/chord/flight-audio/i18n/layout tests passed 108/108; `npm run build` passed (120 modules, 2.46 s). FontTools found all Korean warning glyphs; at 12 px both English strings (240/254 px) and Korean strings (224 px) fit the 274 px text width at 320 px and 329 px at 375 px.
+- Prior cockpit W/S+Space live-input pass and the held 0.15 mix listen were reported as passing; the earlier capture found cues partly masked by hit/clacking. Browser visual/audio retest remains pending.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (implementation commit `1b3e0db`, parent `1f8e649`)
+- Kept the Ace effects bus at 0.15 for the full audible tell, including pulse gaps, and restore it on fire/cancel/pause/mute/zero-volume/suspend; cue gain, master gain, headroom, limiter, cadence, dodge window, and controls are unchanged. Gun/missile HUD copy now says “DODGE WHEN THE TWO RINGS NEARLY OVERLAP” / “두 원이 거의 겹칠 때 회피”; current Ace plan copy matches.
+- Verification: focused audio/Ace-lock/chord/flight-audio/i18n tests passed 57/57; `npm run build` passed (120 modules, 2.59 s). Prior cockpit W/S+Space live-input pass was reported; the `d5801c6` listen failed the clarity bar (cues audible but partly masked by hit/clacking). Corrected English/Korean HUD screenshots: `/home/ubuntu/ace-hud-en-overlap-1f8e649.png`, `/home/ubuntu/ace-hud-ko-overlap-1f8e649.png`; new browser audio listen pending.
+- State: committed as `1b3e0db` on PR7 branch; browser mix retest pending.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `d5801c6`; base `4bbf4c6`)
+- Brought the latest `renderer-proto` documentation into PR7 only; `git merge-tree` found only `docs/WORKLOG.md` conflicted, resolved by preserving the PR7 Ace entries and all base-side worklog entries. Changes since common base `b123ba6` are documentation; the P1 branch tip `96bd079` and PR8 branch tip `c070cad` are not ancestors of this base, and no gameplay/audio source was brought in from either.
+- Verification: actual Chrome/Pulse capture on `d5801c6` phase-2 chase heard the short high-pitched pulses and rising two-note accent around 0:01–0:03; they are audible but partly masked by loud effects/clacking (`/home/ubuntu/ace-phase2-d5801c6.wav`). Final merged UI check is pending. No P1/PR8 code was cherry-picked.
+- Controls: regression coverage on `d5801c6` confirms Space-first Shift across the fire tick resolves one roll, late accepted W/S+Space cancels only its salvo, and cooldown-blocked input still fires. Base changes contain no source or test files.
+- State: in progress; final merged UI verification pending. No merge back to `renderer-proto`/`main` or deploy.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `1a0a5b2`; current `renderer-proto` ref `7d883ad`, not merged)
+- Added dedicated synthesized Ace lock pulses (~40 ms, 1.25 kHz) accelerating from 12 to 6 simulation ticks, plus a one-shot rising two-note accent at the existing dodge-window edge. Ace cues bypass the effects bus but retain master/headroom/limiter; effects duck during each cue. Scheduler is keyed by boss/tell, tick-only, capped to one voice and catch-up cue, with no StageState/RNG changes; matching Ace startup warnings are suppressed while unrelated tells remain.
+- Verification: focused audio/lock/chord tests 48/48; `npm run build` passed (120 modules, 2.08 s). Browser playback/listening remains pending; no P1 assets or external APIs were used.
+- State: in progress; browser/audio listening remains pending. This is PR-only work; no base merge or deploy.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `1a0a5b2`; current `renderer-proto` ref `7d883ad`, not merged)
+- Replaced the single Ace warning ring with a fixed viewport-scaled reference circle and a larger shrinking circle; the gap is near-overlap at the existing 18-tick dodge-window entry and exactly zero at fire. An observer-only fire cue preserves that final render frame; maneuver acceptance, input grace and key chords are unchanged.
+- Verification: focused tests 21/21; `npm run build` passed (120 modules, 1.91 s). Screen rendering was not driven; audio hooks/assets were inspected only, with a beep/window-cue design pending review and no audio implementation.
+- State: in progress; no commit, push, base merge or deploy. The current base ref advanced to `7d883ad` after PR head `1a0a5b2`; preserve it for the review handoff.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (PR head `c22c9c5`; base `b123ba6`)
+- Preserved FlightChord's full 80 ms Space/Shift arbitration and passed unresolved W/S+Space intent to simulation. At a valid solid-warning fire tick, Ace defers at most five ticks only while a roll or maneuver can be accepted; only an accepted first-tick action cancels the salvo, while cooldown-blocked intent still fires. Phase 1/2 live attack fixtures continue to hold their release cone through the opening salvo.
+- Verification: focused tests 19/19; `npm run build` passed (120 modules); full `npm test` exited 0 (the retained output has no TAP count); `git diff --check HEAD` clean. The `renderer-proto` documentation changes and approved Ace-lock fixes are integrated with no unresolved conflicts.
+- State: in progress; browser/cockpit warning-position verification remains with the UI testing agent.
+
 ### 2026-11-23 23:15 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `cf53220`; renderer-proto `c6d2d16`, `ee908d4`, `4bbf4c6`)
 - Merged the latest documentation-only renderer-proto delta into PR8, preserving additive worklog entries and upstream docs; no game source or test files changed.
 - Verification: `git diff --check`; source/tests/build-input comparison with `cf53220` is empty. State: done; final PR8 integration.
@@ -69,6 +177,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - [P1 상자 연출 검증](wiki/HISTORY.md#p1-96bd079)은 밸런스 봇이 확인한 `96bd079`에 한정한다. 다른 후보의 플레이 녹화와 분리했다.
 - [후속 글꼴 후보](wiki/HISTORY.md#p1-font) `61154f5`에서는 시드 18의 한국어 ‘잭팟 ×5’와 보상 5개가 보인다. [이동 리플레이](wiki/HISTORY.md#p1-trail)에서는 잔상을 켜도 꺼도 일부 적탄이 가려졌다. 실기기 성능 미검증으로 통합 보류.
 - State: in progress. 원격 버전·Pages 성공 배포·PR 상태 및 게임 데이터와 38개 항목을 대조했다. HTML 도감은 Product Engineer가 별도 반영하며, 확인 전에는 기존 기획 문서를 정리하지 않는다.
+
+### 2026-11-23 (KST) · 기획 봇 · devin/1795438662-ace-lock-dodge (base `81a0e2a`)
+- State: in progress. Ace 상호 락온 표식 및 발사 직전 배럴롤·반전 기동 회피 판정. 키 매핑·Seeker·P1 사운드는 변경하지 않는다.
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795438706-auto-countermeasures (`70204b0`, base `81a0e2a`)
 - 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.

@@ -417,10 +417,10 @@ function drawAim(c: Context, area: Rect, aim: Point): void {
 
 function drawMarker(c: Context, marker: CockpitMarker, radius: number, pulse: boolean): void {
   const x = Math.round(marker.x) + 0.5, y = Math.round(marker.y) + 0.5;
-  const color = marker.locked ? green : marker.color;
+  const color = marker.locked ? green : marker.lockProgress > 0 ? '#64dfce' : marker.color;
   c.globalAlpha = marker.opacity;
   c.beginPath();
-  if (marker.boxed) {
+  if (marker.boxed && (!marker.ace || marker.lockProgress > 0)) {
     for (let side = -1; side <= 1; side += 2) for (let vertical = -1; vertical <= 1; vertical += 2) {
       c.moveTo(x + side * (radius - 5), y + vertical * radius);
       c.lineTo(x + side * radius, y + vertical * radius);
@@ -449,7 +449,7 @@ function drawMarker(c: Context, marker: CockpitMarker, radius: number, pulse: bo
   c.strokeStyle = color;
   c.lineWidth = marker.danger ? 2 : 1;
   c.stroke();
-  if (marker.boxed && pulse) c.strokeRect(x - radius, y - radius, 2 * radius, 2 * radius);
+  if (marker.boxed && pulse && !marker.ace) c.strokeRect(x - radius, y - radius, 2 * radius, 2 * radius);
   if (marker.boxed && !marker.locked && marker.lockProgress > 0) {
     fill(c, ink, x - radius, y + radius + 2, radius * 2, 2);
     fill(c, green, x - radius, y + radius + 2, Math.max(1, Math.round(radius * 2 * marker.lockProgress)), 2);

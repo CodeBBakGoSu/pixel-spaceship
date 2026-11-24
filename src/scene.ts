@@ -718,6 +718,20 @@ export class FlightScene {
     };
   }
 
+  // Match the model size and the flattened TOP presentation, not its simulation altitude.
+  projectAirframe(state: StageState, subject: 'boss' | 'player') {
+    const boss = subject === 'boss', vehicle = boss ? state.boss : state.player;
+    if (!vehicle) return null;
+    const mesh = boss ? this.rosterVisuals.ace : this.ship;
+    const alt = state.view === 'overhead' ? TOP_FLIGHT + (boss ? 1 : 3) : 'alt' in vehicle ? vehicle.alt : vehicle.altitude;
+    const point = this.project({ x: vehicle.x, z: vehicle.z, alt });
+    if (!point) return null;
+    const depth = -this.vector.set(vehicle.x, alt, -vehicle.z).applyMatrix4(this.camera.matrixWorldInverse).z;
+    const scale = this.framing.height * this.camera.projectionMatrix.elements[5] / 2;
+    const radius = (mesh.geometry.boundingSphere?.radius ?? 0) * mesh.scale.x * scale / (this.camera === this.top ? 1 : depth);
+    return { ...point, radius };
+  }
+
   // Keep unclipped screen coordinates so cockpit markers can point outside the glass.
   projectContact(target: Position, out: ContactProjection): void {
     projectCameraContact(this.camera, this.framing, target, out, this.vector);

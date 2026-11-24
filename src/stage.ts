@@ -5,8 +5,8 @@ import { gnatBursts } from './combat-feedback.ts';
 import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, WORLD_SITES } from './data/world.ts';
 import { isWater } from './world.ts';
-import { advanceRoll, rollAltitude, rollLateralStep } from './roll.ts';
-import { ROLL_TURN_DEADZONE } from './data/roll.ts';
+import { advanceRoll, canRoll, rollAltitude, rollLateralStep } from './roll.ts';
+import { ROLL_CHORD_MS, ROLL_TURN_DEADZONE } from './data/roll.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
@@ -746,6 +746,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   for (const effect of state.effects) effect.life -= STEP;
   state.effects = state.effects.filter(effect => effect.life > 0);
   if (state.weaponFx.length) state.weaponFx = state.weaponFx.filter(effect => state.tick < effect.until);
+  const pendingSpace = input.spacePending === undefined ? undefined : {
+    active: true,
+    graceTicks: canManeuver(state, input.spacePending) || canRoll(state)
+      ? Math.ceil(ROLL_CHORD_MS * TICKS_PER_SECOND / 1000) : 0,
+  };
   const turn = input.turn ?? 0;
   advanceRoll(state, input.roll ? input.rollTurn ?? turn : undefined, events);
   if (Math.abs(turn) >= ROLL_TURN_DEADZONE) state.player.lastTurn = turn < 0 ? -1 : 1;
@@ -784,7 +789,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
 
   relocateStragglers(state, ground);
   advanceEnemies(state, ground, events, observeSwarm);
-  advanceAce(state, ground, events, observeSwarm);
+  advanceAce(state, ground, events, observeSwarm, pendingSpace);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {

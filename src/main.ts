@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import './style.css';
 import './numeric-hud.css';
+import { drawAceLocks } from './ace-sights.ts';
 import { DamageFeedback, observeDamage } from './combat-feedback.ts';
 import { COMBAT_FEEDBACK as DAMAGE } from './data/combat-feedback.ts';
 import { advanceDamageFixture } from './damage-fixture.ts';
@@ -17,7 +18,11 @@ import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
-import { barrelRollForKey, FlightChord, type SpaceAction } from './flight-chord.ts';
+import {
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord,
+  mapSimulationStepTimesToAudioTicks, simulationStepTimesForFrame, takeDueActionsAtTick,
+  type SpaceAction, type TimedAction,
+} from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
 import { createGearIcon } from './gear-icons.ts';
 import { GraphicsRecovery } from './graphics-recovery.ts';
@@ -43,7 +48,7 @@ import { FlightScene } from './scene.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
-import type { ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
+import type { AceTell, ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
 import { BANDS, canCueAltitude } from './bands.ts';
 import { COMPARISON_DIVISOR } from './data/render-quality.ts';
@@ -216,9 +221,11 @@ let pendingStart = false, pendingPause = false, pendingViews = 0;
 let pendingDraft: Pick<StageInput, 'pick' | 'reroll' | 'banish' | 'skip'> = {};
 let pendingChest: StageInput['chestPick'];
 type ManeuverPress = { kind: ManeuverKind; turn: number };
-let pendingManeuver: ManeuverPress | undefined;
-let requestedSpace: ManeuverPress | undefined;
-let pendingRoll: number | undefined;
+type PendingFlightInput =
+  | { kind: 'maneuver'; press: ManeuverPress; spaceAt?: number }
+  | { kind: 'roll'; turn: number; spaceAt?: number };
+let pendingFlightInputs: TimedAction<PendingFlightInput>[] = [];
+let requestedSpace: TimedAction<ManeuverPress> | undefined;
 let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
@@ -235,6 +242,11 @@ let parryNoticeUntil = 0;
 const projectedShip = { x: 0, y: 0, depth: 0 };
 const feedbackTarget = { x: 0, z: 0, alt: 0 };
 let feedbackAnchor: { x: number; y: number } | null = null;
+let aceFireCue: AceTell | null = null;
+const aceVisualEvents: CombatEvents = { aceTellFired(tell) {
+  audio.finishAceLockFire();
+  aceFireCue = tell;
+} };
 const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   muzzle(shot, shape, x, z, alt) {
     const age = primingBullets ? query.has('shape') ? 3 : 10 : 0;
@@ -265,8 +277,14 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   // --- S7e lane ---
   tell(kind, x, z) {
     if (kind === 'ace-down') audio.play('explosion');
-    if ((x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) audio.play(`tell:${kind}`);
+    const aceTell = state.boss?.tell;
+    const aceAttack = (kind === 'gun' || kind === 'missile') && aceTell?.kind === kind
+      && aceTell.since === state.tick && state.boss?.x === x && state.boss?.z === z;
+    if (!aceAttack && (x - state.player.x) ** 2 + (z - state.player.z) ** 2 <= RADAR_RANGE ** 2) {
+      audio.play(`tell:${kind}`);
+    }
   },
+  aceTellFired: aceVisualEvents.aceTellFired,
   destroyed(kind, elite) {
     audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
   },
@@ -776,8 +794,6 @@ function updateMenu(): void {
   if (!$('#hangar-panel').hidden) renderHangar();
   if (showing) {
     resetTouch();
-    pendingManeuver = undefined;
-    pendingRoll = undefined;
     flushSpaceInput();
     pendingViews = 0;
   }
@@ -918,16 +934,23 @@ root.addEventListener('touchmove', event => {
   event.preventDefault();
 }, { passive: false });
 
-function resolveSpaceAction(action: SpaceAction | undefined, turn: number): void {
+function queueFlightInput(action: TimedAction<PendingFlightInput>): void {
+  pendingFlightInputs = enqueueTimedAction(pendingFlightInputs, action);
+}
+
+function resolveSpaceAction(action: TimedAction<SpaceAction> | undefined, turn: number): void {
   if (!action) return;
-  if (action === 'roll') pendingRoll = turn;
-  else if (requestedSpace) pendingManeuver = requestedSpace;
-  requestedSpace = undefined;
+  if (action.action === 'roll') {
+    queueFlightInput({ action: { kind: 'roll', turn, spaceAt: requestedSpace?.at }, at: action.at });
+  } else if (requestedSpace) {
+    queueFlightInput({ action: { kind: 'maneuver', press: requestedSpace.action, spaceAt: requestedSpace.at }, at: action.at });
+  }
 }
 
 function flushSpaceInput(): void {
   flightChord.reset();
   requestedSpace = undefined;
+  pendingFlightInputs = [];
 }
 
 window.addEventListener('keydown', event => {
@@ -990,14 +1013,18 @@ window.addEventListener('keydown', event => {
       ? barrelRollForKey(code, flightInput().turn ?? 0, state.player.lastTurn)
       : undefined;
     if (barrel !== undefined) {
-      flushSpaceInput();
-      pendingRoll = barrel;
+      resolveSpaceAction(flightChord.flush(event.timeStamp), turn);
+      flightChord.reset();
+      queueFlightInput({
+        action: { kind: 'roll', turn: barrel, spaceAt: requestedSpace?.at },
+        at: event.timeStamp,
+      });
       return;
     }
     const kind = maneuverForKey(code, turn, climb);
     if (kind) {
       event.preventDefault();
-      requestedSpace = { kind, turn };
+      requestedSpace = { action: { kind, turn }, at: event.timeStamp };
       resolveSpaceAction(flightChord.pressSpace(event.timeStamp, event.shiftKey), turn);
     } else if (code === 'ShiftLeft' || code === 'ShiftRight') {
       resolveSpaceAction(flightChord.pressShift(event.timeStamp), turn);
@@ -1006,14 +1033,18 @@ window.addEventListener('keydown', event => {
   if (code === 'KeyR' && state.rank) pendingStart = true;
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
+function updateAceLockAndRebaseFlightClock(active: boolean): void {
+  const performanceTime = performance.now();
+  audio.updateAceLock(state, active, performanceTime);
+}
+
 function syncAudioPause(): void {
   audio.setSuspended(!graphics.canAdvance || (touch && (document.hidden || interrupted)));
+  updateAceLockAndRebaseFlightClock(false);
 }
 
 function interruptFlight(reason: 'focus' | 'graphics' = 'focus'): void {
   keys.clear();
-  pendingManeuver = undefined;
-  pendingRoll = undefined;
   flushSpaceInput();
   resetTouch();
   resumeAt = 0;
@@ -1168,26 +1199,30 @@ touchLoop.addEventListener('pointerdown', event => {
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
   touchLoop.addEventListener(name, event => {
     if (!loopPointer || event.pointerId !== loopPointer.id) return;
-    if (name === 'pointerup' && menuKey === 'playing') pendingManeuver = loopPointer.press;
+    if (name === 'pointerup' && menuKey === 'playing') {
+      queueFlightInput({ action: { kind: 'maneuver', press: loopPointer.press }, at: event.timeStamp });
+    }
     loopPointer = null;
     touchLoop.classList.remove('held');
   });
 }
 touchLoop.addEventListener('click', event => {
-  if (event.detail === 0 && menuKey === 'playing') pendingManeuver = { kind: chooseManeuver(stickX, stickY), turn: stickX };
+  if (event.detail === 0 && menuKey === 'playing') {
+    queueFlightInput({ action: { kind: 'maneuver', press: { kind: chooseManeuver(stickX, stickY), turn: stickX } }, at: event.timeStamp });
+  }
 });
-function bindPress(button: HTMLButtonElement, press: () => void): void {
+function bindPress(button: HTMLButtonElement, press: (at: number) => void): void {
   button.addEventListener('pointerdown', event => {
     if (event.button !== 0 || menuKey !== 'playing') return;
     event.preventDefault();
-    press();
+    press(event.timeStamp);
   });
   button.addEventListener('click', event => {
-    if (event.detail === 0 && menuKey === 'playing') press();
+    if (event.detail === 0 && menuKey === 'playing') press(event.timeStamp);
   });
 }
 bindPress(touchPause, () => { pendingPause = true; });
-bindPress(touchRoll, () => { pendingRoll = stickX; });
+bindPress(touchRoll, at => { queueFlightInput({ action: { kind: 'roll', turn: stickX }, at }); });
 bindPress($<HTMLButtonElement>('#touch-view'), () => { pendingViews++; });
 
 function keyboardAxes() {
@@ -1208,7 +1243,7 @@ function flightInput(): StageInput {
   };
 }
 
-function advance(): void {
+function advance(tickTime: number): void {
   if (!graphics.canAdvance || !scene || guide || (persistent && document.hidden)) return;
   if (query.get('fixture') === 'damage') { advanceDamageFixture(state); return; }
   if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
@@ -1224,28 +1259,38 @@ function advance(): void {
   if (launch && state.phase !== 'playing' && state.phase !== 'draft' && state.phase !== 'chest') world.seed = launch.seed;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   resolveSpaceAction(flightChord.flush(frameNow), 0);
+  const inputAtTick = takeDueActionsAtTick(pendingFlightInputs, tickTime);
+  const dueInputs = inputAtTick.actions.map(input => input.action);
+  const queuedInput = dueInputs.find(input => input.kind === 'roll') ?? dueInputs[0];
+  const consumesRequestedSpace = consumesSpaceRequest(dueInputs, requestedSpace?.at);
+  const maneuverInput = queuedInput?.kind === 'maneuver' ? queuedInput.press : undefined;
+  const rollInput = queuedInput?.kind === 'roll' ? queuedInput.turn : undefined;
+  const spacePending = requestedSpace && actionDueAt(requestedSpace, tickTime)
+    && !consumesRequestedSpace
+    ? requestedSpace.action.kind : undefined;
   stepStage(state, {
     ...control,
     start: pendingStart,
     launch,
     retreat: pendingRetreat,
     pause: pendingPause,
-    maneuver: pendingRoll === undefined ? pendingManeuver?.kind ?? control.maneuver : undefined,
-    maneuverTurn: pendingManeuver?.turn ?? control.maneuverTurn,
-    roll: pendingRoll !== undefined || control.roll,
-    rollTurn: pendingRoll ?? control.rollTurn,
+    maneuver: queuedInput?.kind !== 'roll' ? maneuverInput?.kind ?? control.maneuver : undefined,
+    maneuverTurn: maneuverInput?.turn ?? control.maneuverTurn,
+    spacePending,
+    roll: queuedInput?.kind === 'roll' || control.roll,
+    rollTurn: queuedInput?.kind === 'roll' ? rollInput : control.rollTurn,
     toggleView: pendingViews > 0 || control.toggleView,
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
-  }, ground, undefined, combatEvents);
+  }, ground, undefined, combatEvents ?? aceVisualEvents);
   if (bulletFixture?.stress) bulletFixture.fillStress(combatEvents);
   pendingStart = pendingPause = false;
   pendingRetreat = false;
   if (pendingViews) pendingViews--;
   pendingDraft = {};
   pendingChest = undefined;
-  pendingManeuver = undefined;
-  pendingRoll = undefined;
+  pendingFlightInputs = inputAtTick.pending;
+  if (consumesRequestedSpace) requestedSpace = undefined;
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
@@ -1386,6 +1431,7 @@ function render(now: number): boolean {
   }
   const audioActive = graphics.canAdvance && effectsEnabled && !document.hidden && !guide && state.phase === 'playing' && !state.paused;
   if (scene) audio.updateFlight(state, scene.speedFeel.boost, scene.speedFeel.clearance, scene.cloudPass, audioActive);
+  updateAceLockAndRebaseFlightClock(audioActive);
   updateHud(readout);
   updateManeuverCue();
   updateRearBombMarker();
@@ -1509,9 +1555,11 @@ function showReversalImpact(): void {
 }
 
 function animate(now: number): void {
+  aceFireCue = null;
   damageFeedback.beginFrame();
   frameNow = now;
-  const elapsed = Math.max(0, (now - previousTime) / 1000);
+  const rafFrameStart = previousTime;
+  const elapsed = Math.max(0, (now - rafFrameStart) / 1000);
   previousTime = now;
   if (scene?.contextLost) loseGraphics();
   if (scene && !forceUsed && forcedLossTick !== null && state.tick >= forcedLossTick) {
@@ -1533,16 +1581,26 @@ function animate(now: number): void {
     return;
   }
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
-  if (updateAutoResume(now)) carry = 0;
-  else carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
-  while (carry >= STEP) {
+  const resumed = updateAutoResume(now);
+  const stepStart = Math.max(rafFrameStart, hitstopUntil);
+  const acceptedElapsed = resumed ? 0 : Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
+  const stepTimes = resumed
+    ? (carry = 0, { times: [], carry: 0 })
+    : simulationStepTimesForFrame(stepStart, acceptedElapsed, carry, STEP);
+  carry = stepTimes.carry;
+  const audioAnchor = audio.aceLockPerformanceTimeForTick(state.tick);
+  const tickTimes = audioAnchor === undefined
+    ? stepTimes.times
+    : mapSimulationStepTimesToAudioTicks(
+      stepTimes.times, state.tick, tick => audio.aceLockPerformanceTimeForTick(tick),
+    );
+  for (const tickTime of tickTimes) {
     if (scene?.contextLost) {
       loseGraphics();
       break;
     }
     const burst = state.reversal?.burstAt;
-    advance();
-    carry -= STEP;
+    advance(tickTime);
     const nextBurst = state.reversal?.burstAt;
     if (nextBurst !== undefined && nextBurst !== burst) {
       hitstopUntil = now + REVERSAL_HITSTOP_MS;
@@ -1551,6 +1609,8 @@ function animate(now: number): void {
       break;
     }
   }
+  updateAceLockAndRebaseFlightClock(graphics.canAdvance && effectsEnabled && !document.hidden && !guide
+    && state.phase === 'playing' && !state.paused);
   if (graphics.recovering) {
     requestAnimationFrame(animate);
     return;
@@ -1569,6 +1629,7 @@ function animate(now: number): void {
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   drawDamageFeedback();
+  if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
   requestAnimationFrame(animate);
 }
 
