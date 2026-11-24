@@ -24,15 +24,50 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:17 KST · 데븐 봇 · candidate validation follow-up
+- The first full run found the intentional Survivors seeker behavior change no longer matched its previous seed-1 terminal hash. Reproduced both fidelity-rendering settings: both clear with identical hash `f0b5e5c44f5033d6edf2a94249970287cabe1d0b81635ec0d4ee5c3688ee569d`; refreshed only the Survivors hash. The Legacy golden remains unchanged and passed.
+- Fixed the strict TypeScript optional seeker-velocity input; rebuilt the generated bundle and verified the new EN/KO quest copy is present with obsolete copy absent.
+- Final verification: `npm test` passed 646/646; `npm run build` passed with 121 modules (`3.44s`).
+
 ### 2026-11-25 00:14 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (commit `54a2fd8`)
 - Replaced scaled unit Aegis toruses with inner/outer TorusGeometry at the actual judged radii and a fixed 0.15 world-unit tube radius; renderer outline data is precomputed once.
 - Verification: focused geometry suite 2/2, including rendered TorusGeometry bounds at both radii; `npm run build` (123 modules, 2.16s); `git diff --check` clean. State: done.
+
+### 2026-11-25 00:08 KST · 데븐 봇 · review finding 0005
+- Reproduced the pursuit failure with an elevated target 30 m above the player moving laterally at 40 units/s: the prior seeker lost the target at tick 28 with altitude still about 15 m short, then stopped climbing when it nulled vertical velocity.
+- Survivors seekers now turn a 3D direction within the configured turn rate, cap vertical speed, account for the time needed to climb when choosing the lead point/horizontal speed, and retain their current trajectory when capture is lost. Legacy steering remains unchanged.
+- Updated the vertical-flight regression to check the bounded 3D trajectory and added the receding-target intercept regression. Verification: the two targeted seeker tests passed 2/2.
+
+### 2026-11-25 00:04 KST · 데븐 봇 · review finding 0004
+- Reproduced both paths with receding elevated Survivors targets: Twin fired at altitude +35 while a target receded at 240 units/s and missed; Pods fired at altitude +35 while a target receded at 180 units/s and missed. The shots used current-range lead for their horizontal aim/vertical component rather than solving the moving 3D intercept.
+- Twin Cannon and Wing Pods now solve a positive 3D intercept time and align horizontal and vertical projectile velocity to the same future point. Legacy aim behavior is unchanged.
+- Verification: `node --test tests/friendly-intercept.test.mjs` passed 2/2; existing Twin Cannon and Wing Pods cases in `tests/loadout.test.mjs` passed 2/2.
+
+### 2026-11-25 00:02 KST · 데븐 봇 · review finding 0003
+- Reproduced level-five drone target acquisition across altitude: three bolts spawned at altitudes 110/120/130 toward a target 45 m above the player, but all had `vy=0` and the target remained at 100 HP after 90 ticks.
+- Survivors drone bolts now use a normalized 3D direction to the acquired target; Legacy keeps its horizontal shot path.
+- Verification: `node --test tests/drone-aim.test.mjs` passed 1/1; the existing level-five drone case in `tests/loadout.test.mjs` passed 1/1.
 
 ### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (기준 `ae1b94c`, commit `b71acc7`)
 - Matched the renderer to PR #13's continuous-flight verdict: radial bounds `radius ± halfWidth` and altitude bounds `player.alt ± halfWidth`; added transparent boundary rings and supports without changing collision or simulation state.
 - Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
 - PR #10 compatibility review: not cherry-picked to its remote branch (`fa45f64`) because its Aegis verdict uses `hitWindow(state)` vertically, while PR #13's continuous-run verdict uses `player.alt ± halfWidth`; rendering the PR #13 outline there would misstate the judged bounds. No separate PR was opened pending approval.
 - State: done on the pushed PR #13-derived renderer branch (`c742880`); collision, balance, and simulation remain unchanged.
+
+### 2026-11-24 23:59 KST · 데븐 봇 · review finding 0002
+- Reproduced with a Survivors state at the first Bill offer (tick 3600): weak bot seed 1 caused `state.bills.active` to become `null`; at the deadline `finishBillTick` returned `null`, interest stayed false, and XP scaling stayed 1. Weak seed 9 handled the Bill and correctly produced an unpaid expiry with interest and 0.75 XP scale, confirming the failure was on the ignored-Bill input path.
+- `perceive` returns the original state for Survivors, so assigning the hidden-Bill view to it mutated simulation state. The bot now gets a shallow observation copy with a hidden Bill; Legacy retains its existing band-filtered perception.
+- Verification: `node --test tests/bot-bills.test.mjs tests/bot-sim.test.mjs` passed 11/11.
+
+### 2026-11-24 23:56 KST · 데븐 봇 · review finding 0001
+- Reproduced Prism Lance on a Survivors state with the evolution equipped: `advanceRangedWeapons` emitted one beam from `{x:0,z:0,alt:125}` to `{x:0,z:562.5,alt:125}`. The old rail test asserted that one-beam behavior.
+- Survivors Prism Lance now emits three terrain-clipped rays with distinct horizontal and vertical directions. Legacy's altitude-lane behavior remains unchanged; the regression test verifies the three charge/beam paths and clipping.
+- Verification: `node --test --test-name-pattern='Prism Lance' tests/ranged-evolutions.test.mjs` passed 1/1.
+
+### 2026-11-24 23:53 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (이전 후보 `ae1b94c`)
+- Updated the Hangar unlock display name to Focus Lens in English and 초점 렌즈 in Korean. Replaced obsolete band labels with the actual cumulative conditions: 3 kills at a player/target height difference of at least 15 m across sorties, and 3 kills within 5 seconds spanning at least 30 m. The existing metric rules and kill recording already match those conditions.
+- `src/i18n.ts` is the only checked-in locale source; the old generated `dist` bundle contained stale copy, and the Vite build regenerated it with the new strings and no stale phrases. The existing Galmuri11 subset covers all 33 distinct Hangul syllables in the changed Korean text; no font file change was needed.
+- Verification: `node --test tests/i18n.test.mjs tests/loadout.test.mjs` passed 30/30; `npm run build` passed (121 modules, 1.85 s). The PR review fixes are being investigated separately before the candidate is pushed.
 
 ### 2026-11-24 23:37 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
 - Isolated the Legacy replay against detached `09e2890`: the first serialized-state difference at tick 0 was only the progress-metric schema (`multibandWithinFive`/`bandsKilled` vs `heightSpreadWithinFive`/`verticalKills`). Removing profile/daily/run metrics from the behavioral projection produced identical seed-1 simulation state through tick 6770/`clear` on both trees. Added mode-scoped Legacy metric creation/normalization; the Legacy golden is unchanged.

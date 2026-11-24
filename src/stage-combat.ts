@@ -229,6 +229,19 @@ function steerAceMissile(shot: Shot, player: Position): void {
 
 type Aim = Position & { vx?: number; vz?: number; id: number; kind?: string };
 
+function friendlyInterceptTime(origin: Position, target: Aim, projectileSpeed: number): number {
+  const dx = target.x - origin.x, dy = target.alt - origin.alt, dz = target.z - origin.z;
+  const vx = target.vx ?? 0, vz = target.vz ?? 0;
+  const a = vx * vx + vz * vz - projectileSpeed * projectileSpeed;
+  const b = 2 * (dx * vx + dz * vz);
+  const c = dx * dx + dy * dy + dz * dz;
+  const discriminant = b * b - 4 * a * c;
+  if (Math.abs(a) < 1e-9 || discriminant < 0) return Math.sqrt(c) / projectileSpeed;
+  const root = Math.sqrt(discriminant);
+  const times = [(-b - root) / (2 * a), (-b + root) / (2 * a)].filter(time => time > 0);
+  return times.length ? Math.min(...times) : Math.sqrt(c) / projectileSpeed;
+}
+
 function fireFriendly(
   state: StageState, kind: 'twin' | 'pods', offsets: readonly number[], target: Aim | null, lockId: number | null,
 ): void {
@@ -238,8 +251,6 @@ function fireFriendly(
   const verticalDistance = target && (state.run || isGroundAa(target)) ? target.alt - p.altitude : 0;
   const distance = state.run && target ? Math.hypot(horizontalDistance, verticalDistance) : horizontalDistance;
   const lead = distance / BOLT_SPEED;
-  const vy = target && (state.run || isGroundAa(target)) && lead > 0 ? verticalDistance / lead : 0;
-  const horizontalSpeed = state.run && target && distance > 0 ? BOLT_SPEED * horizontalDistance / distance : BOLT_SPEED;
   const volley = ++state.nextVolley;
   const level = state.run?.weaponLevels[kind] ?? 1;
   const pierce = (lockId === null ? WEAPONS[kind].tuning.pierce[level - 1] : 0)
@@ -258,9 +269,17 @@ function fireFriendly(
     const muzzle = kind === 'twin' ? TWIN_MUZZLE : 0;
     const x = p.x + forwardX * muzzle + forwardZ * side;
     const z = p.z + forwardZ * muzzle - forwardX * side;
+    const aimOrigin = { x: fanned ? p.x + forwardX * muzzle : x, z: fanned ? p.z + forwardZ * muzzle : z,
+      alt: p.altitude };
+    const intercept = state.run && target ? friendlyInterceptTime(aimOrigin, target, BOLT_SPEED) : lead;
+    const aimX = target ? target.x + (target.vx ?? 0) * intercept - aimOrigin.x : 0;
+    const aimZ = target ? target.z + (target.vz ?? 0) * intercept - aimOrigin.z : 0;
+    const aimDistance = state.run && target ? Math.hypot(aimX, verticalDistance, aimZ) : distance;
+    const vy = target && (state.run || isGroundAa(target)) && intercept > 0 ? verticalDistance / intercept : 0;
+    const horizontalSpeed = state.run && target && aimDistance > 0
+      ? BOLT_SPEED * Math.hypot(aimX, aimZ) / aimDistance : BOLT_SPEED;
     const aim = target
-      ? Math.atan2(target.x + (target.vx ?? 0) * lead - (fanned ? p.x + forwardX * muzzle : x),
-        target.z + (target.vz ?? 0) * lead - (fanned ? p.z + forwardZ * muzzle : z))
+      ? Math.atan2(aimX, aimZ)
       : p.yaw;
     const wingSpread = fanned ? side / maxOffset * fan : 0;
     const yaw = aim + wingSpread + (aurora && (fanned || !fan) ? side * CLOSE_EVOLUTIONS.aurora.fan : 0);

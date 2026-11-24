@@ -56,19 +56,22 @@ test('Swarm Rack launches twelve rockets for an engaged carrier and fits two vol
   assert.equal(state.shots.length, 24);
 });
 
-test('Prism Lance charges and strikes along one terrain-clipped ray at its actual altitude', () => {
+test('Prism Lance charges and strikes along a terrain-clipped three-ray 3D fan', () => {
   const state = setup('rail', 'prism-lance');
   state.player.altitude = mid + 8;
   const sourceAltitude = state.player.altitude;
   const leading = contact(state, 0, 69, sourceAltitude);
-  const wrongHeight = contact(state, 0, 69, sourceAltitude + 20);
+  const wrongHeight = contact(state, 0, 69, sourceAltitude + 80);
   const behindWall = contact(state, 0, 130, sourceAltitude);
   const flyingIn = contact(state, 0, 65, sourceAltitude);
   flyingIn.entry = {};
   const ridge = (_, z) => z >= 83 && z <= 96 ? 150 : 35;
   advanceRangedWeapons(state, ridge);
   assert.equal(state.railChargeAt, 54);
-  assert.deepEqual(state.weaponFx.filter(fx => fx.kind === 'rail-charge').map(fx => fx.from.alt), [sourceAltitude]);
+  const charges = state.weaponFx.filter(fx => fx.kind === 'rail-charge');
+  assert.equal(charges.length, 3);
+  assert.deepEqual(charges.map(fx => fx.from.alt), [sourceAltitude, sourceAltitude, sourceAltitude]);
+  assert.equal(new Set(charges.map(fx => `${fx.to.x}:${fx.to.z}:${fx.to.alt}`)).size, 3);
 
   state.tick = state.railChargeAt;
   advanceRangedWeapons(state, ridge);
@@ -77,8 +80,9 @@ test('Prism Lance charges and strikes along one terrain-clipped ray at its actua
   assert.equal(behindWall.hp, 12);
   assert.equal(flyingIn.hp, 12);
   const beams = state.weaponFx.filter(fx => fx.kind === 'rail-beam');
-  assert.deepEqual(beams.map(beam => beam.from.alt), [sourceAltitude]);
-  assert.ok(beams[0].to.z < behindWall.z);
+  assert.equal(beams.length, 3);
+  assert.deepEqual(beams.map(beam => beam.from.alt), [sourceAltitude, sourceAltitude, sourceAltitude]);
+  assert.ok(beams.every(beam => beam.to.z < behindWall.z));
 });
 
 test('Skybreaker damages the bounded 3D blast volume and launches one generation of three secondary shells', () => {

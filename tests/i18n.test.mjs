@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { UNLOCK_QUESTS } from '../src/data/meta.ts';
 import { createTranslator, detectLanguage, initialLanguage, saveLanguage, strings } from '../src/i18n.ts';
 import { rosterThreatMessage } from '../src/roster-hud.ts';
 
@@ -12,6 +13,31 @@ test('every translation is nonempty and uses the same placeholders in both langu
     assert.ok(en.trim(), `empty English translation for ${key}`);
     assert.ok(strings.ko[key].trim(), `empty Korean translation for ${key}`);
     assert.deepEqual(placeholders(strings.ko[key]), placeholders(en), key);
+  }
+});
+
+test('Hangar quest names and copy describe cumulative vertical kills and a five-second height spread', () => {
+  const byId = Object.fromEntries(UNLOCK_QUESTS.map(quest => [quest.id, quest]));
+  assert.deepEqual({ metric: byId['band-lens'].metric, target: byId['band-lens'].target },
+    { metric: 'verticalKills', target: 3 });
+  assert.deepEqual({ metric: byId.flak.metric, target: byId.flak.target },
+    { metric: 'heightSpreadWithinFive', target: 3 });
+
+  const en = createTranslator('en'), ko = createTranslator('ko');
+  assert.equal(en('item.band-lens.title'), 'Focus Lens');
+  assert.equal(ko('item.band-lens.title'), '초점 렌즈');
+  assert.equal(en('item.flak.title'), 'Flak Burst');
+  assert.equal(ko('item.flak.title'), '대공 파열포');
+  assert.equal(en('hangar.quest.band-lens'),
+    'Across all sorties, kill 3 enemies at least 15 m above or below your altitude.');
+  assert.equal(ko('hangar.quest.band-lens'),
+    '모든 출격을 통틀어 내 고도와 15m 이상 차이 나는 적을 총 3기 격추하세요.');
+  assert.equal(en('hangar.quest.flak'),
+    'Within 5 seconds, kill 3 enemies whose altitudes span at least 30 m.');
+  assert.equal(ko('hangar.quest.flak'),
+    '5초 안에 고도 차가 30m 이상 나도록 적 3기를 격추하세요.');
+  for (const text of [en('hangar.quest.band-lens'), ko('hangar.quest.band-lens')]) {
+    assert.doesNotMatch(text, /LOW|MID|HIGH/);
   }
 });
 

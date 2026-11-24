@@ -33,19 +33,21 @@ const projectiles = (state, count, terrain = ground) => {
   }
 };
 
-test('Seeker vertical travel retains its per-tick rate in both directions and stops without a target', () => {
+test('Seeker turns in 3D within its climb rate and keeps momentum without a target', () => {
   for (const direction of [-1, 1]) {
     const state = setup('seeker');
     const target = contact(state, 0, 120, BANDS[direction < 0 ? 0 : 2]);
     advanceRangedWeapons(state, ground);
     const shot = state.shots[0], altitude = shot.alt;
     advanceRangedShot(state, shot, ground);
-    assert.ok(Math.abs(shot.alt - altitude - direction * 34 * STEP) < 1e-9);
+    assert.ok(direction * (shot.alt - altitude) > 0);
+    assert.ok(Math.abs(shot.alt - altitude) <= 34 * STEP);
     target.hp = 0;
     const prior = shot.alt;
+    const priorVy = shot.vy;
     advanceRangedShot(state, shot, ground);
-    assert.equal(shot.alt, prior);
-    assert.equal(shot.vy, 0);
+    assert.ok(Math.abs(shot.alt - prior - priorVy * STEP) < 1e-9);
+    assert.equal(shot.vy, priorVy);
   }
 });
 

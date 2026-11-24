@@ -167,8 +167,8 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
       latestBill = activeBill;
       handlesBill = !!activeBill && random(rng) < profile.billsHandling;
     }
-    const perceived = perceive(state, profile, preferredBand);
-    if (!handlesBill) perceived.bills = { ...state.bills, active: null };
+    const observation = perceive(state, profile, preferredBand);
+    const perceived = handlesBill ? observation : { ...observation, bills: { ...state.bills, active: null } };
     const base = autopilotInput(perceived, 'full', ground, profile,
       state.run ? !!state.player.skim : preferredBand === SKIM_BAND);
     const aimOffset = (random(rng) * 2 - 1) * profile.aimErrorRad;

@@ -128,9 +128,15 @@ function advanceDrones(state: StageState, level: number): void {
     }
     if (target && shotRoom) {
       const bearing = Math.atan2(target.x - drone.x, target.z - drone.z);
+      const dx = target.x - drone.x, dz = target.z - drone.z, dy = target.alt - drone.alt;
+      const distance = Math.hypot(dx, dy, dz);
+      const horizontalSpeed = state.run && distance > 0 ? tuning.fireSpeed / distance : tuning.fireSpeed;
       state.shots.push({
         x: drone.x, z: drone.z, alt: drone.alt, kind: 'drone-bolt', weapon: 'drones',
-        vx: Math.sin(bearing) * tuning.fireSpeed, vz: Math.cos(bearing) * tuning.fireSpeed, life: tuning.fireRange / tuning.fireSpeed,
+        vx: state.run ? dx * horizontalSpeed : Math.sin(bearing) * tuning.fireSpeed,
+        vz: state.run ? dz * horizontalSpeed : Math.cos(bearing) * tuning.fireSpeed,
+        ...(state.run && distance > 0 && dy ? { vy: dy * horizontalSpeed } : {}),
+        life: tuning.fireRange / tuning.fireSpeed,
         damage: weaponDamage(state, 'drones', tuning.fireDamage), volley: ++state.nextVolley,
         nearMiss: false, lockId: target.id === ace?.id ? target.id : null,
       });
