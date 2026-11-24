@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 23:56 KST · 데븐 봇 · review finding 0001
+- Reproduced Prism Lance on a Survivors state with the evolution equipped: `advanceRangedWeapons` emitted one beam from `{x:0,z:0,alt:125}` to `{x:0,z:562.5,alt:125}`. The old rail test asserted that one-beam behavior.
+- Survivors Prism Lance now emits three terrain-clipped rays with distinct horizontal and vertical directions. Legacy's altitude-lane behavior remains unchanged; the regression test verifies the three charge/beam paths and clipping.
+- Verification: `node --test --test-name-pattern='Prism Lance' tests/ranged-evolutions.test.mjs` passed 1/1.
+
 ### 2026-11-24 23:53 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (이전 후보 `ae1b94c`)
 - Updated the Hangar unlock display name to Focus Lens in English and 초점 렌즈 in Korean. Replaced obsolete band labels with the actual cumulative conditions: 3 kills at a player/target height difference of at least 15 m across sorties, and 3 kills within 5 seconds spanning at least 30 m. The existing metric rules and kill recording already match those conditions.
 - `src/i18n.ts` is the only checked-in locale source; the old generated `dist` bundle contained stale copy, and the Vite build regenerated it with the new strings and no stale phrases. The existing Galmuri11 subset covers all 33 distinct Hangul syllables in the changed Korean text; no font file change was needed.

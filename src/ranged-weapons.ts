@@ -124,12 +124,20 @@ function railLines(state: StageState, source: Position, level: number, ground: G
     altitudes.push(bandAltitude(low, low === SKIM_BAND ? ground(source.x, source.z) : undefined));
   }
   if (!state.run && !prism && level >= rail.upperBandAt && high !== null) altitudes.push(bandAltitude(high));
-  const yaw = state.player.yaw;
   const length = rail.range[level - 1];
-  const dx = Math.sin(yaw) * length, dz = Math.cos(yaw) * length;
-  return altitudes.map(alt => ({
-    from: { x: source.x, z: source.z, alt },
-    to: { x: source.x + dx, z: source.z + dz, alt },
+  const fan = state.run && prism ? [-1, 0, 1] : [0];
+  return altitudes.flatMap(alt => fan.map(side => {
+    const yaw = state.player.yaw + (state.run && prism ? side * Math.PI / 9 : 0);
+    const pitch = state.run && prism ? side * Math.PI / 18 : 0;
+    const horizontal = length * Math.cos(pitch);
+    return {
+      from: { x: source.x, z: source.z, alt },
+      to: {
+        x: source.x + Math.sin(yaw) * horizontal,
+        z: source.z + Math.cos(yaw) * horizontal,
+        alt: alt + Math.sin(pitch) * length,
+      },
+    };
   }));
 }
 
