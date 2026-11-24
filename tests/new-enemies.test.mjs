@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createStage, parseStageOptions } from '../src/stage.ts';
+import { autopilotInput } from '../src/autoplay.ts';
+import { TICKS_PER_SECOND } from '../src/simulation-time.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies, makeEnemy } from '../src/stage-enemies.ts';
 import { trySpendThreat } from '../src/threat-budget.ts';
+import { World } from '../src/world.ts';
 
 const flat = () => 35;
 const stage = () => createStage(parseStageOptions('?mode=survivors&t=0'), flat);
@@ -77,7 +80,7 @@ test('minute-six Crosswing and Twin Chaser tells serialize when the first reserv
   assert.equal(twin.tell, undefined);
 });
 
-test('Manta aligns to captured player height and follows its frozen 3D pass at high and low altitude', () => {
+test('Manta dives from above captured player height and follows its frozen 3D pass at high and low altitude', () => {
   for (const [playerHeight, startAltitude] of [[35, 110], [110, 35]]) {
     const state = stage();
     const ground = () => 0;
@@ -103,9 +106,10 @@ test('Manta aligns to captured player height and follows its frozen 3D pass at h
       advanceEnemies(state, ground);
     }
     assert.equal(manta.manta.phase, 'warning');
-    assert.equal(manta.alt, playerHeight);
-    assert.equal(manta.manta.passStart.alt, playerHeight);
+    assert.equal(manta.alt, manta.manta.passAltitude);
+    assert.ok(manta.manta.passStart.alt > playerHeight);
     assert.equal(manta.manta.passEnd.alt, playerHeight);
+    assert.ok(manta.manta.passStart.alt > manta.manta.passEnd.alt);
     const passStart = { ...manta.manta.passStart };
     const passEnd = { ...manta.manta.passEnd };
     state.player.x += 250;
@@ -119,11 +123,14 @@ test('Manta aligns to captured player height and follows its frozen 3D pass at h
       advanceEnemies(state, ground);
     }
     const passDeadline = state.tick + 600;
+    let descended = false;
     for (let tick = state.tick + 1; tick <= passDeadline && manta.manta.phase === 'pass'; tick++) {
       state.tick = tick;
       advanceEnemies(state, ground);
+      descended ||= manta.alt < passStart.alt;
     }
     assert.equal(manta.manta.phase, 'exit');
+    assert.ok(descended);
     assert.deepEqual({ x: manta.x, z: manta.z, alt: manta.alt }, passEnd);
     assert.deepEqual(manta.manta.passStart, passStart);
     assert.deepEqual(manta.manta.passEnd, passEnd);
@@ -137,6 +144,75 @@ test('Manta aligns to captured player height and follows its frozen 3D pass at h
     assert.equal(manta.alt, playerHeight);
     assert.equal(Math.hypot(manta.x - passEnd.x, manta.z - passEnd.z) > 0, true);
   }
+});
+
+test('seed 3 assisted stepStage Manta descends to its captured height and exits horizontally', () => {
+  const world = new World();
+  const ground = (x, z) => world.height(x, z);
+  const state = createStage(parseStageOptions('?autoplay=1&mode=survivors&seed=3'), ground);
+  const scheduledTick = 260 * TICKS_PER_SECOND;
+  let actualSpawnTick, firstAttackTick, warning, exitStarted, exited, descended = false;
+  for (let frame = 0; frame < 275 * TICKS_PER_SECOND && !exited; frame++) {
+    if (state.tick >= scheduledTick) state.enemies = state.enemies.filter(enemy => enemy.kind === 'manta');
+    state.shots.length = 0;
+    const input = autopilotInput(state, 'full', ground);
+    input.fire = false;
+    stepStage(state, input, ground);
+    const manta = state.enemies.find(enemy => enemy.kind === 'manta');
+    if (!manta) continue;
+    actualSpawnTick ??= state.tick;
+    const flight = manta.manta;
+    if (flight?.phase === 'warning' && !warning) {
+      firstAttackTick ??= state.tick;
+      warning = {
+        tick: state.tick, start: { ...flight.passStart }, end: { ...flight.passEnd }, playerHeight: flight.playerHeight,
+        exitTarget: { ...flight.exitTarget },
+      };
+    }
+    if (warning && flight) {
+      assert.deepEqual(flight.passStart, warning.start);
+      assert.deepEqual(flight.passEnd, warning.end);
+    }
+    if (flight?.phase === 'pass' && warning && manta.alt < warning.start.alt) descended = true;
+    if (flight?.phase === 'exit' && !exitStarted) {
+      exitStarted = { x: manta.x, z: manta.z, alt: manta.alt, target: flight.exitTarget, height: flight.playerHeight };
+    }
+    if (warning && exitStarted && !flight) exited = { x: manta.x, z: manta.z, alt: manta.alt };
+  }
+  const trace = `scheduled=${scheduledTick} spawned=${actualSpawnTick} firstAttack=${firstAttackTick}`;
+  assert.ok(actualSpawnTick >= scheduledTick, trace);
+  assert.ok(firstAttackTick >= actualSpawnTick, trace);
+  assert.ok(warning, trace);
+  assert.ok(warning.start.alt > warning.playerHeight);
+  assert.equal(warning.end.alt, warning.playerHeight);
+  assert.ok(descended);
+  assert.ok(exitStarted);
+  assert.equal(exitStarted.alt, warning.playerHeight);
+  assert.equal(exitStarted.height, warning.playerHeight);
+  assert.ok(exited);
+  assert.equal(exited.x, warning.exitTarget.x);
+  assert.equal(exited.z, warning.exitTarget.z);
+  assert.equal(exited.alt, warning.playerHeight);
+  assert.ok(Math.hypot(exited.x - warning.end.x, exited.z - warning.end.z) > 0);
+});
+
+test('low-altitude Manta climbs above a ridge before continuing its approach', () => {
+  const state = stage();
+  const ridge = (x, z) => x > -500 && x < 500 && z > -190 && z < -120 ? 100 : 35;
+  Object.assign(state.player, { x: 0, z: -85, yaw: 0, altitude: 80 });
+  const manta = makeEnemy(state, 0, 50, 2, 'manta');
+  manta.alt = 70;
+  manta.maneuverAt = state.tick;
+  state.enemies.push(manta);
+  advanceEnemies(state, ridge);
+
+  for (let tick = 1; tick <= 1200 && manta.manta.phase === 'approach'; tick++) {
+    state.tick = tick;
+    advanceEnemies(state, ridge);
+  }
+  assert.notEqual(manta.manta.phase, 'approach');
+  assert.ok(manta.z < -120);
+  assert.ok(manta.alt >= 100 + 22);
 });
 
 test('Mender repairs damaged Aegis after a short uninterrupted 3D tether', () => {

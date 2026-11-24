@@ -145,6 +145,7 @@ export type Enemy = Position & {
   manta?: {
     phase: 'approach' | 'climb' | 'warning' | 'pass' | 'exit';
     playerHeight: number;
+    passAltitude: number;
     approach: Point;
     passStart?: Position;
     passEnd?: Position;

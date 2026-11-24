@@ -19,9 +19,11 @@ import { HOSTILE_BOLT_LIFE } from './data/hostile-fire.ts';
 
 const COAST_TURNS = [0.65, -0.65, 1.3, -1.3, 2.05, -2.05, Math.PI];
 const MAX_TURN = 3.2 * STEP;
+const ENEMY_CLEARANCE = 22;
 // Ease most of a speed or bank change over the next 0.18 seconds.
 const STEERING_BLEND = 1 - Math.exp(-STEP / 0.06);
 const TERRAIN_HOLD_TICKS = 18;
+const MANTA_DIVE_OFFSET = scaleTravel(30);
 const { span: ESCORT_SPAN, aft: ESCORT_AFT, speedLimit: ESCORT_SPEED } = ROSTER.escort;
 const FLYBY = ROSTER.flyby;
 
@@ -209,7 +211,7 @@ function rangeMode(active: boolean | undefined, range: number, threshold: number
 
 function clearAt(enemy: Enemy, floor: number): boolean {
   if (enemy.skim) return !enemy.skimWater || isWater(floor);
-  return floor + 22 <= enemy.alt + 0.01;
+  return floor + ENEMY_CLEARANCE <= enemy.alt + 0.01;
 }
 
 function steer(state: StageState, enemy: Enemy, ground: Ground, targetYaw: number, targetSpeed: number): void {
@@ -248,7 +250,7 @@ function clearFlybyPath(ground: Ground, from: Point, to: Point, altitude: number
   const steps = Math.ceil(Math.hypot(dx, dz) / 16);
   for (let i = 1; i <= steps; i++) {
     const x = from.x + dx * i / steps, z = from.z + dz * i / steps;
-    if (ground(x, z) + 22 > altitude) return false;
+    if (ground(x, z) + ENEMY_CLEARANCE > altitude) return false;
   }
   return true;
 }
@@ -539,6 +541,7 @@ function moveManta(state: StageState, enemy: Enemy, ground: Ground, angle: numbe
       const playerHeight = player.altitude;
       maneuver = enemy.manta = {
         phase: 'approach', playerHeight,
+        passAltitude: Math.max(enemy.alt, playerHeight + MANTA_DIVE_OFFSET, ground(enemy.x, enemy.z) + ENEMY_CLEARANCE),
         approach: { x: player.x - fx * scaleTravel(72) + sx * side * scaleTravel(24),
           z: player.z - fz * scaleTravel(72) + sz * side * scaleTravel(24) },
       };
@@ -550,7 +553,9 @@ function moveManta(state: StageState, enemy: Enemy, ground: Ground, angle: numbe
     if (Math.hypot(dx, dz) > scaleTravel(8)) {
       steer(state, enemy, ground, Math.atan2(dx, dz), ENEMY_KINDS.manta.speed);
     }
-    moveMantaAltitude(enemy, maneuver.playerHeight, scaleTravel(72));
+    maneuver.passAltitude = Math.max(maneuver.passAltitude,
+      ground(enemy.x + enemy.vx * STEP, enemy.z + enemy.vz * STEP) + ENEMY_CLEARANCE);
+    moveMantaAltitude(enemy, maneuver.passAltitude, scaleTravel(72));
     if (Math.hypot(maneuver.approach.x - enemy.x, maneuver.approach.z - enemy.z) <= scaleTravel(8)) {
       maneuver.phase = 'climb';
     }
@@ -558,7 +563,8 @@ function moveManta(state: StageState, enemy: Enemy, ground: Ground, angle: numbe
   }
   if (maneuver.phase === 'climb') {
     enemy.vx = enemy.vz = 0;
-    const aligned = moveMantaAltitude(enemy, maneuver.playerHeight, scaleTravel(72));
+    maneuver.passAltitude = Math.max(maneuver.passAltitude, ground(enemy.x, enemy.z) + ENEMY_CLEARANCE);
+    const aligned = moveMantaAltitude(enemy, maneuver.passAltitude, scaleTravel(72));
     if (aligned && state.tick >= enemy.maneuverAt) startMantaWarning(state, enemy, maneuver);
     return;
   }
