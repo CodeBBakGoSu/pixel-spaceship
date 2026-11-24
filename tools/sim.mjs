@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBot } from '../src/bot.ts';
 import { BOT_PROFILE_IDS } from '../src/data/bot-profiles.ts';
-import { BUFF_IDS, WEAPON_IDS } from '../src/data/items.ts';
+import { BUFF_IDS, DRAFT_RULES, WEAPON_IDS } from '../src/data/items.ts';
 import { PHASES, phaseAt, SWARM_CAPS } from '../src/data/phases.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { World } from '../src/world.ts';
 import { createPhaseTelemetry, summarizePhaseTelemetry } from './phase-telemetry.mjs';
-import { createProgressionObservations, summarizeProgressionObservations } from './sim-observations.mjs';
+import { createFullBuildObservation, createProgressionObservations, summarizeProgressionObservations } from './sim-observations.mjs';
 
 const MAX_SEED = 0xffffffff;
 const USAGE = 'npm run sim -- --profile skilled|average|weak|all --seeds N [--from S] [--heat H] [--mobile]';
@@ -50,6 +50,8 @@ function runSortie(args, profile, seed, world) {
   const pilot = createBot(profile, seed);
   const phaseTelemetry = createPhaseTelemetry(PHASES, phaseAt, TICKS_PER_SECOND);
   const progressionObservations = createProgressionObservations(TICKS_PER_SECOND);
+  const fullBuildObservation = createFullBuildObservation({ weaponSlots: DRAFT_RULES.maxSlots, buffSlots: DRAFT_RULES.maxSlots,
+    maxWeaponLevel: DRAFT_RULES.maxWeaponLevel, maxBuffLevel: DRAFT_RULES.maxBuffLevel, ticksPerSecond: TICKS_PER_SECOND });
   let inputs = 0, peakLiveGnats = 0, gnatCapPressureBeats = 0;
   const observeSwarm = (live, cap, requestedBeyondRoom) => {
     const expectedCap = args.mobile ? SWARM_CAPS.mobile : SWARM_CAPS.desktop;
@@ -66,6 +68,7 @@ function runSortie(args, profile, seed, world) {
     progressionObservations.record({ previousTick, previousLevel, previousXp, previousSalvage, previousPhase,
       nextTick: stage.tick, nextLevel: stage.level, nextXp: stage.xp, nextSalvage: stage.salvage, nextPhase: stage.phase,
       terminal: !['playing', 'draft', 'chest'].includes(stage.phase) });
+    fullBuildObservation.record({ tick: stage.tick, weaponLevels: stage.run.weaponLevels, buffLevels: stage.run.buffLevels });
   }
   const clear = stage.phase === 'clear' || stage.phase === 'timeout';
   const seconds = stage.tick / TICKS_PER_SECOND;
@@ -75,6 +78,7 @@ function runSortie(args, profile, seed, world) {
     survivalSeconds: clear ? RUN_END_TICK / TICKS_PER_SECOND : seconds,
     deathPhase: stage.phase === 'lost' ? phaseAt(seconds).id : null,
     hull: stage.hull, maxHull: stage.maxHull, hitsTaken: stage.hitsTaken, kills: stage.kills, levelUps: stage.level - 1,
+    fullBuildSeconds: fullBuildObservation.finish(),
     weapons: Object.fromEntries(WEAPON_IDS.filter(id => stage.run.weaponLevels[id]).map(id => [id, stage.run.weaponLevels[id]])),
     buffs: Object.fromEntries(BUFF_IDS.filter(id => stage.run.buffLevels[id]).map(id => [id, stage.run.buffLevels[id]])),
     evolutions: WEAPON_IDS.flatMap(id => stage.run.evolutions[id] ? [stage.run.evolutions[id]] : []),
@@ -182,9 +186,12 @@ function main(values) {
     timeout: percent(row.timeoutRate), 'survival p10/50/90 s':
       [row.survival.p10, row.survival.median, row.survival.p90].map(value => value.toFixed(1)).join('/'),
     'run median s': row.duration.median.toFixed(1), 'end HP median': row.medianEndHull,
-    'kills median': row.medianKills, 'level-ups median': row.medianLevelUps, 'Bills %': row.billsPaidPct ?? '–',
+    'kills median': row.medianKills, 'terminal level-ups median': row.medianLevelUps, 'Bills %': row.billsPaidPct ?? '–',
     'first XP s (med,n)': observed(row.firstXpGainSeconds), 'first draft s (med,n)': observed(row.firstDraftSeconds),
-    'first level-up s (med,n)': observed(row.firstLevelUpSeconds), 'level-ups @60 (med,n)': observed(row.levelUpsAt60Seconds),
+    'first level-up s (med,n)': observed(row.firstLevelUpSeconds),
+    'levels 2/3/4 s (med,n)': [2, 3, 4].map(level => observed(row.levelUpTimes[level])).join(' / '),
+    'level-ups @60 (med,n)': observed(row.levelUpsAt60Seconds), 'level-ups @600 (med,n)': observed(row.levelUpsAt600Seconds),
+    'full build s (med,n)': observed(row.fullBuildSeconds),
     'peak live Gnats': row.peakLiveGnats, 'cap pressure beats': row.gnatCapPressureBeats,
   })));
   console.table(report.profiles.flatMap(row => PHASES.map(phase => {
