@@ -61,7 +61,12 @@ function playerVelocity(state: StageState): SpatialVector {
   };
 }
 
+function playerInArena(state: StageState): boolean {
+  return Math.hypot(state.player.x - state.arena.x, state.player.z - state.arena.z) <= state.arena.radius;
+}
+
 function arenaPosition(state: StageState, point: SpatialPoint): SpatialPoint {
+  if (!playerInArena(state)) return point;
   const offset = { x: point.x - state.arena.x, z: point.z - state.arena.z, alt: 0 };
   const distance = Math.hypot(offset.x, offset.z);
   const limit = Math.max(0, state.arena.radius - scaleTravel(64));

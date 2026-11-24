@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; pending commit)
+- Reproduced seed 1 at the 205s cue with the pilot outside (x=2393, edge=1792): the transport spawned clipped near x=1653, 765 units from the pilot. `arenaPosition` now preserves player-local coordinates outside the arena and retains the existing in-arena clamp.
+- Added an external-pilot spawn regression; `tests/sortie-bosses.test.mjs` passed 12/12 and `git diff --check` was clean. No balance values changed; findings 0004–0005 remain in progress.
+
 ### 2026-11-25 00:20 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0002; pending commit)
 - Reproduced an outside-arena pilot (x=2392, arena edge=1792): after ten seconds of approach Ace remained at x=1761 with 631-unit separation because the rejoin target was clamped back inside. Approach now clamps only while the pilot is in-arena; existing in-arena bound coverage is retained.
 - Added the external-pilot regression; Ace/reengagement/checkpoint regressions passed 50/50 and `git diff --check` was clean. No balance values changed; findings 0003–0005 remain in progress.

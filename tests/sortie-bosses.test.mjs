@@ -54,6 +54,22 @@ test('the miniboss consumer starts only from the shared producer cue', () => {
   });
 });
 
+test('miniboss spawn stays player-local when an external pilot is outside the arena', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=1'), ground);
+  state.tick = SORTIE_MINIBOSS_CUES[0].startTick - 1;
+  state.chests.next = 1;
+  state.speed = 120;
+  Object.assign(state.player, {
+    x: state.arena.x + state.arena.radius + 600, z: state.arena.z,
+    yaw: Math.PI / 2, vx: 120, vz: 0, altitude: 125,
+  });
+  stepStage(state, {}, ground);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  assert.ok(actor.x > state.arena.x + state.arena.radius + 200,
+    `the boss remains near the external pilot instead of clipping to the arena edge: ${actor.x}`);
+  assert.ok(Math.hypot(actor.x - state.player.x, actor.z - state.player.z) < 400);
+});
+
 test('generic straggler recycling cannot strand a sortie boss in a skipped fly-in entry', () => {
   const state = startEncounter(0);
   const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
