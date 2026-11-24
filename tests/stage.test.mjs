@@ -324,6 +324,46 @@ test('timeout settles only captured salvage without delaying the recorded outcom
   assert.deepEqual(events[0].position, events[0].playerPosition);
 });
 
+test('blur pause does not advance or finish a terminal capture settlement', () => {
+  const state = stage('?mode=survivors&t=0');
+  const terminalTick = endTick(state);
+  const p = state.player;
+  const pickup = { id: 922, kind: 'salvage', x: p.x + 300, z: p.z + 300, alt: 180, xp: 3, born: terminalTick - 5,
+    capture: { capturedAtTick: terminalTick - 5, arriveAtTick: terminalTick + 1, origin: { x: p.x + 300, z: p.z + 300, alt: 180 },
+      curve: { x: 1, z: 0, amount: 2 } } };
+  state.tick = terminalTick;
+  state.pickups = [pickup];
+  state.pendingFinish = { outcome: 'timeout', terminalTick, settlementTick: terminalTick };
+  state.phase = 'playing';
+  const initialProfile = state.profile;
+  const events = [];
+  const observe = { pickupCollected: event => events.push(event) };
+
+  stepStage(state, { pause: true }, ground, undefined, observe);
+  assert.equal(state.paused, true);
+  assert.equal(state.pendingFinish.settlementTick, terminalTick);
+  assert.equal(state.summary, null);
+  assert.equal(state.profile, initialProfile);
+  assert.equal(state.salvage, 0);
+  assert.equal(events.length, 0);
+
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.pendingFinish.settlementTick, terminalTick);
+  stepStage(state, { pause: true }, ground, undefined, observe);
+  assert.equal(state.paused, false);
+  assert.equal(state.pendingFinish.settlementTick, terminalTick);
+
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.phase, 'timeout');
+  assert.equal(state.tick, terminalTick);
+  assert.equal(state.summary.seconds, terminalTick / 60);
+  assert.notEqual(state.profile, initialProfile);
+  assert.equal(state.run.credits, 3);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].tick, terminalTick + 1);
+  assert.deepEqual(events[0].position, events[0].playerPosition);
+});
+
 test('close planar salvage at a different altitude still follows a capture deadline to the ship', () => {
   const state = stage('?mode=survivors&t=0');
   state.enemies = [];

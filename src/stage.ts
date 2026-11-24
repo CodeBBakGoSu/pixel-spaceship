@@ -834,6 +834,12 @@ function advanceDestinations(state: StageState, ground: Ground): void {
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
   observeSwarm?: SwarmObserver, events?: CombatEvents): void {
   if (state.pendingFinish) {
+    if (input.pause) {
+      state.paused = !state.paused;
+      state.boosting = false;
+      return;
+    }
+    if (state.paused) return;
     const pending = state.pendingFinish;
     pending.settlementTick++;
     advanceCapturedPickups(state, events, pending.settlementTick);
