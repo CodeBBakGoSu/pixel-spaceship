@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
-  simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord,
+  mapSimulationStepTimesToAudioTicks, ROLL_CHORD_MS, simulationStepTime, simulationStepTimesForFrame,
+  takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 
 test('Space while either Shift is held rolls immediately and never queues a reversal', () => {
@@ -93,19 +94,49 @@ test('capped 4fps step times use the accepted interval prefix and rebase each fr
   assert.deepEqual(takeDueActionsAtTick([], pausedAt), { actions: [], pending: [] });
 });
 
+test('rAF fallback keeps accepted step boundaries after the hitstop floor', () => {
+  const step = 1 / 60, previousRaf = 1016.67, now = 1037, hitstopUntil = 1020;
+  const elapsed = (now - previousRaf) / 1000;
+  const acceptedElapsed = Math.min(elapsed, (now - hitstopUntil) / 1000);
+  const result = simulationStepTimesForFrame(Math.max(previousRaf, hitstopUntil), acceptedElapsed, 0, step);
+  assert.equal(result.times.length, 1);
+  assert.ok(result.times[0] >= hitstopUntil);
+});
+
 test('4ms render cost does not make a 60Hz RAF timeline lose simulation steps', () => {
   const step = 1 / 60;
-  let previousRaf = 0, flightClock = 0, carry = 0, ticks = 0;
+  let previousRaf = 0, previousRender = 0, carry = 0, renderCarry = 0, ticks = 0, renderTicks = 0;
   for (let frame = 1; frame <= 600; frame++) {
     const now = frame * 1000 / 60;
     const elapsed = (now - previousRaf) / 1000;
+    const renderElapsed = Math.max(0, (now - previousRender) / 1000);
     previousRaf = now;
-    const result = simulationStepTimesForFrame(flightClock, elapsed, carry, step);
+    const result = simulationStepTimesForFrame(previousRaf - elapsed * 1000, elapsed, carry, step);
+    const renderResult = simulationStepTimesForFrame(previousRender, renderElapsed, renderCarry, step);
     ticks += result.times.length;
+    renderTicks += renderResult.times.length;
     carry = result.carry;
-    flightClock = now + 4;
+    renderCarry = renderResult.carry;
+    previousRender = now + 4;
   }
   assert.equal(ticks, 600);
+  assert.equal(renderTicks, 456, 'replacing the RAF timestamp with its post-render time reproduces the regression');
+});
+
+test('90Hz, 144Hz, and 240Hz RAF timelines each retain 600 ticks over ten seconds', () => {
+  const step = 1 / 60;
+  for (const refreshRate of [90, 144, 240]) {
+    let previousRaf = 0, carry = 0, ticks = 0;
+    for (let frame = 1; frame <= refreshRate * 10; frame++) {
+      const now = frame * 1000 / refreshRate;
+      const elapsed = (now - previousRaf) / 1000;
+      const result = simulationStepTimesForFrame(previousRaf, elapsed, carry, step);
+      ticks += result.times.length;
+      carry = result.carry;
+      previousRaf = now;
+    }
+    assert.equal(ticks, 600, `${refreshRate}Hz`);
+  }
 });
 
 test('all due inputs drain together, with future inputs retained for a later tick', () => {

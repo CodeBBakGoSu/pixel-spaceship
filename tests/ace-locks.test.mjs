@@ -4,8 +4,9 @@ import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
 import {
-  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
-  simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord,
+  mapSimulationStepTimesToAudioTicks, ROLL_CHORD_MS, simulationStepTime, simulationStepTimesForFrame,
+  takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -225,6 +226,37 @@ test('4fps capped catch-up applies post-cue C in the window and prioritizes it o
     }
   }
   assert.equal(state.boss.tell, null);
+});
+
+test('120Hz carry maps cue+2ms C to the exact next audio tick and cancels at fire', () => {
+  const state = duel();
+  const windowTick = state.boss.tell.until - ACE.lock.dodgeTicks;
+  while (state.tick < windowTick - 1) step(state);
+  const stateTick = state.tick, fixedStep = 1 / 60, audioAnchor = 1000, eventTime = 1012.67;
+  const audioTimeForTick = tick => audioAnchor + (tick - stateTick) * fixedStep * 1000;
+  const firstFrame = simulationStepTimesForFrame(audioAnchor, 1 / 120, 0, fixedStep);
+  assert.deepEqual(firstFrame.times, []);
+  assert.ok(Math.abs(firstFrame.carry * 1000 - 8.3333333333) < 1e-8);
+
+  const rafStart = audioAnchor + 1000 / 120;
+  const nextFrame = simulationStepTimesForFrame(rafStart, 1 / 120, firstFrame.carry, fixedStep);
+  assert.equal(nextFrame.times.length, 1);
+  const wrong = simulationStepTimesForFrame(audioAnchor, 1 / 120, firstFrame.carry, fixedStep).times[0];
+  const mapped = mapSimulationStepTimesToAudioTicks(
+    nextFrame.times, stateTick, audioTimeForTick,
+  )[0];
+  assert.ok(wrong < eventTime && eventTime < mapped);
+  assert.ok(Math.abs(wrong - 1008.3333333333) < 1e-8);
+  assert.ok(Math.abs(mapped - 1016.6666666667) < 1e-8);
+
+  const pending = enqueueTimedAction([], {
+    action: { kind: 'roll', turn: barrelRollForKey('KeyC', 1) }, at: eventTime,
+  });
+  const due = takeDueActionsAtTick(pending, mapped);
+  assert.equal(due.actions.length, 1);
+  step(state, { roll: true, rollTurn: due.actions[0].action.turn });
+  assert.equal(state.tick, windowTick);
+  assert.equal(state.boss.tell, null, 'C reaches the actual fire tick after the cue boundary');
 });
 
 test('Space grace survives until C is consumed after the fire tick', () => {

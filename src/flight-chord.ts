@@ -22,6 +22,17 @@ export function simulationStepTimesForFrame(frameStart: number, elapsed: number,
   return { times, carry: pending };
 }
 
+export function mapSimulationStepTimesToAudioTicks(
+  frameTimes: readonly number[],
+  stateTick: number,
+  audioTimeForTick: (tick: number) => number | undefined,
+): number[] {
+  return frameTimes.map((frameTime, index) => {
+    const audioTime = audioTimeForTick(stateTick + index + 1);
+    return audioTime ?? frameTime;
+  });
+}
+
 export function actionDueAt<T>(pending: TimedAction<T> | undefined, tickTime: number): boolean {
   return pending !== undefined && pending.at <= tickTime;
 }

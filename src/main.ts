@@ -19,8 +19,8 @@ import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import {
-  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord, simulationStepTimesForFrame,
-  takeDueActionsAtTick,
+  actionDueAt, barrelRollForKey, consumesSpaceRequest, enqueueTimedAction, FlightChord,
+  mapSimulationStepTimesToAudioTicks, simulationStepTimesForFrame, takeDueActionsAtTick,
   type SpaceAction, type TimedAction,
 } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
@@ -230,7 +230,7 @@ let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
-let previousTime = 0, flightClockTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
+let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
 const REVERSAL_HITSTOP_MS = 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const cockpitLayer = $('#cockpit-display');
@@ -1036,7 +1036,6 @@ window.addEventListener('keyup', event => keys.delete(event.code));
 function updateAceLockAndRebaseFlightClock(active: boolean): void {
   const performanceTime = performance.now();
   audio.updateAceLock(state, active, performanceTime);
-  flightClockTime = audio.aceLockPerformanceTimeForTick(state.tick) ?? performanceTime;
 }
 
 function syncAudioPause(): void {
@@ -1559,8 +1558,8 @@ function animate(now: number): void {
   aceFireCue = null;
   damageFeedback.beginFrame();
   frameNow = now;
-  const frameStart = audio.aceLockPerformanceTimeForTick(state.tick) ?? flightClockTime;
-  const elapsed = Math.max(0, (now - previousTime) / 1000);
+  const rafFrameStart = previousTime;
+  const elapsed = Math.max(0, (now - rafFrameStart) / 1000);
   previousTime = now;
   if (scene?.contextLost) loseGraphics();
   if (scene && !forceUsed && forcedLossTick !== null && state.tick >= forcedLossTick) {
@@ -1583,13 +1582,19 @@ function animate(now: number): void {
   }
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
   const resumed = updateAutoResume(now);
-  const stepStart = Math.max(frameStart, hitstopUntil);
+  const stepStart = Math.max(rafFrameStart, hitstopUntil);
   const acceptedElapsed = resumed ? 0 : Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
   const stepTimes = resumed
     ? (carry = 0, { times: [], carry: 0 })
     : simulationStepTimesForFrame(stepStart, acceptedElapsed, carry, STEP);
   carry = stepTimes.carry;
-  for (const tickTime of stepTimes.times) {
+  const audioAnchor = audio.aceLockPerformanceTimeForTick(state.tick);
+  const tickTimes = audioAnchor === undefined
+    ? stepTimes.times
+    : mapSimulationStepTimesToAudioTicks(
+      stepTimes.times, state.tick, tick => audio.aceLockPerformanceTimeForTick(tick),
+    );
+  for (const tickTime of tickTimes) {
     if (scene?.contextLost) {
       loseGraphics();
       break;
@@ -1665,7 +1670,6 @@ async function start(): Promise<void> {
   resize();
   applyLanguage();
   previousTime = performance.now();
-  flightClockTime = previousTime;
   // --- S7f lane ---
   if (flightFixture || fidelityFixture || rosterSheet) {
     frameNow = previousTime;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CombatAudio } from '../src/combat-audio.ts';
 import { FLIGHT_AUDIO } from '../src/data/flight-audio.ts';
 import { mapFlightAudio } from '../src/flight-audio.ts';
-import { simulationStepTimesForFrame } from '../src/flight-chord.ts';
+import { mapSimulationStepTimesToAudioTicks, simulationStepTimesForFrame } from '../src/flight-chord.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const gesture = { isTrusted: true };
@@ -756,15 +756,42 @@ test('input step mapping follows the actual scheduled window source across doubl
     const voice = context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === window).at(-1);
     assert.ok(voice?.startTime !== undefined);
     const cuePerformanceTime = audio.aceLockPerformanceTimeForAudioTime(voice.startTime);
-    const stepAnchor = audio.aceLockPerformanceTimeForTick(state.tick);
-    assert.ok(cuePerformanceTime !== undefined && stepAnchor !== undefined);
+    assert.ok(cuePerformanceTime !== undefined);
     const eventTime = cuePerformanceTime + 2;
-    const steps = simulationStepTimesForFrame(stepAnchor, 0.2, 0, 1 / 60).times;
+    const frameTimes = simulationStepTimesForFrame(5000 + renderCost, 0.2, 0, 1 / 60).times;
+    const steps = mapSimulationStepTimesToAudioTicks(
+      frameTimes, state.tick, tick => audio.aceLockPerformanceTimeForTick(tick),
+    );
     const consumedStep = steps.findIndex(time => time >= eventTime);
     assert.ok(consumedStep >= 0, `${renderCost}ms render cost leaves C inside the accepted frame prefix`);
     assert.ok(state.tick + consumedStep + 1 >= 111,
       `${renderCost}ms render cost maps C after the scheduled dodge-window tick`);
+    assert.equal(steps[consumedStep],
+      audio.aceLockPerformanceTimeForTick(state.tick + consumedStep + 1));
   }
+});
+
+test('actual scheduled window source maps cue+2ms to the near-fire tick', t => {
+  const { instances, userActivation } = browserAudio(t);
+  userActivation.hasBeenActive = true;
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  const [context] = instances;
+  const { window } = aceLockBuffers(context);
+  context.currentTime = 3.5;
+  const state = aceLockState(128, { since: 100, until: 129 });
+  audio.updateAceLock(state, true, 7000);
+
+  const voice = context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === window).at(-1);
+  assert.ok(voice?.startTime !== undefined);
+  const eventTime = audio.aceLockPerformanceTimeForAudioTime(voice.startTime) + 2;
+  const frameTimes = simulationStepTimesForFrame(7000, 1 / 60, 0, 1 / 60).times;
+  const steps = mapSimulationStepTimesToAudioTicks(
+    frameTimes, state.tick, tick => audio.aceLockPerformanceTimeForTick(tick),
+  );
+  assert.equal(steps.length, 1);
+  assert.ok(steps[0] >= eventTime);
+  assert.equal(state.tick + 1, 129, 'the actual cue onset plus 2ms is consumed at the fire tick');
 });
 
 test('first audible tell emits one overdue low pip unless the dodge window already has priority', t => {
