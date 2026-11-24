@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { findTouchCueRect, pointBehindTouchControls, screenArrowRotation, screenPointObscured, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, pointBehindTouchControls, screenArrowRotation,
+  screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -94,4 +95,25 @@ test('full touch backdrop occlusion includes safe-inset edges and reserves the v
     width: 44,
     height: 44,
   });
+});
+
+test('obstacle-edge search finds distinct Aegis and dive cue slots in short portrait cockpits', () => {
+  for (const width of [360, 390]) {
+    const layout = phoneLayout(width, 844, { top: 0, right: 0, bottom: 0, left: 0 }, 'cockpit', true);
+    const [aegis, threat] = findTouchCueRects(layout, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]);
+    assert.ok(aegis, `${width}x844 Aegis slot`);
+    assert.ok(threat, `${width}x844 threat slot`);
+    const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    assert.equal(overlaps(aegis, threat), false);
+    for (const cue of [aegis, threat]) {
+      assert.ok(cue.x >= layout.controls.x && cue.y >= layout.controls.y);
+      assert.ok(cue.x + cue.width <= layout.controls.x + layout.controls.width);
+      assert.ok(cue.y + cue.height <= layout.controls.y + layout.controls.height);
+      assert.equal(overlaps(cue, layout.audio), false);
+      assert.equal(overlaps(cue, layout.playfield), false);
+      for (const target of [layout.pause, layout.stick, layout.stickLabel, layout.loop, layout.roll, layout.boost, layout.view]) {
+        assert.equal(overlaps(cue, target), false);
+      }
+    }
+  }
 });
