@@ -35,6 +35,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
+import { touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -76,6 +77,7 @@ const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), gearToas
 const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
+const touchThreatCue = $('#touch-threat-cue');
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -735,6 +737,22 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
+  touchThreatCue.hidden = true;
+  if ((message === 'hud.enemyDive' || message === 'hud.interceptorDive') && touch && phone && scene
+    && state.phase === 'playing' && !state.paused && warning?.maneuver?.phase === 'warning') {
+    const target = { x: warning.x, z: warning.z, alt: BANDS[warning.maneuver.band] };
+    const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
+    scene.projectContact(target, projectedTarget);
+    scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
+    if (projectedTarget.depth > 0.05 && projectedPlayer.depth > 0.05) {
+      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, { width: 48, height: 40 });
+      if (cue) {
+        setRect('touch-threat-cue', cue.rect);
+        touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
+        touchThreatCue.hidden = false;
+      }
+    }
+  }
   const tag = $('#view-tag');
   tag.hidden = state.viewTag <= 0 || !!message;
   if (!tag.hidden) setText('#view-tag', t('view.tag', { view: t(`view.${state.view}`) }));
