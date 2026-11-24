@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 (KST) · 데븐 봇 · `devin/1795531296-aegis-volume-pr13` (`fab05d1`, `8c85070`; base `b1fa90a`)
+- Cherry-picked the shared touch-safe cue helper from PR #10. Added a compact mobile Aegis cue in a free control-panel slot only when projected world-boundary samples are off-screen or obscured by HUD, controls, or aircraft; inner/outer and upper/lower labels derive from the existing Aegis bounds. Collision, camera, and gameplay remain unchanged.
+- Verification: focused Aegis/layout tests 61/61; `npm run build` passed (124 modules, 2.31 s; nonfatal chunk-size advisory). Latest continuous-flight base `b1fa90a` is already an ancestor and retains the same `radius ± halfWidth` / `player.alt ± halfWidth` verdict semantics. Mobile visual QA remains delegated.
+- State: implementation complete; no public deployment.
+
 ### 2026-11-25 00:30 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (merge `aee37b8`, source `2a4d915`, base `b1fa90a`)
 - Merged the continuous-flight base into the Aegis renderer; resolved the sole `docs/WORKLOG.md` conflict additively, retaining both sides' entries. Aegis activation and `radius ± halfWidth` / `player.alt ± halfWidth` verdict semantics are unchanged.
 - Verification: `npm test` 648/648; `npm run build` passed (123 modules, 2.15 s). State: done.
