@@ -373,6 +373,50 @@ function seekerContact(state: StageState, shot: Extract<RangedShot, { kind: 'see
   return next;
 }
 
+function seekerDirection(shot: RangedShot, target: Target): { x: number; z: number; alt: number } {
+  const speed = seeker.speed;
+  const current = normalize3d({ x: shot.vx, z: shot.vz, alt: shot.vy });
+  const climbTime = Math.abs(target.alt - shot.alt) / seeker.verticalSpeed;
+  const lead = Math.max(Math.sqrt(distanceSquared3d(shot, target)) / speed, climbTime);
+  const predicted = { ...target, x: target.x + (target.vx ?? 0) * lead, z: target.z + (target.vz ?? 0) * lead };
+  const desired = normalize3d(subtract3d(predicted, shot));
+  const maxVertical = Math.min(1, seeker.verticalSpeed / speed);
+  const vertical = clamp(desired.alt, -maxVertical, maxVertical);
+  const horizontal = Math.hypot(desired.x, desired.z);
+  const horizontalScale = Math.sqrt(1 - vertical * vertical);
+  const limited = {
+    x: horizontal ? desired.x / horizontal * horizontalScale : 0,
+    z: horizontal ? desired.z / horizontal * horizontalScale : 0,
+    alt: vertical,
+  };
+  const cosine = clamp(dot3d(current, limited), -1, 1);
+  const angle = Math.acos(cosine);
+  const turn = seeker.turnRate * STEP;
+  if (angle <= turn) return { x: limited.x * speed, z: limited.z * speed, alt: limited.alt * speed };
+  const perpendicular = normalize3d({
+    x: limited.x - current.x * cosine,
+    z: limited.z - current.z * cosine,
+    alt: limited.alt - current.alt * cosine,
+  });
+  const direction = normalize3d({
+    x: current.x * Math.cos(turn) + perpendicular.x * Math.sin(turn),
+    z: current.z * Math.cos(turn) + perpendicular.z * Math.sin(turn),
+    alt: current.alt * Math.cos(turn) + perpendicular.alt * Math.sin(turn),
+  });
+  const altitudeSpeed = clamp(direction.alt, -maxVertical, maxVertical);
+  const timeToAltitude = Math.abs(target.alt - shot.alt) / Math.max(Math.abs(altitudeSpeed * speed), 0.001);
+  const horizontalDistance = Math.hypot(predicted.x - shot.x, predicted.z - shot.z);
+  const horizontalSpeed = timeToAltitude > 0
+    ? Math.min(Math.sqrt(speed * speed - (altitudeSpeed * speed) ** 2), horizontalDistance / timeToAltitude)
+    : speed;
+  const directionHorizontal = Math.hypot(direction.x, direction.z);
+  return {
+    x: directionHorizontal ? direction.x / directionHorizontal * horizontalSpeed : 0,
+    z: directionHorizontal ? direction.z / directionHorizontal * horizontalSpeed : 0,
+    alt: altitudeSpeed * speed,
+  };
+}
+
 function projectileImpact(state: StageState, shot: RangedShot, dx: number, dz: number, dy: number, target: Target): number {
   const radius = target.kind === 'ace' ? ACE.hitRadius : CONTACT_RADIUS;
   if (state.run) return impactTime3d(shot, dx, dz, dy, target, radius);
@@ -473,16 +517,26 @@ export function advanceRangedShot(state: StageState, shot: RangedShot, ground: G
   let target: Target | null = null, dy = 0;
   if (shot.kind === 'seeker') {
     target = seekerContact(state, shot);
-    if (target) {
-      const yaw = Math.atan2(shot.vx, shot.vz);
-      const turn = angleTo(yaw, target.x - shot.x, target.z - shot.z);
-      const aimed = yaw + clamp(turn, -seeker.turnRate * STEP, seeker.turnRate * STEP);
-      shot.vx = Math.sin(aimed) * seeker.speed;
-      shot.vz = Math.cos(aimed) * seeker.speed;
-      const climb = seeker.verticalSpeed * STEP;
-      dy = clamp(target.alt - shot.alt, -climb, climb);
+    if (state.run) {
+      if (target) {
+        const direction = seekerDirection(shot, target);
+        shot.vx = direction.x;
+        shot.vy = direction.alt;
+        shot.vz = direction.z;
+      }
+      dy = shot.vy * STEP;
+    } else {
+      if (target) {
+        const yaw = Math.atan2(shot.vx, shot.vz);
+        const turn = angleTo(yaw, target.x - shot.x, target.z - shot.z);
+        const aimed = yaw + clamp(turn, -seeker.turnRate * STEP, seeker.turnRate * STEP);
+        shot.vx = Math.sin(aimed) * seeker.speed;
+        shot.vz = Math.cos(aimed) * seeker.speed;
+        const climb = seeker.verticalSpeed * STEP;
+        dy = clamp(target.alt - shot.alt, -climb, climb);
+      }
+      shot.vy = dy / STEP;
     }
-    shot.vy = dy / STEP;
   }
   const dx = shot.vx * STEP, dz = shot.vz * STEP;
   const terrain = groundImpact(shot, dx, dz, ground, dy);

@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:08 KST · 데븐 봇 · review finding 0005
+- Reproduced the pursuit failure with an elevated target 30 m above the player moving laterally at 40 units/s: the prior seeker lost the target at tick 28 with altitude still about 15 m short, then stopped climbing when it nulled vertical velocity.
+- Survivors seekers now turn a 3D direction within the configured turn rate, cap vertical speed, account for the time needed to climb when choosing the lead point/horizontal speed, and retain their current trajectory when capture is lost. Legacy steering remains unchanged.
+- Updated the vertical-flight regression to check the bounded 3D trajectory and added the receding-target intercept regression. Verification: the two targeted seeker tests passed 2/2.
+
 ### 2026-11-25 00:04 KST · 데븐 봇 · review finding 0004
 - Reproduced both paths with receding elevated Survivors targets: Twin fired at altitude +35 while a target receded at 240 units/s and missed; Pods fired at altitude +35 while a target receded at 180 units/s and missed. The shots used current-range lead for their horizontal aim/vertical component rather than solving the moving 3D intercept.
 - Twin Cannon and Wing Pods now solve a positive 3D intercept time and align horizontal and vertical projectile velocity to the same future point. Legacy aim behavior is unchanged.
