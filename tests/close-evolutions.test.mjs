@@ -86,20 +86,23 @@ test('Plasma Ribbon preserves an eight-second wall and pulses in its own band', 
   assert.ok(near.hp < 4 - damage);
 });
 
-test('Collector Swarm retains its six drones and draws salvage beyond pilot pickup range', () => {
+test('Collector Swarm requests timed salvage capture without moving or collecting the orb itself', () => {
   const state = start();
   evolve(state, 'drones', 'collector-swarm');
   const { x, z } = state.player;
   const pickup = { id: 42, x, z: z + scaleTravel(33), alt: 125, xp: 1, born: 0 };
   state.pickups.push(pickup);
-  for (let i = 0; i < 12 && !pickup.collected; i++) {
+  for (let i = 0; i < 12 && !pickup.pulling; i++) {
     state.tick++;
     advanceSupportWeapons(state, sea);
   }
   assert.equal(state.orbitDrones.length, 6);
-  assert.ok(pickup.z < z + scaleTravel(33));
-  assert.equal(pickup.collected, true);
+  assert.equal(pickup.z, z + scaleTravel(33));
+  assert.equal(pickup.collected, undefined);
   stepStage(state, {}, sea);
+  assert.ok(pickup.capture);
+  assert.equal(state.salvage, 0);
+  while (state.tick < pickup.capture.arriveAtTick) stepStage(state, {}, sea);
   assert.equal(state.salvage, 1);
   assert.ok(!state.pickups.includes(pickup));
 });

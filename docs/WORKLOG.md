@@ -24,6 +24,16 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 22:35 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- Applied §3 review fixes for Survivors captures: global magnet now snapshots eligible salvage into fixed-deadline curved arrivals, rewards only at hull arrival, ordinary contact checks 3D distance, drone collection requests capture, and trails appear only in the final segment. Legacy recovery and pickup handling were separated where practical; public `main` is untouched.
+- Restored exact legacy pull/contact ordering and salvage object key order (the changed key order altered replay hashes despite identical field values); retained legacy drone altitude gating and trail lengths. Survivor timed captures remain run-scoped.
+- Verification: `npm test` passed 634/634; `npm run build` passed (120 modules); `git diff --check` passed. Candidate remains uncommitted/unpushed; no public deployment.
+
+### 2026-11-24 22:01 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (based on `09e2890`)
+- Implemented approved pickup §3 on the independent candidate: altitude-independent timed salvage, direct magnet drops and collection; public `main` remains untouched.
+- Verification: `npm test` (632 passed) and `npm run build` passed. The configurable 5% drop chance is a balance-review candidate, not final; the baseline has no midboss defeat hook, so `dropMagnet` is available to its future owner.
+- Candidate is uncommitted/unpushed; no public deployment.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.

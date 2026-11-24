@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeAce, createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { activeAce, createStage, dropMagnet, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput, seekStage } from '../src/autoplay.ts';
 import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
 import { ROSTER } from '../src/data/roster.ts';
+import { makeEnemy } from '../src/stage-enemies.ts';
 import { relativeMark } from '../src/instruments.ts';
 import { World } from '../src/world.ts';
 
@@ -123,28 +124,152 @@ test('shot and body overlap only damage the player through the inclusive eight-m
   assert.equal(state.hull, 6);
 });
 
-test('salvage pulls from 84 m and collects inside 16 m, only while inside the altitude window', () => {
-  const state = stage('?fixture=stack');
+test('salvage captures within the planar radius and arrives on its fixed deadline across altitude changes', () => {
+  const state = stage('?mode=survivors&t=0');
   state.enemies = [];
   const { x, z } = state.player;
-  state.pickups = [{ id: 10, x, z: z + 84, alt: 75, xp: 2, born: state.tick }];
-  run(state, 3);
-  assert.equal(state.pickups[0].z, z + 84);
-  state.player.altitude = 83;
+  state.pickups = [
+    { id: 10, x, z: z + 60, alt: 75, xp: 2, born: state.tick },
+    { id: 11, x: x + 100, z, alt: 180, xp: 3, born: state.tick },
+  ];
   run(state, 1);
-  assert.ok(Math.abs(state.pickups[0].z - (z + 84 - (state.speed + 90) / 60)) < 1e-6);
-  assert.equal(state.pickups[0].pulling, true);
-  state.player.altitude = 90;
-  const afterPull = state.pickups[0].z;
-  run(state, 3);
-  assert.equal(state.pickups[0].z, afterPull);
-  assert.equal(state.pickups[0].pulling, false);
-  state.player.altitude = 83;
-  state.pickups[0].z = state.player.z + 15;
-  run(state, 1);
+  const [captured, outside] = state.pickups;
+  assert.equal(captured.pulling, false, 'the trail is hidden until the final capture segment');
+  assert.ok(captured.capture);
+  assert.ok(captured.capture.curve.amount > 0);
+  assert.ok(captured.capture.arriveAtTick - captured.capture.capturedAtTick <= 36);
+  assert.ok(captured.capture.arriveAtTick > state.tick);
+  assert.equal(outside.capture, undefined);
+  const deadline = captured.capture.arriveAtTick;
+  state.player.altitude = 180;
+  run(state, 3, { boost: true, turn: 1, climb: 1 });
+  run(state, 3, { boost: true, turn: -1, climb: -1 });
+  assert.equal(captured.capture.arriveAtTick, deadline);
+  assert.ok(captured.alt > 75, 'the captured target follows current player altitude');
+  const progress = (state.tick - captured.capture.capturedAtTick) / (deadline - captured.capture.capturedAtTick);
+  const straightX = captured.capture.origin.x + (state.player.x - captured.capture.origin.x) * progress;
+  const straightZ = captured.capture.origin.z + (state.player.z - captured.capture.origin.z) * progress;
+  assert.ok(Math.hypot(captured.x - straightX, captured.z - straightZ) > 0.1, 'the path bends to a wing side');
+  assert.equal(state.salvage, 0);
+  while (state.tick < deadline) run(state, 1);
   assert.equal(state.xp, 2);
   assert.equal(state.salvage, 2);
-  assert.equal(state.pickups.length, 0);
+  assert.equal(state.run.credits, 2);
+  assert.equal(state.pickups.includes(captured), false);
+  assert.equal(state.pickups.includes(outside), true);
+});
+
+test('global magnet captures only existing salvage and credits each orb at its hull-arrival deadline', () => {
+  const state = stage('?mode=survivors&t=0');
+  state.enemies = [];
+  const p = state.player;
+  const magnet = { id: 50, kind: 'magnet', x: p.x, z: p.z + 1, alt: p.altitude + 16, xp: 0, born: state.tick };
+  const otherMagnet = { id: 54, kind: 'magnet', x: p.x + 800, z: p.z + 800, alt: p.altitude, xp: 0, born: state.tick };
+  const captured = { id: 51, x: p.x + 260, z: p.z + 260, alt: 75, xp: 7, born: state.tick, pulling: true,
+    capture: { capturedAtTick: state.tick, arriveAtTick: state.tick + 5, origin: { x: p.x + 260, z: p.z + 260, alt: 75 },
+      curve: { x: 1, z: 0, amount: 2 } } };
+  const events = [];
+  state.pickups = [magnet, otherMagnet,
+    { id: 52, x: p.x + 280, z: p.z + 270, alt: 75, xp: 2, born: state.tick },
+    { id: 53, x: p.x - 280, z: p.z + 270, alt: 180, xp: 3, born: state.tick },
+    captured];
+  state.chests.drops.push({ id: 'coast-supply', x: p.x + 3000, z: p.z + 3000, alt: p.altitude });
+  const observe = {
+    pickupContacted: event => events.push({ type: 'contact', ...event }),
+    pickupCollected: event => events.push({ type: 'collected', ...event }),
+  };
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.run.credits, 0, 'wrong-altitude direct contact does not activate the magnet');
+  assert.equal(state.pickups.includes(magnet), true);
+  magnet.alt = state.player.altitude;
+  magnet.x = state.player.x;
+  magnet.z = state.player.z;
+  const deadline = captured.capture.arriveAtTick;
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.run.credits, 0, 'global activation does not pay salvage immediately');
+  assert.equal(captured.capture.arriveAtTick, deadline);
+  assert.equal(state.pickups.includes(captured), true);
+  assert.equal(state.pickups.includes(otherMagnet), true, 'the global magnet does not collect other magnet items');
+  assert.equal(state.chests.drops.length, 1, 'the global magnet excludes chests');
+  assert.ok(events.some(event => event.type === 'collected' && event.kind === 'magnet'));
+  assert.equal(events.filter(event => event.type === 'collected' && event.kind === 'salvage').length, 0);
+  const future = { id: 55, x: p.x + 2000, z: p.z + 2000, alt: 75, xp: 11, born: state.tick };
+  state.pickups.push(future);
+  const globalDeadline = Math.max(state.pickups.find(pickup => pickup.id === 52).capture.arriveAtTick,
+    state.pickups.find(pickup => pickup.id === 53).capture.arriveAtTick);
+  const pausedPositions = [captured.x, captured.z, captured.alt];
+  state.paused = true;
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.tick, 2);
+  assert.deepEqual([captured.x, captured.z, captured.alt], pausedPositions);
+  assert.equal(captured.capture.arriveAtTick, deadline);
+  state.paused = false;
+  while (state.tick < deadline) stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.run.credits, 7, 'previously captured salvage retains its original deadline');
+  const originalEvent = events.find(event => event.type === 'collected' && event.pickupId === captured.id);
+  assert.deepEqual(originalEvent.position, originalEvent.playerPosition, 'arrival event position is on the hull');
+  while (state.tick < globalDeadline) stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.run.credits, 12);
+  assert.equal(future.capture, undefined, 'drops after global activation remain ordinary pickups');
+  const arrivalEvents = events.filter(event => event.type === 'collected' && [52, 53].includes(event.pickupId));
+  assert.equal(arrivalEvents.length, 2);
+  for (const event of arrivalEvents) assert.deepEqual(event.position, event.playerPosition);
+  stepStage(state, {}, ground);
+  assert.equal(state.run.credits, 12, 'global captures are credited exactly once');
+});
+
+test('close planar salvage at a different altitude still follows a capture deadline to the ship', () => {
+  const state = stage('?mode=survivors&t=0');
+  state.enemies = [];
+  const { x, z, altitude } = state.player;
+  const pickup = { id: 80, x, z: z + 4, alt: altitude + 90, xp: 2, born: state.tick };
+  const events = [];
+  state.pickups = [pickup];
+  stepStage(state, {}, ground, undefined, { pickupCollected: event => events.push(event) });
+  assert.equal(state.salvage, 0);
+  assert.ok(pickup.capture);
+  const deadline = pickup.capture.arriveAtTick;
+  while (state.tick < deadline) stepStage(state, {}, ground, undefined, { pickupCollected: event => events.push(event) });
+  assert.equal(state.salvage, 2);
+  assert.deepEqual(events[0].position, events[0].playerPosition);
+});
+
+test('magnet drops use only the dedicated seeded stream and ordinary kills do not roll', () => {
+  const ordinary = stage('?mode=survivors&seed=19&t=0');
+  const before = ordinary.streams.magnetDrop.rng;
+  const enemy = makeEnemy(ordinary, ordinary.player.x + 250, ordinary.player.z + 250, 1, 'patrol');
+  enemy.hp = 0;
+  enemy.shotDown = true;
+  ordinary.enemies = [enemy];
+  run(ordinary, 1);
+  assert.equal(ordinary.streams.magnetDrop.rng, before);
+  assert.equal(ordinary.pickups.some(pickup => pickup.kind === 'magnet'), false);
+
+  const state = stage('?mode=survivors&seed=19&t=0');
+  const spawnRng = state.streams.spawn.rng, combatRng = state.streams.combat.rng;
+  const drops = [];
+  const magnet = dropMagnet(state, { sourceEventId: 77, sourceKind: 'midboss',
+    position: { x: state.player.x + 300, z: state.player.z + 300, alt: 75 } },
+  { pickupDropped: event => drops.push(event) });
+  assert.equal(magnet.kind, 'magnet');
+  assert.deepEqual(magnet.source, { eventId: 77, kind: 'midboss' });
+  assert.deepEqual(drops[0], { pickupId: magnet.id, kind: 'magnet', position: { x: magnet.x, z: magnet.z, alt: magnet.alt },
+    tick: state.tick, sourceEventId: 77 });
+  assert.equal(state.streams.spawn.rng, spawnRng);
+  assert.equal(state.streams.combat.rng, combatRng);
+
+  const eliteState = stage('?mode=survivors&seed=19&t=0');
+  const elite = makeEnemy(eliteState, eliteState.player.x + 300, eliteState.player.z + 300, 1, 'bomber');
+  elite.carrier = 'coast-supply';
+  elite.hp = 0;
+  elite.shotDown = true;
+  eliteState.enemies = [elite];
+  run(eliteState, 1);
+  assert.ok(eliteState.pickups.some(pickup => pickup.kind === 'magnet' && pickup.source.kind === 'elite'));
+
+  const miss = stage('?mode=survivors&seed=1&t=0');
+  assert.equal(dropMagnet(miss, { sourceEventId: 78, sourceKind: 'elite',
+    position: { x: miss.player.x, z: miss.player.z, alt: miss.player.altitude } }), null);
 });
 
 test('the three draft cards pause active time, apply once and keep three legal choices on round two', () => {
