@@ -135,6 +135,7 @@ export type Enemy = Position & {
     side: -1 | 1;
     phase?: 'warning' | 'crossing' | 'exit' | 'finished' | 'recovery' | 'cancelled';
     until?: number;
+    pathUntil?: number;
     isolationUntil?: number;
     start?: Point;
     crossingPoint?: Point;

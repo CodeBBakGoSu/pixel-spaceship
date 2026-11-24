@@ -52,6 +52,7 @@ function suppressForIntro(state: StageState, enemy: Enemy, until: number): void 
   if (enemy.crosswing) {
     enemy.crosswing.phase = 'cancelled';
     enemy.crosswing.until = until;
+    delete enemy.crosswing.pathUntil;
     enemy.crosswing.isolationUntil = until;
     delete enemy.crosswing.start;
     delete enemy.crosswing.crossingPoint;
@@ -393,13 +394,14 @@ function moveTwinChaser(state: StageState, enemy: Enemy, ground: Ground, angle: 
 
 function startCrosswing(state: StageState, first: Enemy, second: Enemy): boolean {
   const director = state.phaseDirector;
+  const pathUntil = state.tick + 258;
   if (director?.six && (director.sixCrosswingStarted || state.tick < director.sixTellUntil)) {
     first.maneuverAt = second.maneuverAt = Math.max(first.maneuverAt, second.maneuverAt,
       director.sixCrosswingStarted ? state.tick + THREAT_BUDGET.spacingTicks : director.sixTellUntil);
     return false;
   }
   if (!trySpendThreat(state, {
-    tick: state.tick + 48, activeFromTick: state.tick, activeUntilTick: state.tick + 258,
+    tick: state.tick + 48, activeFromTick: state.tick, activeUntilTick: pathUntil,
     source: `regular:${first.id}`, points: 2,
     bearing: Math.atan2(first.x - state.player.x, first.z - state.player.z),
   })) {
@@ -439,6 +441,7 @@ function startCrosswing(state: StageState, first: Enemy, second: Enemy): boolean
     const pair = fighter.crosswing!;
     pair.phase = 'warning';
     pair.until = state.tick + 48;
+    pair.pathUntil = pathUntil;
     pair.start = start;
     pair.crossingPoint = crossingPoint;
     pair.target = target;
@@ -450,6 +453,22 @@ function startCrosswing(state: StageState, first: Enemy, second: Enemy): boolean
   return true;
 }
 
+function cancelCrosswingPath(enemy: Enemy, mate?: Enemy): void {
+  for (const fighter of mate ? [enemy, mate] : [enemy]) {
+    const pair = fighter.crosswing;
+    if (!pair) continue;
+    pair.phase = 'cancelled';
+    delete pair.until;
+    delete pair.pathUntil;
+    delete pair.start;
+    delete pair.crossingPoint;
+    delete pair.target;
+    delete pair.finishedAt;
+    delete pair.exitYaw;
+    delete fighter.tell;
+  }
+}
+
 function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: number, range: number): void {
   const pair = enemy.crosswing;
   if (!pair) return;
@@ -458,6 +477,7 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
     pair.phase = undefined;
     delete pair.isolationUntil;
     delete pair.until;
+    delete pair.pathUntil;
     delete pair.start;
     delete pair.crossingPoint;
     delete pair.target;
@@ -465,9 +485,14 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
     delete pair.finishedAt;
     delete pair.exitYaw;
   }
+  if (pair.pathUntil !== undefined && state.tick >= pair.pathUntil
+    && (pair.phase === 'warning' || pair.phase === 'crossing' || pair.phase === 'exit' || pair.phase === 'finished')) {
+    cancelCrosswingPath(enemy, mate);
+    steer(state, enemy, ground, angle + pair.side * 0.45, ENEMY_KINDS.crosswing.speed);
+    return;
+  }
   if (!mate && (pair.phase === 'warning' || pair.phase === 'crossing') && !pair.crossed) {
-    pair.phase = 'cancelled';
-    delete enemy.tell;
+    cancelCrosswingPath(enemy);
   }
   if (!pair.phase && mate && range <= scaleTravel(152) && state.tick >= enemy.maneuverAt) startCrosswing(state, enemy, mate);
   if (pair.phase === 'warning') {
@@ -503,10 +528,12 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
         for (const fighter of [enemy, mate]) {
           fighter.crosswing!.phase = 'recovery';
           fighter.crosswing!.until = state.tick + 60;
+          delete fighter.crosswing!.pathUntil;
         }
       } else if (!mate) {
         pair.phase = 'recovery';
         pair.until = state.tick + 60;
+        delete pair.pathUntil;
       }
       steer(state, enemy, ground, pair.exitYaw!, ENEMY_KINDS.crosswing.speed);
     } else {
@@ -519,6 +546,7 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
       for (const fighter of [enemy, mate]) {
         fighter.crosswing!.phase = 'recovery';
         fighter.crosswing!.until = state.tick + 60;
+        delete fighter.crosswing!.pathUntil;
       }
     }
     steer(state, enemy, ground, pair.exitYaw ?? enemy.yaw, ENEMY_KINDS.crosswing.speed);
@@ -528,6 +556,7 @@ function moveCrosswing(state: StageState, enemy: Enemy, ground: Ground, angle: n
     if (state.tick >= (pair.until ?? 0)) {
       pair.phase = 'cancelled';
       delete pair.until;
+      delete pair.pathUntil;
       delete pair.start;
       delete pair.crossingPoint;
       delete pair.target;

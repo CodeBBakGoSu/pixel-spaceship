@@ -19,6 +19,20 @@ function segmentsIntersect(a, b, c, d) {
   return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
 }
 
+function asymmetricPair(ground) {
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'), ground);
+  state.phaseDirector = undefined;
+  const p = state.player;
+  const first = makeEnemy(state, p.x - 30, p.z + 100, 1, 'crosswing');
+  const second = makeEnemy(state, p.x + 30, p.z + 140, 1, 'crosswing');
+  first.crosswing = { mate: second.id, side: -1 };
+  second.crosswing = { mate: first.id, side: 1 };
+  first.maneuverAt = second.maneuverAt = state.tick;
+  state.enemies.push(first, second);
+  advanceEnemies(state, ground);
+  return { state, first, second };
+}
+
 test('seed 4 full-step Crosswing paths intersect and recover only after both exit', () => {
   const world = new World();
   const ground = (x, z) => world.height(x, z);
@@ -94,4 +108,32 @@ test('Crosswing cancels the un-crossed path when its mate dies during warning', 
   assert.equal(first.crosswing.phase, 'cancelled');
   assert.equal(first.crosswing.crossed, false);
   assert.equal(first.tell, undefined);
+});
+
+test('terrain-blocked Crosswing paths abort at the shared threat-window deadline', () => {
+  let blocked = false;
+  const ground = () => blocked ? 1e6 : 35;
+  const { state, first, second } = asymmetricPair(ground);
+  let finished, exiting;
+  for (let frame = 0; frame < 180; frame++) {
+    state.tick++;
+    advanceEnemies(state, ground);
+    finished = [first, second].find(enemy => enemy.crosswing.phase === 'finished');
+    exiting = [first, second].find(enemy => enemy.crosswing.phase === 'exit');
+    if (finished && exiting) break;
+  }
+  assert.ok(finished && exiting, 'the asymmetric pair should finish independently before blocking');
+  const deadline = first.crosswing.pathUntil;
+  assert.equal(second.crosswing.pathUntil, deadline);
+  blocked = true;
+
+  while (state.tick < deadline) {
+    state.tick++;
+    advanceEnemies(state, ground);
+  }
+
+  assert.equal(first.crosswing.phase, 'cancelled');
+  assert.equal(second.crosswing.phase, 'cancelled');
+  assert.equal(first.crosswing.pathUntil, undefined);
+  assert.equal(second.crosswing.pathUntil, undefined);
 });
