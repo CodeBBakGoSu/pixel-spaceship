@@ -225,6 +225,30 @@ test('natural reengagement stays inside the arena, above terrain and below the c
   assert.ok(sampled > 3 * TICKS_PER_SECOND);
 });
 
+test('Ace approach follows an outside-arena pilot without extending the in-arena boundary', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  const edge = state.arena.x + state.arena.radius;
+  Object.assign(player, {
+    x: edge + 600, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, altitude: 125,
+  });
+  state.speed = 0;
+  delete ace.entry;
+  Object.assign(ace, {
+    x: edge - 100, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, alt: 125, tell: null, roll: null,
+    attackAt: Number.MAX_SAFE_INTEGER, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'approach', startedAt: state.tick, side: 1 },
+  });
+  for (let i = 0; i < 10 * TICKS_PER_SECOND; i++) {
+    state.tick++;
+    advanceAce(state, ground);
+  }
+  assert.ok(ace.x > edge + 100, `outside pilot is reachable: Ace x=${ace.x}, arena edge=${edge}`);
+});
+
 test('Ace damage remains available outside reengagement windows', () => {
   const state = stage();
   const ace = state.boss;

@@ -204,7 +204,8 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
     : p.x + (p.vx ?? 0) * targetLead;
   const targetZ = reengagement ? p.z + forwardPath.z * ahead - forwardPath.x * sideStep
     : p.z + (p.vz ?? 0) * targetLead;
-  const target = reengagement ? boundToArena(state, targetX, targetZ) : { x: targetX, z: targetZ };
+  const target = reengagement && playerInArena(state)
+    ? boundToArena(state, targetX, targetZ) : { x: targetX, z: targetZ };
   const acceleratingRejoin = reengagement?.phase === 'approach'
     && (target.x - ace.x) * forwardPath.x + (target.z - ace.z) * forwardPath.z > 0;
 
