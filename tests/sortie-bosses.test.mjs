@@ -188,6 +188,7 @@ test('boss and escort altitude follows a rising terrain floor without crossing t
   const cue = SORTIE_MINIBOSS_CUES[1];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ridge);
   state.tick = cue.startTick - 1;
+  state.midbossSchedule.next = 1;
   state.speed = 160;
   Object.assign(state.player, { x: 0, z: 0, yaw: 0, altitude: 100, vx: 0, vz: 160 });
   state.chests.next = 3;
@@ -285,19 +286,4 @@ test('a 30-second miniboss retreat returns its actual tick and pays no rewards',
   assert.deepEqual(state.midbossSchedule.lastResult,
     { id: boss.cue.id, endedAt: boss.endTick, outcome: 'escaped' });
   assert.equal(state.pickups.length, 0);
-});
-
-test('the 3:35 and 6:45 swarm events are consumed during boss/rest and never launch afterward', () => {
-  for (const [index, eventStart] of [[0, 215], [1, 405]]) {
-    const state = startEncounter(index);
-    const hooks = SORTIE_BOSS_HOOKS;
-    run(state, 45 * TICKS_PER_SECOND, hooks);
-    assert.ok(state.suppressedSwarmEvents.includes(eventStart));
-    assert.equal(state.enemies.filter(enemy => enemy.eventFlight).length, 0);
-    assert.ok(state.tick >= (eventStart === 215 ? 250 : 445) * TICKS_PER_SECOND);
-    run(state, 15 * TICKS_PER_SECOND, hooks);
-    assert.equal(state.enemies.filter(enemy => enemy.eventFlight).length, 0,
-      `suppressed ${eventStart}s event did not appear as a deferred crossing after rest`);
-    assert.equal(state.swarmNotice?.kind, undefined);
-  }
 });

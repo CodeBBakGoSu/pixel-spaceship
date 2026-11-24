@@ -3,10 +3,11 @@ import test from 'node:test';
 import { ACE } from '../src/data/ace.ts';
 import { TWIN_VOLLEYS, WEAPONS } from '../src/data/items.ts';
 import { CRUISE_SPEED } from '../src/flight.ts';
-import { aceReengagementCadence, advanceAce } from '../src/ace.ts';
+import { aceReengagementCadence, advanceAce, makeAce } from '../src/ace.ts';
 import { angleTo, BOLT_SPEED, HIT_WINDOW, hurtAce, MAX_ALTITUDE, TICKS_PER_SECOND, TWIN_CONE } from '../src/stage-combat.ts';
-import { segmentSphereIntersection3d } from '../src/sortie-spatial-adapter.ts';
+import { segmentSphereIntersection3d } from '../src/spatial.ts';
 import { createStage, parseStageOptions, RUN_BOSS_TICK, RUN_END_TICK, stepStage } from '../src/stage.ts';
+import { trySpendThreat } from '../src/threat-budget.ts';
 
 const ground = () => 0;
 const stage = (query = '?mode=survivors&fixture=ace') => createStage(parseStageOptions(query), ground);
@@ -233,31 +234,42 @@ test('Ace damage remains available outside reengagement windows', () => {
   assert.ok(ace.hp < hp);
 });
 
-test('Ace attack admission shares the threat hook and denial does not telegraph or advance the attack pattern', () => {
-  const state = stage();
-  const ace = state.boss;
-  const player = state.player;
-  delete ace.entry;
-  state.tick = 8 * 60 * TICKS_PER_SECOND;
-  Object.assign(ace, {
-    x: player.x, z: player.z + 100, alt: player.altitude, yaw: Math.PI,
-    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
-    bandAt: Number.MAX_SAFE_INTEGER, reengagement: undefined,
-  });
-  const attacks = ace.attacks;
-  const requests = [];
-  advanceAce(state, ground, undefined, undefined, undefined, (requestState, request) => {
-    assert.equal(requestState, state);
-    requests.push(request);
-    return false;
-  });
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].tick, state.tick);
-  assert.equal(requests[0].source, 'ace');
-  assert.equal(requests[0].points, 1);
-  assert.ok(Number.isFinite(requests[0].bearing));
-  assert.equal(ace.tell, null);
-  assert.equal(ace.attacks, attacks);
+test('Ace attacks spend one shared threat slot and denial does not advance the attack pattern', () => {
+  const readyAce = () => {
+    const state = createStage(parseStageOptions('?mode=survivors&autoplay=1'), ground);
+    const player = state.player;
+    const ace = state.boss = makeAce(state, player.x, player.z + 100, ground);
+    state.tick = 8 * 60 * TICKS_PER_SECOND;
+    Object.assign(ace, {
+      x: player.x, z: player.z + 100, alt: player.altitude, yaw: Math.PI,
+      tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+      bandAt: Number.MAX_SAFE_INTEGER, reengagement: undefined,
+    });
+    return state;
+  };
+
+  const denied = readyAce();
+  const deniedAce = denied.boss;
+  const deniedAttacks = deniedAce.attacks;
+  const requestTick = denied.tick + ACE.gun.warningTicks;
+  assert.equal(trySpendThreat(denied, {
+    tick: requestTick, source: 'regular:fixture', points: 2, bearing: 0,
+  }), true);
+  const existingSpends = denied.threatBudget.spends.length;
+  advanceAce(denied, ground);
+  assert.equal(denied.threatBudget.spends.length, existingSpends);
+  assert.equal(deniedAce.tell, null);
+  assert.equal(deniedAce.attacks, deniedAttacks);
+
+  const admitted = readyAce();
+  const admittedAce = admitted.boss;
+  const admittedAttacks = admittedAce.attacks;
+  advanceAce(admitted, ground);
+  assert.deepEqual(admitted.threatBudget.spends.map(({ source, points }) => ({ source, points })),
+    [{ source: 'ace', points: 2 }]);
+  assert.equal(admitted.threatBudget.spends[0].tick, admitted.tick + ACE.gun.warningTicks);
+  assert.equal(admittedAce.tell?.kind, 'gun');
+  assert.equal(admittedAce.attacks, admittedAttacks + 1);
 });
 
 test('a lethal Ace hit on the 10:00 deadline tick still clears the sortie', () => {

@@ -346,8 +346,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     run, profile, daily, hangar, metrics: run ? createRunMetrics() : createLegacyRunMetrics(),
     killBandTicks: [-1, -1, -1], ...(run ? { killAltitudeTicks: [] } : {}),
     ejectorUsed: false, summary: null, phaseNotice: null, bills: createBillState(), lastHitTick: -1,
-    phaseRepairMask: 0,
-    ...(run ? { threatBudget: createThreatBudget(), midbossSchedule: createMidbossSchedule() } : {}),
+    ...(run ? { phaseRepairMask: 0, threatBudget: createThreatBudget(), midbossSchedule: createMidbossSchedule() } : {}),
     chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
     aceRank: rank,
@@ -805,6 +804,10 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
     if (!pickup.capture && state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
     if (pickup.capture) {
       return advanceCapturedPickup(state, pickup, events);
+    }
+    if (!pickup.collected && !inBand(p.altitude, pickup.alt, HIT_WINDOW)) {
+      pickup.pulling = false;
+      return true;
     }
     const range = Math.hypot(p.x - pickup.x, p.z - pickup.z);
     if (Math.hypot(p.x - pickup.x, p.z - pickup.z, p.altitude - pickup.alt) <= SALVAGE_RANGE.collect) {

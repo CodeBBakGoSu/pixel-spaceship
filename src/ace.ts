@@ -266,7 +266,8 @@ function incomingFire(state: StageState, ace: Ace): boolean {
   return false;
 }
 
-export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], target: Position, events?: CombatEvents): void {
+export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], target: Position,
+  events?: CombatEvents): boolean {
   if (kind !== 'roll' && !trySpendThreat(state, {
     tick: state.tick + ACE[kind].warningTicks,
     activeFromTick: state.tick,
@@ -278,10 +279,11 @@ export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], t
     bearing: Math.atan2(ace.x - state.player.x, ace.z - state.player.z),
   })) {
     ace.attackAt = state.tick + THREAT_BUDGET.spacingTicks;
-    return;
+    return false;
   }
   ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks };
   events?.tell?.(kind, ace.x, ace.z, ace.alt);
+  return true;
 }
 
 export function aceReengagementCadence(tick: number): number {
@@ -384,10 +386,8 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
   const kind = nextAttack % tuning.missileEvery === 0 ? 'missile' : 'gun';
   const lead = ACE.attack.leadSeconds;
   const target = { x: p.x + (p.vx ?? 0) * lead, z: p.z + (p.vz ?? 0) * lead, alt: ace.alt };
-  if (state.run && !trySpendThreat(state, { tick, source: 'ace', points: 1,
-    bearing: angleTo(p.yaw, ace.x - p.x, ace.z - p.z) })) return;
+  if (!setAceTell(state, ace, kind, target, events)) return;
   ace.attacks = nextAttack;
-  setAceTell(state, ace, kind, target, events);
 }
 
 export function beginAceDefeat(state: StageState, ace: Ace, events?: CombatEvents): void {
@@ -440,10 +440,7 @@ export function advanceAce(state: StageState, ground: Ground, events?: CombatEve
         z: state.player.z + (state.player.vz ?? 0) * ACE.attack.leadSeconds,
         alt: ace.alt,
       };
-      if (trySpendThreat(state, { tick: state.tick, source: 'ace', points: 1,
-        bearing: angleTo(state.player.yaw, ace.x - state.player.x, ace.z - state.player.z) })) {
-        setAceTell(state, ace, 'gun', target, events);
-      }
+      setAceTell(state, ace, 'gun', target, events);
     }
   }
   updatePhase(state, ace, ground, events, observe);

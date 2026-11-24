@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { HIT_WINDOW } from '../src/stage-combat.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceFlares, advanceRearBombs, advanceShots,
@@ -69,7 +70,8 @@ test('Magnet Core expands planar pickup reach without widening its altitude wind
   for (const state of [without, withMagnet]) {
     state.pickups.push(
       { id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: state.player.altitude, xp: 4, born: 0 },
-      { id: 106, x: state.player.x, z: state.player.z + scaleTravel(10), alt: state.player.altitude + 20, xp: 4, born: 0 },
+      { id: 106, x: state.player.x, z: state.player.z + scaleTravel(52),
+        alt: state.player.altitude + HIT_WINDOW + 1, xp: 4, born: 0 },
     );
   }
   withMagnet.run.buffLevels['magnet-core'] = 2;
