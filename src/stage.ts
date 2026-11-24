@@ -12,7 +12,7 @@ import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
-import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
+import { addBomberEscort, advanceEnemies, formationIdForDefeat, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { rngStream } from './stage-random.ts';
 import { GNAT, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
@@ -586,7 +586,7 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
     if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
     events?.destroyed?.(enemy.kind, !!enemy.carrier, enemy.id, { x: enemy.x, z: enemy.z, alt: enemy.alt }, state.tick,
-      enemy.formation?.leader, enemy.kind === 'aegis' || enemy.gnatVariant === 'armored');
+      formationIdForDefeat(enemy), enemy.kind === 'aegis' || enemy.gnatVariant === 'armored');
   }
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);

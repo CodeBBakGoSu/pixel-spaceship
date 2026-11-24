@@ -105,6 +105,20 @@ test('three authoritative formation defeats become one bounded D03 at all three 
   for (const position of positions) assert.ok(projected.some(point => JSON.stringify(point) === JSON.stringify(position)));
 });
 
+test('bomber leaders and both escorts report the same formation ID to defeat observers', () => {
+  const world = new World(), ground = (x, z) => world.height(x, z);
+  const observed = createStage(parseStageOptions('?mode=survivors&t=0&fixture=bomber&seed=19'), ground);
+  const bomber = observed.enemies.find(enemy => enemy.kind === 'bomber');
+  assert.ok(bomber);
+  const members = observed.enemies.filter(enemy => enemy.id === bomber.id || enemy.formation?.leader === bomber.id);
+  assert.equal(members.length, 3);
+  for (const enemy of members) { enemy.hp = 0; enemy.shotDown = true; }
+  const defeats = [];
+  stepStage(observed, {}, ground, undefined, { destroyed(...event) { defeats.push(event); } });
+  assert.equal(defeats.length, 3);
+  assert.deepEqual(defeats.map(event => event[5]), [bomber.id, bomber.id, bomber.id]);
+});
+
 test('formation defeats group across render frames and flush only after the tick window expires', () => {
   const vfx = new SortieVfx(TICKS_PER_SECOND), positions = [
     { x: 10, z: 20, alt: 30 }, { x: 40, z: 50, alt: 60 }, { x: 70, z: 80, alt: 90 },
