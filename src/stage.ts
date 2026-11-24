@@ -38,9 +38,9 @@ import { stageAceFixture, stageRosterFixture } from './roster-fixture.ts';
 import { ARENA, BEACON_SIGNAL_SECONDS, findRally, isLandmarkId, LANDMARKS, reachedWorldSite, updateWorldSites } from './reach.ts';
 import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, BODY_RADIUS,
-  bombCapacity, clamp, dropFlares, dropRearBomb, fireHostile, flareCapacity, HIT_WINDOW, hurtPlayer, inBand,
-  MAX_ALTITUDE, MAX_BOMBS, MAX_FLARES, MIN_ALTITUDE,
-  openReversal, REAR_GLIMPSE_TICKS, STEP, TICKS_PER_SECOND, WIPE_DURATION,
+  clamp, fireHostile, HIT_WINDOW, hurtPlayer, inBand,
+  MAX_ALTITUDE, MIN_ALTITUDE,
+  openReversal, STEP, TICKS_PER_SECOND, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { AcePhase, Band, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome, Pickup,
   StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -70,7 +70,7 @@ export function parseStageOptions(search: string): StageOptions {
   // --- S7e lane ---
   const phase = Number(q.get('phase'));
   const fixtureCue = q.get('cue');
-  const survivorTime = mode === 'survivors' || fixture === 'ace' && mode !== 'legacy';
+  const survivorTime = mode === 'survivors' || (fixture === 'ace' || fixture === 'flare') && mode !== 'legacy';
   const seed = q.get('seed') ?? '';
   const time = q.has('t') ? Number(q.get('t')) : NaN;
   // --- S7d lane ---
@@ -205,33 +205,14 @@ function applyGearEffects(state: StageState, card: DraftCard): void {
   const run = state.run!;
   if (card.id === 'repair') state.hull = Math.min(state.maxHull, state.hull + DRAFT_RULES.repairHull);
   if (card.variant === 'risky') state.hull -= DRAFT_RULES.riskHull;
-  adjustBuffStores(state, card);
-  state.twinRank = (run.weaponLevels.twin ?? 1) >= 3 ? 3 : run.weaponLevels.twin === 2 ? 2 : 1;
-  state.podRank = (run.weaponLevels.pods ?? 0) >= 2 ? 2 : 1;
-}
-
-function adjustBuffStores(state: StageState, card: DraftCard): void {
-  const added = card.nextLevel - card.currentLevel;
   if (card.id === 'hull-plating') {
     const before = BUFFS['hull-plating'].levels[card.currentLevel - 1]?.maxHull ?? 0;
     const after = BUFFS['hull-plating'].levels[card.nextLevel - 1].maxHull;
     state.maxHull += after - before;
-    state.hull = Math.min(state.maxHull, state.hull + added);
-  } else if (card.id === 'flare-bay') {
-    state.flareCharges = Math.min(flareCapacity(state), state.flareCharges + added);
-    if (state.flareReloadAt !== null) {
-      const before = BUFFS['flare-bay'].levels[card.currentLevel - 1]?.reloadScale ?? 1;
-      const after = BUFFS['flare-bay'].levels[card.nextLevel - 1].reloadScale;
-      state.flareReloadAt = state.tick + Math.round((state.flareReloadAt - state.tick) * after / before);
-    }
-  } else if (card.id === 'ordnance-rack') {
-    state.bombs = Math.min(bombCapacity(state), state.bombs + added);
-    if (state.bombReloadAt !== null) {
-      const before = BUFFS['ordnance-rack'].levels[card.currentLevel - 1]?.reloadScale ?? 1;
-      const after = BUFFS['ordnance-rack'].levels[card.nextLevel - 1].reloadScale;
-      state.bombReloadAt = state.tick + Math.round((state.bombReloadAt - state.tick) * after / before);
-    }
+    state.hull = Math.min(state.maxHull, state.hull + after - before);
   }
+  state.twinRank = (run.weaponLevels.twin ?? 1) >= 3 ? 3 : run.weaponLevels.twin === 2 ? 2 : 1;
+  state.podRank = (run.weaponLevels.pods ?? 0) >= 2 ? 2 : 1;
 }
 
 const fixtureBands: Record<NewEnemyKind, Band> = {
@@ -281,7 +262,7 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
   } else if (fixture === 'flare') {
     const p = state.player;
     state.nextWave = WAVES.length;
-    // Start the review on a reload so both close contacts are available for a manual drop.
+    if (state.run) state.run.weaponLevels.phoenix = 5;
     state.podsAt = state.tick + 150;
     for (const [band, lateral, aft, kind] of [
       [1, -6, 22, 'hound'], [1, 7, 29, 'hound'], [0, 52, 80, 'patrol'], [2, 10, 40, 'patrol'],
@@ -334,7 +315,7 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
 
 export function createStage(options: StageOptions = parseStageOptions(''), ground: Ground = seaLevel): StageState {
   const x = ARENA.x, z = ARENA.z - 85;
-  const survivor = options.mode === 'survivors' || options.fixture === 'ace' && options.mode !== 'legacy';
+  const survivor = options.mode === 'survivors' || (options.fixture === 'ace' || options.fixture === 'flare') && options.mode !== 'legacy';
   const profile = normalizeProfile(options.profile), daily = survivor && !!options.daily;
   const hangar = hangarLoadout(profile, daily);
   const rank = options.aceRank ?? aceRank(profile);
@@ -360,8 +341,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     arena: { ...ARENA }, boundaryWarning: false,
     player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0, pitch: 0 },
     speed: 0, climbRate: 0, hull, maxHull: hull, hitsTaken: 0, rank: null, invulnerability: 0,
-    boost: 1, boosting: false, boostTicks: 0, bombs: MAX_BOMBS, bombReadyAt: 0, bombReloadAt: null, rearBombs: [], enemyMines: [],
-    flares: [], flareCharges: MAX_FLARES, flareReadyAt: 0, flareReloadAt: null, flareHit: null, rearGlimpse: null,
+    boost: 1, boosting: false, boostTicks: 0, rearBombs: [], enemyMines: [],
+    flares: [], flareHit: null, rearGlimpse: null,
     maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
     xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
@@ -688,8 +669,6 @@ function advanceDestinations(state: StageState, ground: Ground): void {
   const site = reachedWorldSite(state);
   if (site?.kind === 'supply') {
     state.boost = Math.min(1, state.boost + WORLD_SITES.boost);
-    state.bombs = Math.min(bombCapacity(state), state.bombs + WORLD_SITES.reliefBombs);
-    if (state.bombs === bombCapacity(state)) state.bombReloadAt = null;
   } else if (site?.kind === 'xp') {
     creditSalvage(state, { alt: site.alt, xp: WORLD_SITES.wellXp });
   }
@@ -754,10 +733,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
   const grace = state.tick <= state.graceUntil;
   const glimpse = state.rearGlimpse;
-  if (glimpse) {
-    if ((input.bomb || input.flare) && state.tick <= glimpse.until) glimpse.until = Math.max(glimpse.until, state.tick + REAR_GLIMPSE_TICKS);
-    else if (state.tick >= glimpse.until) state.rearGlimpse = null;
-  }
+  if (glimpse && state.tick >= glimpse.until) state.rearGlimpse = null;
   if (input.toggleView && !grace) {
     state.view = VIEWS[(VIEWS.indexOf(state.view) + 1) % VIEWS.length];
     state.wipe = WIPE_DURATION;
@@ -782,8 +758,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   fly(state, input, ground, grace, controlled);
   advanceDestinations(state, ground);
   if (state.run && state.boosting) state.metrics.boostTicks++;
-  const vx = state.player.vx = (state.player.x - x) / STEP;
-  const vz = state.player.vz = (state.player.z - z) / STEP;
+  state.player.vx = (state.player.x - x) / STEP;
+  state.player.vz = (state.player.z - z) / STEP;
   if (maneuver && state.maneuverTrail && (maneuver.elapsed % TRAIL_SAMPLE_TICKS === 0 || maneuver.elapsed === MANEUVERS[maneuver.kind].ticks)) {
     const { x, z, altitude } = state.player;
     state.maneuverTrail.points.push({ x, z, alt: altitude });
@@ -812,15 +788,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
-    if (input.bomb && !grace) {
-      const charges = state.bombs;
-      dropRearBomb(state);
-      if (state.run && state.bombs < charges) state.metrics.manualBombs++;
-    }
     acquireAndFire(state);
     if (state.run) advanceRangedWeapons(state, ground);
   }
-  if (input.flare) dropFlares(state, vx, vz);
   const maneuverEnded = maneuver && maneuver.elapsed === MANEUVERS[maneuver.kind].ticks;
   if (maneuverEnded) {
     if (state.maneuverTrail) {

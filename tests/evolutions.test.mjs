@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EVOLUTIONS, WEAPON_IDS } from '../src/data/items.ts';
 import { availableEvolutions, createProgression, evolveWeapon, rollBonusUpgrade } from '../src/progression.ts';
 import { familyBonus, weaponCooldown, weaponDamage } from '../src/loadout.ts';
-import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { createStage, grantBonusUpgrade, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const start = () => createStage(parseStageOptions('?t=0&mode=survivors&seed=9'));
 
@@ -53,6 +53,23 @@ test('bonus upgrades consume only their named RNG and do not spend XP or a draft
   assert.equal(first.level, 1);
   assert.equal(first.run.draftsResolved, 0);
   assert.equal(first.run.weaponLevels.twin, 2);
+});
+
+test('chest upgrades do not rank up owned ordnance buffs without their weapon', () => {
+  for (const [weapon, buff] of [['phoenix', 'flare-bay'], ['bomb-bay', 'ordnance-rack']]) {
+    const state = start();
+    state.daily = true;
+    state.run.weaponSlots = 4;
+    state.run.weaponLevels = { twin: 7, pods: 7, seeker: 7, rail: 7 };
+    state.run.weapons = [weapon];
+    state.run.buffs = [buff];
+    state.run.buffLevels = { [buff]: 1 };
+
+    const reward = grantBonusUpgrade(state, state.streams.chest);
+    assert.ok(reward);
+    assert.notEqual(reward.id, buff);
+    assert.equal(state.run.buffLevels[buff], 1);
+  }
 });
 
 test('only the two evolution crates evolve a valid recipe and the modal freezes active ticks', () => {

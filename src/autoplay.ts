@@ -3,14 +3,13 @@ import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts
 import { SKIM, skimAltitude, SKIM_BAND } from './bands.ts';
 import { ACE_PILOT, BOT_POLICY, BOT_PROFILES, PILOT_ROUTE, type BotProfile } from './data/bot-profiles.ts';
 import { FLIGHT_MODEL } from './data/flight-model.ts';
-import { REAR_ORDNANCE, REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
+import { REPLAY_DRAFT_PRIORITY, REPLAY_RISK_HULL } from './data/run-balance.ts';
 import { EVOLUTIONS } from './data/items.ts';
-import { scaleTravel } from './data/speed.ts';
 import { FLY_IN_WORLD, WORLD_TERRAIN } from './data/world.ts';
 import { advancePitch, CRUISE_SPEED, pitchLimitScale, pitchSpeedFactor, pitchVerticalSpeed } from './flight.ts';
 import { buffTuning } from './loadout.ts';
 import { LANDMARKS } from './reach.ts';
-import { angleTo, BANDS, BODY_RADIUS, canDropFlare, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MAX_ALTITUDE, MINE_RADIUS,
+import { angleTo, BANDS, BODY_RADIUS, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MAX_ALTITUDE, MINE_RADIUS,
   MIN_ALTITUDE, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -160,33 +159,6 @@ function rearManeuver(state: StageState, target: Route, angle: number, range: nu
   if (canManeuver(state, kind) && inBand(exitAltitude(altitude, kind), target.alt)) return kind;
 }
 
-function hasRearBombTarget(state: StageState): boolean {
-  if (!state.bombs || state.tick < state.bombReadyAt) return false;
-  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  return state.enemies.some(enemy => {
-    if (enemy.entry || !enemy.hp) return false;
-    const x = enemy.x - p.x, z = enemy.z - p.z;
-    if (x * fx + z * fz >= 0) return false;
-    const dx = x + scaleTravel(14) * fx, dz = z + scaleTravel(14) * fz;
-    const vv = enemy.vx ** 2 + enemy.vz ** 2;
-    const time = vv > 0 ? clamp(-(dx * enemy.vx + dz * enemy.vz) / vv, 0, 2) : 0;
-    const altitude = p.altitude - Math.max(0, time - 0.45) * 24;
-    return inBand(altitude, enemy.alt) && Math.hypot(dx + time * enemy.vx, dz + time * enemy.vz) <= REAR_ORDNANCE.bomb.proximity;
-  });
-}
-
-function hasRearFlareTarget(state: StageState): boolean {
-  if (!canDropFlare(state, state.tick + 1)) return false;
-  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  return state.enemies.some(enemy => {
-    if (enemy.entry || !enemy.hp || (enemy.burnUntil ?? 0) > state.tick) return false;
-    const x = enemy.x - p.x, z = enemy.z - p.z;
-    const aft = -x * fx - z * fz, side = x * fz - z * fx;
-    const drop = p.altitude - enemy.alt;
-    return aft >= scaleTravel(9) && aft <= scaleTravel(48) && Math.abs(side) <= scaleTravel(6) + aft * 0.24 && drop >= -3 && drop <= 16;
-  });
-}
-
 function dodgeAceWarning(state: StageState, tactics: AceTactics): number | undefined {
   const ace = state.boss, p = state.player, tell = ace?.tell;
   if (!ace?.tail || !tell || tell.kind === 'roll' || tell.until - state.tick > tactics.aceWarningTicks
@@ -213,8 +185,7 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
       ?? safe[0]?.id ?? state.draft[0] };
   }
   if (state.phase !== 'playing' || state.paused) return {};
-  const flare = mode === 'full' && hasRearFlareTarget(state);
-  if (!maneuverAllowsControl(state.maneuver)) return { flare };
+  if (!maneuverAllowsControl(state.maneuver)) return {};
   const p = state.player, target = routeFor(state, mode, tactics, skimUse);
   const dx = target.x - p.x, dz = target.z - p.z;
   const range = Math.hypot(dx, dz), angle = angleTo(p.yaw, dx, dz);
@@ -247,8 +218,6 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   return {
     turn: extend ? 0 : turn, climb: dodge ?? (extend ? 0 : climb), boost, maneuver,
     toggleView: state.view !== view,
-    bomb: mode === 'full' && !acceptingPass && !maneuver && hasRearBombTarget(state),
-    flare: flare && !maneuver && !acceptingPass,
   };
 }
 

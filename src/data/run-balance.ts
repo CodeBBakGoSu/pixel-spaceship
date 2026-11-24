@@ -25,7 +25,7 @@ export const PLAYER_PROJECTILES = {
 } as const;
 
 export const REAR_ORDNANCE = {
-  bomb: { aftOffset: scaleTravel(12), driftSpeed: scaleTravel(8), proximity: scaleTravel(16), clearRadius: scaleTravel(40) },
+  bomb: { proximity: scaleTravel(16), clearRadius: scaleTravel(40) },
   flare: { aftOffset: scaleTravel(8), kick: scaleTravel(70), fanSpacing: scaleTravel(3.4), lateralSpeed: scaleTravel(10) },
 } as const;
 

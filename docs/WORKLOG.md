@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-23 23:15 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `cf53220`; renderer-proto `c6d2d16`, `ee908d4`, `4bbf4c6`)
+- Merged the latest documentation-only renderer-proto delta into PR8, preserving additive worklog entries and upstream docs; no game source or test files changed.
+- Verification: `git diff --check`; source/tests/build-input comparison with `cf53220` is empty. State: done; final PR8 integration.
+
 ### 2026-11-23 23:10 KST · 기획 봇 · devin/1795439573-aster-wing-wiki
 - [자동 폭장·C롤 실험](wiki/HISTORY.md#auto-countermeasures)에 조작·폭탄창 자동 투하 영상 두 건을 연결했다. 인계 당시 PR #8은 충돌 상태였으며, 실물 모바일·자연 해금·완주는 미검증이다.
 - State: done (실험 기록만 갱신). 개발판 조작과 해금 도감은 변경하지 않았다.
@@ -34,6 +38,23 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - [위키 홈](wiki/README.md)에서 인증이 필요한 웹 도감과 Git 원본을 구분했다. [웹 도감 네 탭 검증 영상](https://app.devin.ai/sessions/4278635e7a724fa497392840d7643666?testRecording=31df854a-fa53-4f2b-ab05-d1295ac749cc)은 Product Engineer의 브라우저 검증이며, 채팅 첨부 미리보기나 공개 게임 배포 검증은 아니다.
 - State: done (문서 검수·정리).
 
+### 2026-11-23 23:05 KST · 데븐 봇 · devin/1795438706-auto-countermeasures (`264b23a`; Bomb Bay `e104198`; renderer-proto `69f81c8`, `f544ee2`, `7d883ad`)
+- UI session report for `264b23a`: Chrome keyboard/mouse weak-left and neutral C, Shift+Space, W/S+Space, twin-only no-rear-fire, inert X/K, and Phoenix auto-fire fixture passed; forced-touch Roll/Loop passed. Bomb Bay auto-fire passed at `e104198`; combat code is unchanged since.
+- [Final UI recording](https://app.devin.ai/sessions/7f15ccc7bd4c4b0ea3c7555fd75b88a2?testRecording=9b4b7f3e-18ba-4e5e-b6c3-ee6367b6e79b). Checks used checkpoints/fixtures and forced touch; no physical mobile or natural-unlock playthrough.
+- Merged docs-only renderer-proto updates, preserving additive worklog/history. Focused progression/evolutions/chests/stage tests passed 48/48 and build passed on `264b23a`; no rerun after docs-only integration. `git diff --check` passed. State: done; final UI evidence recorded.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (parent `e104198`; review `4666747118`)
+- Draft refills revalidate kept cards as well as new offers, replacing Flare Bay/Ordnance Rack when their unowned Phoenix/Bomb Bay is banished; an owned paired weapon keeps its valid buff. Replacements remain unique.
+- Verification: focused progression/evolutions/chest/stage tests 48/48; `npm run build` passed (119 modules). State: done; UI evidence recorded in the latest entry.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`8824cfc`; merged `2e9770d`, `cc77357`)
+- C normalizes nonzero combined steering to its sign and uses the remembered/default sign when neutral; stepStage regressions cover weak opposite input and neutral C. Shift+Space ailerons and W/S+Space selectors remain unchanged; the global roll threshold is untouched.
+- Merged the docs-only `renderer-proto` updates, preserving its additive worklog and history. Verification: focused tests 65/65 and build passed on `8824cfc`; post-merge `git diff --check` passed. State: UI verification pending; PR branch integration.
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438706-auto-countermeasures (`eb21d00`, merge `d8d34fd`; renderer-proto `a77502d`)
+- PR #8 review fixes: C follows current combined steering; Flare Bay/Ordnance Rack require their weapon to be owned or addable; skip Rear Guard only for full four-slot loadouts without a rear weapon, advancing the Bill schedule without a new failure penalty. Preserve historical manual-bomb migration.
+- Merged latest `renderer-proto` into the PR branch, preserving its three wiki docs and in-progress planning-bot entry; resolved only the additive worklog overlap.
+- Verification: focused regressions 57/57 and build passed; post-merge `npm test` 578/578 and `npm run build` passed (119 modules, 2.93 s). State: done locally; not pushed.
 ### 2026-11-23 (KST) · 데븐 봇 · devin/1795439918-catalog-update → renderer-proto (base `cc77357`; integrated `69f81c8`; commit `f544ee2`)
 - Finalized the standalone catalog with theme-safe Hangar/Quest styles, Korean status/audit copy, verified plan anchors, and the `위키 홈` link. Snapshot is `69f81c8`; the latest upstream changes were only `WORKLOG.md` and `wiki/HISTORY.md`, both preserved.
 - Verification: catalog assertions/source audit, GitHub plan-anchor lookup, artifact compile and offline bundle; final packaged HTML rendered at 1440×1800 with no page JS/resource errors. No game code changed; meta/build suites were not rerun for this docs-only update.
@@ -49,6 +70,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - [후속 글꼴 후보](wiki/HISTORY.md#p1-font) `61154f5`에서는 시드 18의 한국어 ‘잭팟 ×5’와 보상 5개가 보인다. [이동 리플레이](wiki/HISTORY.md#p1-trail)에서는 잔상을 켜도 꺼도 일부 적탄이 가려졌다. 실기기 성능 미검증으로 통합 보류.
 - State: in progress. 원격 버전·Pages 성공 배포·PR 상태 및 게임 데이터와 38개 항목을 대조했다. HTML 도감은 Product Engineer가 별도 반영하며, 확인 전에는 기존 기획 문서를 정리하지 않는다.
 
+### 2026-11-23 (KST) · 기획 봇 · devin/1795438706-auto-countermeasures (`70204b0`, base `81a0e2a`)
+- 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.
+- 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.
+- 데스크톱 Heat 0, 시드 1–100: 숙련/평균/초보 생존(시간 종료 포함) 100%/69%/26%, 에이스 격추 100%/69%/1%, 격추 수 중앙값 3,155/3,193.5/2,806. State: done (구현·로컬 검증).
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).

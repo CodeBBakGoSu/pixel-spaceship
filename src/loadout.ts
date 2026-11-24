@@ -51,7 +51,8 @@ function echoInterval(state: StageState, ticks: number): number {
 }
 
 export function weaponCooldown(state: StageState, weapon: WeaponId, base: number): number {
-  const ticks = base * weaponRankScale(state, weapon, 'cooldownScale')
+  const ordnance = weapon === 'phoenix' ? buffTuning(state, 'flare-bay') : weapon === 'bomb-bay' ? buffTuning(state, 'ordnance-rack') : null;
+  const ticks = base * (ordnance?.cooldownScale ?? 1) * weaponRankScale(state, weapon, 'cooldownScale')
     * (buffTuning(state, 'capacitor')?.cooldownScale ?? 1) * (familyBonus(state, weapon)?.cooldownScale ?? 1);
   return Math.max(1, Math.round(weapon === 'twin' ? ticks : echoInterval(state, ticks)));
 }

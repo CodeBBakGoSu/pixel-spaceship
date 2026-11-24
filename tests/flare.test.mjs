@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { autopilotInput } from '../src/autoplay.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { World } from '../src/world.ts';
 
-const empty = () => {
+const empty = (level = 1) => {
   const state = createStage(parseStageOptions('?fixture=flare'));
+  state.tick = 1;
+  state.run.weaponLevels.phoenix = level;
   state.enemies = [];
   state.twinAt = state.podsAt = Infinity;
   return state;
@@ -24,15 +25,14 @@ function contact(state, aft, band, kind = 'patrol', lateral = 0) {
   return enemy;
 }
 
-test('a volley ejects five fanned flares aft and inherits the faster launch from boost', () => {
-  const cruise = empty(), boosted = empty();
+test('a volley ejects four fanned rank-seven flares aft and inherits the faster launch from boost', () => {
+  const cruise = empty(7), boosted = empty(7);
   cruise.player.yaw = boosted.player.yaw = Math.PI / 5;
   const fx = Math.sin(cruise.player.yaw), fz = Math.cos(cruise.player.yaw);
-  run(cruise, 1, { flare: true });
-  run(boosted, 1, { flare: true, boost: true });
-  assert.equal(cruise.flares?.length, 5);
-  assert.equal(boosted.flares?.length, 5);
-  assert.equal(cruise.flareCharges, 2);
+  run(cruise, 1);
+  run(boosted, 1, { boost: true });
+  assert.equal(cruise.flares?.length, 4);
+  assert.equal(boosted.flares?.length, 4);
   const spread = cruise.flares.map(flare => flare.vx * fz - flare.vz * fx);
   assert.ok(Math.min(...spread) < scaleTravel(-12) && Math.max(...spread) > scaleTravel(12));
   for (const state of [cruise, boosted]) {
@@ -47,9 +47,9 @@ test('a volley ejects five fanned flares aft and inherits the faster launch from
 
 test('a volley sinks through the next altitude band and burns out at two seconds', () => {
   const state = empty();
-  run(state, 1, { flare: true });
+  run(state, 1);
   assert.ok(state.flares?.length);
-  const flare = state.flares[2], initial = flare.alt;
+  const flare = state.flares[0], initial = flare.alt;
   run(state, 60);
   assert.ok(flare.alt < initial - 10 && flare.alt > 88);
   run(state, 59);
@@ -63,7 +63,7 @@ test('a same-band Hound aft burns and takes damage over time while the contacts 
   const target = contact(state, 21, 1, 'hound');
   const above = contact(state, 21, 2, 'hound');
   const ahead = contact(state, -24, 1, 'hound');
-  run(state, 1, { flare: true });
+  run(state, 1);
   for (let i = 0; i < 25 && !state.flareHit; i++) run(state, 1);
   assert.ok(state.flareHit?.until > state.tick);
   assert.ok(target.burnUntil > state.tick);
@@ -78,13 +78,14 @@ test('a same-band Hound aft burns and takes damage over time while the contacts 
 });
 
 test('the Ace burns at a slower damage cadence after a rear flare hit', () => {
-  const state = createStage(parseStageOptions('?fixture=boss'));
+  const state = createStage(parseStageOptions('?fixture=boss&mode=survivors'));
+  state.run.weaponLevels.phoenix = 1;
   const ace = state.boss;
   ace.yaw = 0;
   const { x, z, alt } = ace;
   Object.assign(state.player, { x, z: z + scaleTravel(21), altitude: alt });
   state.twinAt = state.podsAt = Infinity;
-  run(state, 1, { flare: true });
+  run(state, 1);
   for (let i = 0; i < 25 && !ace.burnUntil; i++) run(state, 1);
   assert.ok(ace.burnUntil > state.tick);
   assert.ok(ace.hp < ace.maxHp);
@@ -98,71 +99,23 @@ test('the Ace burns at a slower damage cadence after a rear flare hit', () => {
 
 test('flares can fire during the scripted half-loop', () => {
   const state = empty();
+  state.weaponFireAt.phoenix = state.tick + 20;
   run(state, 1, { maneuver: 'immelmann' });
   run(state, 18);
-  run(state, 1, { flare: true });
+  run(state, 1);
   assert.equal(state.maneuver?.kind, 'immelmann');
-  assert.equal(state.flareCharges, 2);
-  assert.ok(state.flares?.length);
-});
-
-test('three flare charges refill one at a time using active ticks after a brief launch gap', () => {
-  const state = empty(), start = state.tick;
-  run(state, 1, { flare: true });
-  assert.equal(state.flareCharges, 2);
-  run(state, 35, { flare: true });
-  assert.equal(state.flareCharges, 2);
-  run(state, 1, { flare: true });
-  assert.equal(state.flareCharges, 1);
-  run(state, 36, { flare: true });
-  assert.equal(state.flareCharges, 0);
-  run(state, 1, { pause: true });
-  run(state, 500, { flare: true });
-  assert.equal(state.flareCharges, 0);
-  run(state, 1, { pause: true });
-  run(state, start + 420 - state.tick);
-  assert.equal(state.flareCharges, 0);
-  for (const charges of [1, 2, 3]) {
-    run(state, charges === 1 ? 1 : 420);
-    assert.equal(state.flareCharges, charges);
-  }
-  assert.equal(state.flareReloadAt, null);
-});
-
-test('pressing either weapon extends one rear view even while its stores are unavailable', () => {
-  const state = empty();
-  run(state, 1, { flare: true });
-  const { since, until } = state.rearGlimpse ?? {};
-  assert.equal(since, state.tick);
-  assert.ok(until - since >= 72 && until - since <= 90);
-  run(state, 12);
-  const charges = state.flareCharges;
-  run(state, 1, { flare: true });
-  assert.equal(state.flareCharges, charges);
-  assert.equal(state.rearGlimpse?.since, since);
-  assert.ok(state.rearGlimpse?.until > until);
-  state.bombs = 0;
-  const extended = state.rearGlimpse?.until;
-  run(state, 1, { bomb: true });
-  assert.equal(state.rearGlimpse?.since, since);
-  assert.ok(state.rearGlimpse?.until > extended);
-  const lastFrame = state.rearGlimpse.until - 1;
-  run(state, lastFrame - state.tick);
-  run(state, 1, { bomb: true });
-  assert.equal(state.rearGlimpse?.since, since);
-  run(state, state.rearGlimpse.until - state.tick + 1);
-  assert.equal(state.rearGlimpse, null);
-  state.flareCharges = 0;
-  run(state, 1, { bomb: true, flare: true });
-  assert.equal(state.rearGlimpse, null);
+  assert.equal(state.flares[0].born, state.tick);
 });
 
 test('switching weapons reuses the open rear view for the newly released payload', () => {
   const state = empty();
-  run(state, 1, { bomb: true });
+  state.run.weaponLevels['bomb-bay'] = 1;
+  state.run.weaponLevels.phoenix = 0;
+  run(state, 1);
   const { since, until } = state.rearGlimpse;
   run(state, 12);
-  run(state, 1, { flare: true });
+  state.run.weaponLevels.phoenix = 1;
+  run(state, 1);
   assert.equal(state.rearGlimpse?.since, since);
   assert.equal(state.rearGlimpse?.kind, 'flare');
   assert.ok(state.rearGlimpse?.until > until);
@@ -171,8 +124,8 @@ test('switching weapons reuses the open rear view for the newly released payload
 test('a sinking flare reaches a contact when it enters its altitude window mid-tick', () => {
   const state = empty();
   const lower = contact(state, 80, 0, 'hound');
-  run(state, 1, { flare: true });
-  const flare = state.flares[2];
+  run(state, 1);
+  const flare = state.flares[0];
   Object.assign(flare, { x: lower.x, z: lower.z, alt: 83.1, vx: 0, vz: 0, vy: -12 });
   run(state, 1);
   assert.ok(lower.burnUntil > state.tick);
@@ -180,7 +133,9 @@ test('a sinking flare reaches a contact when it enters its altitude window mid-t
 
 test('a delayed bomb blast reopens the rear view at the impact location', () => {
   const state = empty();
-  run(state, 1, { bomb: true });
+  state.run.weaponLevels['bomb-bay'] = 1;
+  state.run.weaponLevels.phoenix = 0;
+  run(state, 1);
   assert.equal(state.rearGlimpse?.kind, 'bomb');
   assert.equal(state.rearGlimpse?.since, state.tick);
   const until = state.rearGlimpse.until;
@@ -198,8 +153,8 @@ test('a delayed bomb blast reopens the rear view at the impact location', () => 
 
 test('a low contact hit after the launch window reopens the rear view', () => {
   const state = empty();
-  const below = contact(state, 84, 0, 'patrol', 4);
-  run(state, 1, { flare: true });
+  const below = contact(state, 84, 0, 'patrol');
+  run(state, 1);
   const launchWindow = state.rearGlimpse?.until;
   assert.ok(launchWindow > state.tick);
   for (let i = 0; i < 119 && !state.flareHit; i++) run(state, 1);
@@ -210,15 +165,7 @@ test('a low contact hit after the launch window reopens the rear view', () => {
   assert.equal(state.rearGlimpse?.target?.alt, 75);
 });
 
-test('the full pilot fires on a nearby tail and holds its flare when the contact climbs above it', () => {
-  const state = empty();
-  const target = contact(state, 24, 1, 'hound');
-  assert.equal(autopilotInput(state, 'full').flare, true);
-  target.alt = 180;
-  assert.equal(autopilotInput(state, 'full').flare, false);
-});
-
-test('the flare review fixture has moving three-band tails and shows both real weapon outcomes', () => {
+test('the flare review fixture has moving three-band tails and automatically burns pursuers', () => {
   const world = new World(), ground = (x, z) => world.height(x, z);
   const create = () => createStage(parseStageOptions('?fixture=flare'), ground);
   const state = create(), player = { ...state.player };
@@ -227,17 +174,30 @@ test('the flare review fixture has moving three-band tails and shows both real w
   assert.deepEqual([...new Set(state.enemies.map(enemy => enemy.alt))].sort((a, b) => a - b), [75, 125, 180]);
   assert.ok(state.enemies.every(enemy => enemy.z < player.z));
   const before = state.enemies.map(enemy => enemy.z);
-  run(state, 1, { flare: true }, ground);
+  run(state, 1, {}, ground);
   assert.ok(state.player.z > player.z);
-  assert.ok(state.enemies.some((enemy, index) => enemy.z !== before[index]));
+  assert.ok(before.some((z, index) => state.enemies[index].z !== z));
   run(state, 28, {}, ground);
   assert.ok(state.enemies.some(enemy => enemy.burnUntil > state.tick));
   assert.ok(state.rearGlimpse?.target);
+});
 
-  const bomb = create();
-  run(bomb, 1, { bomb: true }, ground);
-  run(bomb, 28, {}, ground);
-  assert.ok(bomb.effects.some(effect => effect.kind === 'bomb-blast'));
-  assert.ok(bomb.enemies.length < state.enemies.length);
-  assert.ok(bomb.rearGlimpse?.target);
+test('without either weapon old manual inputs cannot create ordnance; equipping starts automatic fire', () => {
+  const state = empty(0);
+  run(state, 30, { flare: true, bomb: true });
+  assert.equal(state.flares.length, 0);
+  assert.equal(state.rearBombs.length, 0);
+  assert.equal(state.metrics.bombsDropped, 0);
+  assert.equal(state.rearGlimpse, null);
+  state.run.weaponLevels.phoenix = 1;
+  run(state, 1);
+  assert.equal(state.flares.length, 1);
+  assert.equal(state.rearBombs.length, 0);
+  state.run.weaponLevels['bomb-bay'] = 1;
+  run(state, 1);
+  assert.equal(state.rearBombs.length, 1);
+  assert.equal(state.metrics.bombsDropped, 1);
+  run(state, 1, { pause: true });
+  run(state, 500);
+  assert.equal(state.metrics.bombsDropped, 1);
 });

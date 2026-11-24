@@ -116,12 +116,12 @@ export const BUFFS = {
   ] },
   'vector-thrusters': { levels: [{ agilityScale: 1.08 }, { agilityScale: 1.16 }, { agilityScale: 1.25 }] },
   'flare-bay': { levels: [
-    { stock: 1, reloadScale: 0.85, burnBonusTicks: 18 }, { stock: 2, reloadScale: 0.75, burnBonusTicks: 36 },
-    { stock: 3, reloadScale: 0.65, burnBonusTicks: 54 },
+    { cooldownScale: 0.85, burnBonusTicks: 18 }, { cooldownScale: 0.75, burnBonusTicks: 36 },
+    { cooldownScale: 0.65, burnBonusTicks: 54 },
   ] },
   'ordnance-rack': { levels: [
-    { stock: 1, reloadScale: 0.85, radiusScale: 1.1 }, { stock: 2, reloadScale: 0.75, radiusScale: 1.2 },
-    { stock: 3, reloadScale: 0.65, radiusScale: 1.3 },
+    { cooldownScale: 0.85, radiusScale: 1.1 }, { cooldownScale: 0.75, radiusScale: 1.2 },
+    { cooldownScale: 0.65, radiusScale: 1.3 },
   ] },
   'fire-control': { levels: [
     { lockScale: 0.85, criticalChance: 0.05 }, { lockScale: 0.7, criticalChance: 0.10 }, { lockScale: 0.55, criticalChance: 0.15 },

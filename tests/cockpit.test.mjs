@@ -216,7 +216,7 @@ test('cockpit copy covers warnings, instruments and targeting in both languages'
   for (const suffix of [
     'north', 'east', 'south', 'west', 'bearing', 'range', 'lock', 'ace', 'gLoad',
     'masterCaution', 'cautionShort', 'lowHull', 'altLow', 'pullUp',
-    'airframe', 'weapons', 'altDelta', 'bombs', 'flares', 'inverted',
+    'airframe', 'weapons', 'altDelta', 'inverted',
   ]) {
     const key = `cockpit.${suffix}`;
     assert.ok(strings.en[key]?.trim(), key);
