@@ -19,7 +19,7 @@ import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
 import { isNewEnemyKind } from './enemy-kinds.ts';
 import {
-  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, simulationStepTime, takeNextActionAtTick,
+  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, simulationStepTimesForFrame, takeDueActionsAtTick,
   type SpaceAction, type TimedAction,
 } from './flight-chord.ts';
 import { isFlightFixture, primeFlightFixture } from './flight-fixture.ts';
@@ -1253,12 +1253,13 @@ function advance(tickTime: number): void {
   if (launch && state.phase !== 'playing' && state.phase !== 'draft' && state.phase !== 'chest') world.seed = launch.seed;
   const control = options.autoplay ? autopilotInput(state, 'full', ground) : flightInput();
   resolveSpaceAction(flightChord.flush(frameNow), 0);
-  const inputAtTick = takeNextActionAtTick(pendingFlightInputs, tickTime);
-  const queuedInput = inputAtTick.action?.action;
+  const inputAtTick = takeDueActionsAtTick(pendingFlightInputs, tickTime);
+  const dueInputs = inputAtTick.actions.map(input => input.action);
+  const queuedInput = dueInputs.find(input => input.kind === 'roll') ?? dueInputs[0];
   const maneuverInput = queuedInput?.kind === 'maneuver' ? queuedInput.press : undefined;
   const rollInput = queuedInput?.kind === 'roll' ? queuedInput.turn : undefined;
   const spacePending = requestedSpace && actionDueAt(requestedSpace, tickTime)
-    && queuedInput?.spaceAt !== requestedSpace.at
+    && dueInputs.length === 0
     ? requestedSpace.action.kind : undefined;
   stepStage(state, {
     ...control,
@@ -1282,7 +1283,7 @@ function advance(tickTime: number): void {
   pendingDraft = {};
   pendingChest = undefined;
   pendingFlightInputs = inputAtTick.pending;
-  if (queuedInput?.spaceAt !== undefined && requestedSpace?.at === queuedInput.spaceAt) requestedSpace = undefined;
+  if (dueInputs.length > 0) requestedSpace = undefined;
   if (state.summary && state.summary !== priorSummary) {
     profile = state.profile;
     persistPilot();
@@ -1550,8 +1551,8 @@ function animate(now: number): void {
   aceFireCue = null;
   damageFeedback.beginFrame();
   frameNow = now;
-  const elapsed = Math.max(0, (now - previousTime) / 1000);
-  previousTime = now;
+  const frameStart = previousTime;
+  const elapsed = Math.max(0, (now - frameStart) / 1000);
   if (scene?.contextLost) loseGraphics();
   if (scene && !forceUsed && forcedLossTick !== null && state.tick >= forcedLossTick) {
     forceUsed = true;
@@ -1568,20 +1569,25 @@ function animate(now: number): void {
       syncAudioPause();
       dirty = true;
     }
+    previousTime = now;
     requestAnimationFrame(animate);
     return;
   }
   if (elapsed > 0 && elapsed < 0.25) fps += (1 / elapsed - fps) * 0.08;
-  if (updateAutoResume(now)) carry = 0;
-  else carry += Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
-  while (carry >= STEP) {
+  const resumed = updateAutoResume(now);
+  const stepStart = Math.max(frameStart, hitstopUntil);
+  const acceptedElapsed = resumed ? 0 : Math.min(0.2, elapsed, Math.max(0, (now - hitstopUntil) / 1000));
+  const stepTimes = resumed
+    ? (carry = 0, { times: [], carry: 0 })
+    : simulationStepTimesForFrame(stepStart, acceptedElapsed, carry, STEP);
+  carry = stepTimes.carry;
+  for (const tickTime of stepTimes.times) {
     if (scene?.contextLost) {
       loseGraphics();
       break;
     }
     const burst = state.reversal?.burstAt;
-    advance(simulationStepTime(now, carry, STEP));
-    carry -= STEP;
+    advance(tickTime);
     const nextBurst = state.reversal?.burstAt;
     if (nextBurst !== undefined && nextBurst !== burst) {
       hitstopUntil = now + REVERSAL_HITSTOP_MS;
@@ -1593,6 +1599,7 @@ function animate(now: number): void {
   audio.updateAceLock(state, graphics.canAdvance && effectsEnabled && !document.hidden && !guide
     && state.phase === 'playing' && !state.paused);
   if (graphics.recovering) {
+    previousTime = now;
     requestAnimationFrame(animate);
     return;
   }
@@ -1611,6 +1618,7 @@ function animate(now: number): void {
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
   drawDamageFeedback();
   if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
+  previousTime = now;
   requestAnimationFrame(animate);
 }
 

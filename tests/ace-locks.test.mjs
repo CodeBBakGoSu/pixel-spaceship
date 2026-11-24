@@ -4,7 +4,8 @@ import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
 import {
-  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime, takeNextActionAtTick,
+  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
+  simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -182,6 +183,48 @@ test('between-frame C input reaches its matching dodge tick and is not deferred 
 
   run(false);
   run(true);
+});
+
+test('4fps capped catch-up applies post-cue C in the window and prioritizes it over a due maneuver', () => {
+  const state = duel();
+  const windowTick = state.boss.tell.until - ACE.lock.dodgeTicks;
+  while (state.tick < windowTick - 11) step(state);
+  assert.equal(state.tick, windowTick - 11);
+
+  const fixedStep = 1 / 60;
+  let frameAnchor = 1000, carry = 0;
+  const cueAt = frameAnchor + (windowTick - state.tick) * fixedStep * 1000;
+  const cAt = cueAt + 2;
+  let pending = enqueueTimedAction([], {
+    action: { kind: 'maneuver', press: { kind: 'j-turn', turn: 1 } }, at: cAt - 1,
+  });
+  pending = enqueueTimedAction(pending, {
+    action: { kind: 'roll', turn: barrelRollForKey('KeyC', 0) }, at: cAt,
+  });
+
+  for (let frame = 0; frame < 3; frame++) {
+    const result = simulationStepTimesForFrame(frameAnchor, 0.2, carry, fixedStep);
+    assert.equal(result.times.length, 12);
+    for (const tickTime of result.times) {
+      const due = takeDueActionsAtTick(pending, tickTime);
+      const accepted = due.actions.find(input => input.action.kind === 'roll') ?? due.actions[0];
+      if (accepted) {
+        assert.ok(state.tick >= windowTick, 'C is not applied before the visible window');
+        step(state, accepted.action.kind === 'roll'
+          ? { roll: true, rollTurn: accepted.action.turn }
+          : { maneuver: accepted.action.press.kind, maneuverTurn: accepted.action.press.turn });
+      } else step(state);
+      pending = due.pending;
+    }
+    carry = result.carry;
+    frameAnchor += 250;
+    if (frame === 0) {
+      assert.equal(state.boss.tell, null);
+      assert.equal(state.roll?.elapsed, 0);
+      assert.deepEqual(pending, [], 'same-step maneuver is consumed rather than replayed');
+    }
+  }
+  assert.equal(state.boss.tell, null);
 });
 
 test('Space grace survives until C is consumed after the fire tick', () => {

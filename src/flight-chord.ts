@@ -8,6 +8,20 @@ export function simulationStepTime(frameTime: number, carry: number, step: numbe
   return frameTime - (carry - step) * 1000;
 }
 
+export function simulationStepTimesForFrame(frameStart: number, elapsed: number, carry: number, step: number): {
+  times: number[];
+  carry: number;
+} {
+  const frameEnd = frameStart + elapsed * 1000;
+  let pending = carry + elapsed;
+  const times: number[] = [];
+  while (pending >= step) {
+    times.push(simulationStepTime(frameEnd, pending, step));
+    pending -= step;
+  }
+  return { times, carry: pending };
+}
+
 export function actionDueAt<T>(pending: TimedAction<T> | undefined, tickTime: number): boolean {
   return pending !== undefined && pending.at <= tickTime;
 }
@@ -28,6 +42,15 @@ export function takeNextActionAtTick<T>(pending: readonly TimedAction<T>[], tick
     action: pending[index],
     pending: [...pending.slice(0, index), ...pending.slice(index + 1)],
   };
+}
+
+export function takeDueActionsAtTick<T>(pending: readonly TimedAction<T>[], tickTime: number): {
+  actions: TimedAction<T>[];
+  pending: TimedAction<T>[];
+} {
+  const index = pending.findIndex(action => action.at > tickTime);
+  const dueCount = index < 0 ? pending.length : index;
+  return { actions: [...pending.slice(0, dueCount)], pending: [...pending.slice(dueCount)] };
 }
 
 export function barrelRollForKey(code: string, turn: number, lastTurn = 1): number | undefined {

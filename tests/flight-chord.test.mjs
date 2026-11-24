@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
-  takeNextActionAtTick,
+  simulationStepTimesForFrame, takeDueActionsAtTick, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 
 test('Space while either Shift is held rolls immediately and never queues a reversal', () => {
@@ -74,6 +74,36 @@ test('simultaneously caught-up inputs are consumed in timestamp order', () => {
   const second = takeNextActionAtTick(first.pending, 1100);
   assert.deepEqual(second.action, { action: 'later C roll', at: 1090 });
   assert.deepEqual(second.pending, []);
+});
+
+test('capped 4fps step times use the accepted interval prefix and rebase each frame', () => {
+  const step = 1 / 60;
+  let anchor = 1000, carry = 0;
+  for (let frame = 0; frame < 3; frame++) {
+    const result = simulationStepTimesForFrame(anchor, 0.2, carry, step);
+    assert.equal(result.times.length, 12);
+    assert.ok(Math.abs(result.times[0] - (anchor + step * 1000)) < 1e-8);
+    assert.ok(Math.abs(result.times.at(-1) - (anchor + 200)) < 1e-8);
+    carry = result.carry;
+    anchor += 250;
+  }
+  const pausedAt = 9000;
+  const resumed = simulationStepTimesForFrame(pausedAt, 0, 0, step);
+  assert.deepEqual(resumed.times, [], 'resetting carry on pause does not retain old frame timestamps');
+  assert.deepEqual(takeDueActionsAtTick([], pausedAt), { actions: [], pending: [] });
+});
+
+test('all due inputs drain together, with future inputs retained for a later tick', () => {
+  const pending = enqueueTimedAction(
+    enqueueTimedAction([], { action: 'earlier maneuver', at: 1001 }),
+    { action: 'C roll', at: 1002 },
+  );
+  const due = takeDueActionsAtTick(pending, 1005);
+  assert.deepEqual(due.actions.map(input => input.action), ['earlier maneuver', 'C roll']);
+  assert.deepEqual(due.pending, []);
+  assert.deepEqual(takeDueActionsAtTick(enqueueTimedAction([], { action: 'future', at: 1006 }), 1005), {
+    actions: [], pending: [{ action: 'future', at: 1006 }],
+  });
 });
 
 test('C after an expired Space chord queues the deadline reversal first', () => {
