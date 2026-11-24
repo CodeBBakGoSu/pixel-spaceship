@@ -4,7 +4,7 @@ import { ACE, ACE_PHASES } from '../src/data/ace.ts';
 import { drawAceLocks } from '../src/ace-sights.ts';
 import { aceDodgeWindow, advanceAce } from '../src/ace.ts';
 import {
-  actionDueAt, barrelRollForKey, FlightChord, ROLL_CHORD_MS, simulationStepTime, takeActionAtTick,
+  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime, takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 import { maneuverForKey } from '../src/maneuvers.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -153,19 +153,22 @@ test('between-frame C input reaches its matching dodge tick and is not deferred 
       carry -= fixedStep;
     }
     const cueAt = tickTimes[2];
-    let pending = { action: barrelRollForKey('KeyC', 0), at: cueAt + 5 };
-    assert.equal(actionDueAt(pending, cueAt), false, 'the input is not retroactive to the cue tick');
+    const pressAt = cueAt + 5;
+    let pending = enqueueTimedAction([], {
+      action: { kind: 'roll', turn: barrelRollForKey('KeyC', 0) }, at: pressAt,
+    });
+    assert.equal(actionDueAt(pending[0], cueAt), false, 'the input is not retroactive to the cue tick');
 
     for (let index = 0; index < tickTimes.length; index++) {
-      const queued = takeActionAtTick(pending, tickTimes[index]);
+      const queued = takeNextActionAtTick(pending, tickTimes[index]);
       if (queued.action !== undefined) {
         assert.equal(index, 3, 'the event is consumed at the first simulation boundary after the press');
-        step(state, { roll: true, rollTurn: queued.action });
+        step(state, { roll: queued.action.action.kind === 'roll', rollTurn: queued.action.action.turn });
       } else step(state);
       pending = queued.pending;
     }
     assert.equal(state.tick, windowTick + 1);
-    assert.equal(pending, undefined, 'the queued event is consumed once even if stage cooldown rejects it');
+    assert.deepEqual(pending, [], 'the queued event is consumed once even if stage cooldown rejects it');
     if (cooldownBlocked) {
       assert.equal(state.roll, undefined);
       assert.ok(state.boss.tell, 'a blocked roll does not cancel the Ace salvo');
@@ -179,6 +182,83 @@ test('between-frame C input reaches its matching dodge tick and is not deferred 
 
   run(false);
   run(true);
+});
+
+test('Space grace survives until C is consumed after the fire tick', () => {
+  const state = duel(), until = state.boss.tell.until;
+  while (state.tick < until - 1) step(state);
+  const request = { action: splitS.maneuver, at: 955 };
+  let pending = enqueueTimedAction([], {
+    action: { kind: 'roll', turn: barrelRollForKey('KeyC', 1), spaceAt: request.at }, at: 1005,
+  });
+  const fixedStep = 1 / 60, frameTime = 1000 + fixedStep * 1000;
+  const tickTimes = [
+    simulationStepTime(frameTime, 2 * fixedStep, fixedStep),
+    simulationStepTime(frameTime, fixedStep, fixedStep),
+  ];
+
+  for (let index = 0; index < tickTimes.length; index++) {
+    const next = takeNextActionAtTick(pending, tickTimes[index]);
+    const spacePending = actionDueAt(request, tickTimes[index])
+      && next.action?.action.spaceAt !== request.at ? request.action : undefined;
+    const input = next.action?.action;
+    step(state, {
+      spacePending,
+      roll: input?.kind === 'roll',
+      rollTurn: input?.kind === 'roll' ? input.turn : undefined,
+    });
+    pending = next.pending;
+    if (index === 0) {
+      assert.equal(state.tick, until);
+      assert.equal(state.boss.tell?.dodgeGraceUntil, until + Math.ceil(ROLL_CHORD_MS * 60 / 1000),
+        'the fire-tick grace sees Space before the later C event');
+    }
+  }
+  assert.deepEqual(pending, []);
+  assert.equal(state.roll?.elapsed, 0);
+  assert.equal(state.boss.tell, null, 'C is applied on its later tick inside the pending-space grace');
+});
+
+test('late Shift resolves Space at its saved deadline before a later catch-up input', () => {
+  const state = duel(), until = state.boss.tell.until, chord = new FlightChord();
+  while (state.tick < until - 1) step(state);
+  assert.equal(chord.pressSpace(999, false), undefined);
+  const resolved = chord.pressShift(1090);
+  assert.deepEqual(resolved, { action: 'reversal', at: 999 + ROLL_CHORD_MS });
+  let pending = enqueueTimedAction([], {
+    action: { kind: 'maneuver', press: { kind: splitS.maneuver, turn: 0 }, spaceAt: 999 }, at: resolved.at,
+  });
+  pending = enqueueTimedAction(pending, {
+    action: { kind: 'roll', turn: barrelRollForKey('KeyC', 1), spaceAt: 999 }, at: 1095,
+  });
+  const fixedStep = 1 / 60, frameTime = 1100, carry = 7 * fixedStep, tickTimes = [];
+  let remaining = carry;
+  while (remaining >= fixedStep) {
+    tickTimes.push(simulationStepTime(frameTime, remaining, fixedStep));
+    remaining -= fixedStep;
+  }
+  assert.ok(tickTimes[0] <= 1000 && tickTimes.at(-1) === frameTime);
+
+  const consumed = [];
+  for (const tickTime of tickTimes) {
+    const next = takeNextActionAtTick(pending, tickTime);
+    const spacePending = actionDueAt({ action: splitS.maneuver, at: 999 }, tickTime)
+      && next.action?.action.spaceAt !== 999 ? splitS.maneuver : undefined;
+    const action = next.action?.action;
+    if (next.action) consumed.push(next.action.action.kind);
+    step(state, {
+      spacePending,
+      maneuver: action?.kind === 'maneuver' ? action.press.kind : undefined,
+      maneuverTurn: action?.kind === 'maneuver' ? action.press.turn : undefined,
+      roll: action?.kind === 'roll',
+      rollTurn: action?.kind === 'roll' ? action.turn : undefined,
+    });
+    pending = next.pending;
+  }
+  assert.deepEqual(pending, []);
+  assert.deepEqual(consumed, ['maneuver', 'roll'], 'the later C action does not replace the earlier resolved reversal');
+  assert.equal(state.maneuver?.kind, splitS.maneuver);
+  assert.equal(state.boss.tell, null, 'the action reaches the tick covered by the original grace');
 });
 
 test('gun aim drops on loss of bearing, altitude or range before release', () => {

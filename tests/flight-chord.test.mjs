@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  actionDueAt, barrelRollForKey, FlightChord, ROLL_CHORD_MS, simulationStepTime, takeActionAtTick,
+  actionDueAt, barrelRollForKey, enqueueTimedAction, FlightChord, ROLL_CHORD_MS, simulationStepTime,
+  takeNextActionAtTick,
 } from '../src/flight-chord.ts';
 
 test('Space while either Shift is held rolls immediately and never queues a reversal', () => {
@@ -21,7 +22,7 @@ test('Shift catches Space in either order within the chord window', () => {
 test('Space alone queues one reversal and late Shift keeps that choice', () => {
   const chord = new FlightChord();
   chord.pressSpace(10, false);
-  assert.deepEqual(chord.pressShift(11 + ROLL_CHORD_MS), { action: 'reversal', at: 11 + ROLL_CHORD_MS });
+  assert.deepEqual(chord.pressShift(11 + ROLL_CHORD_MS), { action: 'reversal', at: 10 + ROLL_CHORD_MS });
   assert.equal(chord.flush(500), undefined);
   chord.pressSpace(500, false);
   assert.deepEqual(chord.flush(500 + ROLL_CHORD_MS), { action: 'reversal', at: 500 + ROLL_CHORD_MS });
@@ -48,20 +49,45 @@ test('a between-frame C press waits for its corresponding catch-up tick', () => 
   }
   const cueAt = tickTimes[2];
   const pressAt = cueAt + 5;
-  let pending = { action: barrelRollForKey('KeyC', 0), at: pressAt };
+  let pending = enqueueTimedAction([], { action: barrelRollForKey('KeyC', 0), at: pressAt });
   const pendingSpace = { action: { kind: 'reversal', turn: -1 }, at: pressAt };
   const applied = [];
 
-  assert.equal(actionDueAt(pending, cueAt), false, 'the event does not affect earlier catch-up ticks');
+  assert.equal(actionDueAt(pending[0], cueAt), false, 'the event does not affect earlier catch-up ticks');
   assert.equal(actionDueAt(pendingSpace, cueAt), false, 'pending defense grace does not precede its Space event');
   assert.equal(actionDueAt(pendingSpace, tickTimes[3]), true);
   for (const tickTime of tickTimes) {
-    const consumed = takeActionAtTick(pending, tickTime);
-    if (consumed.action !== undefined) applied.push({ action: consumed.action, at: tickTime });
+    const consumed = takeNextActionAtTick(pending, tickTime);
+    if (consumed.action !== undefined) applied.push({ action: consumed.action.action, at: tickTime });
     pending = consumed.pending;
   }
   assert.deepEqual(applied, [{ action: 1, at: frameTime }], 'C is consumed at the first tick boundary after the event');
-  assert.equal(pending, undefined, 'the event is consumed exactly once');
+  assert.deepEqual(pending, [], 'the event is consumed exactly once');
+});
+
+test('simultaneously caught-up inputs are consumed in timestamp order', () => {
+  let pending = enqueueTimedAction([], { action: 'earlier reversal', at: 1079 });
+  pending = enqueueTimedAction(pending, { action: 'later C roll', at: 1090 });
+
+  const first = takeNextActionAtTick(pending, 1100);
+  assert.deepEqual(first.action, { action: 'earlier reversal', at: 1079 });
+  const second = takeNextActionAtTick(first.pending, 1100);
+  assert.deepEqual(second.action, { action: 'later C roll', at: 1090 });
+  assert.deepEqual(second.pending, []);
+});
+
+test('C after an expired Space chord queues the deadline reversal first', () => {
+  const chord = new FlightChord();
+  assert.equal(chord.pressSpace(999, false), undefined);
+  const reversal = chord.flush(1095);
+  assert.deepEqual(reversal, { action: 'reversal', at: 999 + ROLL_CHORD_MS });
+
+  let pending = enqueueTimedAction([], reversal);
+  pending = enqueueTimedAction(pending, { action: 'C roll', at: 1095 });
+  const first = takeNextActionAtTick(pending, 1100);
+  assert.equal(first.action?.action, 'reversal');
+  const second = takeNextActionAtTick(first.pending, 1100);
+  assert.equal(second.action?.action, 'C roll');
 });
 
 test('Shift+Space and delayed W/S+Space actions keep their arbitration resolution timestamps', () => {

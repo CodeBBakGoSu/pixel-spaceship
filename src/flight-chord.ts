@@ -12,12 +12,22 @@ export function actionDueAt<T>(pending: TimedAction<T> | undefined, tickTime: nu
   return pending !== undefined && pending.at <= tickTime;
 }
 
-export function takeActionAtTick<T>(pending: TimedAction<T> | undefined, tickTime: number): {
-  action: T | undefined;
-  pending: TimedAction<T> | undefined;
+export function enqueueTimedAction<T>(pending: readonly TimedAction<T>[], action: TimedAction<T>): TimedAction<T>[] {
+  const index = pending.findIndex(queued => queued.at > action.at);
+  if (index < 0) return [...pending, action];
+  return [...pending.slice(0, index), action, ...pending.slice(index)];
+}
+
+export function takeNextActionAtTick<T>(pending: readonly TimedAction<T>[], tickTime: number): {
+  action: TimedAction<T> | undefined;
+  pending: TimedAction<T>[];
 } {
-  if (!pending || pending.at > tickTime) return { action: undefined, pending };
-  return { action: pending.action, pending: undefined };
+  const index = pending.findIndex(action => action.at <= tickTime);
+  if (index < 0) return { action: undefined, pending: [...pending] };
+  return {
+    action: pending[index],
+    pending: [...pending.slice(0, index), ...pending.slice(index + 1)],
+  };
 }
 
 export function barrelRollForKey(code: string, turn: number, lastTurn = 1): number | undefined {
@@ -36,9 +46,10 @@ export class FlightChord {
 
   pressShift(now: number): TimedAction<SpaceAction> | undefined {
     if (this.deadline === undefined) return;
-    const action = now <= this.deadline ? 'roll' : 'reversal';
+    const deadline = this.deadline;
+    const action = now <= deadline ? 'roll' : 'reversal';
     this.reset();
-    return { action, at: now };
+    return { action, at: now <= deadline ? now : deadline };
   }
 
   flush(now: number): TimedAction<SpaceAction> | undefined {
