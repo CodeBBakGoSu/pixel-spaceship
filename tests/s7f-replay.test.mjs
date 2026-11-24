@@ -11,7 +11,7 @@ import { World } from '../src/world.ts';
 // Seed-1 terminal hashes also cover timed swarm formations and recovery pulses, production terrain, and the full-view pilot.
 const terminalHashes = {
   legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
-  survivors: '9534f369d842378f776a2e2d009492e105360270a1319b24084c293ae84438c6',
+  survivors: 'c22dfa0b44dbb6f11bf42258a557adf924526740543ef6cc5a3da59fda0502fc',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

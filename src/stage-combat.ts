@@ -3,7 +3,7 @@ import type { Ace, AceTell, Effect, Enemy, Flare, Ground, KillCredit, Point, Pos
 import { ACE } from './data/ace.ts';
 import { reportDamage } from './combat-feedback.ts';
 import { aegisBlocks } from './data/roster.ts';
-import { scaleClimb } from './data/speed.ts';
+import { scaleClimb, scaleTravel } from './data/speed.ts';
 import { BOOST_SPEED } from './flight.ts';
 import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, skimAltitude, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
@@ -18,6 +18,7 @@ import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindo
 import { nearestBand } from './maneuvers.ts';
 import { advanceRangedShot } from './ranged-weapons.ts';
 import { rollBoltImmune, rollParryActive } from './roll.ts';
+import { segmentSphereIntersection3d } from './sortie-spatial-adapter.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -45,7 +46,8 @@ const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-const TWIN_CONE = Math.PI / 6;
+const SORTIE_BOSS_RADIUS = scaleTravel(14);
+export const TWIN_CONE = Math.PI / 6;
 const TWIN_MUZZLE = 6;
 const LOCK_RANGE = WEAPONS.twin.tuning.range;
 const REVERSAL_WINDOW = 120;
@@ -999,7 +1001,10 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
-        const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+        const bossContact = enemy.sortieBoss && segmentSphereIntersection3d(shot,
+          { x: shot.x + dx, z: shot.z + dz, alt: shot.alt + dy }, enemy, SORTIE_BOSS_RADIUS);
+        const time = enemy.sortieBoss ? bossContact ?? Infinity
+          : altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
         if (time < first) {
           first = time;
           enemyHit = enemy;

@@ -24,6 +24,21 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+- Tightened Ace acceptance from natural 8:00 spawn: a real player twin trajectory reaches the Ace hull within five seconds, four first-minute windows sustain at least three seconds, and 9:00+ cadence is observed. The probe uses live range/cone/muzzle/lead/bolt-life/hull geometry on a forecast clone without damage or actor relocation; trimmed unused spatial exports while retaining used helper signatures.
+- Verification: Ace reengagement 6/6; `npm test` 644/644; `npm run build` `✓ 122 modules transformed.` / `✓ built in 2.00s` (source unchanged after build); `git diff --check` clean. No balance simulation or visual/UI check.
+- State: tests verified; implementation commit/push pending. A follow-up log-only commit will record the implementation hash.
+
+### 2026-11-24 23:32 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+- Review fixes: natural Ace player-hit opportunity and 12s→10s reengagement windows; arena bounds apply while the pilot is inside the arena, with terrain/ceiling checks. Added damageable escorts, repeating commander cross/recovery, rising-ground altitude guard, and consumed 3:35/6:45 swarms. Existing HP/firepower values are unchanged; Survivors replay golden updated.
+- Read-only PR #12 contract alignment: consume exact `midboss` cue shape, send `defeated`/`escaped` completion at the actual tick, and spend threat with `{tick,source,points,bearing}`; only miniboss kills call the pickup hook with observation events. Tests exercise replaceable hooks; shared producer runtime remains separate.
+- Verification: focused 40/40; `npm test` 645/645; `npm run build` `✓ 122 modules transformed.` / `✓ built in 3.25s`. No balance simulation or visual check. State: review pending; no commit or push.
+
+### 2026-11-24 22:19 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+- Implemented the 205/400-second replacement minibosses with existing evolution-carrier hull/reward behavior and adapters for `consumeMidbossCue`, `finishMidbossEncounter`, `trySpendThreat`, and `dropMagnet`; routed Ace attacks through the same threat hook and added reengagement with an actual first gun line and 12s→10s cadence.
+- Added deterministic coverage for cue contracts, trajectories/collision, kill versus retreat, one-time rewards, reengagement windows, threat denial, and deadline damage. `npm test` passed 640/640; `npm run build` passed (122 modules, 3.55 s). No balance simulation or visual check was run.
+- State: done; review pending, no commit or push.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.
