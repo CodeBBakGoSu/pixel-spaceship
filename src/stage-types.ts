@@ -131,6 +131,7 @@ export type Enemy = Position & {
   introAttackDone?: true;
   eventFlight?: Point;
   carrier?: ChestId;
+  sortieBoss?: { eventId: string; id: SortieMinibossKind; startTick: number; role: 'leader' | 'escort' };
   killCredit?: KillCredit;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
@@ -236,7 +237,16 @@ export type Effect = Position & (
 );
 // --- S7e lane ---
 export type AcePhase = 1 | 2 | 3;
-export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number; dodgeGraceUntil?: number };
+export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number;
+  dodgeGraceUntil?: number };
+export type AceReengagement = {
+  phase: 'evade' | 'approach' | 'line';
+  startedAt: number;
+  side: -1 | 1;
+  scheduledLineAt?: number;
+  lineStartedAt?: number;
+  lineUntil?: number;
+};
 export type Ace = Position & {
   id: number;
   kind: 'ace';
@@ -266,6 +276,8 @@ export type Ace = Position & {
   attackAt: number;
   roll: Roll | null;
   rollReadyAt: number;
+  reengageAt?: number;
+  reengagement?: AceReengagement;
   defeatedAt: number | null;
   crashed: boolean;
   burnUntil?: number;
@@ -274,6 +286,26 @@ export type Ace = Position & {
   ionReadyAt?: [number, number, number];
   droneReadyAt?: number;
   aegisReadyAt?: number;
+};
+export type SortieMinibossKind = 'armored-transport' | 'escort-commander';
+export type SortieMinibossCue = {
+  id: SortieMinibossKind;
+  kind: 'midboss';
+  startTick: number;
+  maxDurationTicks: number;
+  threatSource: string;
+};
+export type SortieMiniboss = {
+  cue: SortieMinibossCue;
+  actorId: number;
+  phase: 'cross' | 'turn' | 'charge' | 'recover' | 'line';
+  phaseStartedAt: number;
+  side: -1 | 1;
+  lineUntil: number | null;
+  nextThreatAt: number;
+  escortIds: [number, number];
+  endTick: number | null;
+  outcome: 'defeated' | 'retreated' | null;
 };
 export type Lock = { id: number; progress: number; ready: boolean };
 export type StageState = {
@@ -395,6 +427,8 @@ export type StageState = {
   shots: Shot[];
   effects: Effect[];
   boss: Ace | null;
+  sortieBoss?: SortieMiniboss | null;
+  suppressedSwarmEvents?: number[];
   lock: Lock | null;
   wrongLayer: { id: number; since: number } | null;
   altitudeHint: { delta: number } | null;

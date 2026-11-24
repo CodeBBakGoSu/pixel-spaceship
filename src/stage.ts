@@ -32,11 +32,13 @@ import { applyRunPick, availableEvolutions, banishRunCard, createProgression, ev
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
-import { advanceSwarmEvent } from './swarm-events.ts';
-import { createMidbossSchedule, midbossSpawnsBlocked } from './midboss-schedule.ts';
-import { createThreatBudget } from './threat-budget.ts';
+import { advanceSwarmEvent, suppressSwarmEvent } from './swarm-events.ts';
+import { consumeMidbossCue, createMidbossSchedule, finishMidbossEncounter, midbossSpawnsBlocked } from './midboss-schedule.ts';
+import { createThreatBudget, trySpendThreat } from './threat-budget.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
 import { playerSpatialPoint, spheresOverlap3d } from './spatial.ts';
+import { advanceSortieMiniboss, settleSortieMiniboss, startSortieMiniboss,
+  type SortieBossHooks } from './sortie-bosses.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
 import { ACE } from './data/ace.ts';
@@ -363,7 +365,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
     xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
-    twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
+    twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null,
+    ...(run ? { sortieBoss: null } : {}), lock: null,
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options, ground);
@@ -575,6 +578,13 @@ function pickupEvent(pickup: Pickup, tick: number, sourceEventId?: number) {
     ...(eventSource === undefined ? {} : { sourceEventId: eventSource }) };
 }
 
+export const SORTIE_BOSS_HOOKS: SortieBossHooks = {
+  consumeMidbossCue,
+  finishMidbossEncounter,
+  trySpendThreat,
+  dropMagnet,
+};
+
 function mergeSalvage(state: StageState): void {
   const pickups = state.pickups;
   while (pickups.length > PICKUP_LIMIT) {
@@ -746,9 +756,11 @@ function advanceLegacyPickups(state: StageState, ground: Ground): void {
   });
 }
 
-function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents): void {
+function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents | undefined,
+  sortieHooks: SortieBossHooks): void {
   const p = state.player;
   for (const enemy of state.enemies) {
+    if (enemy.sortieBoss) settleSortieMiniboss(state, enemy, sortieHooks);
     if (!enemy.shotDown) continue;
     const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
     const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
@@ -766,8 +778,9 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
         xp, born: state.tick, reversal: enemy.reversalKill };
     state.pickups.push(salvage);
     events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
-    if (state.run && enemy.carrier) {
-      dropMagnet(state, { sourceEventId: enemy.id, sourceKind: 'elite', position }, events);
+    if (state.run && (enemy.sortieBoss?.role === 'leader' || enemy.carrier)) {
+      sortieHooks.dropMagnet(state, { sourceEventId: enemy.id,
+        sourceKind: enemy.sortieBoss?.role === 'leader' ? 'midboss' : 'elite', position }, events);
     }
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
     if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
@@ -852,7 +865,8 @@ function advanceDestinations(state: StageState, ground: Ground): void {
 
 /** Advance a stage tick or a capture-only terminal step; modals consume input without ticking the sortie. */
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
-  observeSwarm?: SwarmObserver, events?: CombatEvents): void {
+  observeSwarm?: SwarmObserver, events?: CombatEvents,
+  sortieHooks: SortieBossHooks = SORTIE_BOSS_HOOKS): void {
   if (state.pendingFinish) {
     if (input.pause) {
       state.paused = !state.paused;
@@ -968,11 +982,13 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     trimEscorts(state);
     if (state.run) events?.aceArrival?.();
   }
+  startSortieMiniboss(state, ground, sortieHooks);
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
-    advanceChestSpawns(state, ground);
-    // External midboss consumers poll due cues after this tick advances and before this spawn gate.
-    if (!advanceSwarmEvent(state, ground, observeSwarm) && !midbossSpawnsBlocked(state)) {
+    advanceChestSpawns(state, ground, ['first-evolution', 'second-evolution']);
+    const suppressFormations = midbossSpawnsBlocked(state);
+    if (suppressFormations) suppressSwarmEvent(state);
+    else if (!advanceSwarmEvent(state, ground, observeSwarm)) {
       if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
     }
   } else {
@@ -984,6 +1000,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   relocateStragglers(state, ground);
+  advanceSortieMiniboss(state, ground, sortieHooks, events);
   advanceEnemies(state, ground, events, observeSwarm);
   advanceAce(state, ground, events, observeSwarm, pendingSpace);
   advanceRearBombs(state, ground);
@@ -1025,7 +1042,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       }
     }
   }
-  advanceSalvage(state, ground, events);
+  advanceSalvage(state, ground, events, sortieHooks);
   if (state.run && state.hull) applyBillReward(state);
   // --- S7e lane ---
   const defeated = state.hull > 0 && state.boss?.hp === 0;

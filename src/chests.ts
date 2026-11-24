@@ -34,9 +34,14 @@ function carrierSite(ground: Ground, origin: Point, yaw: number, range: number, 
 }
 
 /** The documented chest beat is the carrier's arrival, after its normal fly-in. */
-export function advanceChestSpawns(state: StageState, ground: Ground): void {
+export function advanceChestSpawns(state: StageState, ground: Ground, replaced: readonly ChestId[] = []): void {
   if (!state.run) return;
   const chest = CHESTS[state.chests.next];
+  if (chest && replaced.includes(chest.id)
+    && state.tick >= chest.second * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) {
+    state.chests.next++;
+    return;
+  }
   if (!chest || state.tick < chest.second * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS) return;
   const regular = state.enemies.filter(enemy => enemy.hp > 0 && enemy.kind !== 'gnat');
   const heat = HEAT_TIERS[state.heat];

@@ -50,6 +50,7 @@ export function advanceSwarmEvent(state: StageState, ground: Ground, observe?: S
   if (state.swarmNotice && state.tick >= state.swarmNotice.until) delete state.swarmNotice;
   const event = swarmWindowAt(state.tick / TICKS_PER_SECOND);
   if (!event) return false;
+  if (state.suppressedSwarmEvents?.includes(event.start)) return true;
   if (state.tick === event.start * TICKS_PER_SECOND) launch(state, event, ground, observe);
   if (state.tick === (event.start + event.duration) * TICKS_PER_SECOND) {
     if (!state.run) {
@@ -64,4 +65,12 @@ export function advanceSwarmEvent(state: StageState, ground: Ground, observe?: S
     }
   }
   return true;
+}
+
+export function suppressSwarmEvent(state: StageState): void {
+  const event = swarmWindowAt(state.tick / TICKS_PER_SECOND);
+  if (!event || state.tick < event.start * TICKS_PER_SECOND) return;
+  state.suppressedSwarmEvents ??= [];
+  if (!state.suppressedSwarmEvents.includes(event.start)) state.suppressedSwarmEvents.push(event.start);
+  if (state.swarmNotice && state.swarmNotice.kind !== 'recovery') delete state.swarmNotice;
 }

@@ -3,7 +3,7 @@ import type { Ace, AceTell, Effect, Enemy, Flare, Ground, KillCredit, Point, Pos
 import { ACE } from './data/ace.ts';
 import { reportDamage } from './combat-feedback.ts';
 import { aegisBlocks } from './data/roster.ts';
-import { scaleClimb } from './data/speed.ts';
+import { scaleClimb, scaleTravel } from './data/speed.ts';
 import { BOOST_SPEED } from './flight.ts';
 import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, skimAltitude, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
@@ -28,6 +28,7 @@ export { BANDS } from './bands.ts';
 export const HIT_WINDOW = 8;
 export const MIN_ALTITUDE = skimAltitude();
 export const MAX_ALTITUDE = 230;
+export const SORTIE_BOSS_HIT_RADIUS = scaleTravel(14);
 export const VERTICAL_SPEED = scaleClimb(40);
 export const WIPE_DURATION = 0.15;
 export const BOLT_SPEED = PLAYER_PROJECTILES.boltSpeed;
@@ -48,7 +49,8 @@ const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-const TWIN_CONE = Math.PI / 6;
+const SORTIE_BOSS_RADIUS = scaleTravel(14);
+export const TWIN_CONE = Math.PI / 6;
 const TWIN_MUZZLE = 6;
 const LOCK_RANGE = WEAPONS.twin.tuning.range;
 const REVERSAL_WINDOW = 120;
@@ -1097,6 +1099,10 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
         const time = altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+        const bossContact = enemy.sortieBoss && segmentSphereIntersection3d(shot,
+          { x: shot.x + dx, z: shot.z + dz, alt: shot.alt + dy }, enemy, SORTIE_BOSS_HIT_RADIUS);
+        const time = enemy.sortieBoss ? bossContact ?? Infinity
+          : altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS, window);
         if (time < first) {
           first = time;
           enemyHit = enemy;
