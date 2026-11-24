@@ -130,7 +130,7 @@ function maskCorridor(ctx: CanvasRenderingContext2D, from: ScreenPoint, to: Scre
 }
 
 function maskHazards(ctx: CanvasRenderingContext2D, state: StageState, project: SortieProjection,
-  bossArea: { x: number; y: number; radius: number } | null, unit: number): void {
+  bossArea: { x: number; y: number; radius: number } | null, unit: number, projectSegment?: SortieSegmentProjection): void {
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
   ctx.globalAlpha = 1;
@@ -142,9 +142,15 @@ function maskHazards(ctx: CanvasRenderingContext2D, state: StageState, project: 
   }
   for (const enemy of state.enemies) {
     if (enemy.maneuver?.phase !== 'warning') continue;
-    const from = project(enemy);
-    const target = project({ x: enemy.x, z: enemy.z, alt: BANDS[enemy.maneuver.band] });
-    if (from && target) maskCorridor(ctx, from, target, 12 * unit);
+    const from = { x: enemy.x, z: enemy.z, alt: enemy.alt };
+    const target = { x: enemy.x, z: enemy.z, alt: BANDS[enemy.maneuver.band] };
+    if (projectSegment) {
+      const segment = projectSegment(from, target);
+      if (segment) maskCorridor(ctx, segment.from, segment.to, 12 * unit);
+    } else {
+      const start = project(from), end = project(target);
+      if (start && end) maskCorridor(ctx, start, end, 12 * unit);
+    }
   }
   if (bossArea) maskCircle(ctx, bossArea, bossArea.radius + 12 * unit);
   ctx.restore();
@@ -316,7 +322,7 @@ export class SortieVfx {
         this.drawBombShadows(ctx, state, project, groundAt, unit, density);
       }
     }
-    maskHazards(ctx, state, project, bossArea, unit);
+    maskHazards(ctx, state, project, bossArea, unit, projectSegment);
     ctx.globalAlpha = 1;
   }
 

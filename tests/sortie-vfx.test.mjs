@@ -337,6 +337,43 @@ test('dive-warning mask follows its target altitude without requiring player pro
     && operation.path.some(command => command[0] === 'arc' && command[1] === 80 && command[2] === targetY)));
 });
 
+test('partially visible dive-warning corridors remain masked when an endpoint is offscreen or behind camera', () => {
+  const makeCamera = crossing => {
+    const camera = new PerspectiveCamera(60, 1, 0.1, 200);
+    if (crossing) {
+      camera.position.set(0, BANDS[1] / 2, 1);
+      camera.lookAt(0, BANDS[1], 0);
+    } else {
+      camera.lookAt(0, 0, -1);
+    }
+    camera.updateMatrixWorld(true);
+    return camera;
+  };
+  for (const crossing of [false, true]) {
+    const camera = makeCamera(crossing), enemy = { x: 0, z: crossing ? 0 : 20, alt: 0,
+      maneuver: { phase: 'warning', band: 1, diveAt: 10 } };
+    const project = point => {
+      const projected = new Vector3(point.x, point.alt, -point.z).project(camera);
+      if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1) return null;
+      return { x: (projected.x + 1) * 500, y: (1 - projected.y) * 500 };
+    };
+    const target = { x: enemy.x, z: enemy.z, alt: BANDS[enemy.maneuver.band] };
+    assert.ok(!project(enemy) || !project(target));
+    assert.ok(project(enemy) || project(target));
+    assert.ok(clipProjectSortieSegment(camera, 1000, 1000, enemy, target));
+
+    const observed = state(1);
+    observed.enemies = [enemy];
+    const rendered = context();
+    new SortieVfx(TICKS_PER_SECOND).draw(rendered, observed, project, () => 0, null, false, 'flight', 0,
+      (from, to) => clipProjectSortieSegment(camera, 1000, 1000, from, to));
+    const masks = rendered.operations.filter(operation => operation.type === 'fill'
+      && operation.composite === 'destination-out');
+    assert.ok(masks.some(operation => operation.path.some(command => command[0] === 'moveTo')
+      && operation.path.some(command => command[0] === 'lineTo')), crossing ? 'crossing camera plane' : 'offscreen target');
+  }
+});
+
 test('rail and arc fire draw camera-clipped segments for behind-camera and offscreen endpoints', () => {
   const camera = new PerspectiveCamera(60, 1, 0.1, 100);
   camera.lookAt(0, 0, -1);
