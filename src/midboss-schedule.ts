@@ -60,9 +60,5 @@ export function finishMidbossEncounter(state: StageState, result: MidbossResult)
 export function midbossSpawnsBlocked(state: StageState): boolean {
   const midboss = state.midbossSchedule;
   if (!state.run || !midboss) return false;
-  if (state.tick < midboss.restUntil) return true;
-  const active = midboss.active;
-  if (active && state.tick <= active.startTick + active.maxDurationTicks) return true;
-  const startTick = startTicks[midboss.next];
-  return startTick !== undefined && state.tick >= startTick && state.tick <= startTick + MAX_DURATION_TICKS;
+  return !!midboss.active || state.tick < midboss.restUntil;
 }

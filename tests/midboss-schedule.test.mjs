@@ -9,6 +9,7 @@ const stage = () => createStage(parseStageOptions('?mode=survivors&t=0'), () => 
 test('midboss cues use combat ticks and rest starts from the returned end tick', () => {
   const state = stage();
   state.tick = 205 * TICKS_PER_SECOND;
+  assert.equal(midbossSpawnsBlocked(state), false);
   const first = consumeMidbossCue(state);
   assert.deepEqual(first, {
     id: 'armored-transport', kind: 'midboss', startTick: 205 * TICKS_PER_SECOND,
@@ -25,6 +26,7 @@ test('midboss cues use combat ticks and rest starts from the returned end tick',
   assert.equal(midbossSpawnsBlocked(state), false);
 
   state.tick = 400 * TICKS_PER_SECOND;
+  assert.equal(midbossSpawnsBlocked(state), false);
   const second = consumeMidbossCue(state);
   assert.equal(second?.id, 'escort-commander');
   assert.equal(second?.threatSource, 'midboss:escort-commander');

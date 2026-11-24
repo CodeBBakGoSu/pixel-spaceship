@@ -784,6 +784,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground);
+    // External midboss consumers poll due cues after this tick advances and before this spawn gate.
     if (!advanceSwarmEvent(state, ground, observeSwarm) && !midbossSpawnsBlocked(state)) {
       if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
     }
