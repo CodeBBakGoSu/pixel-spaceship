@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:30 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (merge `aee37b8`, source `2a4d915`, base `b1fa90a`)
+- Merged the continuous-flight base into the Aegis renderer; resolved the sole `docs/WORKLOG.md` conflict additively, retaining both sides' entries. Aegis activation and `radius ± halfWidth` / `player.alt ± halfWidth` verdict semantics are unchanged.
+- Verification: `npm test` 648/648; `npm run build` passed (123 modules, 2.15 s). State: done.
+
 ### 2026-11-25 00:17 KST · 데븐 봇 · candidate validation follow-up
 - The first full run found the intentional Survivors seeker behavior change no longer matched its previous seed-1 terminal hash. Reproduced both fidelity-rendering settings: both clear with identical hash `f0b5e5c44f5033d6edf2a94249970287cabe1d0b81635ec0d4ee5c3688ee569d`; refreshed only the Survivors hash. The Legacy golden remains unchanged and passed.
 - Fixed the strict TypeScript optional seeker-velocity input; rebuilt the generated bundle and verified the new EN/KO quest copy is present with obsolete copy absent.
