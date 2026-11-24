@@ -247,6 +247,7 @@ export type StageState = {
   phase: 'title' | 'playing' | 'draft' | 'chest' | Outcome;
   paused: boolean;
   resultPending: Outcome | null;
+  pendingFinish?: { outcome: Outcome; terminalTick: number; settlementTick: number };
   seed: number;
   rng: number;
   streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }> & { magnetDrop?: { rng: number } };

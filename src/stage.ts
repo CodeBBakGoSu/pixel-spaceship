@@ -133,7 +133,11 @@ function finishDraft(state: StageState, id?: DraftId): void {
 function resumePlay(state: StageState): void {
   const pending = state.resultPending;
   const nextCost = requiredXp(state.level, !!state.run);
-  if (nextCost !== null && state.xp >= nextCost) {
+  const captured = state.run && state.pickups.some(pickup => pickup.capture);
+  if (pending && captured) {
+    state.resultPending = null;
+    finish(state, pending);
+  } else if (nextCost !== null && state.xp >= nextCost) {
     openDraft(state, pending);
   } else {
     state.resultPending = null;
@@ -363,9 +367,18 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   return state;
 }
 
-function finish(state: StageState, outcome: Outcome): void {
+function finish(state: StageState, outcome: Outcome, terminalTick = state.tick): void {
+  if (state.run && state.pickups.some(pickup => pickup.capture)) {
+    state.pendingFinish = { outcome, terminalTick, settlementTick: terminalTick };
+    state.resultPending = null;
+    state.phase = 'playing';
+    state.boosting = false;
+    state.paused = false;
+    return;
+  }
   state.phase = outcome;
   state.boosting = false;
+  state.resultPending = null;
   const hits = state.hitsTaken;
   state.rank = hits === 0 ? 'S' : hits <= 2 ? 'A' : hits === 3 ? 'B' : 'C';
   if (outcome === 'clear') state.score += ACE.defeat.score;
@@ -373,7 +386,7 @@ function finish(state: StageState, outcome: Outcome): void {
     const settlement = settleRun(state.profile, state.metrics, {
       outcome, score: state.score, credits: state.run.credits, heat: state.heat,
     });
-    state.summary = { seconds: state.tick / TICKS_PER_SECOND, aceCache: outcome === 'clear',
+    state.summary = { seconds: terminalTick / TICKS_PER_SECOND, aceCache: outcome === 'clear',
       credits: state.daily ? 0 : settlement.credits, unlocked: state.daily ? [] : settlement.unlocked };
     if (!state.daily) state.profile = settlement.profile;
   }
@@ -578,7 +591,8 @@ function mergeSalvage(state: StageState): void {
 }
 
 // --- S7d lane ---
-function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 'skim'>): { xp: number; credits: number } {
+function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 'skim'>,
+  tick = state.tick): { xp: number; credits: number } {
   const beacon = buffTuning(state, 'salvage-beacon');
   const xpScale = state.run ? SURVIVOR_XP_SCALE * billXpScale(state) * state.hangar.xpScale : 1;
   const adjusted = pickup.xp * (beacon?.xpScale ?? 1) * xpScale + state.xpRemainder;
@@ -590,7 +604,7 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
   if (state.run) {
     state.run.credits += credits;
     state.metrics.orbs++;
-    noteBillPickup(state, pickup);
+    noteBillPickup(state, pickup, tick);
   }
   const band = pickup.skim ? 0 : fixedBand(pickup.alt);
   state.salvageBands[band] += pickup.xp;
@@ -602,9 +616,9 @@ function reportPickupContact(events: CombatEvents | undefined, pickup: Pickup, t
 }
 
 function reportPickupCollected(state: StageState, pickup: Pickup, events: CombatEvents | undefined,
-  sourceAlt = pickup.capture?.origin.alt ?? pickup.alt): void {
-  const reward = creditSalvage(state, { ...pickup, alt: sourceAlt });
-  events?.pickupCollected?.({ ...pickupEvent(pickup, state.tick), ...reward,
+  sourceAlt = pickup.capture?.origin.alt ?? pickup.alt, tick = state.tick): void {
+  const reward = creditSalvage(state, { ...pickup, alt: sourceAlt }, tick);
+  events?.pickupCollected?.({ ...pickupEvent(pickup, tick), ...reward,
     playerPosition: { x: state.player.x, z: state.player.z, alt: state.player.altitude } });
 }
 
@@ -622,21 +636,25 @@ function capturePickup(state: StageState, pickup: Pickup, range: number): void {
   delete pickup.collected;
 }
 
-function advanceCapturedPickup(state: StageState, pickup: Pickup, events?: CombatEvents): boolean {
+function advanceCapturedPickup(state: StageState, pickup: Pickup, events?: CombatEvents, tick = state.tick): boolean {
   const p = state.player, { capturedAtTick, arriveAtTick, origin, curve } = pickup.capture!;
   const duration = Math.max(1, arriveAtTick - capturedAtTick);
-  const progress = clamp((state.tick - capturedAtTick) / duration, 0, 1);
+  const progress = clamp((tick - capturedAtTick) / duration, 0, 1);
   const arc = Math.sin(Math.PI * progress) * curve.amount;
   pickup.x = origin.x + (p.x - origin.x) * progress + curve.x * arc;
   pickup.z = origin.z + (p.z - origin.z) * progress + curve.z * arc;
   pickup.alt = origin.alt + (p.altitude - origin.alt) * progress;
   pickup.pulling = progress >= SALVAGE_TRAIL_START;
-  if (state.tick < arriveAtTick) return true;
+  if (tick < arriveAtTick) return true;
   pickup.x = p.x;
   pickup.z = p.z;
   pickup.alt = p.altitude;
-  reportPickupCollected(state, pickup, events);
+  reportPickupCollected(state, pickup, events, undefined, tick);
   return false;
+}
+
+function advanceCapturedPickups(state: StageState, events?: CombatEvents, tick = state.tick): void {
+  state.pickups = state.pickups.filter(pickup => !pickup.capture || advanceCapturedPickup(state, pickup, events, tick));
 }
 
 function activateMagnet(state: StageState, magnets: Pickup[], events?: CombatEvents): void {
@@ -805,9 +823,19 @@ function advanceDestinations(state: StageState, ground: Ground): void {
   if (!state.rally && !state.boss && state.tick >= beaconTick(state)) state.rally = findRally(state, ground);
 }
 
-/** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
+/** Advance a stage tick or a capture-only terminal step; modals consume input without ticking the sortie. */
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
   observeSwarm?: SwarmObserver, events?: CombatEvents): void {
+  if (state.pendingFinish) {
+    const pending = state.pendingFinish;
+    pending.settlementTick++;
+    advanceCapturedPickups(state, events, pending.settlementTick);
+    if (!state.pickups.some(pickup => pickup.capture)) {
+      delete state.pendingFinish;
+      finish(state, pending.outcome, pending.terminalTick);
+    }
+    return;
+  }
   if (state.phase === 'chest') {
     if (input.chestPick) resolveChest(state, input.chestPick);
     return;
@@ -854,6 +882,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     for (const effect of state.effects) effect.life -= STEP;
     state.effects = state.effects.filter(effect => effect.life > 0);
     advanceAce(state, ground);
+    advanceCapturedPickups(state, events);
     if (state.boss.crashed || state.tick >= endTick(state)) finish(state, 'clear');
     return;
   }
@@ -973,6 +1002,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     state.boosting = false;
     state.boostRelease = true;
   }
+  else if (outcome && state.run && state.pickups.some(pickup => pickup.capture)) finish(state, outcome);
   else if (cost !== null && state.xp >= cost) openDraft(state, outcome);
   else if (outcome) finish(state, outcome);
 }

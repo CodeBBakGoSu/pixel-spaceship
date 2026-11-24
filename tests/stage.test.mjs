@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activeAce, createStage, dropMagnet, parseStageOptions, stepStage } from '../src/stage.ts';
+import { activeAce, createStage, dropMagnet, endTick, parseStageOptions, stepStage } from '../src/stage.ts';
 import { autopilotInput, seekStage } from '../src/autoplay.ts';
 import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
 import { ROSTER } from '../src/data/roster.ts';
@@ -216,6 +216,112 @@ test('global magnet captures only existing salvage and credits each orb at its h
   for (const event of arrivalEvents) assert.deepEqual(event.position, event.playerPosition);
   stepStage(state, {}, ground);
   assert.equal(state.run.credits, 12, 'global captures are credited exactly once');
+});
+
+test('captured salvage continues to arrive during Ace defeat ticks', () => {
+  const state = stage('?mode=survivors&t=0&fixture=ace');
+  state.enemies = [];
+  const p = state.player, ace = state.boss;
+  assert.ok(ace);
+  ace.defeatedAt = state.tick;
+  ace.alt = ground(ace.x, ace.z) + 100;
+  const pickup = { id: 910, kind: 'salvage', x: p.x + 50, z: p.z + 80, alt: 180, xp: 2, born: state.tick,
+    capture: { capturedAtTick: state.tick, arriveAtTick: state.tick + 2, origin: { x: p.x + 50, z: p.z + 80, alt: 180 },
+      curve: { x: 1, z: 0, amount: 2 } } };
+  const untouched = { id: 911, x: p.x + 900, z: p.z + 900, alt: 180, xp: 5, born: state.tick };
+  state.pickups = [pickup, untouched];
+  const events = [];
+  const observe = { pickupCollected: event => events.push(event) };
+
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.salvage, 0);
+  stepStage(state, {}, ground, undefined, observe);
+
+  assert.equal(state.salvage, 2);
+  assert.equal(state.run.credits, 2);
+  assert.equal(state.phase, 'playing');
+  assert.equal(ace.crashed, false);
+  assert.equal(state.pickups.includes(pickup), false);
+  assert.equal(state.pickups.includes(untouched), true);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].tick, pickup.capture.arriveAtTick);
+  assert.deepEqual(events[0].position, events[0].playerPosition);
+});
+
+test('Ace clear waits for an already-captured orb to reach the hull', () => {
+  const state = stage('?mode=survivors&t=0&fixture=ace');
+  state.enemies = [];
+  const p = state.player, ace = state.boss;
+  assert.ok(ace);
+  ace.defeatedAt = state.tick;
+  ace.alt = -1000;
+  const pickup = { id: 912, kind: 'salvage', x: p.x + 50, z: p.z + 80, alt: 180, xp: 2, born: state.tick,
+    capture: { capturedAtTick: state.tick, arriveAtTick: state.tick + 3, origin: { x: p.x + 50, z: p.z + 80, alt: 180 },
+      curve: { x: 1, z: 0, amount: 2 } } };
+  state.pickups = [pickup];
+  const events = [];
+  const observe = { pickupCollected: event => events.push(event) };
+
+  stepStage(state, {}, ground, undefined, observe);
+  const terminalTick = state.tick;
+  assert.equal(ace.crashed, true);
+  assert.equal(state.pendingFinish?.outcome, 'clear');
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.salvage, 0);
+
+  while (state.pendingFinish) stepStage(state, {}, ground, undefined, observe);
+
+  assert.equal(state.phase, 'clear');
+  assert.equal(state.summary.seconds, terminalTick / 60);
+  assert.equal(state.salvage, 2);
+  assert.equal(state.run.credits, 2);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].tick, pickup.capture.arriveAtTick);
+  assert.deepEqual(events[0].position, events[0].playerPosition);
+});
+
+test('timeout settles only captured salvage without delaying the recorded outcome time', () => {
+  const state = stage('?mode=survivors&t=0');
+  state.enemies = [];
+  state.boss = null;
+  state.chests.drops = [];
+  state.hull = state.maxHull;
+  state.invulnerability = 1000;
+  const p = state.player;
+  const terminalTick = endTick(state);
+  const captured = { id: 920, kind: 'salvage', x: p.x + 300, z: p.z + 300, alt: 180, xp: 3, born: terminalTick - 10,
+    capture: { capturedAtTick: terminalTick - 5, arriveAtTick: terminalTick + 3, origin: { x: p.x + 300, z: p.z + 300, alt: 180 },
+      curve: { x: 1, z: 0, amount: 2 } } };
+  const uncaptured = { id: 921, x: p.x + 1000, z: p.z + 1000, alt: 180, xp: 7, born: terminalTick - 10 };
+  state.pickups = [captured, uncaptured];
+  state.xp = 1_000_000;
+  state.tick = terminalTick - 1;
+  const events = [];
+  const observe = { pickupCollected: event => events.push(event) };
+
+  stepStage(state, {}, ground, undefined, observe);
+  assert.equal(state.tick, terminalTick);
+  assert.equal(state.pendingFinish?.outcome, 'timeout');
+  assert.equal(state.phase, 'playing', 'a terminal level-up draft does not block capture settlement');
+  assert.equal(state.summary, null);
+  assert.equal(state.run.credits, 0);
+  const enemiesAtOutcome = JSON.stringify(state.enemies);
+  const nextIdAtOutcome = state.nextId;
+
+  while (state.pendingFinish) stepStage(state, {}, ground, undefined, observe);
+
+  assert.equal(state.phase, 'timeout');
+  assert.equal(state.tick, terminalTick);
+  assert.equal(state.summary.seconds, terminalTick / 60);
+  assert.equal(state.salvage, 3);
+  assert.equal(state.run.credits, 3);
+  assert.equal(state.pickups.includes(uncaptured), true);
+  assert.equal(uncaptured.capture, undefined);
+  assert.equal(JSON.stringify(state.enemies), enemiesAtOutcome, 'terminal settlement performs no enemy combat or spawns');
+  assert.equal(state.nextId, nextIdAtOutcome);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].tick, terminalTick + 3);
+  assert.deepEqual(events[0].position, events[0].playerPosition);
 });
 
 test('close planar salvage at a different altitude still follows a capture deadline to the ship', () => {
