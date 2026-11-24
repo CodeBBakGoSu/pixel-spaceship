@@ -32,10 +32,13 @@ for (const [width, height] of sizes) for (const cueSize of [
 for (const [width, height] of sizes) {
   test(`simultaneous dive and Aegis cues use distinct free slots at ${width}x${height}`, () => {
     const layout = phoneLayout(width, height, safe, 'chase', true);
-    const aegis = findTouchCueRect(layout, { width: 160, height: 44 });
+    const [aegis, diveSlot] = findTouchCueRects(layout, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]);
     assert.ok(aegis);
+    assert.ok(diveSlot);
+    const occlusion = touchControlOcclusionRect(layout, { width, height });
     const dive = touchOcclusionCue(layout, { x: width / 2, y: 20 },
-      { x: width / 2, y: layout.controls.y + layout.controls.height / 2 }, { width: 48, height: 40 }, 8, [aegis]);
+      { x: width / 2, y: layout.controls.y + layout.controls.height / 2 }, TOUCH_THREAT_CUE_SIZE,
+      8, occlusion, [aegis], diveSlot);
     assert.ok(dive);
     assert.equal(overlaps(aegis, dive.rect), false);
     assert.equal(overlaps(layout.playfield, aegis), false);

@@ -85,6 +85,7 @@ const touchThreatCue = $('#touch-threat-cue');
 const aegisVolumeCue = $('#aegis-volume-cue');
 const aegisVolumeInner = $('#aegis-volume-cue-inner');
 let aegisCueSlot: Rect | null = null;
+let touchThreatCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -470,6 +471,7 @@ function layoutFlight(): void {
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
   const cueSlots = phone ? findTouchCueRects(phone, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]) : [];
   aegisCueSlot = cueSlots[0] ?? null;
+  touchThreatCueSlot = cueSlots[1] ?? null;
   if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
   aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
@@ -797,14 +799,15 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
   if ((message === 'hud.enemyDive' || message === 'hud.interceptorDive') && touch && phone && scene
-    && state.phase === 'playing' && !state.paused && warning?.maneuver?.phase === 'warning') {
+    && touchThreatCueSlot && state.phase === 'playing' && !state.paused && warning?.maneuver?.phase === 'warning') {
     const target = { x: warning.x, z: warning.z, alt: BANDS[warning.maneuver.band] };
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact(target, projectedTarget);
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
     if (projectedTarget.depth > 0.05 && projectedPlayer.depth > 0.05) {
-      const blocked = !aegisVolumeCue.hidden && aegisCueSlot ? [aegisCueSlot] : [];
-      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, { width: 48, height: 40 }, 8, blocked);
+      const reserved = aegisCueSlot ? [aegisCueSlot] : [];
+      const cue = touchOcclusionCue(phone, projectedPlayer, projectedTarget, TOUCH_THREAT_CUE_SIZE,
+        8, phone.controls, reserved, touchThreatCueSlot);
       if (cue) {
         setRect('touch-threat-cue', cue.rect);
         touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
