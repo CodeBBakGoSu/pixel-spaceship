@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-24 23:25 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`8660bad`, `f53b12d`, `9132b3c`, `1076849`, `f2499f7`; based on `2437b8c`)
+- Fixed five review regressions in separate commits: bomber formation IDs, authoritative Ace weapon IDs, lane-safe ion wakes, target-altitude dive masks, and camera-clipped rail/arc segments. Added focused regressions without changing gameplay state.
+- Focused VFX suite passed 22/22; build passed (121 modules, 3.58s); `git diff --check` was clean. Initial PR #10 CI snapshot: 0 passed, 0 failed, 1 pending (`Devin Review`); no post-fix CI result yet.
+- State: scoped fixes and this entry are complete on the candidate branch; no merge or public deployment. Visual/mobile comparison and physical-device verification remain unverified.
+
 ### 2026-11-24 22:43 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (based on 09e2890)
 - Corrected the VFX review gaps: only damage observers create H cues, fire accents and live trails use actual projectile positions, formation grouping stays open through its tick window, reduced motion suppresses optional movement, hazard masking protects bullets/dive corridors/boss silhouette, and terminal D04 advances after simulation stops.
 - Added focused regression coverage; `node --experimental-strip-types --test tests/sortie-vfx.test.mjs` passed 17/17 and `npm run build` passed (121 modules, 2.21s).
