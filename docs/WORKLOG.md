@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2005000`, based on `88fb590`)
+- Fixed the carry/anchor overlap: accepted rAF elapsed plus carry still determines the number of fixed steps, while active Ace audio maps step i directly to the retained schedule time for `state.tick + i + 1`. Without an audio anchor, step times retain the rAF-prefix and hitstop-floor mapping; elapsed/FPS timing and the 0.2s cap are unchanged.
+- Added the 120Hz zero-step/8.33ms-carry case: C at 1012.67ms now maps to 1016.67ms instead of the incorrect 1008.33ms and cancels at the fire tick. Tests also cover 90/144/240Hz counts, actual scheduled source timing at cue+2ms near fire, 4/20/40ms render costs, and retain the 4fps 12-step cap/cue regression.
+- Focused Ace/flight/audio tests passed 68/68; build passed (120 modules, 3.05s); `git diff --check` was clean. Full suite and UI remain deferred until clean review; no base merge or deployment.
+- State: implementation and focused verification complete; pushing with this Worklog entry.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2bcfbe0`, based on `279f8bd`)
 - Kept `previousTime` on the rAF timeline and mapped input boundaries through the retained CombatAudio tick/AudioContext/performance anchor; an actual scheduled source-start regression covers two audio updates/frame and 4/20/40ms render costs with C at cue+2ms. The 60Hz/10s clock test now retains all 600 ticks.
 - A due action clears pending Space grace only when its `spaceAt` matches that request; C at 1175ms no longer consumes W+Space at 1190ms before the 1270ms chord deadline, preserving grace at fire tick 1200. Gameplay timing and the 0.2s elapsed cap are unchanged.
