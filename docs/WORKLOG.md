@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review boundary fix; 75f977a)
+- Reproduced outside-to-inside arena projections (miniboss actor 343.299 units, Ace 107 units). Re-entry tests now assert under-10-unit movement for the miniboss, both escorts and Ace; natural in-arena bounds remain covered. Ace tests explicitly distinguish predicted Twin geometry windows from actual fire ticks, projectiles and hits.
+- Combined follow-up tree verification: focused Ace/miniboss/strafe/replay tests 40/40; `npm test` 653/653; `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory); `git diff --check` clean. HP/firepower unchanged; no balance sweep. Boundary fix is committed; the separate dive Twin collision fix and follow-up push are pending.
+
 ### 2026-11-25 00:27 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (replay golden follow-up; f884192)
 - The full suite exposed one Survivors replay-hash mismatch after the reviewed transport/collision changes (`c22dfa...` → `52ac4c...`); updated only the gameplay golden, with the legacy hash retained. Focused `tests/s7f-replay.test.mjs` passed 2/2; final `npm test` passed 649/649.
 - `npm run build` passed (122 modules, 4.43s; Vite reported its >500 kB chunk advisory); source did not change after that build. `git diff --check` is clean. No balance simulation or visual/UI check. All fixes are local; push and CI verification pending.
