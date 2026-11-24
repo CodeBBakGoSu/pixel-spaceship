@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 KST · 데븐 봇 · `devin/1795538065-pr15-mobile-followup` (base `eed2087`; `f99d20d`, `e815833`, `b27c7e2`, `27f950c`, `5e8b123`, `0bf4b46`, `e8fb690`, `920b92c`, `a16ced3`, `e6cc023`, `48d4c71`, `4190f32`)
+- Cherry-picked PR #15 follow-ups onto the current continuous-flight base containing merged PR #15; verified the radial `radius ± halfWidth` and vertical `alt ± halfWidth` collision semantics are unchanged. Shared mobile cues now account for the full touch-panel backdrop, real controls, and distinct edge-derived Aegis/dive slots; the Aegis cue uses the overhead render plane, and the dive cue follows active descent with a cockpit fallback.
+- Verification: focused layout/Aegis tests passed 70/70; `npm run build` passed (132 modules, 2.27 s; nonfatal chunk-size advisory). No browser/device validation was performed.
+- State: this new branch isolates the follow-up for review; the merged PR #15 branch remains at `61211d3` from the earlier push, and PR #10 remains at `870c3a1`.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (PR #14 tip `5ae6c27e0194dc404ad76c5e870afbfe37c02e5b`)
 - Integrated the updated boss reapproach, carrier return, and Twin collision fixes while retaining the candidate's `{x,z,alt}` flight envelope and shared `SORTIE_BOSS_HIT_RADIUS` collision for ordinary and piercing shots. Collection integration now preserves cross-altitude baseline planar capture while Magnet Core's expanded radius remains altitude-gated; refreshed only the Survivors replay hash (`be8fcd6d…`), leaving Legacy unchanged.
 - Verification: focused boss/replay 19/19; pickup/loadout/stage/VFX/replay 58/58; `npm run build` passed (132 modules, 1.79s; nonfatal chunk advisory); `npm test` 753/753. Mobile moving-screen review and balance/outcome measurement remain pending; no final acceptance claimed.
