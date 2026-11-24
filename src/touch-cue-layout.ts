@@ -4,6 +4,9 @@ export type ScreenPoint = { x: number; y: number };
 export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
+export const AEGIS_CUE_SIZE: CueSize = Object.freeze({ width: 160, height: 44 });
+export const TOUCH_THREAT_CUE_SIZE: CueSize = Object.freeze({ width: 48, height: 40 });
+
 type TouchLayout = Pick<PhoneLayout,
   'controls' | 'playfield' | 'dashboard' | 'pause' | 'audio' | 'stick' | 'stickLabel' | 'loop' | 'roll' | 'boost' | 'view'>;
 
@@ -23,21 +26,45 @@ function contains(outer: Rect, inner: Rect): boolean {
 export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4, reserved: readonly Rect[] = []): Rect | null {
   const { controls } = layout;
   if (![size.width, size.height, gap].every(Number.isFinite) || size.width <= 0 || size.height <= 0 || gap < 0) return null;
-  const centeredX = controls.x + (controls.width - size.width) / 2;
-  const xCandidates = [...new Set([centeredX, controls.x + gap, controls.x + controls.width - size.width - gap])]
-    .sort((a, b) => Math.abs(a - centeredX) - Math.abs(b - centeredX));
-  const top = controls.y + gap, middle = controls.y + (controls.height - size.height) / 2;
-  const bottom = controls.y + controls.height - size.height - gap;
-  const yCandidates = [...new Set([top, middle, bottom])].sort((a, b) => a - b);
   const targets = [...TOUCH_TARGETS.map(key => layout[key]), ...(layout.dashboard ? [layout.dashboard] : []), ...reserved];
+  const xCandidates = edgeCandidates(controls.x, controls.width, size.width, targets, 'x', gap);
+  const yCandidates = edgeCandidates(controls.y, controls.height, size.height, targets, 'y', gap);
 
   for (const y of yCandidates) for (const x of xCandidates) {
     const rect = { x, y, width: size.width, height: size.height };
     if (!contains(controls, rect) || overlaps(rect, layout.playfield)) continue;
-    if (targets.some(target => overlaps(rect, target))) continue;
+    if (targets.some(target => overlaps(rect, expand(target, gap)))) continue;
     return rect;
   }
   return null;
+}
+
+function expand(rect: Rect, margin: number): Rect {
+  return { x: rect.x - margin, y: rect.y - margin, width: rect.width + margin * 2, height: rect.height + margin * 2 };
+}
+
+function edgeCandidates(origin: number, extent: number, size: number, obstacles: readonly Rect[], axis: 'x' | 'y', gap: number): number[] {
+  const start = origin + gap, end = origin + extent - size - gap;
+  if (end < start) return [];
+  const center = (start + end) / 2;
+  const candidates = [start, center, end];
+  for (const obstacle of obstacles) {
+    const obstacleStart = axis === 'x' ? obstacle.x : obstacle.y;
+    const obstacleExtent = axis === 'x' ? obstacle.width : obstacle.height;
+    candidates.push(obstacleStart - size - gap, obstacleStart + obstacleExtent + gap);
+  }
+  return [...new Set(candidates.filter(candidate => Number.isFinite(candidate) && candidate >= start && candidate <= end))]
+    .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
+}
+
+export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[], gap = 4,
+  reserved: readonly Rect[] = []): (Rect | null)[] {
+  const obstacles = [...reserved];
+  return sizes.map(size => {
+    const rect = findTouchCueRect(layout, size, gap, obstacles);
+    if (rect) obstacles.push(rect);
+    return rect;
+  });
 }
 
 export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, margin = 0): boolean {
