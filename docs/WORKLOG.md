@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:04 KST · 데븐 봇 · review finding 0004
+- Reproduced both paths with receding elevated Survivors targets: Twin fired at altitude +35 while a target receded at 240 units/s and missed; Pods fired at altitude +35 while a target receded at 180 units/s and missed. The shots used current-range lead for their horizontal aim/vertical component rather than solving the moving 3D intercept.
+- Twin Cannon and Wing Pods now solve a positive 3D intercept time and align horizontal and vertical projectile velocity to the same future point. Legacy aim behavior is unchanged.
+- Verification: `node --test tests/friendly-intercept.test.mjs` passed 2/2; existing Twin Cannon and Wing Pods cases in `tests/loadout.test.mjs` passed 2/2.
+
 ### 2026-11-25 00:02 KST · 데븐 봇 · review finding 0003
 - Reproduced level-five drone target acquisition across altitude: three bolts spawned at altitudes 110/120/130 toward a target 45 m above the player, but all had `vy=0` and the target remained at 100 HP after 90 ticks.
 - Survivors drone bolts now use a normalized 3D direction to the acquired target; Legacy keeps its horizontal shot path.
