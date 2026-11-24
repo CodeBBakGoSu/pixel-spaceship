@@ -8,7 +8,7 @@ import { MAX_ALTITUDE, HIT_WINDOW, TICKS_PER_SECOND, TWIN_CONE, advanceShots, an
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies } from '../src/stage-enemies.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
-import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
+import { advanceSortieMiniboss, SORTIE_BOSS_HIT_RADIUS, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
 import { World } from '../src/world.ts';
 
 const ground = () => 0;
@@ -105,8 +105,10 @@ test('the armored transport crosses into a real four-second, in-range firing lin
   run(state, TICKS_PER_SECOND);
   assert.ok(actor.x > initialX, 'the transport crosses toward the player rather than flying away');
 
+  const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+  assert.ok(edgeOffset > 6 && edgeOffset < SORTIE_BOSS_HIT_RADIUS);
   const shot = {
-    kind: 'twin', x: actor.x - 30, z: actor.z, alt: actor.alt,
+    kind: 'twin', x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt,
     vx: 1800, vz: 0, life: 1, damage: 1, volley: 1, nearMiss: false, lockId: null,
   };
   state.shots.push(shot);
@@ -128,6 +130,24 @@ test('the armored transport crosses into a real four-second, in-range firing lin
   assert.equal(activeTicks, 4 * TICKS_PER_SECOND);
   assert.equal(state.tick - lineStart, 4 * TICKS_PER_SECOND);
   assert.ok(Math.hypot(actor.x - state.arena.x, actor.z - state.arena.z) <= state.arena.radius - 128 + 1e-6);
+});
+
+test('piercing Twin edge hits use the same 3D miniboss hull as ordinary shots', () => {
+  const state = startEncounter(0);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  for (const enemy of state.enemies) if (enemy.id !== actor.id) enemy.hp = 0;
+  const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+  const hp = actor.hp;
+  const bolt = { remaining: 1, hits: [] };
+  state.shots = [{
+    kind: 'twin', x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt,
+    vx: 1800, vz: 0, life: 1, damage: 1, volley: 77, nearMiss: false, lockId: null, pierce: bolt,
+  }];
+
+  advanceShots(state, ground);
+
+  assert.equal(actor.hp, hp - 1, 'a piercing shot grazing the 3D hull edge still damages the boss');
+  assert.deepEqual(bolt.hits, [actor.id]);
 });
 
 test('seed-1 autoplay transport rejoin sustains a real twin firing arc without actor relocation', () => {

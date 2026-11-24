@@ -24,9 +24,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-25 00:24 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0004; pending commit)
+### 2026-11-25 00:24 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0004; 8259201)
 - Replayed seed 1 through the 205s cue with `autopilotInput`, then held the natural player course straight without moving the actor; baseline entered a `line` state at 214s but sustained actual Twin range/cone/same-altitude geometry for only 110 ticks, not 3 seconds. The UI note's “no line” state-label detail was not reproduced; the firing opportunity gap was.
 - Transport turn now steers to a player-local forward rejoin point and enters `line` only when Twin range/cone/altitude geometry is valid. `tests/sortie-bosses.test.mjs` passed 13/13, including the natural seed-1 flight; `git diff --check` is clean. HP/firepower unchanged.
+
+### 2026-11-25 00:26 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0005; pending commit)
+- `advancePiercingShot` used the ordinary 6-unit hit radius while non-piercing miniboss shots used the 3D sortie-boss sphere. A shared contact helper now applies the same sphere in both paths and bypasses the smaller altitude prefilter for dedicated bosses.
+- Changed the existing ordinary-shot test and added a piercing Twin edge-hit regression at a 10-unit offset; `tests/sortie-bosses.test.mjs` passed 14/14 and `git diff --check` is clean. No balance values changed.
 
 ### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; eab27c6)
 - Reproduced seed 1 at the 205s cue with the pilot outside (x=2393, edge=1792): the transport spawned clipped near x=1653, 765 units from the pilot. `arenaPosition` now preserves player-local coordinates outside the arena and retains the existing in-arena clamp.

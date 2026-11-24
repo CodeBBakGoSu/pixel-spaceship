@@ -784,6 +784,14 @@ function altitudeImpactTime(origin: Position, dx: number, dz: number, dy: number
   return from <= to ? impactTime(origin, dx, dz, target, radius, from, to) : Infinity;
 }
 
+function enemyImpactTime(origin: Position, dx: number, dz: number, dy: number, target: Enemy, window: number): number {
+  if (target.sortieBoss) {
+    return segmentSphereIntersection3d(origin,
+      { x: origin.x + dx, z: origin.z + dz, alt: origin.alt + dy }, target, SORTIE_BOSS_RADIUS) ?? Infinity;
+  }
+  return altitudeImpactTime(origin, dx, dz, dy, target, HIT_RADIUS, window);
+}
+
 export function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
   if (ground(origin.x, origin.z) >= origin.alt) return 0;
   let first = ground(origin.x + dx / 2, origin.z + dz / 2) >= origin.alt + dy / 2 ? 0.5 : 1;
@@ -856,10 +864,11 @@ function advancePiercingShot(
       if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id)) continue;
       if (shot.kind === 'strafe') {
         if (!strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
-      } else if (!dy && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
+      } else if (!enemy.sortieBoss && !dy
+        && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
         continue;
       }
-      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS,
+      const time = enemyImpactTime(shot, dx, dz, dy, enemy,
         isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : window);
       if (time < first) {
         target = enemy;
@@ -1001,10 +1010,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
-        const bossContact = enemy.sortieBoss && segmentSphereIntersection3d(shot,
-          { x: shot.x + dx, z: shot.z + dz, alt: shot.alt + dy }, enemy, SORTIE_BOSS_RADIUS);
-        const time = enemy.sortieBoss ? bossContact ?? Infinity
-          : altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+        const time = enemyImpactTime(shot, dx, dz, dy, enemy, window);
         if (time < first) {
           first = time;
           enemyHit = enemy;
