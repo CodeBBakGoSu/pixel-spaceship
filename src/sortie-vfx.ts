@@ -412,13 +412,15 @@ export class SortieVfx {
   private drawIonWake(ctx: CanvasRenderingContext2D, state: StageState, project: SortieProjection, unit: number, density: number): void {
     const wake = state.ionWake;
     const start = Math.max(1, wake.length - Math.round(MAX_WAKE_SEGMENTS * density));
-    for (let i = start; i < wake.length; i++) {
-      const a = wake[i - 1], b = wake[i];
-      if (a.lane !== b.lane || b.until < state.tick) continue;
-      const from = project(a), to = project(b);
-      if (!from || !to) continue;
-      line(ctx, from.x, from.y, to.x, to.y, i % 2 ? '#71e0cc' : '#d4fff5', 2 * unit,
-        clamp((b.until - state.tick) / 36, 0.12, 0.66));
+    const previousByLane = new Map<number, StageState['ionWake'][number]>();
+    for (let i = 0; i < wake.length; i++) {
+      const b = wake[i], lane = b.lane ?? 0, a = previousByLane.get(lane);
+      if (i >= start && a && b.until >= state.tick) {
+        const from = project(a), to = project(b);
+        if (from && to) line(ctx, from.x, from.y, to.x, to.y, i % 2 ? '#71e0cc' : '#d4fff5', 2 * unit,
+          clamp((b.until - state.tick) / 36, 0.12, 0.66));
+      }
+      previousByLane.set(lane, b);
     }
   }
 

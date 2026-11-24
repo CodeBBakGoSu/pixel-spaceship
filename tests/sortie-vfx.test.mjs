@@ -274,13 +274,13 @@ test('reduced motion suppresses optional projectile, wake, orbit and flare movem
   assert.ok(normal.arcs.some(([x, y]) => x === 10 && y === 20));
 });
 
-test('ion wake strokes never bridge interleaved lanes', () => {
+test('ion wake trails connect every interleaved sample to the previous sample in its lane', () => {
   const observed = state(8);
   observed.ionWake = [
-    { x: 1, z: 11, alt: 2, until: 40, lane: 0 },
+    { x: 1, z: 11, alt: 2, until: 40 },
     { x: 2, z: 12, alt: 2, until: 40, lane: 1 },
-    { x: 3, z: 13, alt: 2, until: 40, lane: 0 },
-    { x: 4, z: 14, alt: 2, until: 40, lane: 0 },
+    { x: 3, z: 13, alt: 2, until: 40 },
+    { x: 4, z: 14, alt: 2, until: 40 },
     { x: 5, z: 15, alt: 2, until: 40, lane: 1 },
     { x: 6, z: 16, alt: 2, until: 40, lane: 1 },
   ];
@@ -290,7 +290,9 @@ test('ion wake strokes never bridge interleaved lanes', () => {
   const wakeStrokes = rendered.operations.filter(operation => operation.type === 'stroke'
     && operation.path.some(command => command[0] === 'lineTo'));
   assert.deepEqual(wakeStrokes.map(operation => operation.path), [
+    [['moveTo', 10, 110], ['lineTo', 30, 130]],
     [['moveTo', 30, 130], ['lineTo', 40, 140]],
+    [['moveTo', 20, 120], ['lineTo', 50, 150]],
     [['moveTo', 50, 150], ['lineTo', 60, 160]],
   ]);
 });
