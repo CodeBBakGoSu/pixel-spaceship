@@ -133,6 +133,7 @@ export type Enemy = Position & {
   crosswing?: {
     mate: number;
     side: -1 | 1;
+    sideYaw?: number;
     phase?: 'warning' | 'crossing' | 'recovery' | 'cancelled';
     until?: number;
     isolationUntil?: number;

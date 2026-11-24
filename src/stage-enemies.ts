@@ -404,8 +404,9 @@ function startCrosswing(state: StageState, first: Enemy, second: Enemy): boolean
     director.sixCrosswingStarted = true;
     director.sixTellUntil = state.tick + 48;
   }
-  const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-  const sx = Math.cos(p.yaw), sz = -Math.sin(p.yaw);
+  const p = state.player, yaw = first.crosswing?.sideYaw ?? p.yaw;
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
+  const sx = Math.cos(yaw), sz = -Math.sin(yaw);
   const center = { x: p.x + fx * scaleTravel(24), z: p.z + fz * scaleTravel(24) };
   for (const fighter of [first, second]) {
     const pair = fighter.crosswing!;
