@@ -13,8 +13,8 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 const ground = () => 0;
 const step = (state, input = {}) => stepStage(state, input, ground);
-function duel() {
-  const state = createStage(parseStageOptions('?fixture=ace&cue=duel&view=chase'), ground);
+function duel(phase = 1) {
+  const state = createStage(parseStageOptions(`?fixture=ace&phase=${phase}&cue=duel&view=chase`), ground);
   for (let i = 0; i < 120 && !state.boss.tell; i++) step(state);
   assert.equal(state.boss.tell?.kind, 'missile');
   assert.ok(state.lock.progress > 0 && !state.lock.ready);
@@ -229,9 +229,11 @@ test('4fps capped catch-up applies post-cue C in the window and prioritizes it o
 });
 
 test('120Hz carry maps C at 1012.67ms to the fire tick and cancels', () => {
-  const state = duel();
-  const until = state.boss.tell.until;
+  const state = duel(2);
+  const noC = duel(2), until = state.boss.tell.until;
+  assert.equal(noC.boss.tell.until, until);
   while (state.tick < until - 1) step(state);
+  while (noC.tick < until - 1) step(noC);
   const stateTick = state.tick, fixedStep = 1 / 60, audioAnchor = 1000, eventTime = 1012.67;
   const audioTimeForTick = tick => audioAnchor + (tick - stateTick) * fixedStep * 1000;
   const firstFrame = simulationStepTimesForFrame(audioAnchor, 1 / 120, 0, fixedStep);
@@ -257,6 +259,16 @@ test('120Hz carry maps C at 1012.67ms to the fire tick and cancels', () => {
   step(state, { roll: true, rollTurn: due.actions[0].action.turn });
   assert.equal(state.tick, until);
   assert.equal(state.boss.tell, null, 'C cancels the tell on the fire tick');
+  assert.equal(state.roll?.elapsed, 0, 'the due C roll was accepted on the fire tick');
+  assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0,
+    'the accepted roll leaves no enemy projectiles');
+
+  step(noC);
+  assert.equal(noC.tick, until);
+  assert.equal(noC.boss.tell, null, 'normal fire also clears the tell');
+  assert.equal(noC.roll, undefined);
+  assert.equal(noC.shots.filter(shot => shot.kind === 'hostile' && shot.hostileKind === 'ace-missile').length, 2,
+    'the same fire tick without C launches both Ace missiles');
 });
 
 test('Space grace survives until C is consumed after the fire tick', () => {
