@@ -14,7 +14,7 @@ import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { CombatAudio } from './combat-audio.ts';
-import { AEGIS_CUE_SIZE, AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS,
+import { AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS,
   aegisOutlineAltitude, shouldShowAegisCue } from './aegis-volume-render.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
@@ -38,7 +38,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { findTouchCueRects, screenPointObscured, touchControlOcclusionRect, TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRects, screenPointObscured, touchControlOcclusionRect,
+  TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
