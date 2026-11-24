@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2bcfbe0`, based on `279f8bd`)
+- Kept `previousTime` on the rAF timeline and mapped input boundaries through the retained CombatAudio tick/AudioContext/performance anchor; an actual scheduled source-start regression covers two audio updates/frame and 4/20/40ms render costs with C at cue+2ms. The 60Hz/10s clock test now retains all 600 ticks.
+- A due action clears pending Space grace only when its `spaceAt` matches that request; C at 1175ms no longer consumes W+Space at 1190ms before the 1270ms chord deadline, preserving grace at fire tick 1200. Gameplay timing and the 0.2s elapsed cap are unchanged.
+- Focused Ace/flight/audio tests passed 64/64; build passed (120 modules, 4.23s); `git diff --check` was clean. Full suite and UI/audio retest remain deferred pending clean review; no base merge or deployment.
+- State: implementation and focused verification complete; pushing with this Worklog entry.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ef94685`, based on `254d002`)
 - Flight-clock rebasing now samples `performance.now()` immediately after every `updateAceLock` call (including render and pause sync), pairing the input-step anchor with the same frame's AudioContext anchor instead of reusing the earlier rAF timestamp.
 - Focused tests passed 33/33; build passed (120 modules, 4.73s). Full suite and live UI/audio verification remain deferred.
