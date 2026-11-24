@@ -805,17 +805,16 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
     if (pickup.capture) {
       return advanceCapturedPickup(state, pickup, events);
     }
-    if (!pickup.collected && !inBand(p.altitude, pickup.alt, HIT_WINDOW)) {
-      pickup.pulling = false;
-      return true;
-    }
     const range = Math.hypot(p.x - pickup.x, p.z - pickup.z);
     if (Math.hypot(p.x - pickup.x, p.z - pickup.z, p.altitude - pickup.alt) <= SALVAGE_RANGE.collect) {
       reportPickupContact(events, pickup, state.tick);
       reportPickupCollected(state, pickup, events);
       return false;
     }
-    if (pickup.collected || pickup.pulling || range <= SALVAGE_RANGE.magnet * (magnet?.radiusScale ?? 1) * magnetScale) {
+    const baseMagnetRange = SALVAGE_RANGE.magnet * magnetScale;
+    const expandedMagnetRange = range <= baseMagnetRange
+      || range <= baseMagnetRange * (magnet?.radiusScale ?? 1) && inBand(p.altitude, pickup.alt, HIT_WINDOW);
+    if (pickup.collected || pickup.pulling || expandedMagnetRange) {
       capturePickup(state, pickup, range, pickup.captureRequestTicks);
       reportPickupContact(events, pickup, state.tick);
     }

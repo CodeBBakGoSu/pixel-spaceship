@@ -1,4 +1,4 @@
-import { STEP, TICKS_PER_SECOND, angleTo, clamp, fireHostile } from './stage-combat.ts';
+import { HIT_WINDOW, STEP, TICKS_PER_SECOND, TWIN_CONE, angleTo, clamp, fireHostile } from './stage-combat.ts';
 import { CARRIER_TUNING } from './data/chest-tuning.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { HOSTILE_SHOT_LIMIT } from './data/run-balance.ts';
@@ -54,13 +54,24 @@ function playerVelocity(state: StageState): SpatialVector {
   };
 }
 
-function arenaPosition(state: StageState, point: SpatialPoint): SpatialPoint {
+function playerInArena(state: StageState): boolean {
+  return Math.hypot(state.player.x - state.arena.x, state.player.z - state.arena.z) <= state.arena.radius;
+}
+
+function arenaPosition(state: StageState, point: SpatialPoint, previous?: SpatialPoint): SpatialPoint {
+  if (!playerInArena(state)) return point;
   const offset = { x: point.x - state.arena.x, z: point.z - state.arena.z, alt: 0 };
   const distance = Math.hypot(offset.x, offset.z);
   const limit = Math.max(0, state.arena.radius - scaleTravel(64));
   if (distance <= limit || distance === 0) return point;
   const bounded = scale3d(normalize3d(offset), limit);
-  return { ...point, x: state.arena.x + bounded.x, z: state.arena.z + bounded.z };
+  const boundedPoint = { ...point, x: state.arena.x + bounded.x, z: state.arena.z + bounded.z };
+  if (previous) {
+    const correction = Math.hypot(point.x - boundedPoint.x, point.z - boundedPoint.z);
+    const movement = Math.hypot(point.x - previous.x, point.z - previous.z);
+    if (correction > movement + 1e-6) return point;
+  }
+  return boundedPoint;
 }
 
 function playerForward(state: StageState): SpatialVector {
@@ -74,7 +85,7 @@ function escortPosition(state: StageState, actor: Enemy, side: number, ground: G
   const forward = { x: Math.sin(actor.yaw), z: Math.cos(actor.yaw), alt: 0 };
   const right = { x: Math.cos(actor.yaw), z: -Math.sin(actor.yaw), alt: 0 };
   const offset = add3d(scale3d(right, scaleTravel(29) * side), scale3d(forward, -scaleTravel(14)));
-  const position = arenaPosition(state, add3d(actor, offset));
+  const position = arenaPosition(state, add3d(actor, offset), actor);
   const terrain = ground(position.x, position.z), floor = terrain + 22;
   return { ...position, alt: clamp(actor.alt, floor, flightCeiling(terrain, true)) };
 }
@@ -111,7 +122,7 @@ function moveEscorts(state: StageState, boss: SortieMiniboss, actor: Enemy, grou
     escort.vz += clamp(wanted.z - escort.vz, -acceleration, acceleration);
     const bounded = arenaPosition(state, {
       x: escort.x + escort.vx * STEP, z: escort.z + escort.vz * STEP, alt: escort.alt,
-    });
+    }, escort);
     escort.x = bounded.x;
     escort.z = bounded.z;
     escort.vx = (escort.x - previous.x) / STEP;
@@ -163,6 +174,13 @@ function desiredVelocity(state: StageState, boss: SortieMiniboss, actor: Enemy):
   const right = { x: forward.z, z: -forward.x, alt: 0 };
   if (boss.cue.id === 'armored-transport') {
     if (boss.phase === 'cross') return add3d(base, scale3d(right, scaleTravel(42)));
+    if (boss.phase === 'turn') {
+      const target = arenaPosition(state, add3d(playerPoint(state), scale3d(forward, ACE_RETURN_DISTANCE)));
+      const delta = { x: target.x - actor.x, z: target.z - actor.z, alt: 0 };
+      const distance = Math.hypot(delta.x, delta.z);
+      const speed = Math.max(scaleTravel(120), Math.hypot(base.x, base.z) + scaleTravel(16));
+      return distance > 0.001 ? scale3d(normalize3d(delta), speed) : base;
+    }
     return base;
   }
   if (boss.phase === 'charge') return add3d(base, scale3d(right, -boss.side * scaleTravel(120)));
@@ -179,7 +197,8 @@ const ACE_RETURN_DISTANCE = scaleTravel(75);
 
 function moveActor(state: StageState, boss: SortieMiniboss, actor: Enemy, ground: Ground): void {
   const wanted = desiredVelocity(state, boss, actor);
-  const acceleration = scaleTravel(boss.phase === 'recover' ? 180 : 45) * STEP;
+  const acceleration = scaleTravel(boss.phase === 'recover'
+    || (boss.cue.id === 'armored-transport' && boss.phase === 'turn') ? 180 : 45) * STEP;
   const previous = { x: actor.x, z: actor.z };
   actor.vx += clamp(wanted.x - actor.vx, -acceleration, acceleration);
   actor.vz += clamp(wanted.z - actor.vz, -acceleration, acceleration);
@@ -187,7 +206,7 @@ function moveActor(state: StageState, boss: SortieMiniboss, actor: Enemy, ground
     x: actor.x + actor.vx * STEP,
     z: actor.z + actor.vz * STEP,
     alt: actor.alt,
-  });
+  }, actor);
   actor.x = bounded.x;
   actor.z = bounded.z;
   const groundHeight = ground(actor.x, actor.z);
@@ -213,7 +232,9 @@ function advancePhase(state: StageState, boss: SortieMiniboss, actor: Enemy): vo
       boss.phase = 'turn';
       boss.phaseStartedAt = state.tick;
     } else if (boss.phase === 'turn' && elapsed >= DURATION.turn
-      && distance3d(actor, playerPoint(state)) <= scaleTravel(WEAPON_RANGE)) enterLine(state, boss);
+      && distance3d(actor, playerPoint(state)) <= scaleTravel(WEAPON_RANGE)
+      && Math.abs(angleTo(state.player.yaw, actor.x - state.player.x, actor.z - state.player.z)) <= TWIN_CONE
+      && Math.abs(actor.alt - state.player.altitude) <= HIT_WINDOW) enterLine(state, boss);
     else if (boss.phase === 'line' && boss.lineUntil !== null && state.tick >= boss.lineUntil) {
       boss.phase = 'turn';
       boss.phaseStartedAt = state.tick;

@@ -10,7 +10,7 @@ import { World } from '../src/world.ts';
 // Survivors seed-1 covers phase timing, pickup rules, magnet drops, production terrain, and the full-view pilot.
 const terminalHashes = {
   legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
-  survivors: 'e27cc07892e1965b655288c4a7530556ec702d5ab2540c83d4feb296b707a62e',
+  survivors: 'be8fcd6d662e3694eb5f95c51d2598ee27e63fabf11aa2173fb5e7aa279d4e5b',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

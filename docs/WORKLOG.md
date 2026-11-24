@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (PR #14 tip `5ae6c27e0194dc404ad76c5e870afbfe37c02e5b`)
+- Integrated the updated boss reapproach, carrier return, and Twin collision fixes while retaining the candidate's `{x,z,alt}` flight envelope and shared `SORTIE_BOSS_HIT_RADIUS` collision for ordinary and piercing shots. Collection integration now preserves cross-altitude baseline planar capture while Magnet Core's expanded radius remains altitude-gated; refreshed only the Survivors replay hash (`be8fcd6d…`), leaving Legacy unchanged.
+- Verification: focused boss/replay 19/19; pickup/loadout/stage/VFX/replay 58/58; `npm run build` passed (132 modules, 1.79s; nonfatal chunk advisory); `npm test` 753/753. Mobile moving-screen review and balance/outcome measurement remain pending; no final acceptance claimed.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`, `7a6adb5`; based on PR #10 `fa45f64`)
 - Added a direction-only cue to the unused safe touch-panel area when the live dive warning's projected target is covered; the world target ring and gameplay verdict remain unchanged.
 - Mobile layout/helper tests passed 57/57; build passed (122 modules, 2.64s; nonfatal chunk-size advisory). State: PR #10 visual QA pending.
@@ -169,6 +173,38 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Implemented approved pickup §3 on the independent candidate: altitude-independent timed salvage, direct magnet drops and collection; public `main` remains untouched.
 - Verification: `npm test` (632 passed) and `npm run build` passed. The configurable 5% drop chance is a balance-review candidate, not final; the baseline has no midboss defeat hook, so `dropMagnet` is available to its future owner.
 - Candidate is uncommitted/unpushed; no public deployment.
+
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review dive Twin collision fix; 26016f1)
+- Reproduced the ordinary non-piercing dive Twin hull-edge miss before the fix. Ordinary dive segments now use the shared 3D sortie-boss contact helper; the piercing path bypasses the narrow strafe-band prefilter for dedicated bosses, keeping both paths on the same hull.
+- The targeted ordinary/piercing dive regression passed 1/1; final focused tests passed 40/40, `npm test` 653/653, and `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory). No HP/firepower changes or balance sweep. Root fixes are separate commits `75f977a` and `26016f1`; push pending.
+
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review boundary fix; 75f977a)
+- Reproduced outside-to-inside arena projections (miniboss actor 343.299 units, Ace 107 units). Re-entry tests now assert under-10-unit movement for the miniboss, both escorts and Ace; natural in-arena bounds remain covered. Ace tests explicitly distinguish predicted Twin geometry windows from actual fire ticks, projectiles and hits.
+- Combined follow-up tree verification: focused Ace/miniboss/strafe/replay tests 40/40; `npm test` 653/653; `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory); `git diff --check` clean. HP/firepower unchanged; no balance sweep. Boundary fix is committed; the separate dive Twin collision fix and follow-up push are pending.
+
+### 2026-11-25 00:27 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (replay golden follow-up; f884192)
+- The full suite exposed one Survivors replay-hash mismatch after the reviewed transport/collision changes (`c22dfa...` → `52ac4c...`); updated only the gameplay golden, with the legacy hash retained. Focused `tests/s7f-replay.test.mjs` passed 2/2; final `npm test` passed 649/649.
+- `npm run build` passed (122 modules, 4.43s; Vite reported its >500 kB chunk advisory); source did not change after that build. `git diff --check` is clean. No balance simulation or visual/UI check. All fixes are local; push and CI verification pending.
+
+### 2026-11-25 00:26 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0005; 4b1b5ec)
+- `advancePiercingShot` used the ordinary 6-unit hit radius while non-piercing miniboss shots used the 3D sortie-boss sphere. A shared contact helper now applies the same sphere in both paths and bypasses the smaller altitude prefilter for dedicated bosses.
+- Changed the existing ordinary-shot test and added a piercing Twin edge-hit regression at a 10-unit offset; `tests/sortie-bosses.test.mjs` passed 14/14 and `git diff --check` is clean. No balance values changed.
+
+### 2026-11-25 00:24 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0004; 8259201)
+- Replayed seed 1 through the 205s cue with `autopilotInput`, then held the natural player course straight without moving the actor; baseline entered a `line` state at 214s but sustained actual Twin range/cone/same-altitude geometry for only 110 ticks, not 3 seconds. The UI note's “no line” state-label detail was not reproduced; the firing opportunity gap was.
+- Transport turn now steers to a player-local forward rejoin point and enters `line` only when Twin range/cone/altitude geometry is valid. `tests/sortie-bosses.test.mjs` passed 13/13, including the natural seed-1 flight; `git diff --check` is clean. HP/firepower unchanged.
+
+### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; eab27c6)
+- Reproduced seed 1 at the 205s cue with the pilot outside (x=2393, edge=1792): the transport spawned clipped near x=1653, 765 units from the pilot. `arenaPosition` now preserves player-local coordinates outside the arena and retains the existing in-arena clamp.
+- Added an external-pilot spawn regression; `tests/sortie-bosses.test.mjs` passed 12/12 and `git diff --check` was clean. No balance values changed; finding 0004 remained in progress.
+
+### 2026-11-25 00:20 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0002; 406c2bd)
+- Reproduced an outside-arena pilot (x=2392, arena edge=1792): after ten seconds of approach Ace remained at x=1761 with 631-unit separation because the rejoin target was clamped back inside. Approach now clamps only while the pilot is in-arena; existing in-arena bound coverage is retained.
+- Added the external-pilot regression; Ace/reengagement/checkpoint regressions passed 50/50 and `git diff --check` was clean. No balance values changed; findings 0004–0005 remained in progress.
+
+### 2026-11-25 00:18 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0001; 866deba)
+- Reproduced a far transport receiving a generic fly-in entry after 156 far ticks; `advanceEnemies` skipped the sortieBoss entry for 240 ticks and `hurtEnemy` left HP unchanged. `relocateStragglers` now skips dedicated sortie-boss actors.
+- Added a regression asserting far-actor recycling cannot leave the boss invulnerable; `tests/sortie-bosses.test.mjs` passed 11/11 and `git diff --check` was clean. No balance values changed; remaining review findings are still in progress.
 
 ### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; implementation commit `587683981def20f8554a2aa9df0a7321de35c581`)
 - Tightened Ace acceptance from natural 8:00 spawn: a real player twin trajectory reaches the Ace hull within five seconds, four first-minute windows sustain at least three seconds, and 9:00+ cadence is observed. The probe uses live range/cone/muzzle/lead/bolt-life/hull geometry on a forecast clone without damage or actor relocation; trimmed unused spatial exports while retaining used helper signatures.

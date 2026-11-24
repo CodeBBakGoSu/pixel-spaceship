@@ -143,7 +143,8 @@ function playerInArena(state: StageState): boolean {
 }
 
 function keepReengagementInBounds(state: StageState, ace: Ace, previous: { x: number; z: number }): void {
-  if (!playerInArena(state)) {
+  const previousDistance = Math.hypot(previous.x - state.arena.x, previous.z - state.arena.z);
+  if (!playerInArena(state) || previousDistance > state.arena.radius) {
     ace.vx = (ace.x - previous.x) / STEP;
     ace.vz = (ace.z - previous.z) / STEP;
     return;
@@ -205,7 +206,8 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
     : p.x + (p.vx ?? 0) * targetLead;
   const targetZ = reengagement ? p.z + forwardPath.z * ahead - forwardPath.x * sideStep
     : p.z + (p.vz ?? 0) * targetLead;
-  const target = reengagement ? boundToArena(state, targetX, targetZ) : { x: targetX, z: targetZ };
+  const target = reengagement && playerInArena(state)
+    ? boundToArena(state, targetX, targetZ) : { x: targetX, z: targetZ };
   const acceleratingRejoin = reengagement?.phase === 'approach'
     && (target.x - ace.x) * forwardPath.x + (target.z - ace.z) * forwardPath.z > 0;
 

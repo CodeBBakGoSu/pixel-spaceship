@@ -850,6 +850,13 @@ function altitudeImpactTime(state: StageState, origin: Position, dx: number, dz:
   return from <= to ? impactTime(origin, dx, dz, target, radius, from, to) : Infinity;
 }
 
+function enemyImpactTime(state: StageState, origin: Position, dx: number, dz: number, dy: number, target: Enemy, window: number): number {
+  if (target.sortieBoss) {
+    return impactTime3d(origin, dx, dz, dy, target, SORTIE_BOSS_HIT_RADIUS);
+  }
+  return altitudeImpactTime(state, origin, dx, dz, dy, target, HIT_RADIUS, window);
+}
+
 export function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
   if (ground(origin.x, origin.z) >= origin.alt) return 0;
   let first = ground(origin.x + dx / 2, origin.z + dz / 2) >= origin.alt + dy / 2 ? 0.5 : 1;
@@ -882,8 +889,9 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
     let hit: Enemy | null = null;
     const ace = activeAce(state);
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || (!state.run && !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow))) continue;
-      const time = altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+      if (!enemy.hp || enemy.entry || (!enemy.sortieBoss && !state.run
+        && !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow))) continue;
+      const time = enemyImpactTime(state, shot, dx, dz, dy, enemy, window);
       if (time < first) {
         first = time;
         hit = enemy;
@@ -921,11 +929,12 @@ function advancePiercingShot(
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id)) continue;
       if (shot.kind === 'strafe') {
-        if (!state.run && !strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
-      } else if (!dy && !state.run && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
+        if (!enemy.sortieBoss && !state.run && !strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
+      } else if (!enemy.sortieBoss && !state.run && !dy
+        && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
         continue;
       }
-      const time = altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS,
+      const time = enemyImpactTime(state, shot, dx, dz, dy, enemy,
         isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : window);
       if (time < first) {
         target = enemy;
@@ -1097,10 +1106,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
-        const bossContact = enemy.sortieBoss && segmentSphereIntersection3d(shot,
-          { x: shot.x + dx, z: shot.z + dz, alt: shot.alt + dy }, enemy, SORTIE_BOSS_HIT_RADIUS);
-        const time = enemy.sortieBoss ? bossContact ?? Infinity
-          : altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+        const time = enemyImpactTime(state, shot, dx, dz, dy, enemy, window);
         if (time < first) {
           first = time;
           enemyHit = enemy;

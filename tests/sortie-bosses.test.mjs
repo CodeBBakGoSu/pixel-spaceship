@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { autopilotInput } from '../src/autoplay.ts';
+import { fixedBand } from '../src/bands.ts';
 import { CARRIER_TUNING } from '../src/data/chest-tuning.ts';
+import { WEAPONS } from '../src/data/items.ts';
 import { HEAT_TIERS } from '../src/data/meta.ts';
-import { MAX_ALTITUDE, advanceShots, hurtEnemy, TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { MAX_ALTITUDE, HIT_WINDOW, SORTIE_BOSS_HIT_RADIUS, TICKS_PER_SECOND, TWIN_CONE, advanceShots, angleTo, hurtEnemy } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, SORTIE_BOSS_HOOKS, stepStage } from '../src/stage.ts';
+import { advanceEnemies } from '../src/stage-enemies.ts';
+import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS } from '../src/sortie-bosses.ts';
+import { World } from '../src/world.ts';
 
 const ground = () => 0;
 
@@ -77,6 +83,73 @@ test('the miniboss consumer starts only from the shared producer cue', () => {
   });
 });
 
+test('miniboss spawn stays player-local when an external pilot is outside the arena', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=1'), ground);
+  state.tick = SORTIE_MINIBOSS_CUES[0].startTick - 1;
+  state.chests.next = 1;
+  state.speed = 120;
+  Object.assign(state.player, {
+    x: state.arena.x + state.arena.radius + 600, z: state.arena.z,
+    yaw: Math.PI / 2, vx: 120, vz: 0, altitude: 125,
+  });
+  stepStage(state, {}, ground);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  assert.ok(actor.x > state.arena.x + state.arena.radius + 200,
+    `the boss remains near the external pilot instead of clipping to the arena edge: ${actor.x}`);
+  assert.ok(Math.hypot(actor.x - state.player.x, actor.z - state.player.z) < 400);
+});
+
+test('miniboss and escorts move continuously as an outside pilot re-enters the arena', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=1'), ground);
+  const cue = SORTIE_MINIBOSS_CUES[0];
+  state.tick = cue.startTick - 1;
+  state.chests.next = 1;
+  const edge = state.arena.x + state.arena.radius;
+  state.speed = 0;
+  Object.assign(state.player, {
+    x: edge + 1, z: state.arena.z, yaw: Math.PI / 2,
+    vx: 0, vz: 0, altitude: 125,
+  });
+  stepStage(state, {}, ground);
+
+  const boss = state.sortieBoss;
+  const actors = [boss.actorId, ...boss.escortIds].map(id => state.enemies.find(enemy => enemy.id === id));
+  assert.ok(actors.every(actor => Math.hypot(actor.x - state.arena.x, actor.z - state.arena.z) > state.arena.radius));
+  const previous = actors.map(actor => ({ x: actor.x, z: actor.z }));
+
+  state.player.x = edge + 1;
+  state.player.z = state.arena.z;
+  state.player.vx = 0;
+  state.player.vz = 0;
+  state.player.x -= 2;
+  state.player.vx = -120;
+  state.tick++;
+  advanceSortieMiniboss(state, ground, SORTIE_BOSS_HOOKS);
+
+  for (let index = 0; index < actors.length; index++) {
+    const displacement = Math.hypot(actors[index].x - previous[index].x, actors[index].z - previous[index].z);
+    assert.ok(displacement < 10, `actor ${actors[index].id} moves continuously across the boundary: ${displacement}`);
+  }
+});
+
+test('generic straggler recycling cannot strand a sortie boss in a skipped fly-in entry', () => {
+  const state = startEncounter(0);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  const hp = actor.hp;
+  actor.x = state.player.x + 100000;
+  actor.z = state.player.z;
+  actor.farTicks = 155;
+
+  relocateStragglers(state, ground);
+  assert.equal(actor.entry, undefined);
+  for (let i = 0; i < 240; i++) {
+    state.tick++;
+    advanceEnemies(state, ground);
+  }
+  hurtEnemy(state, actor, 1);
+  assert.equal(actor.hp, hp - 1, 'the dedicated boss remains damageable after generic enemy advancement');
+});
+
 test('the armored transport crosses into a real four-second, in-range firing line inside the arena', () => {
   const state = startEncounter(0);
   const boss = state.sortieBoss;
@@ -91,8 +164,10 @@ test('the armored transport crosses into a real four-second, in-range firing lin
   run(state, TICKS_PER_SECOND);
   assert.ok(actor.x > initialX, 'the transport crosses toward the player rather than flying away');
 
+  const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+  assert.ok(edgeOffset > 6 && edgeOffset < SORTIE_BOSS_HIT_RADIUS);
   const shot = {
-    kind: 'twin', x: actor.x - 30, z: actor.z, alt: actor.alt,
+    kind: 'twin', x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt,
     vx: 1800, vz: 0, life: 1, damage: 1, volley: 1, nearMiss: false, lockId: null,
   };
   state.shots.push(shot);
@@ -114,6 +189,84 @@ test('the armored transport crosses into a real four-second, in-range firing lin
   assert.equal(activeTicks, 4 * TICKS_PER_SECOND);
   assert.equal(state.tick - lineStart, 4 * TICKS_PER_SECOND);
   assert.ok(Math.hypot(actor.x - state.arena.x, actor.z - state.arena.z) <= state.arena.radius - 128 + 1e-6);
+});
+
+test('piercing Twin edge hits use the same 3D miniboss hull as ordinary shots', () => {
+  const state = startEncounter(0);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  for (const enemy of state.enemies) if (enemy.id !== actor.id) enemy.hp = 0;
+  const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+  const hp = actor.hp;
+  const bolt = { remaining: 1, hits: [] };
+  state.shots = [{
+    kind: 'twin', x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt,
+    vx: 1800, vz: 0, life: 1, damage: 1, volley: 77, nearMiss: false, lockId: null, pierce: bolt,
+  }];
+
+  advanceShots(state, ground);
+
+  assert.equal(actor.hp, hp - 1, 'a piercing shot grazing the 3D hull edge still damages the boss');
+  assert.deepEqual(bolt.hits, [actor.id]);
+});
+
+test('ordinary and piercing dive Twin segments use the same 3D miniboss hull', () => {
+  for (const piercing of [false, true]) {
+    const state = startEncounter(0);
+    const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+    for (const enemy of state.enemies) if (enemy.id !== actor.id) enemy.hp = 0;
+    const edgeOffset = SORTIE_BOSS_HIT_RADIUS - 4;
+    const hp = actor.hp;
+    const bolt = { remaining: 1, hits: [] };
+    const shot = {
+      kind: 'strafe', targetBand: fixedBand(actor.alt), targetAltitude: actor.alt,
+      x: actor.x - 30, z: actor.z + edgeOffset, alt: actor.alt + 20,
+      vx: 1800, vz: 0, vy: -1200, life: 1, damage: 1, volley: 78,
+      nearMiss: false, lockId: null, ...(piercing ? { pierce: bolt } : {}),
+    };
+    state.shots = [shot];
+
+    advanceShots(state, ground);
+
+    assert.equal(actor.hp, hp - 1, `${piercing ? 'piercing' : 'ordinary'} dive Twin hits the 3D hull edge`);
+    if (piercing) assert.deepEqual(bolt.hits, [actor.id]);
+  }
+});
+
+test('seed-1 autoplay transport rejoin sustains a real twin firing arc without actor relocation', () => {
+  const options = parseStageOptions('?mode=survivors&autoplay=1&seed=1');
+  const world = new World(options.seed);
+  const terrain = (x, z) => world.height(x, z);
+  const hooks = { ...SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
+  const state = createStage(options, terrain);
+  const cue = SORTIE_MINIBOSS_CUES[0];
+  let weaponsDisabled = false;
+  while (state.tick < cue.startTick) {
+    if (!weaponsDisabled && state.tick === cue.startTick - TICKS_PER_SECOND) {
+      state.twinAt = state.podsAt = state.strafeAt = Number.MAX_SAFE_INTEGER;
+      for (const key of Object.keys(state.weaponFireAt ?? {})) state.weaponFireAt[key] = Number.MAX_SAFE_INTEGER;
+      state.shots = [];
+      weaponsDisabled = true;
+    }
+    stepStage(state, autopilotInput(state, 'full', terrain), terrain, undefined, undefined, hooks);
+  }
+
+  const boss = state.sortieBoss;
+  const actor = state.enemies.find(enemy => enemy.id === boss.actorId);
+  const initial = { x: actor.x, z: actor.z, alt: actor.alt };
+  let streak = 0, longest = 0;
+  for (let i = 0; i < cue.maxDurationTicks && !boss.outcome; i++) {
+    stepStage(state, {}, terrain, undefined, undefined, hooks);
+    const dx = actor.x - state.player.x, dz = actor.z - state.player.z;
+    const inTwinArc = Math.hypot(dx, dz) <= WEAPONS.twin.tuning.range
+      && Math.abs(angleTo(state.player.yaw, dx, dz)) <= TWIN_CONE
+      && Math.abs(actor.alt - state.player.altitude) <= HIT_WINDOW;
+    streak = boss.phase === 'line' && inTwinArc ? streak + 1 : 0;
+    longest = Math.max(longest, streak);
+  }
+
+  assert.notDeepEqual({ x: actor.x, z: actor.z, alt: actor.alt }, initial, 'the seeded flight advances the actor naturally');
+  assert.ok(longest >= 3 * TICKS_PER_SECOND,
+    `expected a sustained line with actual Twin range, cone and altitude geometry; got ${longest} ticks`);
 });
 
 test('transport escorts are damageable enemies and only living escort hulls source volleys', () => {
