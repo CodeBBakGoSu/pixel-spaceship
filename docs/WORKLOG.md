@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review dive Twin collision fix; 26016f1)
+- Reproduced the ordinary non-piercing dive Twin hull-edge miss before the fix. Ordinary dive segments now use the shared 3D sortie-boss contact helper; the piercing path bypasses the narrow strafe-band prefilter for dedicated bosses, keeping both paths on the same hull.
+- The targeted ordinary/piercing dive regression passed 1/1; final focused tests passed 40/40, `npm test` 653/653, and `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory). No HP/firepower changes or balance sweep. Root fixes are separate commits `75f977a` and `26016f1`; push pending.
+
 ### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review boundary fix; 75f977a)
 - Reproduced outside-to-inside arena projections (miniboss actor 343.299 units, Ace 107 units). Re-entry tests now assert under-10-unit movement for the miniboss, both escorts and Ace; natural in-arena bounds remain covered. Ace tests explicitly distinguish predicted Twin geometry windows from actual fire ticks, projectiles and hits.
 - Combined follow-up tree verification: focused Ace/miniboss/strafe/replay tests 40/40; `npm test` 653/653; `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory); `git diff --check` clean. HP/firepower unchanged; no balance sweep. Boundary fix is committed; the separate dive Twin collision fix and follow-up push are pending.
