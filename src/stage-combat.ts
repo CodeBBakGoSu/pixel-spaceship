@@ -49,7 +49,6 @@ const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-const SORTIE_BOSS_RADIUS = scaleTravel(14);
 export const TWIN_CONE = Math.PI / 6;
 const TWIN_MUZZLE = 6;
 const LOCK_RANGE = WEAPONS.twin.tuning.range;
@@ -1098,7 +1097,6 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
-        const time = altitudeImpactTime(state, shot, dx, dz, dy, enemy, HIT_RADIUS, window);
         const bossContact = enemy.sortieBoss && segmentSphereIntersection3d(shot,
           { x: shot.x + dx, z: shot.z + dz, alt: shot.alt + dy }, enemy, SORTIE_BOSS_HIT_RADIUS);
         const time = enemy.sortieBoss ? bossContact ?? Infinity

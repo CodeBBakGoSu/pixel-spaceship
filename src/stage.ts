@@ -366,7 +366,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null,
-    ...(run ? { sortieBoss: null } : {}), lock: null,
+    ...(run ? { sortieBoss: null, midbossSchedule: createMidbossSchedule() } : {}), lock: null,
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options, ground);

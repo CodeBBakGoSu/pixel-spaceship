@@ -1,4 +1,4 @@
-import { STEP, TICKS_PER_SECOND, SORTIE_BOSS_HIT_RADIUS, angleTo, clamp, fireHostile } from './stage-combat.ts';
+import { STEP, TICKS_PER_SECOND, angleTo, clamp, fireHostile } from './stage-combat.ts';
 import { CARRIER_TUNING } from './data/chest-tuning.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { HOSTILE_SHOT_LIMIT } from './data/run-balance.ts';

@@ -35,6 +35,7 @@ test('midboss volleys record shared threat-budget spends under their cue source'
 function startEncounter(index, hooks = SORTIE_BOSS_HOOKS) {
   const cue = SORTIE_MINIBOSS_CUES[index];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ground);
+  state.midbossSchedule.next = index;
   state.tick = cue.startTick - 1;
   state.chests.next = index === 0 ? 1 : 3;
   state.twinAt = state.podsAt = state.strafeAt = Number.MAX_SAFE_INTEGER;

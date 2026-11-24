@@ -15,7 +15,6 @@ import { angleTo, clamp, fireAceSalvo, HIT_WINDOW, impactTime, inBand, MAX_ALTIT
   TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
 import { makeEnemy, spawnEscortGnats } from './stage-enemies.ts';
 import { random, rngStream } from './stage-random.ts';
-import { TICKS_PER_SECOND } from './simulation-time.ts';
 import { HOSTILE_BOLT_LIFE } from './data/hostile-fire.ts';
 import { THREAT_BUDGET, trySpendThreat } from './threat-budget.ts';
 import type { Ace, AceTell, Ground, Position, StageState } from './stage-types.ts';

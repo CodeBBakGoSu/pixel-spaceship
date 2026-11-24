@@ -333,7 +333,8 @@ export type StageState = {
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;
   phaseRepairMask?: number;
-  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'rest'; until: number };
+  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number }
+    | { kind: 'rest'; until: number } | { kind: 'recovery'; until: number };
   bills: BillState;
   lastHitTick: number;
   chests: ChestState;
