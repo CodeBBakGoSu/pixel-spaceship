@@ -228,10 +228,10 @@ test('4fps capped catch-up applies post-cue C in the window and prioritizes it o
   assert.equal(state.boss.tell, null);
 });
 
-test('120Hz carry maps cue+2ms C to the exact next audio tick and cancels at fire', () => {
+test('120Hz carry maps C at 1012.67ms to the fire tick and cancels', () => {
   const state = duel();
-  const windowTick = state.boss.tell.until - ACE.lock.dodgeTicks;
-  while (state.tick < windowTick - 1) step(state);
+  const until = state.boss.tell.until;
+  while (state.tick < until - 1) step(state);
   const stateTick = state.tick, fixedStep = 1 / 60, audioAnchor = 1000, eventTime = 1012.67;
   const audioTimeForTick = tick => audioAnchor + (tick - stateTick) * fixedStep * 1000;
   const firstFrame = simulationStepTimesForFrame(audioAnchor, 1 / 120, 0, fixedStep);
@@ -255,8 +255,8 @@ test('120Hz carry maps cue+2ms C to the exact next audio tick and cancels at fir
   const due = takeDueActionsAtTick(pending, mapped);
   assert.equal(due.actions.length, 1);
   step(state, { roll: true, rollTurn: due.actions[0].action.turn });
-  assert.equal(state.tick, windowTick);
-  assert.equal(state.boss.tell, null, 'C reaches the actual fire tick after the cue boundary');
+  assert.equal(state.tick, until);
+  assert.equal(state.boss.tell, null, 'C cancels the tell on the fire tick');
 });
 
 test('Space grace survives until C is consumed after the fire tick', () => {
