@@ -303,7 +303,7 @@ test('optional VFX are masked after drawing around hostile bullets, dive corrido
   ];
   observed.enemies = [{ x: 8, z: 0, alt: 0, maneuver: { phase: 'warning', band: 0, diveAt: 10 } }];
   const rendered = context();
-  vfx.draw(rendered, observed, point => ({ x: point.x * 10, y: point.z * 10 }), () => 0,
+  vfx.draw(rendered, observed, point => ({ x: point.x * 10, y: point.z * 10 + point.alt }), () => 0,
     { x: 50, y: 50, radius: 16 });
   const masks = rendered.operations.filter(operation => operation.type === 'fill' && operation.composite === 'destination-out');
   assert.ok(masks.some(operation => operation.path.some(command => command[0] === 'arc'
@@ -317,6 +317,22 @@ test('optional VFX are masked after drawing around hostile bullets, dive corrido
     && operation.path.some(command => command[0] === 'moveTo' && operation.path.some(end => end[0] === 'lineTo')));
   assert.ok(trailDrawn >= 0 && maskStart > trailDrawn);
   assert.equal(rendered.globalCompositeOperation, 'source-over');
+});
+
+test('dive-warning mask follows its target altitude without requiring player projection', () => {
+  const observed = state(1);
+  observed.player = { x: 50, z: 60, altitude: 70 };
+  observed.enemies = [{ x: 8, z: 9, alt: 20, maneuver: { phase: 'warning', band: 1, diveAt: 10 } }];
+  const project = point => {
+    if (point.x === observed.player.x && point.z === observed.player.z && point.alt === observed.player.altitude) return null;
+    return { x: point.x * 10, y: point.alt * 2 + point.z };
+  };
+  const rendered = context();
+  new SortieVfx(TICKS_PER_SECOND).draw(rendered, observed, project, () => 0, null);
+  const targetY = BANDS[1] * 2 + observed.enemies[0].z;
+  assert.ok(rendered.operations.some(operation => operation.type === 'fill'
+    && operation.composite === 'destination-out'
+    && operation.path.some(command => command[0] === 'arc' && command[1] === 80 && command[2] === targetY)));
 });
 
 test('actual Ace defeat VFX continues on render time after the simulation clock freezes', () => {

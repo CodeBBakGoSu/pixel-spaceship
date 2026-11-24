@@ -1,4 +1,5 @@
 import type { WeaponId } from './data/items.ts';
+import { BANDS } from './bands.ts';
 import type { Position, Shot, StageState, WeaponFx } from './stage-types.ts';
 
 export const SORTIE_VFX_IDS = [
@@ -135,11 +136,11 @@ function maskHazards(ctx: CanvasRenderingContext2D, state: StageState, project: 
     const screen = project(shot);
     if (screen) maskCircle(ctx, screen, 8 * unit);
   }
-  const player = project({ x: state.player.x, z: state.player.z, alt: state.player.altitude });
-  if (player) for (const enemy of state.enemies) {
+  for (const enemy of state.enemies) {
     if (enemy.maneuver?.phase !== 'warning') continue;
     const from = project(enemy);
-    if (from) maskCorridor(ctx, from, player, 12 * unit);
+    const target = project({ x: enemy.x, z: enemy.z, alt: BANDS[enemy.maneuver.band] });
+    if (from && target) maskCorridor(ctx, from, target, 12 * unit);
   }
   if (bossArea) maskCircle(ctx, bossArea, bossArea.radius + 12 * unit);
   ctx.restore();
