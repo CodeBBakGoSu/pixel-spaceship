@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 23:53 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (이전 후보 `ae1b94c`)
+- Updated the Hangar unlock display name to Focus Lens in English and 초점 렌즈 in Korean. Replaced obsolete band labels with the actual cumulative conditions: 3 kills at a player/target height difference of at least 15 m across sorties, and 3 kills within 5 seconds spanning at least 30 m. The existing metric rules and kill recording already match those conditions.
+- `src/i18n.ts` is the only checked-in locale source; the old generated `dist` bundle contained stale copy, and the Vite build regenerated it with the new strings and no stale phrases. The existing Galmuri11 subset covers all 33 distinct Hangul syllables in the changed Korean text; no font file change was needed.
+- Verification: `node --test tests/i18n.test.mjs tests/loadout.test.mjs` passed 30/30; `npm run build` passed (121 modules, 1.85 s). The PR review fixes are being investigated separately before the candidate is pushed.
+
 ### 2026-11-24 23:37 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
 - Isolated the Legacy replay against detached `09e2890`: the first serialized-state difference at tick 0 was only the progress-metric schema (`multibandWithinFive`/`bandsKilled` vs `heightSpreadWithinFive`/`verticalKills`). Removing profile/daily/run metrics from the behavioral projection produced identical seed-1 simulation state through tick 6770/`clear` on both trees. Added mode-scoped Legacy metric creation/normalization; the Legacy golden is unchanged.
 - Closed the rail endpoint, retained/Ace seeker range+cone, and terrain refresh/rise findings. Aegis now uses a bounded annular cylinder rather than a spherical shell; `scene.ts` still renders the flat `RingGeometry`. An exact-plane trial made seed 2026 lose at tick 30344 after Pods/Aegis was selected at 15784 and evolved at 24255, so the cylinder version was restored; VFX owner alignment of the vertical half-width remains needed.

@@ -21,7 +21,7 @@ test('a new phase sortie draws from the five starter weapons and five starter bu
   assert.deepEqual(state.run.buffs, STARTER_BUFFS);
 });
 
-test('Band Lens widens the Twin capture angle without changing its altitude path', () => {
+test('Focus Lens widens the Twin capture angle without changing its altitude path', () => {
   const state = start();
   state.strafeAt = Infinity;
   const enemy = makeEnemy(state, state.player.x + scaleTravel(55), state.player.z + scaleTravel(85), 1, 'patrol', 0);
