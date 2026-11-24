@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `85d3ebfc40fd280998568d3e44754666b641744e`: Survivors still retains the recovery state used to hold wave-spawn gating, but the HUD hides its inactive `RECOVERY · GLOBAL MAGNET` label; Legacy notice handling and translations remain available.
+- Renderer cadence now follows `pendingFinish.settlementTick` and marks the scene dirty as settlement advances, then returns to the unchanged terminal `state.tick` after finish. This addresses the supplied trace where pickup samples progressed while rendered frames remained gated by the frozen stage clock.
+- Added HUD-mode and render-cadence regressions; kept the Legacy recovery helper path covered. Verification: `npm test` passed 642/642; `npm run build` passed (122 modules); `git diff --check` passed. No fixture/server setup changed; no UI test or CI wait was run.
+
 ### 2026-11-24 23:36 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
 - `190d177db9ecf4bb9fd08786725d77c292ad7d9e`: Terminal capture settlement now handles pause/unpause before advancing. A blur/visibility pause one tick before arrival no longer pays or finalizes outside the normal frame path, where the profile is persisted.
 - Added a regression covering the pause-only call, remaining paused, resume, and later physical arrival; no enemy or spawn behavior changes.
