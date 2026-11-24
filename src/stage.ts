@@ -12,7 +12,7 @@ import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
   flightCeiling, maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
-import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
+import { addBomberEscort, advanceEnemies, formationIdForDefeat, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
 import { advancePhaseDirector } from './phase-director.ts';
 import { random, rngStream } from './stage-random.ts';
@@ -771,7 +771,8 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
     }
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
     if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
-    events?.destroyed?.(enemy.kind, !!enemy.carrier);
+    events?.destroyed?.(enemy.kind, !!enemy.carrier, enemy.id, { x: enemy.x, z: enemy.z, alt: enemy.alt }, state.tick,
+      formationIdForDefeat(enemy), enemy.kind === 'aegis' || enemy.gnatVariant === 'armored');
   }
   if (state.run) mergeSalvage(state);
   state.enemies = state.enemies.filter(enemy => enemy.hp > 0);
@@ -1028,7 +1029,12 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run && state.hull) applyBillReward(state);
   // --- S7e lane ---
   const defeated = state.hull > 0 && state.boss?.hp === 0;
-  if (defeated && state.boss) beginAceDefeat(state, state.boss, events);
+  const firstDefeat = defeated && state.boss?.defeatedAt === null;
+  if (defeated && state.boss) {
+    beginAceDefeat(state, state.boss, events);
+    if (firstDefeat) events?.aceDefeated?.({ id: state.boss.id,
+      position: { x: state.boss.x, z: state.boss.z, alt: state.boss.alt }, tick: state.tick, outcome: 'defeated' });
+  }
   const outcome = state.tick >= endTick(state) ? defeated ? 'clear' : 'timeout' : null;
   const cost = requiredXp(state.level, !!state.run);
   if (!state.hull) finish(state, 'lost');

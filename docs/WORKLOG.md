@@ -23,6 +23,25 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`027fdb5`, `6c069b0`; based on `1ef2fd9`)
+- Restored ion wake continuity by connecting each live sample to its previous sample in the same normalized lane (including lane 0's omitted index). Dive-warning masks now use the scene's clipped segment projection, retaining visible corridors for offscreen targets and camera-plane crossings; added regressions for both cases.
+- Regression repros against `1ef2fd9` failed 2/2; the focused VFX suite then passed 23/23. Build passed (121 modules, 2.18s); `git diff --check` was clean. Build preceded a test-only camera-fixture adjustment; production sources were unchanged afterward.
+- State: two scoped fixes are verified and committed on the candidate branch; no gameplay changes, CI wait, merge, or visual review.
+
+### 2026-11-24 23:25 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`8660bad`, `f53b12d`, `9132b3c`, `1076849`, `f2499f7`; based on `2437b8c`)
+- Fixed five review regressions in separate commits: bomber formation IDs, authoritative Ace weapon IDs, lane-safe ion wakes, target-altitude dive masks, and camera-clipped rail/arc segments. Added focused regressions without changing gameplay state.
+- Focused VFX suite passed 22/22; build passed (121 modules, 3.58s); `git diff --check` was clean. Initial PR #10 CI snapshot: 0 passed, 0 failed, 1 pending (`Devin Review`); no post-fix CI result yet.
+- State: scoped fixes and this entry are complete on the candidate branch; no merge or public deployment. Visual/mobile comparison and physical-device verification remain unverified.
+
+### 2026-11-24 22:43 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (based on 09e2890)
+- Corrected the VFX review gaps: only damage observers create H cues, fire accents and live trails use actual projectile positions, formation grouping stays open through its tick window, reduced motion suppresses optional movement, hazard masking protects bullets/dive corridors/boss silhouette, and terminal D04 advances after simulation stops.
+- Added focused regression coverage; `node --experimental-strip-types --test tests/sortie-vfx.test.mjs` passed 17/17 and `npm run build` passed (121 modules, 2.21s).
+- State: fixes complete on this branch; no commit, push, PR, or visual comparison.
+
+### 2026-11-24 22:25 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (based on 09e2890)
+- Implemented the selected W01–W10 fire/hit and D01–D04 defeat visuals in a bounded render-only overlay, with authoritative outcome observers, pickup adapters, and density-based readability reductions.
+- Added route, anchor, pool/cleanup, pickup-event, Ace-verdict, boss-silhouette, and replay-invariance coverage. npm test passed 637/637; npm run build passed (121 modules, 2.88s).
+- State: done on this branch; no commit, push, PR, or visual comparison.
 
 ### 2026-11-25 00:17 KST · 데븐 봇 · candidate validation follow-up
 - The first full run found the intentional Survivors seeker behavior change no longer matched its previous seed-1 terminal hash. Reproduced both fidelity-rendering settings: both clear with identical hash `f0b5e5c44f5033d6edf2a94249970287cabe1d0b81635ec0d4ee5c3688ee569d`; refreshed only the Survivors hash. The Legacy golden remains unchanged and passed.

@@ -26,6 +26,11 @@ const TERRAIN_HOLD_TICKS = 18;
 const MANTA_DIVE_OFFSET = scaleTravel(30);
 const { span: ESCORT_SPAN, aft: ESCORT_AFT, speedLimit: ESCORT_SPEED } = ROSTER.escort;
 const FLYBY = ROSTER.flyby;
+const bomberFormationIds = new WeakMap<Enemy, number>();
+
+export function formationIdForDefeat(enemy: Enemy): number | undefined {
+  return enemy.formation?.leader ?? bomberFormationIds.get(enemy);
+}
 
 function shotInterval(state: StageState, ticks: number): number {
   return state.run ? Math.round(ticks * REGULAR_FIRE_INTERVAL_SCALE * HEAT_TIERS[state.heat].shotIntervalScale) : ticks;
@@ -136,6 +141,7 @@ export function bomberWingPosition(_state: StageState, bomber: Enemy, ground: Gr
 }
 
 export function addBomberEscort(state: StageState, bomber: Enemy, ground: Ground): void {
+  bomberFormationIds.set(bomber, bomber.id);
   for (const side of [-1, 1]) {
     const { x, z } = bomberWingPosition(state, bomber, ground, side);
     const escort = makeEnemy(state, x, z, 1, 'patrol', bomber.offset);

@@ -1,12 +1,15 @@
 import { COMBAT_FEEDBACK as C } from './data/combat-feedback.ts';
+import type { WeaponId } from './data/items.ts';
 import type { Position, StageState } from './stage-types.ts';
 
-type HitObserver = (id: number, damage: number, critical: boolean, target: Position) => void;
+type HitObserver = (id: number, damage: number, critical: boolean, target: Position, weapon?: WeaponId) => void;
 const observers = new WeakMap<StageState, HitObserver>();
 export const gnatBursts = new WeakSet<object>();
 export function observeDamage(state: StageState, observer: HitObserver): void { observers.set(state, observer); }
-export function reportDamage(state: StageState, id: number, damage: number, critical: boolean, target: Position): void {
-  observers.get(state)?.(id, damage, critical, target);
+export function reportDamage(state: StageState, id: number, damage: number, critical: boolean, target: Position, weapon?: WeaponId): void {
+  const observer = observers.get(state);
+  if (weapon === undefined) observer?.(id, damage, critical, target);
+  else observer?.(id, damage, critical, target, weapon);
 }
 
 export class DamageFeedback {
