@@ -112,7 +112,9 @@ export const BUFFS = {
     { radiusScale: 1.2, extraWindow: 2 }, { radiusScale: 1.4, extraWindow: 4 }, { radiusScale: 1.6, extraWindow: 6 },
   ] },
   'band-lens': { levels: [
-    { extraWindow: 1, railExtraWindow: 0.7 }, { extraWindow: 2, railExtraWindow: 1.4 }, { extraWindow: 3, railExtraWindow: 2.1 },
+    { extraWindow: 1, railExtraWindow: 0.7, captureAngleScale: 1.15, railWidthScale: 1.15 },
+    { extraWindow: 2, railExtraWindow: 1.4, captureAngleScale: 1.3, railWidthScale: 1.35 },
+    { extraWindow: 3, railExtraWindow: 2.1, captureAngleScale: 1.45, railWidthScale: 1.55 },
   ] },
   'vector-thrusters': { levels: [{ agilityScale: 1.08 }, { agilityScale: 1.16 }, { agilityScale: 1.25 }] },
   'flare-bay': { levels: [
@@ -177,15 +179,15 @@ export type ChestId = typeof CHESTS[number]['id'];
 
 export type BillDefinition = { id: string; second: number; duration: number; demand: BillDemand; reward: BillReward };
 type BillDemand =
-  | { kind: 'same-band-kills' | 'ace-wipe' | 'pursuer-kills' | 'high-salvage'; count: number }
+  | { kind: 'forward-kills' | 'ace-wipe' | 'pursuer-kills' | 'any-salvage'; count: number }
   | { kind: 'full-repayment'; kills: number; unharmedSeconds: number };
 type BillReward = { upgrades?: number; rerolls?: number; chestPicks?: number; repair?: number | 'full' };
 export const BILL_UNPAID_XP_SCALE = 0.75;
 export const BILLS = [
-  { id: 'first-levy', second: 60, duration: 40, demand: { kind: 'same-band-kills', count: 3 }, reward: { upgrades: 1 } },
+  { id: 'first-levy', second: 60, duration: 40, demand: { kind: 'forward-kills', count: 3 }, reward: { upgrades: 1 } },
   { id: 'ace-duty', second: 150, duration: 30, demand: { kind: 'ace-wipe', count: 3 }, reward: { rerolls: 1 } },
   { id: 'rear-guard', second: 255, duration: 30, demand: { kind: 'pursuer-kills', count: 3 }, reward: { chestPicks: 3 } },
-  { id: 'high-recovery', second: 345, duration: 30, demand: { kind: 'high-salvage', count: 10 }, reward: { repair: 2, upgrades: 1 } },
+  { id: 'high-recovery', second: 345, duration: 30, demand: { kind: 'any-salvage', count: 10 }, reward: { repair: 2, upgrades: 1 } },
   { id: 'full-repayment', second: 435, duration: 30, demand: { kind: 'full-repayment', kills: 25, unharmedSeconds: 20 },
     reward: { repair: 'full', upgrades: 2 } },
 ] as const satisfies readonly BillDefinition[];

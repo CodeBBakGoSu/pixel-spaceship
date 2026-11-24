@@ -10,7 +10,7 @@ import { ROLL_CHORD_MS, ROLL_TURN_DEADZONE } from './data/roll.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS,
-  maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
+  flightCeiling, maneuverAllowsControl, TRAIL_SAMPLE_TICKS, turnExitBurst } from './maneuvers.ts';
 import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
@@ -23,7 +23,8 @@ import { BUFFS, CHESTS, DRAFT_RULES } from './data/items.ts';
 import { billXpScale, createBillState, finishBillTick, noteBillKill, noteBillPickup, startBillTick } from './bills.ts';
 import { advanceChestSpawns, collectChest, createChestState, dropCarrierChest, rollChestRewards } from './chests.ts';
 import { buffTuning } from './loadout.ts';
-import { aceRank, createRunMetrics, draftPool, hangarLoadout, normalizeHeat, normalizeProfile, settleRun } from './meta.ts';
+import { aceRank, createLegacyRunMetrics, createRunMetrics, draftPool, hangarLoadout, normalizeHeat, normalizeLegacyProfile,
+  normalizeProfile, settleRun } from './meta.ts';
 import { applyRunPick, availableEvolutions, banishRunCard, createProgression, evolveWeapon, openRunDraft,
   rerollRunDraft, rollBonusUpgrade, runXpCost, skipRunDraft, updateRunSlots, type DraftCard } from './progression.ts';
 import { advanceRangedWeapons } from './ranged-weapons.ts';
@@ -31,6 +32,7 @@ import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
 import { advanceSwarmEvent } from './swarm-events.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
+import { playerSpatialPoint, spheresOverlap3d } from './spatial.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
 import { ACE } from './data/ace.ts';
@@ -39,7 +41,7 @@ import { ARENA, BEACON_SIGNAL_SECONDS, findRally, isLandmarkId, LANDMARKS, reach
 import {
   acquireAndFire, advanceAutoOrdnance, advanceEnemyHazards, advanceFlares, advanceRearBombs, advanceShots, angleTo, BANDS, BODY_RADIUS,
   clamp, fireHostile, HIT_WINDOW, hurtPlayer, inBand,
-  MAX_ALTITUDE, MIN_ALTITUDE,
+  MIN_ALTITUDE,
   openReversal, STEP, TICKS_PER_SECOND, WIPE_DURATION,
 } from './stage-combat.ts';
 import type { AcePhase, Band, ChestReward, DraftId, Ground, Maneuver, ManeuverKind, Outcome, Pickup,
@@ -56,6 +58,7 @@ export const beaconTick = (state: Pick<StageState, 'run'>): number =>
   state.run ? RUN_BOSS_TICK - RUN_BEACON_LEAD_SECONDS * TICKS_PER_SECOND : BEACON_SIGNAL_SECONDS * TICKS_PER_SECOND;
 const VIEWS = ['overhead', 'chase', 'cockpit'] as const;
 const seaLevel: Ground = () => 35;
+const SURVIVOR_SPACE_SCALE = 1.5;
 const SALVAGE_RANGE = {
   collect: scaleTravel(8), magnet: scaleTravel(42), pullSpeed: scaleTravel(155),
   gain: scaleTravel(45), reversalGain: scaleTravel(75), altitudeWeight: scaleTravel(20) ** 2,
@@ -316,7 +319,8 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
 export function createStage(options: StageOptions = parseStageOptions(''), ground: Ground = seaLevel): StageState {
   const x = ARENA.x, z = ARENA.z - 85;
   const survivor = options.mode === 'survivors' || (options.fixture === 'ace' || options.fixture === 'flare') && options.mode !== 'legacy';
-  const profile = normalizeProfile(options.profile), daily = survivor && !!options.daily;
+  const profile = survivor ? normalizeProfile(options.profile) : normalizeLegacyProfile(options.profile);
+  const daily = survivor && !!options.daily;
   const hangar = hangarLoadout(profile, daily);
   const rank = options.aceRank ?? aceRank(profile);
   const run = survivor ? createProgression(options.seed, {
@@ -328,7 +332,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   const state: StageState = {
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
-    run, profile, daily, hangar, metrics: createRunMetrics(), killBandTicks: [-1, -1, -1],
+    run, profile, daily, hangar, metrics: run ? createRunMetrics() : createLegacyRunMetrics(),
+    killBandTicks: [-1, -1, -1], ...(run ? { killAltitudeTicks: [] } : {}),
     ejectorUsed: false, summary: null, phaseNotice: null, bills: createBillState(), lastHitTick: -1,
     chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
@@ -338,8 +343,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     streams: { spawn: rngStream(options.seed, 'spawn'), chest: rngStream(options.seed, 'chest'),
       bills: rngStream(options.seed, 'bills'), combat: rngStream(options.seed, 'combat') },
     view: options.view ?? (options.fixture === 'pursuit' || options.fixture === 'flare' ? 'chase' : 'overhead'), initialView: options.view, wipe: 0, viewTag: 0,
-    arena: { ...ARENA }, boundaryWarning: false,
-    player: { x, z, altitude: Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0, pitch: 0 },
+    arena: { ...ARENA, radius: ARENA.radius * (survivor ? SURVIVOR_SPACE_SCALE : 1) }, boundaryWarning: false,
+    player: { x, z, altitude: survivor ? ground(x, z) + 90 : Math.max(BANDS[1], ground(x, z) + 22), yaw: 0, bank: 0, pitch: 0 },
     speed: 0, climbRate: 0, hull, maxHull: hull, hitsTaken: 0, rank: null, invulnerability: 0,
     boost: 1, boosting: false, boostTicks: 0, rearBombs: [], enemyMines: [],
     flares: [], flareHit: null, rearGlimpse: null,
@@ -354,7 +359,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
   if (options.worldFixture) {
     const { x, z, skim } = options.worldFixture;
     const floor = ground(x, z);
-    Object.assign(state.player, { x, z, altitude: skim ? skimAltitude(floor) : Math.max(BANDS[1], floor + FLY_IN_WORLD.clearance) });
+    Object.assign(state.player, { x, z, altitude: skim ? skimAltitude(floor)
+      : state.run ? floor + FLY_IN_WORLD.clearance : Math.max(BANDS[1], floor + FLY_IN_WORLD.clearance) });
     if (skim) state.player.skim = isWater(floor) ? 'water' : 'land';
   }
   updateWorldSites(state, ground);
@@ -381,10 +387,13 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number, grou
   if (state.run) state.metrics.maneuvers++;
   const p = state.player, spec = MANEUVERS[kind];
   // --- S7d lane ---
-  const skimExit = kind === 'split-s' && (p.skim || fixedBand(p.altitude) === 0);
+  const skimExit = kind === 'split-s' && (state.run ? !!p.skim : p.skim || fixedBand(p.altitude) === 0);
   const maneuver: Maneuver = {
     kind, elapsed: 0, yaw: p.yaw,
-    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind, ground(p.x, p.z), !!p.skim), side: turn < 0 ? -1 : 1,
+    altitude: p.altitude, exitAltitude: exitAltitude(p.altitude, kind, ground(p.x, p.z), !!p.skim,
+      !!state.run, flightCeiling(ground(p.x, p.z), !!state.run)), side: turn < 0 ? -1 : 1,
+    ...(state.run ? { altitudeFloor: Math.max(MIN_ALTITUDE, skimAltitude(ground(p.x, p.z))),
+      altitudeCeiling: flightCeiling(ground(p.x, p.z), true) } : {}),
     ...(skimExit ? { skimExit: true as const } : {}),
   };
   if (kind === 'immelmann') delete p.skim;
@@ -406,7 +415,9 @@ function startManeuver(state: StageState, kind: ManeuverKind, turn: number, grou
     const aft = -dx * fx - dz * fz, lateral = dx * fz - dz * fx;
     if (enemy.hp && enemy.kind !== 'turret' && aft > scaleTravel(3) && Math.hypot(dx, dz) <= scaleTravel(190)) trail.pursuers.push(enemy.id);
     warnHarrier(state, enemy, maneuver, aft, lateral, events);
-    if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !inBand(enemy.alt, maneuver.exitAltitude)) continue;
+    const matchesExit = state.run ? Math.abs(enemy.alt - maneuver.exitAltitude) <= BODY_RADIUS * 2
+      : inBand(enemy.alt, maneuver.exitAltitude);
+    if (enemy.kind === 'turret' || enemy.kind === 'skimmer' || enemy.maneuver || !matchesExit) continue;
     if (aft <= 0 || Math.abs(lateral) > aft * Math.tan(25 * Math.PI / 180)) continue;
     if (aft >= scaleTravel(34) && aft <= scaleTravel(140)) {
       const targetAft = scaleTravel(64);
@@ -431,6 +442,7 @@ function reverseHeading(state: StageState, entryYaw: number): void {
 
 function fly(state: StageState, input: StageInput, ground: Ground, grace: boolean, controlled: boolean): void {
   const p = state.player, maneuver = state.maneuver, roll = state.roll;
+  const ceiling = flightCeiling(ground(p.x, p.z), !!state.run);
   if (!input.boost) state.boostRelease = false;
   const boostHeld = controlled && !grace && !!input.boost && !state.boostRelease;
   const priorBoost = state.boosting;
@@ -473,7 +485,7 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
       // Round out the commanded angle using the clearance at the start of the tick.
       const follow = skimAltitude(ground(p.x, p.z));
       const floor = climb < -SKIM.inputThreshold ? follow - SKIM.entryDepth : climb < 0 ? Math.max(MIN_ALTITUDE, follow) : MIN_ALTITUDE;
-      const command = climb * pitchLimitScale(climb, p.altitude, floor, MAX_ALTITUDE);
+      const command = climb * pitchLimitScale(climb, p.altitude, floor, ceiling);
       p.pitch = advancePitch(p.pitch, command, STEP);
     }
     const thrust = state.boosting ? boostAirspeed(state.boostTicks) : CRUISE_SPEED * (1 + turnExitBurst(state));
@@ -498,7 +510,7 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
   if (controlled && !roll) {
     // The residual pitch can still point at the limit after the stick reverses.
     const limit = climb < -SKIM.inputThreshold ? follow - SKIM.entryDepth : floor;
-    const scale = pitchLimitScale(p.pitch, prior, limit, MAX_ALTITUDE);
+    const scale = pitchLimitScale(p.pitch, prior, limit, ceiling);
     altitude = (p.skim ? follow : altitude) + pitchVerticalSpeed(state.speed, p.pitch, agility) * scale * STEP;
   }
   const descending = controlled && !roll && climb < -SKIM.inputThreshold && altitude <= follow;
@@ -512,10 +524,10 @@ function fly(state: StageState, input: StageInput, ground: Ground, grace: boolea
     return;
   }
   if (p.skim) delete p.skim;
-  const hold = clamp(altitude, floor, MAX_ALTITUDE);
+  const hold = clamp(altitude, floor, ceiling);
   if (controlled && !roll) {
     const drop = advanceBankDrop(p.bankDrop ?? 0, p.bank, STEP);
-    p.altitude = clamp(hold - drop, floor, MAX_ALTITUDE);
+    p.altitude = clamp(hold - drop, floor, ceiling);
     // Retain only the drop the terrain clamp allowed, so leveling cannot climb above the hold altitude.
     if (drop || p.bankDrop !== undefined) p.bankDrop = hold - p.altitude;
   } else {
@@ -562,7 +574,7 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
   if (state.run) {
     state.run.credits += pickup.xp * (beacon?.creditScale ?? 1);
     state.metrics.orbs++;
-    noteBillPickup(state, pickup);
+    noteBillPickup(state);
   }
   const band = pickup.skim ? 0 : fixedBand(pickup.alt);
   state.salvageBands[band] += pickup.xp;
@@ -605,7 +617,8 @@ function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents
       return false;
     }
     if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) return false;
-    if (!pickup.collected && !(p.skim && pickup.skim) && !inBand(p.altitude, pickup.alt, HIT_WINDOW + (magnet?.extraWindow ?? 0))) {
+    const pickupWindow = HIT_WINDOW + (state.run ? 0 : magnet?.extraWindow ?? 0);
+    if (!pickup.collected && !(p.skim && pickup.skim) && !inBand(p.altitude, pickup.alt, pickupWindow)) {
       pickup.pulling = false;
       return true;
     }
@@ -649,7 +662,7 @@ function applyBillReward(state: StageState): void {
 // --- S7d lane ---
 export function restoreWorldState(state: StageState, ground: Ground): void {
   if (!state.worldRegion) {
-    Object.assign(state.arena, ARENA);
+    Object.assign(state.arena, ARENA, { radius: ARENA.radius * (state.run ? SURVIVOR_SPACE_SCALE : 1) });
     state.boundaryWarning = false;
     for (const enemy of state.enemies) {
       placeSkimEnemy(enemy, ground);
@@ -821,8 +834,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.tick > state.bodyGraceUntil) {
     const p = state.player;
     for (const enemy of state.enemies) {
-      if (enemy.hp && !enemy.entry && isBodyHazard(enemy) && inBand(enemy.alt, p.altitude)
-        && Math.hypot(enemy.x - p.x, enemy.z - p.z) < BODY_RADIUS) {
+      const contact = state.run ? spheresOverlap3d(playerSpatialPoint(p), 0, enemy, BODY_RADIUS)
+        : inBand(enemy.alt, p.altitude) && Math.hypot(enemy.x - p.x, enemy.z - p.z) < BODY_RADIUS;
+      if (enemy.hp && !enemy.entry && isBodyHazard(enemy) && contact) {
         hurtPlayer(state, enemy, events, enemy.gnatVariant === 'sting' ? GNAT.sting.contactDamage : undefined);
         if (!enemy.carrier) enemy.hp = 0;
       }

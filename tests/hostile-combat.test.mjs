@@ -34,9 +34,9 @@ test('graze fires once on the outgoing same-band near miss without editing the s
   assert.equal(stage.hull, stage.maxHull);
 });
 
-test('off-band and terrain-stopped bullets produce no graze while ground and expiry emit impacts', () => {
+test('vertically separated and terrain-stopped bullets produce no graze while ground and expiry emit impacts', () => {
   const stage = sortie(), { altitude } = stage.player;
-  const offBand = bolt(stage, nearRadius, -1, altitude + HIT_WINDOW + 0.01);
+  const offBand = bolt(stage, nearRadius, -1, altitude + HOSTILE_GRAZE_RADIUS + 1);
   const stopped = bolt(stage, -nearRadius, -1);
   const expired = { ...bolt(stage, 80, 0), life: 0.001 };
   stage.shots.push(offBand, stopped, expired);
@@ -49,9 +49,9 @@ test('off-band and terrain-stopped bullets produce no graze while ground and exp
   assert.deepEqual(stage.shots, [offBand]);
 });
 
-test('a real hit reports actual damage and direction, then opens 60 deterministic ticks of protection', () => {
+test('a true 3D hit reports actual damage and direction, then opens 60 deterministic ticks of protection', () => {
   const stage = sortie();
-  stage.shots.push(bolt(stage, 0, -6, stage.player.altitude + HIT_WINDOW));
+  stage.shots.push(bolt(stage, 0, -6, stage.player.altitude + HOSTILE_HIT_RADIUS / 2));
   const hits = [], impacts = [];
   const events = {
     hit: (...args) => hits.push(args),

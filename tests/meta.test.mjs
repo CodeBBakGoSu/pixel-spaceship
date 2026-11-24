@@ -5,6 +5,7 @@ import {
   aceRank, createProfile, createRunMetrics, dailySeed, draftPool, hangarLoadout, hangarOffer, isHeat,
   normalizeHeat, normalizeProfile, purchaseUpgrade, questProgress, settleRun,
 } from '../src/meta.ts';
+import { createStage, parseStageOptions } from '../src/stage.ts';
 
 const lost = { outcome: 'lost', heat: 0, score: 0, credits: 0 };
 
@@ -33,15 +34,15 @@ test('a live quest unlocks on the exact threshold and persists after settlement'
   assert.deepEqual(settleRun(settled.profile, createRunMetrics(), lost).unlocked, []);
 });
 
-test('single-sortie records never add across attempts while lifetime counters do', () => {
-  const first = { ...createRunMetrics(), weakPointHits: 4, multibandWithinFive: 2, bandsKilled: 0b011, boostTicks: 3000 };
-  const second = { ...createRunMetrics(), weakPointHits: 3, multibandWithinFive: 1, bandsKilled: 0b100, boostTicks: 600 };
+test('single-sortie height-spread records retain their best while vertical kills accumulate', () => {
+  const first = { ...createRunMetrics(), weakPointHits: 4, heightSpreadWithinFive: 2, verticalKills: 2, boostTicks: 3000 };
+  const second = { ...createRunMetrics(), weakPointHits: 3, heightSpreadWithinFive: 1, verticalKills: 1, boostTicks: 600 };
   const { profile } = settleRun(createProfile(), first, lost);
   const byGear = Object.fromEntries(questProgress(profile, second).map(quest => [quest.id, quest]));
   assert.equal(byGear.rail.progress, 4);
   assert.equal(byGear.flak.progress, 2);
-  assert.equal(byGear['band-lens'].progress, 2);
-  assert.equal(byGear['band-lens'].unlocked, false);
+  assert.equal(byGear['band-lens'].progress, 3);
+  assert.equal(byGear['band-lens'].unlocked, true);
   assert.equal(byGear['vector-thrusters'].unlocked, true);
   assert.equal(byGear['vector-thrusters'].progress, 3600);
 });
@@ -49,7 +50,7 @@ test('single-sortie records never add across attempts while lifetime counters do
 test('each of the ten locked pieces is awarded only by its documented demand', () => {
   for (const quest of UNLOCK_QUESTS) {
     const progress = createRunMetrics();
-    progress[quest.metric] = quest.metric === 'bandsKilled' ? 0b111 : quest.target;
+    progress[quest.metric] = quest.target;
     assert.deepEqual(questProgress(createProfile(), progress).filter(item => item.unlocked).map(item => item.id), [quest.id]);
   }
 });
@@ -91,8 +92,20 @@ test('profile normalization bounds saved values and discards malformed input', (
   assert.equal(profile.aceScore, 24_350);
   assert.equal(profile.maxHeat, 5);
   assert.deepEqual(profile.upgrades, { hull: 3, growth: 3 });
-  assert.deepEqual(profile.metrics, { ...createRunMetrics(), boostTicks: 87, bandsKilled: 0b100, multibandWithinFive: 3 });
+  assert.deepEqual(profile.metrics, { ...createRunMetrics(), boostTicks: 87, verticalKills: 1, heightSpreadWithinFive: 3 });
   assert.deepEqual(normalizeProfile(JSON.parse(JSON.stringify(profile))), profile);
+});
+
+test('legacy stage snapshots retain the v1 progress keys while Survivors uses height metrics', () => {
+  const ground = () => 35;
+  const legacy = createStage(parseStageOptions('?mode=legacy&seed=1'), ground);
+  const survivors = createStage(parseStageOptions('?mode=survivors&seed=1'), ground);
+  const legacyKeys = ['weakPointHits', 'multibandWithinFive', 'maneuvers', 'orbs', 'peakAceWipe', 'bandsKilled',
+    'boostTicks', 'lockedKills', 'rearFlareKills', 'bombsDropped'];
+  assert.deepEqual(Object.keys(legacy.metrics), legacyKeys);
+  assert.deepEqual(Object.keys(legacy.profile.metrics), legacyKeys);
+  assert.ok('heightSpreadWithinFive' in survivors.metrics);
+  assert.ok('verticalKills' in survivors.profile.metrics);
 });
 
 test('Heat tiers stack their pressure, and boss clears unlock the next tier up to five', () => {
@@ -140,4 +153,13 @@ test('the supplied KST date produces a stable unsigned daily seed', () => {
   for (const invalid of ['2023-02-29', '2026-11-31', '2026-1-01', '0000-05-23', '2026-13-01']) {
     assert.equal(dailySeed(invalid), null);
   }
+});
+
+test('legacy altitude unlock progress migrates without re-awarding already unlocked gear', () => {
+  const profile = normalizeProfile({ metrics: { multibandWithinFive: 3, bandsKilled: 0b111 } });
+  assert.equal(profile.metrics.heightSpreadWithinFive, 3);
+  assert.equal(profile.metrics.verticalKills, 3);
+  assert.ok(draftPool(profile).weapons.includes('flak'));
+  assert.ok(draftPool(profile).buffs.includes('band-lens'));
+  assert.deepEqual(settleRun(profile, createRunMetrics(), lost).unlocked, []);
 });

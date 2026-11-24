@@ -42,6 +42,8 @@ export type Maneuver = {
   yaw: number;
   altitude: number;
   exitAltitude: number;
+  altitudeFloor?: number;
+  altitudeCeiling?: number;
   side: -1 | 1;
   skimExit?: true;
 };
@@ -251,6 +253,7 @@ export type StageState = {
   hangar: ReturnType<typeof hangarLoadout>;
   metrics: RunMetrics;
   killBandTicks: [number, number, number];
+  killAltitudeTicks?: { tick: number; alt: number }[];
   ejectorUsed: boolean;
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;

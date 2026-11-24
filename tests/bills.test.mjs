@@ -18,8 +18,8 @@ function beat(state, second) {
   startBillTick(state);
 }
 
-function kill(state, band = 1, kind = 'patrol', killCredit = { weapon: 'twin' }) {
-  const enemy = makeEnemy(state, 50, 10, band, kind);
+function kill(state, band = 1, kind = 'patrol', killCredit = { weapon: 'twin' }, position = { x: 50, z: 10 }) {
+  const enemy = makeEnemy(state, position.x, position.z, band, kind);
   noteBillKill(state, { ...enemy, hp: 0, shotDown: true, killCredit });
 }
 
@@ -49,19 +49,17 @@ test('the five Bills are offered on the design beats and expire at their exact d
   assert.deepEqual(state.streams, streams);
 });
 
-test('first levy uses the inclusive altitude window and requires three kills in one band', () => {
+test('first levy counts three forward kills at any altitude and rejects rearward kills', () => {
   const state = game();
   beat(state, 60);
   kill(state);
   kill(state);
-  state.player.altitude = 180;
-  kill(state, 2);
-  kill(state, 1);
+  kill(state, 2, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z - 10 });
   assert.equal(state.bills.active.progress, 2);
-  state.player.altitude = 118;
+  kill(state, 0, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z + 10 });
+  assert.equal(state.bills.active.progress, 3);
   // Combat on the last tick is eligible for settlement.
   state.tick = state.bills.active.deadline;
-  kill(state);
   assert.deepEqual(finishBillTick(state), { definition: BILLS[0], paid: true });
   assert.equal(state.bills.paid, 1);
   assert.deepEqual(state.bills.last, { id: BILLS[0].id, paid: true, tick: state.tick });
@@ -126,16 +124,15 @@ test('Rear Guard skips a full non-rear loadout and advances to the next schedule
   assert.equal(withOpenSlot.bills.active?.id, BILLS[2].id);
 });
 
-test('High Recovery counts physical high-band orb collections', () => {
+test('High Recovery counts settled orb collections at any altitude', () => {
   const state = game();
   beat(state, 345);
-  const pickup = { id: 60, x: 0, z: 0, alt: 125, xp: 50, born: 0 };
-  noteBillPickup(state, pickup);
-  assert.equal(state.bills.active.progress, 0);
-  for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: 180 });
+  noteBillPickup(state);
+  assert.equal(state.bills.active.progress, 1);
+  for (let id = 1; id <= 8; id++) noteBillPickup(state);
   assert.equal(state.bills.active.progress, 9);
   assert.equal(finishBillTick(state), null);
-  noteBillPickup(state, { ...pickup, id: 10, alt: 180 });
+  noteBillPickup(state);
   assert.deepEqual(finishBillTick(state), { definition: BILLS[3], paid: true });
 });
 

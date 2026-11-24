@@ -118,7 +118,7 @@ test('Seeker counts and blast radii rise at separate ranks', () => {
   }
 });
 
-test('Rail adds width, reach, vertical lanes, a delayed pulse, and a timed damaging afterglow', () => {
+test('Rail adds width and reach with a delayed pulse and a timed damaging afterglow', () => {
   for (const level of levels) {
     const state = start('rail', level);
     spawn(state, 0, 80, low);
@@ -128,7 +128,7 @@ test('Rail adds width, reach, vertical lanes, a delayed pulse, and a timed damag
     state.tick = 54;
     advanceRangedWeapons(state, ground);
     const beams = state.weaponFx.filter(fx => fx.kind === 'rail-beam');
-    assert.deepEqual(beams.map(fx => fx.from.alt), level < 3 ? [mid] : level < 5 ? [mid, low] : [mid, low, high]);
+    assert.deepEqual(beams.map(fx => fx.from.alt), [mid]);
     assert.ok(beams.every(fx => fx.radius === (level === 1 ? 6 : level < 7 ? 9 : 12)
       && fx.to.z === (level < 4 ? 450 : 562.5)));
     assert.equal(state.railRepeatAt, level < 6 ? undefined : 72);
@@ -245,7 +245,7 @@ test('Phoenix and Bomb Bay change count, lifetime, radius and lingering fire as 
     const fire = bay.weaponFx.find(fx => fx.kind === 'ground-fire');
     assert.equal(!!fire, level >= 6);
     if (!fire) continue;
-    const inFire = spawn(bay, 1, 1, 39), above = spawn(bay, 1, 1, low);
+    const inFire = spawn(bay, 1, 1, 39), above = spawn(bay, 1, 1, 139);
     bay.tick += 89;
     advanceRearBombs(bay, ground);
     assert.equal(inFire.hp, 100 - weaponDamage(bay, 'bomb-bay', WEAPONS['bomb-bay'].tuning.damage)

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { scaleTravel } from '../src/data/speed.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
+import { advanceFlares } from '../src/stage-combat.ts';
 import { World } from '../src/world.ts';
 
 const empty = (level = 1) => {
@@ -126,8 +127,8 @@ test('a sinking flare reaches a contact when it enters its altitude window mid-t
   const lower = contact(state, 80, 0, 'hound');
   run(state, 1);
   const flare = state.flares[0];
-  Object.assign(flare, { x: lower.x, z: lower.z, alt: 83.1, vx: 0, vz: 0, vy: -12 });
-  run(state, 1);
+  Object.assign(flare, { x: lower.x, z: lower.z, alt: lower.alt + 4.6, vx: 0, vz: 0, vy: -12 });
+  advanceFlares(state, () => 35);
   assert.ok(lower.burnUntil > state.tick);
 });
 
@@ -157,10 +158,14 @@ test('a low contact hit after the launch window reopens the rear view', () => {
   run(state, 1);
   const launchWindow = state.rearGlimpse?.until;
   assert.ok(launchWindow > state.tick);
-  for (let i = 0; i < 119 && !state.flareHit; i++) run(state, 1);
+  const flare = state.flares[0];
+  state.tick = launchWindow + 1;
+  Object.assign(flare, { x: below.x, z: below.z, alt: below.alt + 4.6, vx: 0, vz: 0, vy: -12 });
+  advanceFlares(state, () => 35);
   assert.ok(below.burnUntil > state.tick);
   assert.ok(state.tick > launchWindow);
-  assert.equal(state.rearGlimpse?.since, state.tick);
+  assert.equal(state.rearGlimpse?.kind, 'flare');
+  assert.ok(state.rearGlimpse?.until > launchWindow);
   assert.equal(state.rearGlimpse?.kind, 'flare');
   assert.equal(state.rearGlimpse?.target?.alt, 75);
 });

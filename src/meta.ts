@@ -5,7 +5,7 @@ import {
 } from './data/meta.ts';
 import { rngStream } from './stage-random.ts';
 
-export type RunMetrics = Record<RunMetric, number>;
+export type RunMetrics = Record<string, number>;
 export type Profile = {
   credits: number;
   aceScore: number;
@@ -37,6 +37,13 @@ function bandCount(mask: number): number {
 
 export function createRunMetrics(): RunMetrics {
   return {
+    weakPointHits: 0, heightSpreadWithinFive: 0, verticalKills: 0, maneuvers: 0, orbs: 0, peakAceWipe: 0,
+    boostTicks: 0, lockedKills: 0, rearFlareKills: 0, bombsDropped: 0,
+  };
+}
+
+export function createLegacyRunMetrics(): RunMetrics {
+  return {
     weakPointHits: 0, multibandWithinFive: 0, maneuvers: 0, orbs: 0, peakAceWipe: 0, bandsKilled: 0,
     boostTicks: 0, lockedKills: 0, rearFlareKills: 0, bombsDropped: 0,
   };
@@ -59,9 +66,10 @@ export function normalizeMetrics(input: unknown): RunMetrics {
   for (const metric of METRICS) {
     // v1 profiles and checkpoints counted manual drops toward the same unlock.
     const raw = metric === 'bombsDropped' ? saved.bombsDropped ?? saved.manualBombs : saved[metric];
-    const value = whole(raw, metric === 'multibandWithinFive' ? 3 : undefined);
-    metrics[metric] = metric === 'bandsKilled' ? value & 0b111 : value;
+    metrics[metric] = whole(raw, metric === 'heightSpreadWithinFive' ? 3 : undefined);
   }
+  if (saved.heightSpreadWithinFive === undefined) metrics.heightSpreadWithinFive = whole(saved.multibandWithinFive, 3);
+  if (saved.verticalKills === undefined) metrics.verticalKills = bandCount(whole(saved.bandsKilled) & 0b111);
   return metrics;
 }
 
@@ -80,6 +88,23 @@ export function normalizeProfile(input: unknown): Profile {
   return profile;
 }
 
+export function normalizeLegacyProfile(input: unknown): Profile {
+  const profile = normalizeProfile(input), saved = fields(input), savedMetrics = fields(saved.metrics);
+  profile.metrics = {
+    weakPointHits: profile.metrics.weakPointHits,
+    multibandWithinFive: whole(savedMetrics.multibandWithinFive ?? profile.metrics.heightSpreadWithinFive, 3),
+    maneuvers: profile.metrics.maneuvers,
+    orbs: profile.metrics.orbs,
+    peakAceWipe: profile.metrics.peakAceWipe,
+    bandsKilled: whole(savedMetrics.bandsKilled),
+    boostTicks: profile.metrics.boostTicks,
+    lockedKills: profile.metrics.lockedKills,
+    rearFlareKills: profile.metrics.rearFlareKills,
+    bombsDropped: profile.metrics.bombsDropped,
+  };
+  return profile;
+}
+
 export function aceRank(profile: Profile): number {
   return ACE_SCORE_THRESHOLDS.filter(threshold => profile.aceScore >= threshold).length;
 }
@@ -87,7 +112,6 @@ export function aceRank(profile: Profile): number {
 function combine(metric: RunMetric, saved: number, live: number): number {
   switch (METRIC_RULES[metric]) {
     case 'best': return Math.max(saved, live);
-    case 'bands': return bandCount(live) > bandCount(saved) ? live : saved;
     case 'total': return whole(saved + live);
   }
 }
@@ -95,7 +119,7 @@ function combine(metric: RunMetric, saved: number, live: number): number {
 export function questProgress(profile: Profile, current?: RunMetrics): QuestProgress[] {
   return UNLOCK_QUESTS.map(({ id, metric, target }) => {
     const recorded = combine(metric, profile.metrics[metric], current?.[metric] ?? 0);
-    const progress = Math.min(target, metric === 'bandsKilled' ? bandCount(recorded) : recorded);
+    const progress = Math.min(target, recorded);
     return { id, progress, target, unlocked: progress >= target };
   });
 }

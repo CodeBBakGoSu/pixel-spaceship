@@ -14,7 +14,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ## Current state
 - [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
 - 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
-- Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
+- Historical candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). The current continuous-flight candidate is isolated on `devin/1795524980-continuous-flight-10min` from `09e2890`; public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
 - Historical feature-branch results: `82c19c6` variant run and `77163bc` swarm run are separately scoped in the log below, not reruns on integrated `0bc1f99`. The `77163bc` desktop Heat 0, 100-seed average median kills were **3,167.5**, within 2,500–3,500; this does not establish phase density or whole survival acceptance.
@@ -23,6 +23,23 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-24 23:37 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
+- Isolated the Legacy replay against detached `09e2890`: the first serialized-state difference at tick 0 was only the progress-metric schema (`multibandWithinFive`/`bandsKilled` vs `heightSpreadWithinFive`/`verticalKills`). Removing profile/daily/run metrics from the behavioral projection produced identical seed-1 simulation state through tick 6770/`clear` on both trees. Added mode-scoped Legacy metric creation/normalization; the Legacy golden is unchanged.
+- Closed the rail endpoint, retained/Ace seeker range+cone, and terrain refresh/rise findings. Aegis now uses a bounded annular cylinder rather than a spherical shell; `scene.ts` still renders the flat `RingGeometry`. An exact-plane trial made seed 2026 lose at tick 30344 after Pods/Aegis was selected at 15784 and evolved at 24255, so the cylinder version was restored; VFX owner alignment of the vertical half-width remains needed.
+- Verification: build passed (121 modules, 1.71 s); seed-2026 replay passed 1/1 and both replay-hash tests passed 2/2 after restoring the cylinder. Full `npm test` passed 640/640 on that same cylinder implementation before the planar trial; the planar trial failed those two cases and was reverted, so the full suite was not rerun after the exact revert. `git diff --check` is clean.
+- State: candidate implementation is complete; Aegis visual-depth coordination remains a VFX-owner integration item. Browser/UI verification remains delegated.
+
+### 2026-11-24 22:16 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
+- Migrated Survivors flight bounds, arena scale, terrain-relative start, maneuver exits, aim and weapon/hazard collision to continuous 3D while retaining Legacy branches. Added a player-to-spatial-point adapter and updated the altitude marker, rear-maneuver cue, and bot/autoplay paths to use the expanded space.
+- Replaced altitude-layer Bills/unlock metrics, added profile/checkpoint v1 progress migration, and localized the new forward-kill/any-altitude Bill labels. Formation, collection, Ace behavior and VFX remain owner boundaries; no duplicate pickup/event logic was added.
+- Verification: `npm run build` passed; full `npm test` ran 637 tests (636 pass, 1 fail: Legacy replay hash expected `1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5`, got `48bb808883d23acffac0eee329792c70`); `git diff --check` passed. Simulation and visual/browser validation remain pending.
+- State: in progress; Legacy replay mismatch is unresolved; no commit or push. Collection/VFX PR #10/#11 remain unintegrated pending validated owner tips.
+
+### 2026-11-24 21:56 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
+- Added pure continuous-space helpers in `src/spatial.ts` and focused coverage in `tests/spatial.test.mjs`; exports are `SpatialPoint`, `SpatialVector`, `playerSpatialPoint`, `add3d`, `subtract3d`, `scale3d`, `dot3d`, `lengthSquared3d`, `distanceSquared3d`, `distance3d`, `normalize3d`, `direction3d`, `pointSegmentDistanceSquared3d`, `segmentSphereIntersection3d`, and `spheresOverlap3d`.
+- Read `physics-tuning`, the open-game shared contract, and `projectile-hitscan`. Simulation keeps `{x,z,alt}`; VFX uses the existing Z inversion only at its renderer boundary. Keep pickup/drop events and magnet collection under their owner; high-recovery progress will count settled pickups only.
+- State: in progress; tests/build not run yet; no commit or push.
 
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.

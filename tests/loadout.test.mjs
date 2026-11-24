@@ -21,12 +21,14 @@ test('a new phase sortie draws from the five starter weapons and five starter bu
   assert.deepEqual(state.run.buffs, STARTER_BUFFS);
 });
 
-test('Band Lens admits a direct Twin shot outside the unmodified window', () => {
+test('Band Lens widens the Twin capture angle without changing its altitude path', () => {
   const state = start();
-  const enemy = makeEnemy(state, state.player.x, state.player.z + 85, 1, 'patrol', 10);
+  state.strafeAt = Infinity;
+  const enemy = makeEnemy(state, state.player.x + scaleTravel(55), state.player.z + scaleTravel(85), 1, 'patrol', 0);
+  enemy.alt = state.player.altitude;
   state.enemies = [enemy];
   acquireAndFire(state);
-  assert.equal(state.shots.length, 0);
+  assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 0);
   state.run.buffLevels['band-lens'] = 2;
   acquireAndFire(state);
   assert.equal(state.shots.filter(shot => shot.kind === 'twin').length, 2);
@@ -62,16 +64,20 @@ test('taking Hull Plating through a real draft raises and repairs hull', () => {
   assert.equal(state.run.buffLevels['hull-plating'], card.nextLevel);
 });
 
-test('Magnet Core expands both pickup reach and its altitude window', () => {
+test('Magnet Core expands horizontal pickup reach without widening its altitude window', () => {
   const without = start(), withMagnet = start();
   for (const state of [without, withMagnet]) {
-    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 137, xp: 4, born: 0 });
+    state.pickups.push(
+      { id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: state.player.altitude, xp: 4, born: 0 },
+      { id: 106, x: state.player.x, z: state.player.z + scaleTravel(10), alt: state.player.altitude + 20, xp: 4, born: 0 },
+    );
   }
   withMagnet.run.buffLevels['magnet-core'] = 2;
   stepStage(without, {}, ground);
   stepStage(withMagnet, {}, ground);
-  assert.equal(without.pickups[0].pulling, false);
+  assert.notEqual(without.pickups[0].pulling, true);
   assert.equal(withMagnet.pickups[0].pulling, true);
+  assert.notEqual(withMagnet.pickups[1].pulling, true);
   assert.ok(withMagnet.pickups[0].z < without.pickups[0].z);
 });
 
@@ -170,7 +176,8 @@ test('Twin Cannon grows at every rank and the final fan hits flank contacts', ()
   for (const [i, barrels] of [2, 3, 3, 4, 4, 5, 6].entries()) {
     const state = start();
     const { x, z } = state.player;
-    state.run.weaponLevels.twin = i + 1;
+    state.run.weaponLevels = { twin: i + 1 };
+    state.strafeAt = Infinity;
     const center = makeEnemy(state, x, z + 70, 1, 'patrol', 0);
     const left = makeEnemy(state, x - 16, z + 100, 1, 'patrol', 0);
     const right = makeEnemy(state, x + 16, z + 100, 1, 'patrol', 0);
@@ -189,16 +196,20 @@ test('Twin Cannon grows at every rank and the final fan hits flank contacts', ()
   }
 });
 
-test('Wing Pods add rear bolts starting at level four and keep their same-band restriction', () => {
+test('Wing Pods add rear bolts starting at level four and track contacts across altitude', () => {
   const state = start();
   const { x, z } = state.player;
-  state.run.weaponLevels.pods = 4;
-  state.enemies = [makeEnemy(state, x - scaleTravel(22), z - scaleTravel(66), 2, 'patrol', 0)];
+  state.run.weaponLevels = { pods: 4 };
+  const target = makeEnemy(state, x - scaleTravel(22), z - scaleTravel(66), 2, 'patrol', 0);
+  target.alt = state.player.altitude + 35;
+  target.hp = 12;
+  state.enemies = [target];
   acquireAndFire(state);
-  assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 0);
-  state.enemies[0].alt = 125;
-  acquireAndFire(state);
-  assert.equal(state.shots.filter(shot => shot.kind === 'pods').length, 3);
+  const pods = state.shots.filter(shot => shot.kind === 'pods');
+  assert.equal(pods.length, 3);
+  assert.ok(pods.every(shot => shot.vy > 0));
+  for (let tick = 0; tick < 15; tick++) advanceShots(state, ground);
+  assert.ok(target.hp < 12);
   assert.equal(state.podsAt, weaponCooldown(state, 'pods', WEAPONS.pods.tuning.cooldownTicks));
 });
 
@@ -258,7 +269,7 @@ test('Phoenix Flares drop three automatic flares with spreading fire', () => {
   assert.equal(above.burnUntil, undefined);
 });
 
-test('Bomb Bay double-drops at level three, detonates below launch band and counts both drops toward the rack', () => {
+test('Bomb Bay double-drops at level three and detonates within its bounded 3D proximity volume', () => {
   const state = start();
   state.tick = 40;
   state.player.altitude = 180;
@@ -271,7 +282,8 @@ test('Bomb Bay double-drops at level three, detonates below launch band and coun
   assert.ok(state.rearBombs.every(bomb => bomb.weapon === 'bomb-bay'));
   const [bomb] = state.rearBombs;
   const low = makeEnemy(state, bomb.x, bomb.z, 1, 'interceptor', 0);
-  const high = makeEnemy(state, bomb.x, bomb.z, 2, 'interceptor', 0);
+  low.alt = 125;
+  const high = makeEnemy(state, bomb.x + scaleTravel(200), bomb.z, 2, 'interceptor', 0);
   state.enemies = [low, high];
   advanceRearBombs(state, ground);
   assert.equal(high.hp, 4);

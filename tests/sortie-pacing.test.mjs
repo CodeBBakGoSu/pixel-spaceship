@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { createProfile, dailySeed } from '../src/meta.ts';
 import { STARTER_BUFFS, STARTER_WEAPONS } from '../src/data/meta.ts';
+import { noteSortieKill } from '../src/sortie-pacing.ts';
 
 const start = options => createStage({ ...parseStageOptions('?mode=survivors&t=0&seed=42'), ...options });
 
@@ -55,4 +56,23 @@ test('a daily launch uses fixed starter pools, four slots and base hull at a det
   assert.equal(state.summary.seconds, 600);
   assert.equal(state.summary.credits, 0);
   assert.deepEqual(state.profile, profile);
+});
+
+test('height unlocks use a rolling five-second kill spread and cumulative 15m vertical kills', () => {
+  const state = start();
+  const player = state.player.altitude;
+  for (const [tick, alt] of [[1, player - 15], [2, player], [3, player + 15]]) {
+    state.tick = tick;
+    noteSortieKill(state, { alt });
+  }
+  assert.equal(state.metrics.verticalKills, 2);
+  assert.equal(state.metrics.heightSpreadWithinFive, 3);
+  assert.deepEqual(state.killAltitudeTicks, [
+    { tick: 1, alt: player - 15 }, { tick: 2, alt: player }, { tick: 3, alt: player + 15 },
+  ]);
+
+  state.tick = 5 * 60 + 4;
+  noteSortieKill(state, { alt: player + 60 });
+  assert.equal(state.killAltitudeTicks.length, 1);
+  assert.equal(state.metrics.heightSpreadWithinFive, 3);
 });

@@ -46,7 +46,7 @@ import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
-import { clamp, inBand, STEP,
+import { clamp, inBand, MAX_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { AceTell, ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -1386,9 +1386,12 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean): voi
     const altitude = { Above: '↑', Level: '=', Below: '↓' }[threat.height];
     position = bearing + altitude;
     description += ` · ${t(`hud.rear${threat.side}`)} ${t(`hud.rear${threat.height}`)}`;
-    const kind = (['j-turn', 'immelmann', 'split-s'] as const)
-      .find(kind => canManeuver(state, kind) && inBand(threat.alt,
-        exitAltitude(state.player.altitude, kind, ground(state.player.x, state.player.z), !!state.player.skim)));
+    const kind = (['j-turn', 'immelmann', 'split-s'] as const).find(kind => {
+      if (!canManeuver(state, kind)) return false;
+      const exit = exitAltitude(state.player.altitude, kind, ground(state.player.x, state.player.z), !!state.player.skim,
+        !!state.run, MAX_ALTITUDE * (state.run ? 1.5 : 1));
+      return inBand(threat.alt, exit);
+    });
     const seconds = Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND);
     if (kind) {
       const direction = kind === 'immelmann' ? '↑' : kind === 'split-s' ? '↓' : threat.lateral < 0 ? '←' : '→';

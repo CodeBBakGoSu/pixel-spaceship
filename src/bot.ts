@@ -5,9 +5,10 @@ import { DRAFT_RULES, EVOLUTIONS, WEAPONS, WEAPON_IDS } from './data/items.ts';
 import { ROLL_PARRY_TICKS } from './data/roll.ts';
 import { isWeaponId, type DraftCard } from './progression.ts';
 import { canRoll } from './roll.ts';
-import { clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, impactTime, inBand, MINE_RADIUS, TICKS_PER_SECOND } from './stage-combat.ts';
+import { clamp, FLAK_RADIUS, HOSTILE_HIT_RADIUS, impactTime, impactTime3d, inBand, MINE_RADIUS, TICKS_PER_SECOND } from './stage-combat.ts';
 import { chestEvolutions } from './stage.ts';
 import { random, rngStream } from './stage-random.ts';
+import { playerSpatialPoint } from './spatial.ts';
 import type { Ground, Position, StageInput, StageState } from './stage-types.ts';
 
 // --- S7d lane ---
@@ -44,17 +45,20 @@ function projectedThreat(state: StageState, quality: number) {
   const vx = p.vx ?? 0, vz = p.vz ?? 0;
   const lookahead = BOT_POLICY.lookaheadMin + (BOT_POLICY.lookaheadMax - BOT_POLICY.lookaheadMin) * quality;
   const margin = BOT_POLICY.dodgeMarginMin + (BOT_POLICY.dodgeMarginMax - BOT_POLICY.dodgeMarginMin) * quality;
-  return (hazard: Position & { vx?: number; vz?: number }, radius: number): boolean => {
+  return (hazard: Position & { vx?: number; vy?: number; vz?: number }, radius: number): boolean => {
     const x = hazard.x - p.x, z = hazard.z - p.z;
     const dx = (hazard.vx ?? 0) - vx, dz = (hazard.vz ?? 0) - vz;
-    const speedSquared = dx * dx + dz * dz;
-    const time = speedSquared > 0 ? clamp(-(x * dx + z * dz) / speedSquared, 0, lookahead) : 0;
+    const y = hazard.alt - p.altitude, dy = (hazard.vy ?? 0) - (state.climbRate ?? 0);
+    const speedSquared = dx * dx + dz * dz + (state.run ? dy * dy : 0);
+    const time = speedSquared > 0 ? clamp(-(x * dx + z * dz + (state.run ? y * dy : 0)) / speedSquared, 0, lookahead) : 0;
     const offsetX = x + time * dx, offsetZ = z + time * dz;
-    return offsetX * offsetX + offsetZ * offsetZ <= (radius + margin) ** 2;
+    const offsetY = state.run ? y + time * dy : 0;
+    return offsetX * offsetX + offsetZ * offsetZ + offsetY * offsetY <= (radius + margin) ** 2;
   };
 }
 
 function perceive(state: StageState, profile: BotProfile, band: FlightBand): StageState {
+  if (state.run) return state;
   const withinThreatRange = projectedThreat(state, profile.dodgeQuality);
   const onBand = (contact: Position & { skim?: true }) => (contact.skim ? SKIM_BAND : fixedBand(contact.alt)) === band;
   const p = state.player;
@@ -101,8 +105,13 @@ function rollDirection(state: StageState, profile: BotProfile, rng: { rng: numbe
   const radius = HOSTILE_HIT_RADIUS + BOT_POLICY.rollPredictionMargin * profile.rollDodgeQuality;
   let earliest = Infinity, lateral = 0;
   for (const shot of state.shots) {
-    if (shot.kind !== 'hostile' || !inBand(shot.alt, p.altitude)) continue;
-    const hit = impactTime(shot, shot.vx - (p.vx ?? 0), shot.vz - (p.vz ?? 0), p, radius, 0, Math.min(shot.life, horizon));
+    if (shot.kind !== 'hostile' || (!state.run && !inBand(shot.alt, p.altitude))) continue;
+    const duration = Math.min(shot.life, horizon);
+    if (duration <= 0) continue;
+    const hit = state.run
+      ? impactTime3d(shot, (shot.vx - (p.vx ?? 0)) * duration, (shot.vz - (p.vz ?? 0)) * duration,
+        ((shot.vy ?? 0) - (state.climbRate ?? 0)) * duration, playerSpatialPoint(p), radius) * duration
+      : impactTime(shot, shot.vx - (p.vx ?? 0), shot.vz - (p.vz ?? 0), p, radius, 0, duration);
     if (hit >= earliest) continue;
     earliest = hit;
     lateral = (shot.x - p.x) * Math.cos(p.yaw) - (shot.z - p.z) * Math.sin(p.yaw);
@@ -149,7 +158,9 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     if (state.tick >= nextScout) {
       nextScout = state.tick + BOT_POLICY.scoutTicks;
       seeksAltitude = random(rng) < profile.altitudeUse;
-      preferredBand = seeksAltitude ? scoutBand(state, profile, random(skimRng) < profile.skimUse) : playerBand(state.player);
+      preferredBand = state.run
+        ? state.player.skim ? SKIM_BAND : playerBand(state.player)
+        : seeksAltitude ? scoutBand(state, profile, random(skimRng) < profile.skimUse) : playerBand(state.player);
     }
     const activeBill = state.bills.active?.id ?? null;
     if (activeBill !== latestBill) {
@@ -158,7 +169,8 @@ export function createBot(profileId: BotProfileId, seed: number): (state: StageS
     }
     const perceived = perceive(state, profile, preferredBand);
     if (!handlesBill) perceived.bills = { ...state.bills, active: null };
-    const base = autopilotInput(perceived, 'full', ground, profile, preferredBand === SKIM_BAND);
+    const base = autopilotInput(perceived, 'full', ground, profile,
+      state.run ? !!state.player.skim : preferredBand === SKIM_BAND);
     const aimOffset = (random(rng) * 2 - 1) * profile.aimErrorRad;
     const useManeuvers = random(rng) < profile.maneuverUse;
     held = {

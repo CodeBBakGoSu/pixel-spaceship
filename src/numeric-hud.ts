@@ -134,10 +134,11 @@ export class NumericHud {
       el.band.textContent = t(band);
       this.band = band;
     }
-    const markerAltitude = skim ? MIN_ALTITUDE : clamp(altitude, MIN_ALTITUDE, MAX_ALTITUDE);
+    const ceiling = MAX_ALTITUDE * (state.run ? 1.5 : 1);
+    const markerAltitude = skim ? MIN_ALTITUDE : clamp(altitude, MIN_ALTITUDE, ceiling);
     if (this.markerAltitude !== markerAltitude) {
       this.markerAltitude = markerAltitude;
-      el.altMarker.style.top = `${(MAX_ALTITUDE - markerAltitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
+      el.altMarker.style.top = `${(ceiling - markerAltitude) * 100 / (ceiling - MIN_ALTITUDE)}%`;
     }
 
     this.updateProgress(state, t, translated);

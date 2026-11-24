@@ -5,6 +5,7 @@ import { autopilotInput } from '../src/autoplay.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import * as moves from '../src/maneuvers.ts';
 import { advanceRearBombs, HIT_WINDOW } from '../src/stage-combat.ts';
+import { World } from '../src/world.ts';
 
 const pursuit = (view = 'chase') => createStage(parseStageOptions('?fixture=pursuit&view=' + view));
 const run = (state, ticks, input = {}, ground) => {
@@ -15,6 +16,24 @@ const empty = () => {
   state.enemies = [];
   return state;
 };
+
+test('expanded radius survives terrain-region refresh and flight ceiling scales rise over local terrain', () => {
+  const world = new World(), ground = (x, z) => world.height(x, z);
+  let terrain = 35;
+  for (let x = -2000; x <= 2000; x += 250) for (let z = -2000; z <= 2000; z += 250) {
+    terrain = Math.max(terrain, ground(x, z));
+  }
+  assert.ok(terrain > 35);
+  const baseRise = moves.flightCeiling(terrain, false) - terrain;
+  assert.ok(Math.abs(moves.flightCeiling(terrain, true) - terrain - baseRise * 1.5) < 1e-9);
+
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'), ground);
+  const radius = state.arena.radius, region = { ...state.worldRegion };
+  state.player.x = (region.x + 1) * region.spacing + 1;
+  stepStage(state, {}, ground);
+  assert.notDeepEqual(state.worldRegion, region);
+  assert.equal(state.arena.radius, radius);
+});
 
 test('pursuit fixture starts with a three-band group aft', () => {
   const state = createStage(parseStageOptions('?fixture=pursuit'));
@@ -29,6 +48,20 @@ test('pursuit fixture starts with a three-band group aft', () => {
 test('full autoplay uses a charged J-turn against a distant level pursuer', () => {
   const state = pursuit();
   assert.equal(autopilotInput(state).maneuver, 'j-turn');
+});
+
+test('Survivors maneuvers preserve continuous altitude and use the expanded flight envelope', () => {
+  const ground = () => 35;
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'), ground);
+  assert.equal(state.player.altitude, 125);
+  assert.equal(state.arena.radius, 1792 * 1.5);
+  assert.equal(moves.exitAltitude(137, 'immelmann', 35, false, true, 345), 195);
+  assert.equal(moves.exitAltitude(137, 'split-s', 35, false, true, 345), 79);
+  assert.equal(moves.exitAltitude(137, 'immelmann', 35), 180);
+  state.player.altitude = 240;
+  state.player.pitch = 0.4;
+  stepStage(state, { climb: 1 }, ground);
+  assert.ok(state.player.altitude > 240 && state.player.altitude < 345);
 });
 
 for (const [kind, flipTick, ticks, altitude, yaw, cooldown] of [
@@ -270,7 +303,7 @@ test('hostile shots still damage the player during body grace', () => {
   assert.equal(state.hull, state.maxHull - 2);
 });
 
-test('falling bomb damage is altitude gated and clears only nearby hostile shots at any height', () => {
+test('falling bomb damage uses a bounded 3D blast and clears nearby hostile shots', () => {
   const state = empty();
   const targets = createStage(parseStageOptions('?fixture=stack')).enemies;
   const bomb = { x: state.player.x, z: state.player.z, alt: 125, vx: 0, vz: 0, born: state.tick, ceiling: 100, weapon: 'bomb-bay' };
@@ -281,7 +314,7 @@ test('falling bomb damage is altitude gated and clears only nearby hostile shots
     Object.assign(target, { x: bomb.x, z: bomb.z, shotAt: state.tick + 200 });
   }
   state.enemies = targets;
-  const hostile = { x: bomb.x, z: bomb.z, alt: 180, vx: 0, vz: 0, kind: 'hostile', life: 2, damage: 2 };
+  const hostile = { x: bomb.x, z: bomb.z, alt: bomb.alt, vx: 0, vz: 0, kind: 'hostile', life: 2, damage: 2 };
   const outside = { ...hostile, x: bomb.x + scaleTravel(41) };
   state.shots.push(hostile, outside);
   run(state, 1);

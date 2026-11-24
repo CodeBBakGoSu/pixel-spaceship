@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeAce } from '../src/ace.ts';
-import { skimAltitude, SKIM_BAND } from '../src/bands.ts';
 import { scaleTravel } from '../src/data/speed.ts';
 import { WEAPONS } from '../src/data/items.ts';
 import { weaponDamage } from '../src/loadout.ts';
@@ -57,37 +56,37 @@ test('Swarm Rack launches twelve rockets for an engaged carrier and fits two vol
   assert.equal(state.shots.length, 24);
 });
 
-test('Prism Lance charges and strikes along exactly one terrain-clipped ray per band', () => {
+test('Prism Lance charges and strikes along one terrain-clipped ray at its actual altitude', () => {
   const state = setup('rail', 'prism-lance');
   state.player.altitude = mid + 8;
-  const altitudes = [...BANDS, 49];
-  const leading = altitudes.map(alt => contact(state, 0, 69, alt));
-  const obscuredLow = contact(state, 0, 130, low);
-  const flyingIn = contact(state, 0, 65, high);
+  const sourceAltitude = state.player.altitude;
+  const leading = contact(state, 0, 69, sourceAltitude);
+  const wrongHeight = contact(state, 0, 69, sourceAltitude + 20);
+  const behindWall = contact(state, 0, 130, sourceAltitude);
+  const flyingIn = contact(state, 0, 65, sourceAltitude);
   flyingIn.entry = {};
-  const ridge = (_, z) => z >= 83 && z <= 96 ? 99 : 35;
+  const ridge = (_, z) => z >= 83 && z <= 96 ? 150 : 35;
   advanceRangedWeapons(state, ridge);
   assert.equal(state.railChargeAt, 54);
-  assert.deepEqual(state.weaponFx.filter(fx => fx.kind === 'rail-charge').map(fx => fx.from.alt), altitudes);
+  assert.deepEqual(state.weaponFx.filter(fx => fx.kind === 'rail-charge').map(fx => fx.from.alt), [sourceAltitude]);
 
   state.tick = state.railChargeAt;
   advanceRangedWeapons(state, ridge);
-  assert.ok(leading.every(enemy => enemy.hp < 12));
-  assert.equal(obscuredLow.hp, 12);
+  assert.ok(leading.hp < 12);
+  assert.equal(wrongHeight.hp, 12);
+  assert.equal(behindWall.hp, 12);
   assert.equal(flyingIn.hp, 12);
   const beams = state.weaponFx.filter(fx => fx.kind === 'rail-beam');
-  assert.deepEqual(beams.map(beam => beam.from.alt), altitudes);
-  assert.ok(beams[0].to.z < beams[1].to.z);
+  assert.deepEqual(beams.map(beam => beam.from.alt), [sourceAltitude]);
+  assert.ok(beams[0].to.z < behindWall.z);
 });
 
-test('Skybreaker bursts through all four bands and launches one generation of three secondary shells', () => {
+test('Skybreaker damages the bounded 3D blast volume and launches one generation of three secondary shells', () => {
   const state = setup('flak', 'skybreaker');
   const range = scaleTravel(90);
-  const stacked = BANDS.map(alt => contact(state, 0, range, alt));
-  Object.assign(contact(state, 0, range, 65), { kind: 'skimmer', skim: true });
-  stacked.push(state.enemies.at(-1));
-  const wing = contact(state, scaleTravel(32), scaleTravel(99), high);
-  const incoming = contact(state, 0, scaleTravel(87), low);
+  const stacked = [mid - 12, mid, mid + 12].map(alt => contact(state, 0, range, alt));
+  const wing = contact(state, scaleTravel(35), scaleTravel(99), mid + 8);
+  const incoming = contact(state, 0, scaleTravel(87), mid + 8);
   incoming.entry = {};
   advanceRangedWeapons(state, ground);
   projectiles(state, 36);
@@ -97,8 +96,8 @@ test('Skybreaker bursts through all four bands and launches one generation of th
   assert.equal(state.shots.length, 3);
   assert.ok(state.shots.every(shot => shot.kind === 'flak-shell' && shot.skybreaker === 'secondary'));
   const blast = state.weaponFx.find(fx => fx.kind === 'flak-blast');
-  assert.equal(blast.from.alt, mid);
-  assert.ok(blast.halfHeight >= high - mid);
+  assert.equal(blast.from.alt, state.player.altitude);
+  assert.ok(blast.radius > 0);
   projectiles(state, 36);
   assert.ok(wing.hp < 12);
   assert.equal(incoming.hp, 12);
@@ -106,12 +105,11 @@ test('Skybreaker bursts through all four bands and launches one generation of th
   assert.equal(state.weaponFx.filter(fx => fx.kind === 'flak-blast').length, 4);
 });
 
-test('Skybreaker reaches a skimming Ace only when the shot has its lock', () => {
+test('Skybreaker reaches a continuous-height Ace only when the shot has its lock', () => {
   for (const ready of [false, true]) {
     const state = setup('flak', 'skybreaker');
     const ace = state.boss = makeAce(state, 0, scaleTravel(90));
-    ace.band = SKIM_BAND;
-    ace.alt = skimAltitude(ground());
+    ace.alt = state.player.altitude + 15;
     state.lock = { id: ace.id, ready };
     advanceRangedWeapons(state, ground);
     assert.equal(state.shots.length, Number(ready));
