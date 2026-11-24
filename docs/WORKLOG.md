@@ -24,10 +24,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 23:29 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `fef070aa13e7b35cdcd13cbade4953b9505c7a91`: Captured Survivors salvage advances during Ace defeat and through bounded capture-only terminal settlement; rewards pay at hull arrival while stage tick, outcome, and summary seconds stay at terminal time. Settlement does not simulate enemies or spawns, and captured pickups bypass terminal draft blocking.
+- `90ead934e69ce533ff410820e58ceaeb95d3fed1`: Collector Swarm's initial duration derives from existing drone distance, pickup range, and pull speed (minimum one tick, capped to ordinary capture); captured deadlines remain immutable, with no range or damage retune.
+- Verification: `npm test` passed 638/638; `npm run build` passed (120 modules); `git diff --check` passed. Updated the Survivors replay golden for the intentional settlement change; the legacy replay assertion remains unchanged. No UI tests or visual verification; PR #11 CI pending. State: candidate-only fixes complete, no public deployment.
+
 ### 2026-11-24 22:35 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
 - Applied §3 review fixes for Survivors captures: global magnet now snapshots eligible salvage into fixed-deadline curved arrivals, rewards only at hull arrival, ordinary contact checks 3D distance, drone collection requests capture, and trails appear only in the final segment. Legacy recovery and pickup handling were separated where practical; public `main` is untouched.
 - Restored exact legacy pull/contact ordering and salvage object key order (the changed key order altered replay hashes despite identical field values); retained legacy drone altitude gating and trail lengths. Survivor timed captures remain run-scoped.
-- Verification: `npm test` passed 634/634; `npm run build` passed (120 modules); `git diff --check` passed. Candidate remains uncommitted/unpushed; no public deployment.
+- Verification: `npm test` passed 634/634; `npm run build` passed (120 modules); `git diff --check` passed. Candidate was committed and pushed as `309e649` before the PR review; no public deployment.
 
 ### 2026-11-24 22:01 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (based on `09e2890`)
 - Implemented approved pickup §3 on the independent candidate: altitude-independent timed salvage, direct magnet drops and collection; public `main` remains untouched.
