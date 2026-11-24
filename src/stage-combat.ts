@@ -613,7 +613,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     }
   }
   const ace = activeAce(state);
-  if (ace && burnTick(ace, state.tick, ACE.burnInterval)) hurtAce(state, ace, ace.burnDamage ?? 1);
+  if (ace && burnTick(ace, state.tick, ACE.burnInterval)) hurtAce(state, ace, ace.burnDamage ?? 1, 'phoenix');
 
   let alive = 0;
   const window = hitWindow(state);

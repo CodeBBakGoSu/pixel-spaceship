@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { PerspectiveCamera, Vector3 } from 'three';
 import { autopilotInput } from '../src/autoplay.ts';
+import { BANDS } from '../src/bands.ts';
+import { CLOSE_EVOLUTIONS } from '../src/data/close-evolutions.ts';
+import { WEAPONS } from '../src/data/items.ts';
 import { observeDamage } from '../src/combat-feedback.ts';
-import { TICKS_PER_SECOND } from '../src/stage-combat.ts';
+import { advanceFlares, TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { clipProjectSortieSegment } from '../src/scene.ts';
+import { advanceSupportWeapons } from '../src/support-weapons.ts';
 import { SORTIE_VFX_IDS, SortieVfx, defeatVfxId, sortieVfxMode, weaponVfxId } from '../src/sortie-vfx.ts';
 import { World } from '../src/world.ts';
 
@@ -154,6 +160,61 @@ test('observed spread and ground-fire FX never synthesize hit effects', () => {
   assert.equal(vfx.activeCount, 0);
   vfx.hit('phoenix', { tick: 12, position });
   assert.equal(vfx.activeCount, 1);
+});
+
+test('ion, drone, pod-shield and phoenix-burn Ace damage retains its weapon route', () => {
+  const makeAce = () => {
+    const world = new World(), ground = (x, z) => world.height(x, z);
+    const simulation = createStage(parseStageOptions('?mode=survivors&t=0&fixture=ace&seed=19'), ground);
+    assert.ok(simulation.boss && simulation.run);
+    delete simulation.boss.entry;
+    delete simulation.boss.roll;
+    const vfx = new SortieVfx(TICKS_PER_SECOND), weapons = [];
+    observeDamage(simulation, (id, _damage, _critical, target, weapon) => {
+      weapons.push(weapon);
+      if (weapon) vfx.hit(weapon, { tick: simulation.tick, position: target, eventId: id });
+    });
+    return { simulation, ground, vfx, weapons };
+  };
+
+  const ion = makeAce();
+  ion.simulation.run.weaponLevels.ion = 1;
+  ion.simulation.ionWake = [
+    { x: ion.simulation.boss.x - 2, z: ion.simulation.boss.z, alt: ion.simulation.boss.alt, until: ion.simulation.tick + 20 },
+    { x: ion.simulation.boss.x + 2, z: ion.simulation.boss.z, alt: ion.simulation.boss.alt, until: ion.simulation.tick + 20 },
+  ];
+  advanceSupportWeapons(ion.simulation, ion.ground);
+  assert.deepEqual(ion.weapons, ['ion']);
+  assert.equal(ion.vfx.activeCount, 1);
+
+  const drones = makeAce();
+  drones.simulation.run.weaponLevels.drones = 1;
+  const player = drones.simulation.player, tuning = WEAPONS.drones.tuning;
+  const orbit = 2 * Math.PI * drones.simulation.tick / tuning.periodTicks;
+  const yaw = orbit + player.yaw, radius = tuning.radius[0];
+  drones.simulation.boss.x = player.x + Math.sin(yaw) * radius;
+  drones.simulation.boss.z = player.z + Math.cos(yaw) * radius;
+  drones.simulation.boss.alt = player.altitude + Math.sin(orbit) * tuning.tilt;
+  advanceSupportWeapons(drones.simulation, drones.ground);
+  assert.deepEqual(drones.weapons, ['drones']);
+  assert.equal(drones.vfx.activeCount, 1);
+
+  const pods = makeAce();
+  pods.simulation.run.evolutions.pods = true;
+  pods.simulation.boss.x = pods.simulation.player.x + CLOSE_EVOLUTIONS.aegis.radius;
+  pods.simulation.boss.z = pods.simulation.player.z;
+  pods.simulation.boss.alt = pods.simulation.player.altitude;
+  advanceSupportWeapons(pods.simulation, pods.ground);
+  assert.deepEqual(pods.weapons, ['pods']);
+  assert.equal(pods.vfx.activeCount, 1);
+
+  const phoenix = makeAce();
+  phoenix.simulation.boss.burnNextAt = phoenix.simulation.tick;
+  phoenix.simulation.boss.burnUntil = phoenix.simulation.tick + 20;
+  phoenix.simulation.boss.burnDamage = 1;
+  advanceFlares(phoenix.simulation, phoenix.ground);
+  assert.deepEqual(phoenix.weapons, ['phoenix']);
+  assert.equal(phoenix.vfx.activeCount, 1);
 });
 
 test('fire accents anchor to live shot positions and leave no invented missile paths or bodies', () => {
