@@ -183,12 +183,14 @@ async function finishDecoding() {
 }
 
 const voicesFor = (context, buffer) => context.nodes.filter(node => node.kind === 'buffer-source' && node.buffer === buffer);
-const ACE_LOCK_PULSE_HZ = [640, 850, 1125, 1490, 1980];
+const voicesAt = (context, buffer, time) => voicesFor(context, buffer)
+  .filter(voice => voice.startTime >= time && voice.startTime < time + buffer.duration);
+const ACE_LOCK_PULSE_HZ = 1125;
 
 function aceLockBuffers(context) {
   const window = context.buffers.at(-1);
-  const pulses = context.buffers.slice(-ACE_LOCK_PULSE_HZ.length - 1, -1);
-  assert.equal(pulses.length, ACE_LOCK_PULSE_HZ.length);
+  const pulses = context.buffers.slice(-2, -1);
+  assert.equal(pulses.length, 1);
   return { pulses, window };
 }
 
@@ -202,6 +204,17 @@ function positiveCrossingHz(samples, sampleRate, start, end) {
   let crossings = 0;
   for (let i = start + 1; i < end; i++) if (samples[i - 1] <= 0 && samples[i] > 0) crossings++;
   return crossings * sampleRate / (end - start);
+}
+
+function toneAmplitude(samples, sampleRate, frequency, startSeconds, endSeconds) {
+  const start = Math.ceil(startSeconds * sampleRate), end = Math.floor(endSeconds * sampleRate);
+  let real = 0, imaginary = 0;
+  for (let i = start; i < end; i++) {
+    const phase = 2 * Math.PI * frequency * i / sampleRate;
+    real += samples[i] * Math.cos(phase);
+    imaginary += samples[i] * Math.sin(phase);
+  }
+  return 2 * Math.hypot(real, imaginary) / (end - start);
 }
 
 test('approved sounds load once after activation and use the mixer, with a synth fallback per missing sample', async t => {
@@ -654,22 +667,28 @@ test('tail, missile lock and roster alerts play distinct cues with independent c
   assert.equal(context.started.at(-1), context.started[cues.indexOf('tell:missile')]);
 });
 
-test('Ace lock pulse bank spans the reference pitch range and preserves the distinct window cue', t => {
+test('Ace lock uses one steady-pitch band-limited radar beep and preserves the distinct window cue', t => {
   const { instances, userActivation } = browserAudio(t);
   userActivation.hasBeenActive = true;
   const audio = new CombatAudio();
   audio.unlock(gesture);
   const [context] = instances;
   const { pulses, window } = aceLockBuffers(context);
-  assert.equal(pulses.length, ACE_LOCK_PULSE_HZ.length);
-  const measuredPulseHz = pulses.map(pulse => {
-    assert.ok(Math.abs(pulse.duration - 0.04) < 0.001);
-    return positiveCrossingHz(pulse.getChannelData(0), pulse.sampleRate, 96, 864);
-  });
-  for (let i = 0; i < ACE_LOCK_PULSE_HZ.length; i++) {
-    assert.ok(Math.abs(measuredPulseHz[i] - ACE_LOCK_PULSE_HZ[i]) <= 40,
-      `pulse ${i} should be ${ACE_LOCK_PULSE_HZ[i]} Hz, got ${measuredPulseHz[i]}`);
-  }
+  assert.equal(pulses.length, 1);
+  const pulse = pulses[0], samples = pulse.getChannelData(0);
+  assert.ok(Math.abs(pulse.duration - 0.032) < 0.001);
+  const measuredPulseHz = positiveCrossingHz(samples, pulse.sampleRate, 96, samples.length - 96);
+  assert.ok(Math.abs(measuredPulseHz - ACE_LOCK_PULSE_HZ) <= 20,
+    `pulse should remain at ${ACE_LOCK_PULSE_HZ} Hz, got ${measuredPulseHz}`);
+  const peak = Math.max(...samples.map(Math.abs));
+  assert.ok(peak >= 0.34 && peak <= 0.37, `pulse peak preserves prior level without clipping, got ${peak}`);
+  const fundamental = toneAmplitude(samples, pulse.sampleRate, ACE_LOCK_PULSE_HZ, 0.004, 0.020);
+  const thirdHarmonic = toneAmplitude(samples, pulse.sampleRate, ACE_LOCK_PULSE_HZ * 3, 0.004, 0.020);
+  const fifthHarmonic = toneAmplitude(samples, pulse.sampleRate, ACE_LOCK_PULSE_HZ * 5, 0.004, 0.020);
+  assert.ok(thirdHarmonic / fundamental > 0.30 && thirdHarmonic / fundamental < 0.37,
+    'the third odd harmonic gives the pulse a square-like radar timbre');
+  assert.ok(fifthHarmonic / fundamental > 0.17 && fifthHarmonic / fundamental < 0.23,
+    'the fifth odd harmonic remains band-limited and controlled');
   assert.ok(window.duration >= 0.1 && window.duration <= 0.14);
   const windowSamples = window.getChannelData(0);
   assert.ok(positiveCrossingHz(windowSamples, window.sampleRate, 120, 1080) >= 1550);
@@ -698,10 +717,13 @@ test('Ace lock cue bank schedules pulse cadence and window onset at their exact 
   audio.updateAceLock(aceLockState(100), true);
   const pulseCues = context.nodes.filter(cue => cue.kind === 'buffer-source' && pulseBank.includes(cue.buffer));
   const pulseTicks = pulseCues.map(cue => Math.round(100 + (cue.startTime - origin) * 60));
-  const pitchSteps = pulseCues.map(cue => pulseBank.indexOf(cue.buffer));
+  const pulseBankIndices = pulseCues.map(cue => pulseBank.indexOf(cue.buffer));
   const accents = voicesFor(context, window);
-  assert.deepEqual(pulseTicks, [100, 112, 122, 131, 139, 150, 156]);
-  assert.deepEqual(pitchSteps, [0, 1, 2, 3, 4, 4, 4], 'pitches rise by tell progress and remain urgent in the window');
+  assert.deepEqual(pulseTicks, [100, 110, 119, 127, 134, 140, 150, 156]);
+  assert.deepEqual(pulseTicks.slice(1, 6).map((tick, index) => tick - pulseTicks[index]), [10, 9, 8, 7, 6],
+    'pre-window beeps arrive with progressively shorter gaps');
+  assert.deepEqual(pulseBankIndices, Array(pulseTicks.length).fill(0),
+    'all warning pips reuse the same fixed-pitch buffer');
   assert.equal(accents.length, 1);
   assert.equal(accents[0].startTime, origin + 42 / 60, 'the accent is queued at windowTick, independent of render cadence');
   const effects = context.master.inputs.find(node => node.kind === 'gain');
@@ -726,7 +748,7 @@ test('Ace lock cue bank schedules pulse cadence and window onset at their exact 
   const [shortContext] = other.instances;
   const { pulses: shortPulses, window: shortWindow } = aceLockBuffers(shortContext);
   short.updateAceLock(aceLockState(100, { until: 119 }), true);
-  const pulseVoice = voicesFor(shortContext, shortPulses[0]).at(-1);
+  const pulseVoice = voicesFor(shortContext, shortPulses[0])[0];
   const accentVoice = voicesFor(shortContext, shortWindow).at(-1);
   assert.equal(pulseVoice.outputs[0].gain.value, 2.0, 'pulse starts at its requested cue gain');
   assert.equal(accentVoice.startTime, 1 / 60 + 0.006, 'an overlapping short tell gets a six-millisecond replacement fade');
@@ -803,7 +825,7 @@ test('first audible tell emits one overdue low pip unless the dodge window alrea
   const { pulses: firstPulses } = aceLockBuffers(firstContext);
   firstContext.currentTime = 4;
   firstAudio.updateAceLock(aceLockState(101), true);
-  const initialPips = voicesFor(firstContext, firstPulses[0]);
+  const initialPips = voicesAt(firstContext, firstPulses[0], firstContext.currentTime);
   assert.equal(initialPips.length, 1);
   assert.equal(initialPips[0].startTime, firstContext.currentTime);
 
@@ -815,7 +837,7 @@ test('first audible tell emits one overdue low pip unless the dodge window alrea
   const { pulses: latePulses, window } = aceLockBuffers(lateContext);
   lateContext.currentTime = 5;
   lateAudio.updateAceLock(aceLockState(142), true);
-  assert.equal(voicesFor(lateContext, latePulses[0]).length, 0);
+  assert.equal(voicesAt(lateContext, latePulses[0], lateContext.currentTime).length, 0);
   assert.equal(voicesFor(lateContext, window)[0].startTime, lateContext.currentTime,
     'an already-open window plays its distinct cue instead');
 
@@ -827,7 +849,8 @@ test('first audible tell emits one overdue low pip unless the dodge window alrea
   const { pulses: mutedPulses } = aceLockBuffers(mutedContext);
   mutedAudio.updateAceLock(aceLockState(101), false);
   mutedAudio.updateAceLock(aceLockState(101), true);
-  assert.equal(voicesFor(mutedContext, mutedPulses[0]).length, 0, 'an initially inaudible tell never replays its missed pip');
+  assert.equal(voicesAt(mutedContext, mutedPulses[0], mutedContext.currentTime).length, 0,
+    'an initially inaudible tell never replays its missed pip');
 });
 
 test('Ace lock low-frame-rate catch-up retains exact window and pulse start times', t => {
@@ -870,7 +893,8 @@ test('Ace lock cue timing rebases when audio time outruns simulated ticks', t =>
   context.currentTime = origin + 30 / 60;
   audio.updateAceLock(aceLockState(110), true);
   assert.equal(staleWindow.stopped, true, 'a delayed simulation cancels sources queued on the old clock');
-  assert.equal(voicesFor(context, pulseBank[0]).length, 1, 'rebasing does not replay the missed initial pip');
+  assert.equal(voicesAt(context, pulseBank[0], context.currentTime).length, 1,
+    'rebasing schedules only the pulse due at the new tick');
   const currentWindow = voicesFor(context, window).at(-1);
   assert.notEqual(currentWindow, staleWindow);
   assert.equal(currentWindow.startTime, context.currentTime + (142 - 110) / 60);
@@ -1054,17 +1078,19 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   audio.updateAceLock(aceLockState(100, { id: 18, kind: 'missile' }), true);
   audio.updateAceLock(aceLockState(101, { id: 18, kind: 'missile', since: 101 }), true);
   audio.updateAceLock(aceLockState(101, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
-  assert.equal(voicesFor(context, pulseBank[0]).length, 5, 'boss id, kind, since and until all identify a tell');
+  assert.equal(voicesAt(context, pulseBank[0], context.currentTime).length, 5,
+    'boss id, kind, since and until all identify a tell');
   assert.equal(JSON.stringify(snapshot), before, 'the presentation scheduler does not mutate StageState');
 
-  const pausedVoice = voicesFor(context, pulseBank[0]).at(-1);
+  const pausedVoice = voicesAt(context, pulseBank[0], context.currentTime).at(-1);
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161, paused: true }), false);
   assert.equal(pausedVoice.stopped, true, 'pause stops the active lock voice');
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'pause restores the effects bus');
   const resumedCount = context.started.length;
   audio.updateAceLock(aceLockState(102, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.ok(context.started.length > resumedCount, 'resume schedules only future cues');
-  assert.equal(voicesFor(context, pulseBank[0]).length, 5, 'resume does not replay the already-passed first pulse');
+  assert.equal(voicesAt(context, pulseBank[0], context.currentTime).length, 5,
+    'resume does not replay the already-passed first pulse');
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06, 'the active tell re-ducks effects on resume');
 
   audio.setMuted(true);
@@ -1074,7 +1100,8 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
   audio.setMuted(false);
   audio.updateAceLock(aceLockState(113, { id: 18, kind: 'missile', since: 101, until: 161 }), true);
   assert.ok(context.started.length > mutedCount, 'unmute schedules cues that are still ahead');
-  assert.equal(voicesFor(context, pulseBank[0]).length, 5, 'unmute skips pulses that became due while muted');
+  assert.equal(voicesAt(context, pulseBank[0], context.currentTime).length, 5,
+    'unmute skips pulses that became due while muted');
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
   audio.setVolume(0);
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'zero volume restores effects');
@@ -1084,19 +1111,19 @@ test('Ace lock scheduler keys tells and skips paused, muted, suspended and cance
 
   audio.updateAceLock(aceLockState(200, { since: 200, until: 260 }), true);
   const suspendedCount = context.started.length;
-  const firstPulseCount = voicesFor(context, pulseBank[0]).length;
+  const firstPulseCount = voicesAt(context, pulseBank[0], context.currentTime).length;
   audio.setSuspended(true);
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 1, 'suspension restores effects');
   audio.updateAceLock(aceLockState(212, { since: 200, until: 260 }), false);
   audio.setSuspended(false);
   audio.updateAceLock(aceLockState(212, { since: 200, until: 260 }), true);
   assert.ok(context.started.length > suspendedCount, 'resume schedules later simulation cues');
-  assert.equal(voicesFor(context, pulseBank[0]).length, firstPulseCount,
+  assert.equal(voicesAt(context, pulseBank[0], context.currentTime).length, firstPulseCount,
     'resume does not replay the suspended pulse at tick 212');
   assert.equal(context.master.inputs.find(node => node.kind === 'gain').gain.value, 0.06);
 
   audio.updateAceLock(aceLockState(300, { since: 300, until: 360 }), true);
-  const activeVoice = voicesFor(context, pulseBank[0]).at(-1);
+  const activeVoice = voicesAt(context, pulseBank[0], context.currentTime).at(-1);
   const activeGain = activeVoice.outputs[0];
   audio.updateAceLock(aceLockState(301, { active: false }), false);
   assert.equal(activeVoice.stopped, true, 'tell cancellation promptly stops the active voice');

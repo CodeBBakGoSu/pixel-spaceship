@@ -11,7 +11,8 @@ const CUE_HEADROOM = 0.85;
 const SAMPLE_RATE = 24_000;
 const TAU = 2 * Math.PI;
 const EXPLOSION_VOICES = 4;
-const ACE_LOCK_PULSE_TICKS = 12;
+const ACE_LOCK_PULSE_TICKS = 10;
+const ACE_LOCK_MIN_PULSE_TICKS = 5;
 const ACE_LOCK_WINDOW_TICKS = 6;
 const ACE_LOCK_WINDOW_PULSE_DELAY_TICKS = ACE_LOCK_WINDOW_TICKS + 2;
 const ACE_LOCK_TICK_SECONDS = 1 / 60;
@@ -19,7 +20,7 @@ const ACE_LOCK_EFFECTS_DUCK = 0.06;
 const ACE_LOCK_WINDOW_EFFECTS_DUCK = 0.02;
 const ACE_LOCK_PULSE_GAIN = 2.0;
 const ACE_LOCK_WINDOW_GAIN = 2.4;
-const ACE_LOCK_PULSE_FREQUENCIES = [640, 850, 1125, 1490, 1980] as const;
+const ACE_LOCK_PULSE_FREQUENCY = 1125;
 
 const COOLDOWN_SECONDS = {
   hit: 0.20, graze: 0.08, warning: 1.5, muzzle: 0.09, roll: 0.21, parry: 0.12, ace_alert: 1.5,
@@ -50,10 +51,12 @@ type AceLockVoice = {
 type AceLockCueEvent = { tick: number; kind: AceLockCueKind; progress: number };
 
 function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
-  const pulses = ACE_LOCK_PULSE_FREQUENCIES.map(frequency => synthesize(context, 0.04, (elapsed, progress) => {
-    const envelope = Math.max(0, Math.min(1, elapsed / 0.004, (1 - progress) / 0.2));
-    return 0.42 * Math.sin(TAU * frequency * elapsed) * envelope;
-  }));
+  const pulse = synthesize(context, 0.032, (elapsed, progress) => {
+    const phase = TAU * ACE_LOCK_PULSE_FREQUENCY * elapsed;
+    const envelope = Math.max(0, Math.min(1, elapsed / 0.0015, (1 - progress) / 0.125));
+    const squareLike = Math.sin(phase) + Math.sin(3 * phase) / 3 + Math.sin(5 * phase) / 5;
+    return 0.447 * squareLike * envelope;
+  });
   const window = synthesize(context, 0.13, elapsed => {
     const second = elapsed >= 0.065;
     const noteTime = second ? elapsed - 0.065 : elapsed;
@@ -61,7 +64,7 @@ function lockPulseCues(context: AudioContext): AudioOutput['aceLockCues'] {
     const envelope = Math.max(0, Math.min(1, noteTime / 0.004, (0.05 - noteTime) / 0.008));
     return 0.46 * Math.sin(TAU * (second ? 2_200 : 1_650) * noteTime) * envelope;
   });
-  return { pulses, window };
+  return { pulses: [pulse], window };
 }
 
 function storedMute(): boolean {
@@ -375,7 +378,7 @@ export class CombatAudio {
   }
 
   private aceLockInterval(progress: number): number {
-    return Math.round(ACE_LOCK_PULSE_TICKS - (ACE_LOCK_PULSE_TICKS - ACE_LOCK_WINDOW_TICKS) * progress);
+    return Math.round(ACE_LOCK_PULSE_TICKS - (ACE_LOCK_PULSE_TICKS - ACE_LOCK_MIN_PULSE_TICKS) * progress);
   }
 
   private aceLockCueTimeline(tell: AceTell, windowTick: number): AceLockCueEvent[] {

@@ -401,3 +401,8 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 ### 2026-11-18 – 2026-11-20 · 비행기게임봇 · renderer-proto (`2010b34` … `ee94755`)
 - Survivors rework: Three.js voxel renderer, deterministic Reach sortie, cockpit and rear mirror, enemy archetypes, weapons/buffs/evolutions, Bills and pilot progression, mobile sortie UI, combat feedback and balance passes. Plans in `docs/SURVIVORS_PLAN.md`, `docs/WEAPONS_BUFFS_PLAN.md`, `docs/BALANCE_NOTES.md`.
 - State: done.
+
+### 2026-11-24 · 데븐 봇 · devin/1795495663-ace-lock-radar-cue → renderer-proto
+- Ace-lock warning uses one 1125Hz, 32ms band-limited square-like beep; the pulse gaps shorten. The final 1650/2200Hz accent is unchanged.
+- Verification: focused audio/Ace/input tests 68/68; build 120 modules. Trusted C canceled the Ace attack with 0 shots. In the mixed WAV, the accent measures −17.4/−17.5dBFS with off-tone residual −45.9/−41.2dBFS; the preceding pulse ends 1.333ms before the accent, with peak −13.35dBFS and 0 clipped samples. Automated subjective flags for distortion/accent clarity were not corroborated by these measurements. The 57s viewer capture is silent; its separate WAV is unsynchronized: https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=ccdecfff-5e94-4857-9ae3-6fda9fb76db9
+- State: renderer-proto-only update; no PR, main merge, or deployment.
