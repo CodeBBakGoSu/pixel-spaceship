@@ -31,6 +31,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Added shared touch-safe cue placement and screen-direction helpers with 390×844 / 844×390 regression coverage; PR #10 and #15 UI wiring remains in progress.
 - Mobile layout tests passed 57/57 and build passed (122 modules, 2.64s). State: in progress.
 
+### 2026-11-25 (KST) · 데븐 봇 · `devin/1795531296-aegis-volume-pr13` (`fab05d1`, `8c85070`; base `b1fa90a`)
+- Cherry-picked the shared touch-safe cue helper from PR #10. Added a compact mobile Aegis cue in a free control-panel slot only when projected world-boundary samples are off-screen or obscured by HUD, controls, or aircraft; inner/outer and upper/lower labels derive from the existing Aegis bounds. Collision, camera, and gameplay remain unchanged.
+- Verification: focused Aegis/layout tests 61/61; `npm run build` passed (124 modules, 2.31 s; nonfatal chunk-size advisory). Latest continuous-flight base `b1fa90a` is already an ancestor and retains the same `radius ± halfWidth` / `player.alt ± halfWidth` verdict semantics. Mobile visual QA remains delegated.
+- State: implementation complete; no public deployment.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`027fdb5`, `6c069b0`; based on `1ef2fd9`)
 - Restored ion wake continuity by connecting each live sample to its previous sample in the same normalized lane (including lane 0's omitted index). Dive-warning masks now use the scene's clipped segment projection, retaining visible corridors for offscreen targets and camera-plane crossings; added regressions for both cases.
 - Regression repros against `1ef2fd9` failed 2/2; the focused VFX suite then passed 23/23. Build passed (121 modules, 2.18s); `git diff --check` was clean. Build preceded a test-only camera-fixture adjustment; production sources were unchanged afterward.
@@ -50,11 +55,24 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Implemented the selected W01–W10 fire/hit and D01–D04 defeat visuals in a bounded render-only overlay, with authoritative outcome observers, pickup adapters, and density-based readability reductions.
 - Added route, anchor, pool/cleanup, pickup-event, Ace-verdict, boss-silhouette, and replay-invariance coverage. npm test passed 637/637; npm run build passed (121 modules, 2.88s).
 - State: done on this branch; no commit, push, PR, or visual comparison.
+### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (기준 `ae1b94c`, commit `b71acc7`)
+- Matched the renderer to PR #13's continuous-flight verdict: radial bounds `radius ± halfWidth` and altitude bounds `player.alt ± halfWidth`; added transparent boundary rings and supports without changing collision or simulation state.
+- Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
+- PR #10 compatibility review: not cherry-picked to its remote branch (`fa45f64`) because its Aegis verdict uses `hitWindow(state)` vertically, while PR #13's continuous-run verdict uses `player.alt ± halfWidth`; rendering the PR #13 outline there would misstate the judged bounds. No separate PR was opened pending approval.
+- State: done on the pushed PR #13-derived renderer branch (`c742880`); collision, balance, and simulation remain unchanged.
+
+### 2026-11-25 00:30 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (merge `aee37b8`, source `2a4d915`, base `b1fa90a`)
+- Merged the continuous-flight base into the Aegis renderer; resolved the sole `docs/WORKLOG.md` conflict additively, retaining both sides' entries. Aegis activation and `radius ± halfWidth` / `player.alt ± halfWidth` verdict semantics are unchanged.
+- Verification: `npm test` 648/648; `npm run build` passed (123 modules, 2.15 s). State: done.
 
 ### 2026-11-25 00:17 KST · 데븐 봇 · candidate validation follow-up
 - The first full run found the intentional Survivors seeker behavior change no longer matched its previous seed-1 terminal hash. Reproduced both fidelity-rendering settings: both clear with identical hash `f0b5e5c44f5033d6edf2a94249970287cabe1d0b81635ec0d4ee5c3688ee569d`; refreshed only the Survivors hash. The Legacy golden remains unchanged and passed.
 - Fixed the strict TypeScript optional seeker-velocity input; rebuilt the generated bundle and verified the new EN/KO quest copy is present with obsolete copy absent.
 - Final verification: `npm test` passed 646/646; `npm run build` passed with 121 modules (`3.44s`).
+
+### 2026-11-25 00:14 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (commit `54a2fd8`)
+- Replaced scaled unit Aegis toruses with inner/outer TorusGeometry at the actual judged radii and a fixed 0.15 world-unit tube radius; renderer outline data is precomputed once.
+- Verification: focused geometry suite 2/2, including rendered TorusGeometry bounds at both radii; `npm run build` (123 modules, 2.16s); `git diff --check` clean. State: done.
 
 ### 2026-11-25 00:08 KST · 데븐 봇 · review finding 0005
 - Reproduced the pursuit failure with an elevated target 30 m above the player moving laterally at 40 units/s: the prior seeker lost the target at tick 28 with altitude still about 15 m short, then stopped climbing when it nulled vertical velocity.
@@ -70,6 +88,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Reproduced level-five drone target acquisition across altitude: three bolts spawned at altitudes 110/120/130 toward a target 45 m above the player, but all had `vy=0` and the target remained at 100 HP after 90 ticks.
 - Survivors drone bolts now use a normalized 3D direction to the acquired target; Legacy keeps its horizontal shot path.
 - Verification: `node --test tests/drone-aim.test.mjs` passed 1/1; the existing level-five drone case in `tests/loadout.test.mjs` passed 1/1.
+
+### 2026-11-25 00:02 KST · 데븐 봇 · devin/1795531296-aegis-volume-pr13 (기준 `ae1b94c`, commit `b71acc7`)
+- Matched the renderer to PR #13's continuous-flight verdict: radial bounds `radius ± halfWidth` and altitude bounds `player.alt ± halfWidth`; added transparent boundary rings and supports without changing collision or simulation state.
+- Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
+- PR #10 compatibility review: not cherry-picked to its remote branch (`fa45f64`) because its Aegis verdict uses `hitWindow(state)` vertically, while PR #13's continuous-run verdict uses `player.alt ± halfWidth`; rendering the PR #13 outline there would misstate the judged bounds. No separate PR was opened pending approval.
+- State: done on the pushed PR #13-derived renderer branch (`c742880`); collision, balance, and simulation remain unchanged.
 
 ### 2026-11-24 23:59 KST · 데븐 봇 · review finding 0002
 - Reproduced with a Survivors state at the first Bill offer (tick 3600): weak bot seed 1 caused `state.bills.active` to become `null`; at the deadline `finishBillTick` returned `null`, interest stayed false, and XP scaling stayed 1. Weak seed 9 handled the Bill and correctly produced an unpaid expiry with interest and 0.75 XP scale, confirming the failure was on the ignored-Bill input path.
@@ -95,7 +119,6 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: focused Aegis geometry test 1/1; `npm run build` (122 modules, 2.03s); oblique chase preview in `/home/ubuntu/screenshots/ss_d9da52db.png` and `/home/ubuntu/screenshots/ss_zoom_a8b87832.png`. State: in progress pending remote push and PR10 compatibility review.
 - PR #10 compatibility review: not cherry-picked to its remote branch (`fa45f64`) because its Aegis verdict uses `hitWindow(state)` vertically, while PR #13's continuous-run verdict uses `player.alt ± halfWidth`; rendering the PR #13 outline there would misstate the judged bounds. No separate PR was opened pending approval.
 - State: done on the pushed PR #13-derived renderer branch (`c742880`); collision, balance, and simulation remain unchanged.
-
 ### 2026-11-24 23:37 KST · 데븐 봇 · devin/1795524980-continuous-flight-10min (기준 `09e2890`)
 - Isolated the Legacy replay against detached `09e2890`: the first serialized-state difference at tick 0 was only the progress-metric schema (`multibandWithinFive`/`bandsKilled` vs `heightSpreadWithinFive`/`verticalKills`). Removing profile/daily/run metrics from the behavioral projection produced identical seed-1 simulation state through tick 6770/`clear` on both trees. Added mode-scoped Legacy metric creation/normalization; the Legacy golden is unchanged.
 - Closed the rail endpoint, retained/Ace seeker range+cone, and terrain refresh/rise findings. Aegis now uses a bounded annular cylinder rather than a spherical shell; `scene.ts` still renders the flat `RingGeometry`. An exact-plane trial made seed 2026 lose at tick 30344 after Pods/Aegis was selected at 15784 and evolved at 24255, so the cylinder version was restored; VFX owner alignment of the vertical half-width remains needed.

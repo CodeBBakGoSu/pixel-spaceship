@@ -239,6 +239,17 @@
     <button class="touch-button view" id="touch-view" type="button" data-i18n="control.view"></button>
     <button class="touch-button roll" id="touch-roll" type="button" data-i18n="control.roll"></button>
     <div class="touch-threat-cue" id="touch-threat-cue" aria-hidden="true" hidden></div>
+    <div class="aegis-volume-cue" id="aegis-volume-cue" role="img" aria-label="" hidden>
+      <svg viewBox="0 0 42 40" aria-hidden="true">
+        <circle class="aegis-volume-outer" cx="16" cy="20" r="14"></circle>
+        <circle class="aegis-volume-inner" id="aegis-volume-cue-inner" cx="16" cy="20" r="8"></circle>
+        <path class="aegis-volume-altitude" d="M35 6v28 M31 10l4-4 4 4 M31 30l4 4 4-4"></path>
+      </svg>
+      <span class="aegis-volume-cue-labels" aria-hidden="true">
+        <span id="aegis-volume-cue-radial"></span>
+        <span id="aegis-volume-cue-altitude"></span>
+      </span>
+    </div>
   </div>
   <div class="help" id="help" aria-live="polite"></div>
 </main>

@@ -1,6 +1,7 @@
 import type { PhoneLayout, Rect } from './layout.ts';
 
 export type ScreenPoint = { x: number; y: number };
+export type ProjectedScreenPoint = ScreenPoint & { depth: number };
 export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
@@ -20,7 +21,7 @@ function contains(outer: Rect, inner: Rect): boolean {
     && inner.y + inner.height <= outer.y + outer.height;
 }
 
-export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4): Rect | null {
+export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4, blocked: readonly Rect[] = []): Rect | null {
   const { controls } = layout;
   if (![size.width, size.height, gap].every(Number.isFinite) || size.width <= 0 || size.height <= 0 || gap < 0) return null;
   const centeredX = controls.x + (controls.width - size.width) / 2;
@@ -34,7 +35,7 @@ export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4): R
   for (const y of yCandidates) for (const x of xCandidates) {
     const rect = { x, y, width: size.width, height: size.height };
     if (!contains(controls, rect) || overlaps(rect, layout.playfield)) continue;
-    if (targets.some(target => overlaps(rect, target))) continue;
+    if (targets.some(target => overlaps(rect, target)) || blocked.some(target => overlaps(rect, target))) continue;
     return rect;
   }
   return null;
@@ -46,6 +47,15 @@ export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, mar
     && point.y >= controls.y - margin && point.y <= controls.y + controls.height + margin;
 }
 
+export function screenPointObscured(point: ProjectedScreenPoint, viewport: { width: number; height: number },
+  obstacles: readonly Rect[]): boolean {
+  if (![point.x, point.y, point.depth, viewport.width, viewport.height].every(Number.isFinite)
+    || point.depth <= 0.05 || viewport.width <= 0 || viewport.height <= 0) return true;
+  if (point.x < 0 || point.x >= viewport.width || point.y < 0 || point.y >= viewport.height) return true;
+  return obstacles.some(rect => point.x >= rect.x && point.x <= rect.x + rect.width
+    && point.y >= rect.y && point.y <= rect.y + rect.height);
+}
+
 export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number | null {
   const dx = to.x - from.x, dy = to.y - from.y;
   if (![dx, dy].every(Number.isFinite) || Math.hypot(dx, dy) < 0.001) return null;
@@ -53,9 +63,9 @@ export function screenArrowRotation(from: ScreenPoint, to: ScreenPoint): number 
 }
 
 export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target: ScreenPoint,
-  size: CueSize, margin = 8): TouchOcclusionCue | null {
+  size: CueSize, margin = 8, blocked: readonly Rect[] = []): TouchOcclusionCue | null {
   if (!pointBehindTouchControls(target, layout.controls, margin)) return null;
-  const rect = findTouchCueRect(layout, size);
+  const rect = findTouchCueRect(layout, size, 4, blocked);
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
 }
