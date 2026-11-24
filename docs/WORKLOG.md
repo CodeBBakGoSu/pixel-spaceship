@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`ad09f1f`, based on `c81b644`)
+- Guarded Ace-window flags against callbacks from removed voices, replay the missed low pip only on first audible setup, and timestamp queued defensive inputs at fixed-step boundaries; 80ms chord timing and the existing dodge/grace windows are unchanged.
+- Tester’s `c81b644` sample measured the 1650Hz cue at 2.05s (scheduled 2.0527s), with the next visible window frame at 2.0898s and a preceding frame 41ms earlier (25–28fps). Focused tests passed 53/53 and `npm run build` passed (120 modules, 3.51s); both stale-callback regressions failed against `c81b644` before the guard. Full suite deferred until UI retest.
+- State: implementation and focused checks complete; runtime audio/masking, AV-frame quantization, and weapon verification remain pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (UI report for `1b0518f`; tick-scheduled warning)
 - UI-agent report on `1b0518f`: outer radius 143→53px over the first 18 ticks, 27.5px at the dodge window, and 22px at fire; same-tick `1b652cd` baseline was 49.5px and inside the ship. W/S+Space, Shift+Space and C passed; 320/375px layouts passed. Pitch rise was heard, but injected hits partly masked clarity. The reported 5–8fps machine delayed the cue by 11 ticks; 60fps comparison was not verified. Automatic weapons were not runtime-tested. Full `npm test` on `1b0518f` passed 605/605.
 - Pre-scheduled Ace pulses and the dodge accent from simulation ticks, with clock-drift rebasing and cancellation of future sources/duck automation on pause, mute, cancellation and fire. The existing 40ms 640/850/1125/1490/1980Hz pulse bank, cadence, 18-tick window, cue gains, master/headroom/limiter, fire restore and gameplay are unchanged; the two-note accent is brighter (1650→2200Hz), and effects duck further to 0.02 only in the window. The schedule follows the logical tick; at low FPS the visible ring still waits for a rendered frame, so the audio can precede its first visible window frame by up to one frame.
