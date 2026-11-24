@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PHASES } from '../src/data/phases.ts';
 import { advancePhaseDirector } from '../src/phase-director.ts';
-import { createStage, parseStageOptions } from '../src/stage.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies, makeEnemy } from '../src/stage-enemies.ts';
 
 const tick = seconds => seconds * 60;
@@ -52,6 +52,20 @@ test('four new enemy types have deterministic isolated introductions and the lat
   assert.equal(state.enemies.some(enemy => enemy.hp > 0), false);
 });
 
+test('restarting a sortie clears the old director and allows the new introduction schedule', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'), ground);
+  state.phase = 'clear';
+  state.phaseDirector = { intro: 4, six: true, seven: true, manta: true, isolationUntil: tick(500), introIds: [],
+    sixTellUntil: tick(480), sixCrosswingStarted: true, sixTwinStarted: true };
+  stepStage(state, { start: true, launch: { profile: state.profile, heat: 0, seed: 22, daily: false } }, ground);
+  assert.equal(state.tick, 0);
+  assert.equal(state.phaseDirector, undefined);
+
+  state.tick = tick(70) - 1;
+  stepStage(state, {}, ground);
+  assert.equal(state.phaseDirector.intro, 1);
+  assert.equal(state.enemies.some(enemy => enemy.kind === 'twin-chaser' && enemy.directorIntro), true);
+});
 test('intro isolation cancels existing tells and pending volleys', () => {
   const state = createStage(parseStageOptions('?mode=survivors&t=0'), () => 0);
   state.tick = tick(70);

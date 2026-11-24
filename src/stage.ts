@@ -704,6 +704,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       // --- S7d lane ---
       delete state.rally;
       delete state.claimedSites;
+      delete state.phaseDirector;
       Object.assign(state, createStage({ ...parseStageOptions(''), seed: launch?.seed ?? state.seed,
         view: state.initialView, time: 0, mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile,
         profile: launch?.profile ?? state.profile, daily: launch?.daily ?? state.daily, heat: launch?.heat ?? state.heat,
