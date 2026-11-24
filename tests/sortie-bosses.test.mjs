@@ -4,6 +4,8 @@ import { CARRIER_TUNING } from '../src/data/chest-tuning.ts';
 import { HEAT_TIERS } from '../src/data/meta.ts';
 import { MAX_ALTITUDE, advanceShots, hurtEnemy, TICKS_PER_SECOND } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { advanceEnemies } from '../src/stage-enemies.ts';
+import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
 
 const ground = () => 0;
@@ -50,6 +52,24 @@ test('the miniboss consumer starts only from the shared producer cue', () => {
     id: 'escort-commander', kind: 'midboss', startTick: 400 * TICKS_PER_SECOND,
     maxDurationTicks: 30 * TICKS_PER_SECOND, threatSource: 'midboss:escort-commander',
   });
+});
+
+test('generic straggler recycling cannot strand a sortie boss in a skipped fly-in entry', () => {
+  const state = startEncounter(0);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  const hp = actor.hp;
+  actor.x = state.player.x + 100000;
+  actor.z = state.player.z;
+  actor.farTicks = 155;
+
+  relocateStragglers(state, ground);
+  assert.equal(actor.entry, undefined);
+  for (let i = 0; i < 240; i++) {
+    state.tick++;
+    advanceEnemies(state, ground);
+  }
+  hurtEnemy(state, actor, 1);
+  assert.equal(actor.hp, hp - 1, 'the dedicated boss remains damageable after generic enemy advancement');
 });
 
 test('the armored transport crosses into a real four-second, in-range firing line inside the arena', () => {

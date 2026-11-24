@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:18 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0001; pending commit)
+- Reproduced a far transport receiving a generic fly-in entry after 156 far ticks; `advanceEnemies` skipped the sortieBoss entry for 240 ticks and `hurtEnemy` left HP unchanged. `relocateStragglers` now skips dedicated sortie-boss actors.
+- Added a regression asserting far-actor recycling cannot leave the boss invulnerable; `tests/sortie-bosses.test.mjs` passed 11/11 and `git diff --check` was clean. No balance values changed; remaining review findings are still in progress.
+
 ### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; implementation commit `587683981def20f8554a2aa9df0a7321de35c581`)
 - Tightened Ace acceptance from natural 8:00 spawn: a real player twin trajectory reaches the Ace hull within five seconds, four first-minute windows sustain at least three seconds, and 9:00+ cadence is observed. The probe uses live range/cone/muzzle/lead/bolt-life/hull geometry on a forecast clone without damage or actor relocation; trimmed unused spatial exports while retaining used helper signatures.
 - Verification: Ace reengagement 6/6; `npm test` 644/644; `npm run build` `✓ 122 modules transformed.` / `✓ built in 2.00s` (source unchanged after build); `git diff --check` clean. No balance simulation or visual/UI check.
