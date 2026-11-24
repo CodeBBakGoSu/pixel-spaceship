@@ -1,5 +1,7 @@
 # ASTER WING — 무기·버프·메타 성장 상세 기획
 
+**다음 개편 — 승인된 기획, 게임 미반영 (2026-11-24):** [장비·해금·청구서 전환](wiki/SORTIE_10MIN.md#migration) · [경험치·전역 자석](wiki/SORTIE_10MIN.md#pickup) · [선택한 VFX 24개](wiki/SORTIE_10MIN.md#vfx) · [검수 기준](wiki/SORTIE_10MIN.md#acceptance). 기존 수치표를 덮어쓰지 않으며, 첫 승리 목표는 강제 패배나 실측 결과가 아니다.
+
 **현행 기획:** [무기 자체의 쓰임](#weapon-roles) → [타격음·상자 잭팟](#jackpot) → [격납고](#hangar)와 [패배 후 첫 승리](#first-clear). 구현 순서와 검수 담당은 [빌드 계획](SURVIVORS_PLAN.md#pillars)에 있다.
 
 **현재 게임의 수치:** [위키 홈](wiki/README.md) · [구현된 무기·버프·진화·영구 강화·해금 조건](wiki/CATALOG.md). 아래 v1의 Lv5 무기표와 퀘스트 예시는 **과거 설계**이고, §1·§5.2·§13의 구현 점검은 당시 개발판 `0bc1f99` 기준이다.

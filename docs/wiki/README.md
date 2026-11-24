@@ -2,6 +2,8 @@
 
 Hawk로 10분 출격해 같은 고도의 적을 격추하고, 구슬을 모아 무기를 조합하고, 8분에 등장하는 Ace를 잡는 **개발판**의 안내서다. 지금 공개된 게임은 다른 버전이다.
 
+**승인된 기획, 게임 미반영:** [10분 출격 개편안](SORTIE_10MIN.md) · [분별 편성](SORTIE_10MIN.md#minutes) · [검수 기준](SORTIE_10MIN.md#acceptance). 아래 도감은 이 승인안이 아니라 현재 개발판을 설명한다.
+
 **도감:** [무기 10종](CATALOG.md#weapons) · [버프 10종](CATALOG.md#buffs) · [격납고 강화 8종](CATALOG.md#hangar) · [해금 퀘스트 10종](CATALOG.md#quests)
 
 **그림 도감:** [웹 도감 열기 (Devin 인증 필요)](https://aster-wing--9xv0plcv.preview.devinapps.com/docs/wiki/ASTER-WING-%EB%AC%B4%EA%B8%B0-%EB%B2%84%ED%94%84-%EB%8F%84%EA%B0%90.html) · [HTML 원본 보기 (Git)](ASTER-WING-무기-버프-도감.html)

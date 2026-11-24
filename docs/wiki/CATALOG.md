@@ -4,6 +4,8 @@
 
 [웹 도감 열기 (Devin 인증 필요)](https://aster-wing--9xv0plcv.preview.devinapps.com/docs/wiki/ASTER-WING-%EB%AC%B4%EA%B8%B0-%EB%B2%84%ED%94%84-%EB%8F%84%EA%B0%90.html) · [HTML 원본 보기 (Git)](ASTER-WING-무기-버프-도감.html)
 
+[향후 장비·해금 조건](SORTIE_10MIN.md#migration)은 **승인된 기획, 게임 미반영**이다. 아래 표는 승인안의 대체 조건이 아닌 기존 구현을 기록한다.
+
 **도감 데이터 기준:** [`renderer-proto` · 69f81c8](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/69f81c8). 무기와 버프는 이번 판의 빌드이고, 격납고 구매와 퀘스트 달성은 파일럿에게 남는다. 아래의 **기본 후보**는 첫 카드에 보장된다는 뜻이 아니다. Hawk의 실제 시작 무기는 쌍발 기관포 한 종이다.
 
 <a id="weapons"></a>

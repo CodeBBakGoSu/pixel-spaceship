@@ -1,5 +1,7 @@
 # ASTER WING — Survivors 빌드 순서
 
+**다음 개편 — 승인된 기획, 게임 미반영 (2026-11-24):** [10분 출격 승인본](wiki/SORTIE_10MIN.md) · [연속 비행 공간](wiki/SORTIE_10MIN.md#flight) · [매분 적·목표](wiki/SORTIE_10MIN.md#minutes) · [보스 반격 기회](wiki/SORTIE_10MIN.md#bosses) · [검수 기준](wiki/SORTIE_10MIN.md#acceptance). 아래 고도 구분과 스웜 뒤 자동 회수는 이전 구현 기준이며, 새 개발 목표는 승인본을 따른다.
+
 **현행 기획 · 무엇을 먼저 만들까?** [위키 홈](wiki/README.md)에서 현재 버전을, [장비 도감](wiki/CATALOG.md)에서 구현 수치를 본다. 이 문서는 [빌드 순서와 인수 기준](#pillars)을 정한다. 아래 #1~9는 작업 번호이지 GitHub PR 번호가 아니다.
 
 > 작성: 기획 봇 · 2026-11-23 (KST) · 대상: 기현님, Product Engineer 봇, 밸런스 봇
