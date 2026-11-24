@@ -112,7 +112,10 @@ test('pausing, leaving a chest uncollected, or resuming a phase checkpoint does 
     stepStage(state, {}, flat);
     stepStage(restored, {}, flat);
   }
-  assert.deepEqual(JSON.stringify(restored), JSON.stringify(state));
+  const { phaseDirector: restoredDirector, ...restoredState } = restored;
+  const { phaseDirector: originalDirector, ...originalState } = state;
+  assert.deepEqual(JSON.stringify(restoredState), JSON.stringify(originalState));
+  assert.equal(restoredDirector.intro, originalDirector?.intro ?? 1);
   assert.equal(state.swarmNotice.kind, 'rest');
   const legacy = start('legacy');
   legacy.tick = 110 * 60 - 1;

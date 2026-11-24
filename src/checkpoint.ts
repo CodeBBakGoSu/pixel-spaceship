@@ -1,10 +1,14 @@
 import { normalizeMetrics } from './meta.ts';
 import { deployAce } from './ace.ts';
 import { PHASES, RUN_BOSS_SECONDS } from './data/phases.ts';
+import { PHASE_REPAIR_SECONDS } from './data/run-balance.ts';
 import { TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Ground, StageState } from './stage-types.ts';
 import { restoreWorldState } from './stage.ts';
 import { groundAt } from './world.ts';
+import { createMidbossScheduleAtTick } from './midboss-schedule.ts';
+import { createPhaseDirectorAtTick } from './phase-director.ts';
+import { createThreatBudget } from './threat-budget.ts';
 
 export const CHECKPOINT_KEY = 'aster-wing.checkpoint.v1';
 const VERSION = 1;
@@ -47,6 +51,13 @@ export function decodeCheckpoint(raw: string | null, ground?: Ground): StageStat
       if (state.phaseNotice) state.phaseNotice.phase = 'ace';
     } else if (oldWorld && state.boss?.entry) {
       state.boss = deployAce(state, terrain, state.boss);
+    }
+    if (state.run) {
+      state.threatBudget ??= createThreatBudget();
+      state.midbossSchedule ??= createMidbossScheduleAtTick(state.tick);
+      state.phaseDirector ??= createPhaseDirectorAtTick(state.tick);
+      state.phaseRepairMask ??= PHASE_REPAIR_SECONDS.reduce((mask, seconds, index) =>
+        seconds * TICKS_PER_SECOND <= state.tick ? mask | (1 << index) : mask, 0);
     }
     return state;
   } catch {

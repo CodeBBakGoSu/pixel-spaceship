@@ -30,6 +30,10 @@ export function createMidbossSchedule(): MidbossScheduleState {
   return { next: 0, active: null, restUntil: 0, lastResult: null };
 }
 
+export function createMidbossScheduleAtTick(tick: number): MidbossScheduleState {
+  return { ...createMidbossSchedule(), next: startTicks.filter(startTick => startTick < tick).length };
+}
+
 export function consumeMidbossCue(state: StageState): MidbossCue | null {
   const midboss = state.midbossSchedule;
   if (!state.run || !midboss || midboss.active) return null;
