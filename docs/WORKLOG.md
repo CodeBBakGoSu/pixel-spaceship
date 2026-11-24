@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 00:17 KST · 데븐 봇 · candidate validation follow-up
+- The first full run found the intentional Survivors seeker behavior change no longer matched its previous seed-1 terminal hash. Reproduced both fidelity-rendering settings: both clear with identical hash `f0b5e5c44f5033d6edf2a94249970287cabe1d0b81635ec0d4ee5c3688ee569d`; refreshed only the Survivors hash. The Legacy golden remains unchanged and passed.
+- Fixed the strict TypeScript optional seeker-velocity input; rebuilt the generated bundle and verified the new EN/KO quest copy is present with obsolete copy absent.
+- Final verification: `npm test` passed 646/646; `npm run build` passed with 121 modules (`3.44s`).
+
 ### 2026-11-25 00:08 KST · 데븐 봇 · review finding 0005
 - Reproduced the pursuit failure with an elevated target 30 m above the player moving laterally at 40 units/s: the prior seeker lost the target at tick 28 with altitude still about 15 m short, then stopped climbing when it nulled vertical velocity.
 - Survivors seekers now turn a 3D direction within the configured turn rate, cap vertical speed, account for the time needed to climb when choosing the lead point/horizontal speed, and retain their current trajectory when capture is lost. Legacy steering remains unchanged.

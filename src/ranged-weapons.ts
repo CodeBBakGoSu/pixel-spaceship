@@ -375,7 +375,7 @@ function seekerContact(state: StageState, shot: Extract<RangedShot, { kind: 'see
 
 function seekerDirection(shot: RangedShot, target: Target): { x: number; z: number; alt: number } {
   const speed = seeker.speed;
-  const current = normalize3d({ x: shot.vx, z: shot.vz, alt: shot.vy });
+  const current = normalize3d({ x: shot.vx, z: shot.vz, alt: shot.vy ?? 0 });
   const climbTime = Math.abs(target.alt - shot.alt) / seeker.verticalSpeed;
   const lead = Math.max(Math.sqrt(distanceSquared3d(shot, target)) / speed, climbTime);
   const predicted = { ...target, x: target.x + (target.vx ?? 0) * lead, z: target.z + (target.vz ?? 0) * lead };
