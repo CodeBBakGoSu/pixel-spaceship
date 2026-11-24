@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 23:59 KST · 데븐 봇 · review finding 0002
+- Reproduced with a Survivors state at the first Bill offer (tick 3600): weak bot seed 1 caused `state.bills.active` to become `null`; at the deadline `finishBillTick` returned `null`, interest stayed false, and XP scaling stayed 1. Weak seed 9 handled the Bill and correctly produced an unpaid expiry with interest and 0.75 XP scale, confirming the failure was on the ignored-Bill input path.
+- `perceive` returns the original state for Survivors, so assigning the hidden-Bill view to it mutated simulation state. The bot now gets a shallow observation copy with a hidden Bill; Legacy retains its existing band-filtered perception.
+- Verification: `node --test tests/bot-bills.test.mjs tests/bot-sim.test.mjs` passed 11/11.
+
 ### 2026-11-24 23:56 KST · 데븐 봇 · review finding 0001
 - Reproduced Prism Lance on a Survivors state with the evolution equipped: `advanceRangedWeapons` emitted one beam from `{x:0,z:0,alt:125}` to `{x:0,z:562.5,alt:125}`. The old rail test asserted that one-beam behavior.
 - Survivors Prism Lance now emits three terrain-clipped rays with distinct horizontal and vertical directions. Legacy's altitude-lane behavior remains unchanged; the regression test verifies the three charge/beam paths and clipping.
