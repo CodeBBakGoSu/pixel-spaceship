@@ -28,6 +28,7 @@ import { createGearIcon } from './gear-icons.ts';
 import { GraphicsRecovery } from './graphics-recovery.ts';
 import { createTranslator, initialLanguage, saveLanguage, type Language, type MessageKey } from './i18n.ts';
 import { createHangarDisplay } from './hangar-display.ts';
+import { ImpactBatch } from './impact-audio.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { HostileFeedback } from './hostile-feedback.ts';
 import { createHostileFixture } from './hostile-fixture.ts';
@@ -40,6 +41,7 @@ import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, 
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
 import type { DraftCard } from './progression.ts';
 import { clockText, hudHullTone, NumericHud } from './numeric-hud.ts';
+import { primeP1Fixture } from './p1-fixture.ts';
 import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
@@ -67,7 +69,6 @@ const guideSkip = $<HTMLButtonElement>('#guide-skip');
 const guideBody = $('.guide-body');
 const draftCard = $('#draft-card');
 const chestCard = $('#chest-card');
-const chestDisplay = createChestDisplay(chestCard, action => { pendingChest = action; });
 const draftButtons = [...draftCard.querySelectorAll<HTMLButtonElement>('[data-pick]')];
 const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), gearToast = $('#gear-toast');
 const billCount = $('#bill-count');
@@ -111,13 +112,20 @@ let forceUsed = false;
 let forcedRestore: WEBGL_lose_context | null = null;
 const audio = new CombatAudio(query.get('audioDebug') === '1');
 const effectsEnabled = query.get('fx') !== '0';
+root.classList.toggle('effects-off', !effectsEnabled);
+const chestDisplay = createChestDisplay(chestCard, action => { pendingChest = action; }, {
+  enabled: effectsEnabled,
+  play: (cue, maxDelayMs) => audio.playCache(cue, maxDelayMs),
+  stop: () => audio.stopCache(),
+});
 const demoBullets = query.get('fixture') === 'bullets';
 const flightFixture = isFlightFixture(query.get('fixture'));
 const worldFixture = query.get('fixture') === 'world';
 const fidelityFixture = query.get('fixture') === 'fidelity';
+const p1Fixture = import.meta.env.DEV && ['p1-cache', 'p1-combat'].includes(query.get('fixture') ?? '');
 const rosterSheet = query.get('fixture') === 'roster-sheet' ? rosterSubject(query.get('kind')) : null;
 const comparisonScale = fidelityFixture && query.get('compare') === String(COMPARISON_DIVISOR) ? COMPARISON_DIVISOR : undefined;
-if (demoBullets || flightFixture || fidelityFixture || rosterSheet) {
+if (demoBullets || flightFixture || fidelityFixture || rosterSheet || p1Fixture) {
   query.set('mode', 'survivors');
   query.set('t', '0');
 }
@@ -137,7 +145,9 @@ const persistent = options.mode === 'survivors' && !options.autoplay && !options
 let profile = persistent ? readPilot() : normalizeProfile(null);
 options.profile = profile;
 const state = seekStage(options, ground);
+if (p1Fixture) primeP1Fixture(state, query);
 const damageFeedback = new DamageFeedback();
+const impactBatch = new ImpactBatch();
 const damageCanvas = $<HTMLCanvasElement>('#damage-feedback');
 const damageContext = damageCanvas.getContext('2d')!;
 const damageOption = $<HTMLInputElement>('#damage-numbers');
@@ -154,6 +164,7 @@ damageOption.addEventListener('change', () => {
   history.replaceState(history.state, '', url);
 });
 observeDamage(state, (id, damage, critical, target) => {
+  if (effectsEnabled) impactBatch.hit(frameNow, damage, critical);
   if (damageNumbers && effectsEnabled) damageFeedback.hit(id, damage, critical, target, state.tick / 60);
 });
 const bulletFixture = demoBullets ? createHostileFixture(state, query, ground) : null;
@@ -233,6 +244,7 @@ let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
 const REVERSAL_HITSTOP_MS = 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+reducedMotion.addEventListener('change', () => { dirty = true; });
 const cockpitLayer = $('#cockpit-display');
 const reversalFlash = $('#reversal-flash');
 let hitstopUntil = -Infinity;
@@ -286,6 +298,7 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
   },
   aceTellFired: aceVisualEvents.aceTellFired,
   destroyed(kind, elite) {
+    if (kind === 'gnat') impactBatch.destroyedGnat(frameNow);
     audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
   },
   aceArrival() { audio.play('ace_alert'); },
@@ -779,6 +792,7 @@ function updateMenu(): void {
   guideCard.hidden = status !== 'guide';
   draftCard.hidden = !drafting;
   chestCard.hidden = status !== 'chest';
+  if (chestCard.hidden) chestDisplay.close();
   gameCard.hidden = !showing || drafting || status === 'guide' || status === 'chest';
   gameCard.classList.toggle('debrief', !!state.summary);
   $('#hangar-panel').hidden = !state.run || !persistent || interrupted || !(status === 'title' || status === 'paused' || state.summary);
@@ -1039,6 +1053,7 @@ function updateAceLockAndRebaseFlightClock(active: boolean): void {
 }
 
 function syncAudioPause(): void {
+  if (document.hidden || !graphics.canAdvance) impactBatch.clear();
   audio.setSuspended(!graphics.canAdvance || (touch && (document.hidden || interrupted)));
   updateAceLockAndRebaseFlightClock(false);
 }
@@ -1297,6 +1312,7 @@ function advance(tickTime: number): void {
     if (checkpointData) writeCheckpointData(null);
   }
   if (launching && state.phase === 'playing' && previousPhase !== 'playing') {
+    impactBatch.clear();
     if (checkpointData) writeCheckpointData(null);
     gearNotice = null;
     feedback.reset();
@@ -1334,6 +1350,7 @@ function advance(tickTime: number): void {
     }
   }
   if (state.phase !== previousPhase || state.paused !== previouslyPaused || state.draft !== previousDraft || state.chestReveal !== previousReveal) {
+    if (state.phase !== 'playing' || state.paused) impactBatch.clear();
     dirty = true;
     // Open the modal synchronously, even when a slow frame processes several ticks.
     // It clears any pending flight action that arrived with the level-up.
@@ -1538,6 +1555,12 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
   // --- S7f lane ---
   renderQuality: { preferred: preferredRenderQuality, active: scene?.renderQuality, width: canvas.width, height: canvas.height },
+  ...(p1Fixture ? {
+    chestRewards: state.chestReveal?.map(item => ({ ...item })),
+    projectileTraces: scene?.projectileTraceCount,
+    twinShots: state.shots.filter(shot => shot.kind === 'twin').length,
+    rockets: state.shots.filter(shot => shot.kind === 'seeker' && shot.rack).length,
+  } : {}),
   ...(glDebug ? { graphics: graphics.status } : {}),
   layout: phone && { orientation: phone.orientation, buffer: { width: canvas.width, height: canvas.height }, playfield: { ...phone.playfield },
     controls: { ...phone.controls }, dashboard: phone.dashboard && { ...phone.dashboard } },
@@ -1559,6 +1582,7 @@ function animate(now: number): void {
   damageFeedback.beginFrame();
   frameNow = now;
   const rafFrameStart = previousTime;
+  const impactLayers = impactBatch.drain(now);
   const elapsed = Math.max(0, (now - rafFrameStart) / 1000);
   previousTime = now;
   if (scene?.contextLost) loseGraphics();
@@ -1628,6 +1652,7 @@ function animate(now: number): void {
     }
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
+  if (impactLayers && state.phase === 'playing' && !state.paused && !guide && !document.hidden) audio.playImpacts(impactLayers);
   drawDamageFeedback();
   if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
   requestAnimationFrame(animate);

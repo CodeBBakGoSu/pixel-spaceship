@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { autopilotInput } from '../src/autoplay.ts';
+import { observeDamage } from '../src/combat-feedback.ts';
+import { ImpactBatch } from '../src/impact-audio.ts';
 import { PickupVisuals } from '../src/pickup-visuals.ts';
+import { ProjectileTrails } from '../src/projectile-trails.ts';
 import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
@@ -22,9 +25,14 @@ for (const [mode, expected] of Object.entries(terminalHashes)) {
       const stage = createStage(parseStageOptions(`?autoplay=1&mode=${mode}&seed=1`), ground);
       const pickups = enabled ? new PickupVisuals() : null;
       const quality = enabled ? new AdaptiveQuality('high') : null;
+      const trails = enabled ? new ProjectileTrails() : null;
+      const impacts = enabled ? new ImpactBatch() : null;
+      if (impacts) observeDamage(stage, (_id, damage, critical) => impacts.hit(stage.tick * 1000 / 60, damage, critical));
       for (let i = 0; i < RUN_END_TICK * 2 && ['playing', 'draft', 'chest'].includes(stage.phase); i++) {
+        impacts?.drain(stage.tick * 1000 / 60);
         stepStage(stage, autopilotInput(stage, 'full', ground), ground);
         pickups?.update(stage, stage.view === 'overhead' ? stage.player.altitude : undefined);
+        trails?.advance(stage.shots, stage.tick, stage.run?.weaponLevels.twin ?? 1, true);
         quality?.observe(18);
       }
       if (quality) assert.equal(quality.tier, 'low');

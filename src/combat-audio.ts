@@ -1,6 +1,7 @@
 import { FLIGHT_AUDIO } from './data/flight-audio.ts';
 import { ACE } from './data/ace.ts';
 import { FlightAudio, type FlightAudioState, type FlightSound } from './flight-audio.ts';
+import { IMPACT_LAYERS, type ImpactCue } from './impact-audio.ts';
 import { ROSTER_CUE_COOLDOWN, synthesizeRosterCues, type RosterSound } from './roster-audio.ts';
 import { loadSfx, SFX_CUE_GAIN, type SfxCue, type SfxSamples } from './sfx-samples.ts';
 import type { AceTell, StageState } from './stage-types.ts';
@@ -29,11 +30,13 @@ const COOLDOWN_SECONDS = {
 type SynthSound = Exclude<keyof typeof COOLDOWN_SECONDS, 'ace_alert'> | RosterSound;
 export type CombatSound = SynthSound | 'ace_alert' | 'explosion';
 type ExplosionVoice = { source: AudioBufferSourceNode; strength: number };
+export type CacheCue = Extract<SfxCue, `cache_${string}`>;
 
 interface AudioOutput {
   context: AudioContext;
   master: GainNode;
   effects: GainNode;
+  rewards: GainNode;
   buffers: Record<SynthSound, AudioBuffer>;
   aceLockCues: { pulses: readonly AudioBuffer[]; window: AudioBuffer };
   samples: SfxSamples;
@@ -167,6 +170,10 @@ export class CombatAudio {
   private level = DEFAULT_VOLUME;
   private readonly nextPlayAt: Partial<Record<CombatSound, number>> = {};
   private readonly explosions: ExplosionVoice[] = [];
+  private readonly impactVoices: Partial<Record<ImpactCue, AudioBufferSourceNode>> = {};
+  private cacheVoice: AudioBufferSourceNode | undefined;
+  private pendingCache: { cue: CacheCue; until: number } | undefined;
+  private warningUntil = 0;
   private readonly debugSamples: boolean;
   private detuneSeed = 0x3aa1197b;
   private aceLockKey: string | null = null;
@@ -203,6 +210,7 @@ export class CombatAudio {
   setMuted(muted: boolean): void {
     if (this.isMuted === muted) return;
     this.isMuted = muted;
+    if (muted) this.pendingCache = undefined;
     this.updateGain();
     if (muted) this.stopAceLockVoice();
     if (typeof window !== 'undefined') {
@@ -214,6 +222,7 @@ export class CombatAudio {
   setVolume(volume: number): void {
     if (!Number.isFinite(volume)) return;
     this.level = Math.max(0, Math.min(1, volume));
+    if (this.level === 0) this.pendingCache = undefined;
     this.updateGain();
     if (this.level === 0) this.stopAceLockVoice();
   }
@@ -234,6 +243,8 @@ export class CombatAudio {
         const effects = context.createGain();
         effects.gain.value = 1;
         effects.connect(master);
+        const rewards = context.createGain();
+        rewards.connect(master);
         const headroom = context.createGain();
         headroom.gain.value = FLIGHT_AUDIO.mixHeadroom;
         const limiter = context.createWaveShaper();
@@ -242,9 +253,11 @@ export class CombatAudio {
         headroom.connect(limiter);
         limiter.connect(context.destination);
         const samples: SfxSamples = {};
-        this.output = { context, master, effects, buffers: synthesizeCues(context), aceLockCues: lockPulseCues(context), samples };
+        this.output = { context, master, effects, rewards, buffers: synthesizeCues(context), aceLockCues: lockPulseCues(context), samples };
         if (typeof context.decodeAudioData === 'function') {
-          void loadSfx(context, samples).then(() => {
+          void loadSfx(context, samples, name => {
+            if (name === this.pendingCache?.cue) this.flushCache();
+          }).then(() => {
             if (this.debugSamples) console.info('[audio] Decoded SFX', Object.keys(samples).sort().join(', '));
           });
         }
@@ -254,7 +267,7 @@ export class CombatAudio {
       }
     }
     if (context.state !== 'running' && context.state !== 'closed') {
-      void context.resume().catch(() => {});
+      void context.resume().then(() => this.flushCache()).catch(() => {});
     }
   }
 
@@ -262,6 +275,7 @@ export class CombatAudio {
     if (suspended === this.suspended) return;
     this.suspended = suspended;
     if (suspended) this.stopAceLockVoice();
+    if (suspended) this.pendingCache = undefined;
     const context = this.output?.context;
     if (!context || context.state === 'closed') return;
     // Submit both requests, even if a quick visibility reversal races the state change.
@@ -316,6 +330,13 @@ export class CombatAudio {
       gain?.disconnect();
     };
     source.start(now);
+    if (sound === 'warning' || sound === 'ace_alert' || (sound.startsWith('tell:') && sound !== 'tell:ace-down')) {
+      this.warningUntil = Math.max(this.warningUntil, now + buffer.duration);
+      const rewardGain = this.output.rewards.gain;
+      rewardGain.cancelScheduledValues(now);
+      rewardGain.setTargetAtTime(0.29, now, 0.012);
+      rewardGain.setTargetAtTime(1, this.warningUntil, 0.06);
+    }
     if (sound === 'explosion') return;
     const cooldown = COOLDOWN_SECONDS[voice as keyof typeof COOLDOWN_SECONDS] ?? ROSTER_CUE_COOLDOWN;
     this.nextPlayAt[voice] = now + (voice === 'graze' || voice === 'hit' ? cooldown : Math.max(cooldown, buffer.duration));
@@ -511,6 +532,67 @@ export class CombatAudio {
 
   private restoreEffects(output: AudioOutput, now: number): void {
     output.effects.gain.setTargetAtTime(1, now, 0.018);
+  }
+
+  playImpacts(layers: number): void {
+    for (const [i, cue] of IMPACT_LAYERS.entries()) {
+      if (!(layers & (1 << i))) continue;
+      const source = this.playReward(cue, this.impactVoices[cue], () => {
+        if (this.impactVoices[cue] === source) delete this.impactVoices[cue];
+      });
+      if (source) this.impactVoices[cue] = source;
+    }
+  }
+
+  playCache(cue: CacheCue, maxDelayMs: number): void {
+    this.stopCache();
+    if (!this.output || this.isMuted || this.level === 0 || this.suspended) return;
+    this.pendingCache = { cue, until: performance.now() + maxDelayMs };
+    this.flushCache();
+  }
+
+  private flushCache(): void {
+    const pending = this.pendingCache;
+    if (!pending) return;
+    if (performance.now() > pending.until) {
+      this.pendingCache = undefined;
+      return;
+    }
+    const { cue } = pending;
+    const source = this.playReward(cue, undefined, () => {
+      if (this.cacheVoice === source) this.cacheVoice = undefined;
+    });
+    if (!source) return;
+    this.pendingCache = undefined;
+    this.cacheVoice = source;
+  }
+
+  stopCache(): void {
+    this.pendingCache = undefined;
+    this.cacheVoice?.stop();
+    this.cacheVoice = undefined;
+  }
+
+  private playReward(cue: ImpactCue | CacheCue, previous: AudioBufferSourceNode | undefined,
+    ended: () => void): AudioBufferSourceNode | undefined {
+    const output = this.output;
+    if (!output || this.isMuted || this.level === 0 || this.suspended || output.context.state !== 'running') return;
+    const buffer = output.samples[cue]?.buffer;
+    if (!buffer) return;
+    previous?.stop();
+    const source = output.context.createBufferSource();
+    const gain = output.context.createGain();
+    gain.gain.value = SFX_CUE_GAIN[cue];
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(output.rewards);
+    source.onended = () => {
+      source.disconnect();
+      gain.disconnect();
+      ended();
+    };
+    source.start();
+    return source;
   }
 
   updateFlight(state: FlightAudioState, boostAmount: number, clearance: number, cloudPass: number, active: boolean): void {

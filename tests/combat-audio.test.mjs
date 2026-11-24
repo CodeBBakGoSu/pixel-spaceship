@@ -150,7 +150,8 @@ function browserAudio(t) {
 
 function sampleBrowser(t, { missing = [], corrupt = [], gapless = false } = {}) {
   const { instances, userActivation } = browserAudio(t);
-  const shotKeys = ['hit', 'explosion', 'graze', 'parry', 'roll', 'warning', 'ace_alert'];
+  const shotKeys = ['hit', 'explosion', 'graze', 'parry', 'roll', 'warning', 'ace_alert',
+    'impact_tick', 'impact_body', 'impact_spark', 'cache_single', 'cache_triple', 'cache_jackpot', 'cache_evolution'];
   const loopKeys = ['engine_loop', 'afterburner_loop', 'wind_loop'];
   const keys = [...loopKeys, ...shotKeys];
   const manifest = Object.fromEntries(keys.map(key => [key, {
@@ -226,8 +227,8 @@ test('approved sounds load once after activation and use the mixer, with a synth
   audio.unlock(gesture);
   audio.unlock(gesture);
   await finishDecoding();
-  assert.equal(requests.length, 11);
-  assert.equal(new Set(requests).size, 11);
+  assert.equal(requests.length, 18);
+  assert.equal(new Set(requests).size, 18);
   assert.equal(warning.mock.callCount(), 1);
   const [context] = instances;
   audio.play('hit');
@@ -240,6 +241,76 @@ test('approved sounds load once after activation and use the mixer, with a synth
   const effects = source.outputs[0].outputs[0];
   assert.equal(effects.outputs[0], context.master, 'ordinary combat cues pass through effects gain into master');
   assert.equal(context.master.outputs[0].outputs[0].kind, 'wave-shaper');
+});
+
+test('impact playback is capped at three sample voices and only the reward bus ducks for warnings', async t => {
+  const { instances, decoded } = sampleBrowser(t);
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  const impactBuffers = [decoded.impact_tick, decoded.impact_body, decoded.impact_spark];
+  const active = () => impactBuffers.flatMap(buffer => voicesFor(context, buffer)).filter(source => !source.stopped);
+  audio.playImpacts(7);
+  assert.equal(active().length, 3);
+  context.currentTime = 0.08;
+  audio.playImpacts(1);
+  assert.equal(active().length, 3);
+  assert.equal(voicesFor(context, decoded.impact_tick)[0].stopped, true);
+  const duckBus = active()[0].outputs[0].outputs[0];
+  assert.equal(duckBus.outputs[0], context.master);
+  audio.play('warning');
+  const effectsBus = context.master.inputs.find(node => node.kind === 'gain' && node !== duckBus);
+  assert.equal(voicesFor(context, decoded.warning)[0].outputs[0].outputs[0], effectsBus);
+  assert.equal(effectsBus.outputs[0], context.master);
+  assert.deepEqual(duckBus.gain.targets.map(node => node.target), [0.29, 1]);
+  assert.equal(duckBus.gain.targets[1].now, context.currentTime + decoded.warning.duration);
+  assert.deepEqual(effectsBus.gain.targets, []);
+  assert.deepEqual(context.master.gain.targets, []);
+});
+
+test('cache playback is static, cancellable on skip, and respects mute and volume', async t => {
+  const { instances, decoded } = sampleBrowser(t, { missing: ['cache_single'] });
+  const audio = new CombatAudio();
+  audio.unlock(gesture);
+  await finishDecoding();
+  const [context] = instances;
+  audio.playCache('cache_single', 320);
+  assert.equal(context.started.length, 0);
+  audio.playCache('cache_jackpot', 940);
+  const [jackpot] = voicesFor(context, decoded.cache_jackpot);
+  assert.ok(jackpot);
+  audio.stopCache();
+  assert.equal(jackpot.stopped, true);
+  audio.setMuted(true);
+  audio.playImpacts(7);
+  audio.playCache('cache_triple', 540);
+  assert.equal(context.started.length, 1);
+  audio.setMuted(false);
+  audio.setVolume(0);
+  audio.playCache('cache_evolution', 960);
+  assert.equal(context.started.length, 1);
+});
+
+test('a first-gesture cache waits for decoding, but skip, mute and expiry discard it', async t => {
+  for (const interrupt of ['none', 'skip', 'mute', 'timeout']) {
+    await t.test(interrupt, async t => {
+      const { instances, decoded } = sampleBrowser(t);
+      const audio = new CombatAudio();
+      let now = 0;
+      t.mock.method(performance, 'now', () => now);
+      audio.unlock(gesture);
+      audio.playCache('cache_jackpot', 940);
+      const [context] = instances;
+      assert.equal(context.started.length, 0);
+      if (interrupt === 'skip') audio.stopCache();
+      if (interrupt === 'mute') audio.setMuted(true);
+      now = interrupt === 'timeout' ? 1000 : 30;
+      await finishDecoding();
+      audio.setMuted(false);
+      assert.deepEqual(context.started, interrupt === 'none' ? [decoded.cache_jackpot] : []);
+    });
+  }
 });
 
 test('graze retriggers after 80 ms and warning waits at least 1.5 seconds', async t => {
@@ -512,7 +583,7 @@ test('flight audio uses one silent-until-active bed that fades through pause and
   assert.equal(context.nodes.length, originalCount);
   audio.updateFlight(levelFlight, 0.45, 32, 0, true);
   const effects = context.master.inputs.find(node => node.kind === 'gain');
-  const bed = context.master.inputs.find(node => node.kind === 'gain' && node !== effects);
+  const bed = context.master.inputs.at(-1);
   const oscillator = context.nodes.find(node => node.kind === 'oscillator');
   assert.equal(bed.gain.value, 1);
   assert.equal(oscillator.type, 'sawtooth');

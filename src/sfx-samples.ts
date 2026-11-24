@@ -2,6 +2,8 @@ const SAMPLE_PATH = './audio/sfx/';
 
 export const SFX_CUE_GAIN = {
   hit: 0.55, explosion: 1, graze: 0.32, parry: 0.50, roll: 0.44, warning: 0.48, ace_alert: 0.72,
+  impact_tick: 0.27, impact_body: 0.24, impact_spark: 0.23,
+  cache_single: 0.53, cache_triple: 0.55, cache_jackpot: 0.64, cache_evolution: 0.64,
 } as const;
 export type SfxCue = keyof typeof SFX_CUE_GAIN;
 
@@ -25,13 +27,13 @@ function sampleLoopRange(buffer: AudioBuffer, entry: ManifestEntry): LoopRange {
   return { start, end: Math.min(buffer.duration, start + duration) };
 }
 
-/** Loads each voice independently so one unusable file leaves just that voice on synth. */
-export async function loadSfx(context: AudioContext, ready: SfxSamples): Promise<void> {
+/** Loads each voice independently so a missing file doesn't affect the other cues. */
+export async function loadSfx(context: AudioContext, ready: SfxSamples, onReady: (name: SfxLoop | SfxCue) => void): Promise<void> {
   let warned = false;
   const warn = () => {
     if (warned) return;
     warned = true;
-    console.warn('[audio] Some SFX samples are unavailable. Synthesized audio will be used for those cues.');
+    console.warn('[audio] Some SFX samples are unavailable. Built-in fallbacks will be used where available.');
   };
   try {
     const response = await fetch(`${SAMPLE_PATH}manifest.json`);
@@ -48,6 +50,7 @@ export async function loadSfx(context: AudioContext, ready: SfxSamples): Promise
         const buffer = await context.decodeAudioData(await response.arrayBuffer());
         if (!(buffer.duration > 0)) throw new Error('Empty SFX buffer');
         ready[name] = entry.loop ? { buffer, loop: sampleLoopRange(buffer, entry) } : { buffer };
+        onReady(name);
       } catch {
         warn();
       }

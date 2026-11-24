@@ -13,9 +13,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Current state
 - [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
-- 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
-- Candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). Public `main` is unchanged.
-- #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
+- P0 Seeker balance remains with 밸런스 봇; P1 hit audio, cache reveals, and projectile trails are in the separate playtest candidate below; P2 hangar progression and expanded ordinary-weapon pool are unimplemented. The current candidate's preview/browser check is assigned to the testing agent; the earlier UI result on `9d677b5` predates P1.
+- Current playtest candidate `devin/1795498866-all-features-playtest` is based on `renderer-proto` `2d543dd`, which already contains weapon Lv7/Ace, PR7/8, the 200/120-cap horde, variants, and swarm/recovery features. This branch adds only the inspected P1 presentation/audio candidate; public `main` is unchanged.
+- Candidate validation: `npm test` passed 639/639, including Ace replay seeds 1/11/27/42/128/2026; `npm run build` passed (123 modules, 3.45 s). No fresh 100-seed simulation was run for the presentation/audio-only P1 integration; the horde results below are historical and not measurements of this candidate. Current-candidate browser verification and real-hardware FPS remain unverified.
 - Pre-variant baseline only: integrated candidate `9d677b5` (ancestor of `8f41122`) at desktop Heat 0, seeds 1–100/profile; skilled / average / weak clear **100%/75%/26%**, Ace kills **99%/72%/2%**, median kills **3,677.5/3,591/3,373.5**, median peak Gnats **200** each. The pre-variant average median kills **3,591** was **91 above** the 3,500 upper planning target; these are not `0bc1f99` results.
 - Historical feature-branch results: `82c19c6` variant run and `77163bc` swarm run are separately scoped in the log below, not reruns on integrated `0bc1f99`. The `77163bc` desktop Heat 0, 100-seed average median kills were **3,167.5**, within 2,500–3,500; this does not establish phase density or whole survival acceptance.
 - The damage-feedback fixture measured **36.44 fps** in a SwiftShader VM after High→Low fallback; this software-renderer sample is not current hardware/device performance. The 100-seed simulations do not measure rendered FPS or phase density.
@@ -24,10 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-24 (KST) · 데븐 봇 · devin/1795498866-all-features-playtest (claim; base `2d543dd`)
-- Integrating the inspected P1 combat-feedback candidate (`2bad3c4`…`61154f5`); the latest base already contains the horde, Armored/Sting Gnats, and swarm/recovery features.
-- Seeker balance tuning and P2 are excluded. Preview/browser verification is assigned to the testing agent; tests/build pending.
-- State: in progress.
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795498866-all-features-playtest (base `2d543dd`, P1 `2bad3c4`…`61154f5`)
+- Integrated the inspected P1 candidate: batched actual-hit audio, reveals only already-awarded cache rewards, and Twin/Rack projectile trails with static SFX and Korean jackpot glyphs. Latest renderer-proto gameplay/regressions are preserved; Seeker balance and P2 are excluded.
+- Verification: `npm test` 639/639; Ace seeds 1/11/27/42/128/2026 all cleared with phase 3 and crashed boss; `npm run build` passed (123 modules, 3.45 s). No new simulation; the all-features preview/browser check is pending the testing agent, and real-hardware FPS is unverified.
+- State: code integration done on the playtest branch; preview/browser verification pending.
 
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2cc10e4`, based on `7da5db6`)
 - Strengthened the 120Hz fire-tick regression: C must leave an accepted roll and zero hostile projectiles, while the deterministic phase-2 no-C twin reaches the same tick, clears the tell normally, and spawns both Ace missiles.
@@ -190,6 +190,16 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - 플레어·폭탄은 피닉스 플레어·폭탄창을 장착해야 자동 발사한다. 수동 탄약·버튼은 제거했고 기존 폭탄 투하 해금 기록은 이어진다. C는 단독 배럴롤이며 Shift+Space 및 W/S+Space는 그대로다.
 - 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.
 - 데스크톱 Heat 0, 시드 1–100: 숙련/평균/초보 생존(시간 종료 포함) 100%/69%/26%, 에이스 격추 100%/69%/1%, 격추 수 중앙값 3,155/3,193.5/2,806. State: done (구현·로컬 검증).
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `fb6412a`)
+- 한국어 ‘잭팟 ×5’가 ‘×5’로만 보이던 글꼴 누락을 수정. Galmuri11을 현재 한국어 번역으로 다시 생성했고, 보상 로직은 그대로다.
+- 검증: 기존 글리프 유지, 현재 번역의 한글 410자 포함, 프로덕션 빌드 통과. State: done (후보, renderer-proto 미통합).
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `81a0e2a`, code `2bad3c4` + `96bd079`)
+- P1: 실제 아군 피해를 80ms 단위로 모아 타격음을 겹친다. 이미 지급된 상자의 보상 1/3/5개·진화만 공개하고, 고랭크 Twin·Swarm Rack의 실제 탄 위치에서 장식 잔상을 그린다.
+- 정적 ElevenLabs 효과음 7종. 밸런스·난수·Seeker P0 후보는 변경 또는 포함하지 않았다.
+- 검증: 테스트 587/587, 프로덕션 빌드, Legacy/Survivors seed 1 해시 동일. PC/폰 Heat 0의 세 프로필 × 시드 1–3 시뮬레이션 결과가 기준 브랜치와 동일.
+- Chrome에서 상자 전 결과·건너뛰기·모션 줄이기·FX off·첫 클릭 잭팟음·실제 명중음·탄 궤적 확인. 고음 타격층은 자동 테스트만 확인. State: done (후보 검증, renderer-proto 통합 대기).
+
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.
 - 격납고: Hawk 복셀 미리보기와 강화 8종의 아이콘·현재/다음 수치·가격·구매 상태를 정의했다. 신규 기체는 미정. [화면 사양](WEAPONS_BUFFS_PLAN.md#hangar) · [첫 클리어 검수](WEAPONS_BUFFS_PLAN.md#first-clear).
