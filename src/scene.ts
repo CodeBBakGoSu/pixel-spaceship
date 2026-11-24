@@ -10,6 +10,7 @@ import { batchBursts, gnatBursts } from './combat-feedback.ts';
 import { COMBAT_FEEDBACK } from './data/combat-feedback.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
+import { aegisVolumeOutline } from './aegis-volume.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { FLIGHT_CAMERA, FLIGHT_FEEL } from './data/flight-feel.ts';
@@ -252,6 +253,10 @@ export class FlightScene {
     new MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false }));
   private readonly weaponRings = instances(new RingGeometry(0.91, 1, 20).rotateX(-Math.PI / 2), WEAPON_RING_LIMIT,
     new MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
+  private readonly aegisRings = instances(new TorusGeometry(1, 0.22, 5, 40).rotateX(-Math.PI / 2), 4,
+    new MeshBasicMaterial({ color: 0x62edff, transparent: true, opacity: 0.5, depthWrite: false }));
+  private readonly aegisSupports = instances(new BoxGeometry(), 32,
+    new MeshBasicMaterial({ color: 0x62edff, transparent: true, opacity: 0.38, depthWrite: false }));
   private readonly flakColumns = instances(new CylinderGeometry(1, 1, 2, 12, 1, true), FLAK_COLUMN_LIMIT,
     new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
   private readonly arcMiddle: Position = { x: 0, z: 0, alt: 0 };
@@ -292,7 +297,7 @@ export class FlightScene {
     this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails,
-      this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
+      this.defenseDrones, this.weaponLinks, this.weaponRings, this.aegisRings, this.aegisSupports, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     if (this.feelEnabled) this.atmosphere.wind.layers.set(MAIN_CAMERA_LAYER);
@@ -763,10 +768,22 @@ export class FlightScene {
 
   private drawWeaponEffects(state: StageState, view: StageState['view'] | 'rear', flat: boolean, links: number): void {
     const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
-    let rings = 0, columns = 0, drones = 0;
+    let rings = 0, columns = 0, drones = 0, aegisRingCount = 0, aegisSupportCount = 0;
     if (state.run?.evolutions.pods) {
-      const p = state.player, radius = CLOSE_EVOLUTIONS.aegis.radius;
-      this.write(this.weaponRings, rings++, p.x, p.z, plane ?? p.altitude, 0, radius, 1, radius, 0xb3eaff);
+      const p = state.player, halfWidth = CLOSE_EVOLUTIONS.aegis.halfWidth;
+      const { rings: boundaries, supports } = aegisVolumeOutline(CLOSE_EVOLUTIONS.aegis.radius, halfWidth);
+      const centerAlt = plane ?? p.altitude, tint = 0x62edff;
+      for (const boundary of boundaries) {
+        this.write(this.aegisRings, aegisRingCount++, p.x, p.z, centerAlt + (flat ? 0 : boundary.alt), 0,
+          boundary.radius, 1, boundary.radius, tint);
+      }
+      if (!flat) {
+        for (const support of supports) {
+          const from = { x: p.x + support.from.x, z: p.z + support.from.z, alt: p.altitude + support.from.alt };
+          const to = { x: p.x + support.to.x, z: p.z + support.to.z, alt: p.altitude + support.to.alt };
+          this.connect(this.aegisSupports, aegisSupportCount++, from, to, 0.3, tint);
+        }
+      }
     }
     for (const drone of state.orbitDrones) {
       if (drones === this.defenseDrones.instanceMatrix.count) break;
@@ -841,6 +858,8 @@ export class FlightScene {
     upload(this.defenseDrones, drones);
     upload(this.weaponLinks, links);
     upload(this.weaponRings, rings);
+    upload(this.aegisRings, aegisRingCount);
+    upload(this.aegisSupports, aegisSupportCount);
     upload(this.flakColumns, columns);
   }
 
