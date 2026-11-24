@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 23:36 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
+- `190d177db9ecf4bb9fd08786725d77c292ad7d9e`: Terminal capture settlement now handles pause/unpause before advancing. A blur/visibility pause one tick before arrival no longer pays or finalizes outside the normal frame path, where the profile is persisted.
+- Added a regression covering the pause-only call, remaining paused, resume, and later physical arrival; no enemy or spawn behavior changes.
+- Verification: `node --test tests/stage.test.mjs` passed 31/31; `npm run build` passed (120 modules); `git diff --check` passed. The PR `git_pr_checks` wait was canceled after 156 seconds without a result while the pause finding was handed off, so final CI status remains unknown. No UI tests or visual verification; no public deployment. State: candidate-only fix committed, push pending.
+
 ### 2026-11-24 23:29 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet
 - `fef070aa13e7b35cdcd13cbade4953b9505c7a91`: Captured Survivors salvage advances during Ace defeat and through bounded capture-only terminal settlement; rewards pay at hull arrival while stage tick, outcome, and summary seconds stay at terminal time. Settlement does not simulate enemies or spawns, and captured pickups bypass terminal draft blocking.
 - `90ead934e69ce533ff410820e58ceaeb95d3fed1`: Collector Swarm's initial duration derives from existing drone distance, pickup range, and pull speed (minimum one tick, capped to ordinary capture); captured deadlines remain immutable, with no range or damage retune.
