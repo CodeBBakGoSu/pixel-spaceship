@@ -90,7 +90,7 @@ export function touchControlOcclusionRect(layout: Pick<PhoneLayout, 'controls'>,
   return { x: 0, y, width: Math.max(0, viewport.width), height: Math.max(0, viewport.height - y) };
 }
 
-export function isDescendingDiveWarning(maneuver: { phase: string; band: number } | undefined,
+export function isDescendingDiveWarning(maneuver: { phase: string; band: number } | null | undefined,
   currentBand: number): boolean {
   return maneuver?.phase === 'warning' && Number.isFinite(maneuver.band) && maneuver.band < currentBand;
 }
