@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2cc10e4`, based on `7da5db6`)
+- Strengthened the 120Hz fire-tick regression: C must leave an accepted roll and zero hostile projectiles, while the deterministic phase-2 no-C twin reaches the same tick, clears the tell normally, and spawns both Ace missiles.
+- Focused fire-tick test passed 1/1; test-only change, so no full-suite, build, or UI rerun.
+- State: ready pushed; no production change.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`3e68ea0`, based on `444076d`)
 - Final UI report on `444076d`: at forced 4fps, the prior tick 28823 was before window tick 28834; trusted C arrived 2.4ms after the scheduled cue, and the next frame at tick 28835 canceled the tell with zero missiles. An output-compensated C about 5ms after estimated acoustic tick 28836 also canceled. Measured cue spacing was 398.896ms vs 398.866ms scheduled at normal rate and 433.708ms vs 433.696ms at 4fps. `getOutputTimestamp` estimates the acoustic window at +25.9ms normal / -23.3ms at 4fps relative to the first near-window frame; this is a one-frame estimate, not a microphone-calibrated AV offset.
 - In the overlap window, the 1650/2200Hz components measured -17.4dBFS against local residual levels of -44.7/-40.7dBFS; peak was -13.34dBFS with no clipping. The UI report described a neutral foreground chime and muffled background. Earlier automated listening disagreed, so this is capture-specific, not a universal audibility claim. W/S+Space, Shift+Space, C+Space grace, pause/mute/cancel/stale-source and initial 640Hz tests passed. Phoenix Lv5/Bomb Bay Lv1 no-key automatic spawning passed; unlock and bomb impact damage were not tested.
