@@ -14,7 +14,8 @@ import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { CombatAudio } from './combat-audio.ts';
-import { AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS } from './aegis-volume-render.ts';
+import { AEGIS_CUE_SIZE, AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS,
+  aegisOutlineAltitude, shouldShowAegisCue } from './aegis-volume-render.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
@@ -37,7 +38,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { findTouchCueRect, screenPointObscured, touchOcclusionCue } from './touch-cue-layout.ts';
+import { findTouchCueRects, screenPointObscured, touchControlOcclusionRect, TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -47,7 +48,7 @@ import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
-import { FlightScene } from './scene.ts';
+import { FlightScene, OVERHEAD_EFFECT_PLANE_ALTITUDE } from './scene.ts';
 import { sortieVfxMode } from './sortie-vfx.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { clamp, inBand, MAX_ALTITUDE, STEP,
@@ -466,7 +467,8 @@ function setRect(name: string, box: Rect): void {
 function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
-  aegisCueSlot = phone ? findTouchCueRect(phone, { width: 160, height: 44 }) : null;
+  const cueSlots = phone ? findTouchCueRects(phone, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]) : [];
+  aegisCueSlot = cueSlots[0] ?? null;
   if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
   aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
@@ -507,7 +509,9 @@ function layoutFlight(): void {
 
 function aegisOutlineObscured(): boolean {
   if (!phone || !scene) return false;
-  const obstacles: Rect[] = [phone.hud, phone.boss, phone.radio, phone.objective, phone.radar, phone.alt, phone.controls];
+  const viewport = { width: innerWidth, height: innerHeight };
+  const controls = touchControlOcclusionRect(phone, viewport);
+  const obstacles: Rect[] = [phone.hud, phone.boss, phone.radio, phone.objective, phone.radar, phone.alt, controls];
   if (phone.dashboard) obstacles.push(phone.dashboard);
   const aircraft = scene.projectAirframe(state, 'player');
   if (aircraft && Number.isFinite(aircraft.radius)) {
@@ -515,11 +519,10 @@ function aegisOutlineObscured(): boolean {
     obstacles.push({ x: aircraft.x - radius, y: aircraft.y - radius, width: radius * 2, height: radius * 2 });
   }
   const point = { x: 0, z: 0, alt: 0 }, projected = { x: 0, y: 0, depth: 0 };
-  const viewport = { width: innerWidth, height: innerHeight };
   for (const offset of AEGIS_VOLUME_CUE_OFFSETS) {
     point.x = state.player.x + offset.x;
     point.z = state.player.z + offset.z;
-    point.alt = state.player.altitude + offset.alt;
+    point.alt = aegisOutlineAltitude(state.view, state.player.altitude, offset.alt, OVERHEAD_EFFECT_PLANE_ALTITUDE);
     scene.projectContact(point, projected);
     if (screenPointObscured(projected, viewport, obstacles)) return true;
   }
@@ -634,8 +637,16 @@ function updateRadio(): void {
 
 function updateHud(readout: RadarReadout): void {
   updateBillDisplay(state, t);
-  aegisVolumeCue.hidden = !(touch && phone && aegisCueSlot && state.run?.evolutions.pods
-    && state.phase === 'playing' && !state.paused && state.view !== 'overhead' && aegisOutlineObscured());
+  aegisVolumeCue.hidden = !shouldShowAegisCue({
+    view: state.view,
+    touch,
+    hasSlot: !!(phone && aegisCueSlot),
+    hasEvolution: !!state.run?.evolutions.pods,
+    phase: state.phase,
+    paused: state.paused,
+    outlineObscured: !!(touch && phone && aegisCueSlot && state.run?.evolutions.pods
+      && state.phase === 'playing' && !state.paused && aegisOutlineObscured()),
+  });
   sortieStrip.hidden = !state.run;
   billCount.hidden = !state.run;
   if (state.run) {

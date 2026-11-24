@@ -17,3 +17,15 @@ export const AEGIS_VOLUME_CUE_OFFSETS = Object.freeze(AEGIS_VOLUME_OUTLINE.rings
 export function createAegisRingGeometry(boundaryRadius: number): TorusGeometry {
   return new TorusGeometry(boundaryRadius, AEGIS_RING_TUBE_RADIUS, 8, 40).rotateX(-Math.PI / 2);
 }
+
+export function aegisOutlineAltitude(view: string, playerAltitude: number, offset: number, flatAltitude: number): number {
+  return view === 'overhead' ? flatAltitude : playerAltitude + offset;
+}
+
+export function shouldShowAegisCue(options: {
+  view: 'cockpit' | 'chase' | 'overhead'; touch: boolean; hasSlot: boolean; hasEvolution: boolean;
+  phase: string; paused: boolean; outlineObscured: boolean;
+}): boolean {
+  return ['cockpit', 'chase', 'overhead'].includes(options.view) && options.touch && options.hasSlot
+    && options.hasEvolution && options.phase === 'playing' && !options.paused && options.outlineObscured;
+}

@@ -131,6 +131,7 @@ export function clipProjectSortieSegment(camera: Camera, width: number, height: 
   };
 }
 const TOP_FLIGHT = 152;
+export const OVERHEAD_EFFECT_PLANE_ALTITUDE = TOP_FLIGHT + 2.5;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const GNAT_LIVERY = {
   armored: { width: 1.75, height: 2.25, length: 1.25, tints: [0x6485aa, 0x778198, 0x886e80] },
@@ -820,7 +821,7 @@ export class FlightScene {
   }
 
   private drawWeaponEffects(state: StageState, view: StageState['view'] | 'rear', flat: boolean, links: number): void {
-    const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
+    const plane = flat ? OVERHEAD_EFFECT_PLANE_ALTITUDE : undefined;
     let rings = 0, columns = 0, drones = 0, aegisInnerRingCount = 0, aegisOuterRingCount = 0, aegisSupportCount = 0;
     if (state.run?.evolutions.pods) {
       const p = state.player;

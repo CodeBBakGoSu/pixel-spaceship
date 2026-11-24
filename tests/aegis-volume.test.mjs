@@ -4,7 +4,7 @@ import { CLOSE_EVOLUTIONS } from '../src/data/close-evolutions.ts';
 import { aegisVolumeOutline } from '../src/aegis-volume.ts';
 import {
   AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_RING_TUBE_RADIUS, AEGIS_VOLUME_CUE_OFFSETS, AEGIS_VOLUME_OUTLINE,
-  createAegisRingGeometry,
+  aegisOutlineAltitude, createAegisRingGeometry, shouldShowAegisCue,
 } from '../src/aegis-volume-render.ts';
 
 test('Aegis volume outlines the judged inner, outer, upper, and lower bounds', () => {
@@ -76,4 +76,13 @@ test('mobile Aegis visibility samples use the rendered inner, outer, upper, and 
     [(radius - halfWidth).toFixed(3), (radius + halfWidth).toFixed(3)].sort());
   assert.deepEqual([...new Set(AEGIS_VOLUME_CUE_OFFSETS.map(point => point.alt))].sort((a, b) => a - b),
     [-halfWidth, halfWidth]);
+});
+
+test('overhead Aegis occlusion samples follow the flattened rendered outline', () => {
+  const flatAltitude = 154.5;
+  assert.equal(aegisOutlineAltitude('overhead', 82, -4, flatAltitude), flatAltitude);
+  assert.equal(aegisOutlineAltitude('overhead', 82, 4, flatAltitude), flatAltitude);
+  assert.equal(aegisOutlineAltitude('chase', 82, 4, flatAltitude), 86);
+  assert.equal(shouldShowAegisCue({ view: 'overhead', touch: true, hasSlot: true, hasEvolution: true,
+    phase: 'playing', paused: false, outlineObscured: true }), true);
 });
