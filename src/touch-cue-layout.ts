@@ -23,7 +23,7 @@ function contains(outer: Rect, inner: Rect): boolean {
     && inner.y + inner.height <= outer.y + outer.height;
 }
 
-export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 4, reserved: readonly Rect[] = []): Rect | null {
+export function findTouchCueRect(layout: TouchLayout, size: CueSize, gap = 1, reserved: readonly Rect[] = []): Rect | null {
   const { controls } = layout;
   if (![size.width, size.height, gap].every(Number.isFinite) || size.width <= 0 || size.height <= 0 || gap < 0) return null;
   const targets = [...TOUCH_TARGETS.map(key => layout[key]), ...(layout.dashboard ? [layout.dashboard] : []), ...reserved];
@@ -57,7 +57,7 @@ function edgeCandidates(origin: number, extent: number, size: number, obstacles:
     .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
 }
 
-export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[], gap = 4,
+export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[], gap = 1,
   reserved: readonly Rect[] = []): (Rect | null)[] {
   const obstacles = [...reserved];
   return sizes.map(size => {
