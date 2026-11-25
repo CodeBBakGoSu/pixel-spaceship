@@ -18,6 +18,7 @@ const FIXTURE_TICK = 24_000;
 const STRESS_TICK = 26_640;
 
 export function createHostileFixture(state: StageState, query: URLSearchParams, ground: Ground) {
+  const cueDivers: ReturnType<typeof makeEnemy>[] = [];
   const stress = query.get('stress') === '1';
   const boostFlight = stress && query.get('flight') === 'boost';
   const cue = query.get('cue');
@@ -103,6 +104,22 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
     }
     for (let i = state.enemyMines.length; i < MINE_LIMIT; i++) {
       state.enemyMines.push({ x: p.x + (i % 8 - 3.5) * 26, z: p.z + 74 + (i * 17 % 64), alt: 110, born: state.tick });
+    }
+    if (cue === 'aegis') {
+      if (state.run) state.run.evolutions.pods = 'aegis-halo';
+      state.phase = 'playing';
+      state.draft = [];
+      while (cueDivers.length < 2) {
+        const diver = makeEnemy(state, p.x, p.z + 20, 2, 'hound');
+        cueDivers.push(diver);
+        state.enemies.push(diver);
+      }
+      cueDivers.forEach((diver, index) => {
+        Object.assign(diver, {
+          x: p.x + (index ? 8 : 0), z: p.z + (index ? 22 : 95), alt: BANDS[2], band: 2,
+          maneuver: { phase: 'warning', band: 0, diveAt: state.tick + 600 },
+        });
+      });
     }
   }
 
