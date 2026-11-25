@@ -24,6 +24,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 14:40 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (review of a641975)
+- A full shared ledger incorrectly started the normal miniboss attack cooldown even though no escorts fired. Blocked volleys now retry at the shared spacing interval; an emitted volley still starts the normal cooldown.
+- The regression reproduces a denied volley and confirms a single paid volley once room opens. `npm test` 683/683, `npm run build` and `git diff --check` passed; Survivors replay golden updated. Re-running the 100 seeds per profile on this tree for PR review.
+
 ### 2026-11-25 14:30 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge 0674f91 + 201cbce)
 - Integrated `renderer-proto`'s miniboss, Ace reengagement and arena changes. Actual miniboss actors consume the shared cues, use the same threat ledger as Ace and regular enemies, and block formations during the encounter and its 15-second rest.
 - `npm test` 682/682, `npm run build` and `git diff --check` passed. The Survivors replay golden reflects the combined gameplay. The 100-seed/profile simulation is running; the PR remains open for review.

@@ -10,11 +10,12 @@ import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceEnemies } from '../src/stage-enemies.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_BOSS_HIT_RADIUS, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
+import { THREAT_BUDGET, trySpendThreat } from '../src/threat-budget.ts';
 import { World } from '../src/world.ts';
 
 const ground = () => 0;
 
-function startEncounter(index, hooks = STANDALONE_SORTIE_BOSS_HOOKS) {
+function startEncounter(index, hooks) {
   const cue = SORTIE_MINIBOSS_CUES[index];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ground);
   state.tick = cue.startTick - 1;
@@ -353,6 +354,25 @@ test('miniboss attacks spend the threat hook and denial emits no volley', () => 
     assert.ok(Number.isFinite(requests[0].request.bearing));
     assert.equal(state.shots.filter(shot => shot.kind === 'hostile').length, 0);
   }
+});
+
+test('transport escorts retry after a denied spend and keep their normal cadence after firing', () => {
+  const state = startEncounter(0);
+  const boss = state.sortieBoss;
+  const firstAttempt = boss.nextThreatAt;
+  const retryAt = firstAttempt + THREAT_BUDGET.spacingTicks;
+  for (const tick of [retryAt - THREAT_BUDGET.windowTicks, firstAttempt - 180, firstAttempt - 60]) {
+    assert.ok(trySpendThreat(state, { tick, source: 'regular-escort', points: 2, bearing: 0 }));
+  }
+  const volleys = [];
+  const events = { muzzle(shot) { if (shot.kind === 'hostile') volleys.push(state.tick); } };
+  run(state, firstAttempt - state.tick, undefined, events);
+  assert.deepEqual(volleys, []);
+  assert.equal(boss.nextThreatAt, retryAt);
+  run(state, THREAT_BUDGET.spacingTicks, undefined, events);
+  assert.deepEqual(volleys, [retryAt, retryAt]);
+  assert.equal(boss.nextThreatAt, retryAt + 5 * TICKS_PER_SECOND);
+  assert.equal(state.threatBudget.spends.filter(spend => spend.source === boss.cue.threatSource).length, 1);
 });
 
 test('either miniboss kill pays one existing evolution chest and one midboss hook, then rests from completion', () => {
