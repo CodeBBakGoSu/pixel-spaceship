@@ -724,11 +724,12 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   bottom: calc(100% - var(--controls-y) + 8px);
 }
 .experience.phone-landscape:not(.cockpit-view) .flight-message {
-  bottom: calc(100% - var(--controls-y) + clamp(64px, 20vh, 112px));
-  left: auto;
-  right: calc(100% - min(var(--radar-x), var(--arena-map-x)) + 6px);
+  top: calc(var(--objective-y) + var(--objective-h) + 4px);
+  bottom: auto;
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  right: auto;
   transform: none;
-  max-width: max(96px, calc(min(var(--radar-x), var(--arena-map-x)) - 50% - 46px));
+  max-width: max(96px, calc(50% - 96px));
   white-space: normal;
   overflow: visible;
   line-height: 1.25;
