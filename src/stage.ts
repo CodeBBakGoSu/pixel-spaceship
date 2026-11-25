@@ -261,6 +261,13 @@ function applyFixture(state: StageState, options: StageOptions, ground: Ground):
     const enemy = makeEnemy(state, x, z, fixtureBands[fixture], fixture);
     placeSkimEnemy(enemy, ground);
     state.enemies.push(enemy);
+    if (fixture === 'crosswing') {
+      const mate = makeEnemy(state, x + scaleTravel(18), z + scaleTravel(6), fixtureBands[fixture], fixture);
+      placeSkimEnemy(mate, ground);
+      enemy.crosswing = { mate: mate.id, side: -1 };
+      mate.crosswing = { mate: enemy.id, side: 1 };
+      state.enemies.push(mate);
+    }
     if (fixture === 'bomber') addBomberEscort(state, enemy, ground);
   } else if (fixture === 'stack') {
     for (const band of [0, 1, 2] as const) {
