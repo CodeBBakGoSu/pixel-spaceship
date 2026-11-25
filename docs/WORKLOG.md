@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795538065-pr15-mobile-followup (merge `3460aa9`)
+- Merged the updated continuous-flight target (`f6fc1d0`, including minute-wave/Ace firing integration) into the mobile cue follow-up; only `docs/WORKLOG.md` conflicted, and the compact Aegis/dive-cue path plus short-landscape rear-cue separation remain intact.
+- Verification after the merge: tests 769/769 and build passed; mobile emulation at 844x390 and 375x667 confirmed simultaneous Aegis/dive cues without cue, control, or aircraft overlap. State: validation complete; review/merge pending. Real-device verification remains unverified.
+
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795538065-pr15-mobile-followup (`713913b`, `cacad18`, `9e14e45`)
 - Merged the continuous-flight target branch, kept generalized dive-warning targets while preserving compact simultaneous Aegis/threat slots, and separated short-landscape flight warnings from rear-danger cues.
 - Validation: tests 765/765 and build on `cacad18`, build again after final CSS; mobile emulation verified simultaneous Aegis/dive cues at 844x390 and 375x667 without cue, control, or aircraft overlap. State: validation complete; review/merge pending. Real-device verification remains unverified.
