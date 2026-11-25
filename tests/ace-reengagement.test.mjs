@@ -342,6 +342,31 @@ test('Ace damage remains available outside reengagement windows', () => {
   assert.ok(ace.hp < hp);
 });
 
+test('Ace firing lines keep target locks without requiring its nose to face backward', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  delete ace.entry;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 125 });
+  Object.assign(ace, {
+    x: 0, z: 180, alt: 125, yaw: 0, vx: 0, vz: CRUISE_SPEED,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'line', startedAt: state.tick, side: 1, lineStartedAt: state.tick,
+      lineUntil: state.tick + ACE.reengagement.lineSeconds * TICKS_PER_SECOND },
+  });
+  const fired = [];
+  advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  assert.equal(ace.tell?.kind, 'gun', 'the line admits an attack even though the player is behind Ace');
+
+  const until = ace.tell.until;
+  while (state.tick < until) {
+    state.tick++;
+    advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  }
+  assert.equal(fired.length, 1);
+  assert.ok(state.shots.some(shot => shot.kind === 'hostile'), 'the completed warning launches real hostile shots');
+});
+
 test('Ace attack admission shares the threat hook and denial does not telegraph or advance the attack pattern', () => {
   const state = stage();
   const ace = state.boss;

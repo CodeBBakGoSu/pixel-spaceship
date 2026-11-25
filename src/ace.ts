@@ -337,11 +337,15 @@ export function aceDodgeWindow(tell: AceTell, tick: number): boolean {
   return tell.kind !== 'roll' && tick >= tell.until - ACE.lock.dodgeTicks && tick <= tell.until;
 }
 
+function reengagementLineLock(state: StageState, ace: Ace): boolean {
+  return !!state.run && ace.reengagement?.phase === 'line';
+}
+
 function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
   const { player: p, tick } = state;
   const dx = p.x - ace.x, dz = p.z - ace.z;
   if (!inBand(p.altitude, tell.alt, ACE.attack.bandWindow) || Math.hypot(dx, dz) > ACE.attack.range
-    || Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
+    || !reengagementLineLock(state, ace) && Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
   // Only an accepted maneuver's first tick counts, not its whole animation or a held input.
   const dodgeWindow = aceDodgeWindow(tell, tick)
     || tell.dodgeGraceUntil !== undefined && tick <= tell.dodgeGraceUntil;
@@ -388,7 +392,8 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
   }
   const dx = p.x - ace.x, dz = p.z - ace.z, range = Math.hypot(dx, dz);
   const heading = angleTo(ace.yaw, dx, dz);
-  if (tick < ace.attackAt || range > ACE.attack.range || Math.abs(heading) > ACE.attack.cone
+  if (tick < ace.attackAt || range > ACE.attack.range
+    || !reengagementLineLock(state, ace) && Math.abs(heading) > ACE.attack.cone
     || !inBand(ace.alt, p.altitude, ACE.attack.bandWindow)) return;
   const nextAttack = ace.attacks + 1;
   const kind = nextAttack % tuning.missileEvery === 0 ? 'missile' : 'gun';
