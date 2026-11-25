@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`99ea789`, fixture pending; based on `50709d0`)
+- Raised small-landscape flight warnings above the aircraft while preserving the radar-side lane; the stress fixture now suppresses draft interruption so the 64-hostile-shot mobile scene remains observable at 07:30.
+- Before the fixture change, full tests passed 704/704 and builds passed on both cue branches. Browser evidence collection is in progress. State: in progress.
+
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`525adbe`; based on `870c3a1`)
 - Moved landscape non-cockpit warning/rear cues into left/right lanes so they stay clear of the centered aircraft; shared touch cue placement now falls back to narrower Aegis slots on narrow phones and scans all nearby descending warnings instead of only the first.
 - Focused touch layout tests passed 13/13; full tests passed 664/664; build passed (nonfatal chunk-size advisory). Mobile visual QA is in progress. State: in progress.

@@ -62,6 +62,11 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
     }
     state.hull = state.maxHull;
     state.xp = 0;
+    if (state.phase === 'draft' || state.draft.length) {
+      state.draft = [];
+      state.resultPending = null;
+      state.phase = 'playing';
+    }
     if (!state.boss) {
       const ace = state.boss = makeAce(state, p.x + 18, p.z + 146);
       ace.phase = 3;
