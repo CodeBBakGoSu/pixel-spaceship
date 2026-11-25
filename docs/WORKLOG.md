@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`525adbe`; based on `870c3a1`)
+- Moved landscape non-cockpit warning/rear cues into left/right lanes so they stay clear of the centered aircraft; shared touch cue placement now falls back to narrower Aegis slots on narrow phones and scans all nearby descending warnings instead of only the first.
+- Focused touch layout tests passed 13/13; build passed (nonfatal chunk-size advisory). Full tests and mobile visual QA are in progress. State: in progress.
+
 ### 2026-11-25 (KST) - Devin bot - devin/1795534997-pr10-mobile-safe-cues (523f801, 6e628ba, 103cdcf, 0e13095, 39da42b, 1b22743; reviewed base 26a774b)
 - Dive cue state is independent of HUD message selection, falls back to the cockpit aiming reference behind the camera, and detects the full physical touch backdrop. Shared placement accounts for audio/mute and all controls, searches obstacle edges, and reserves separate Aegis/threat slots.
 - A 1 CSS-pixel clearance lets 160x44 and 48x40 slots fit at 360x844 without overlap. Focused tests passed 61/61; build passed (122 modules, 2.87s; nonfatal chunk-size advisory). State: locally verified, push pending; visual/device QA delegated.
