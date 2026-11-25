@@ -82,6 +82,12 @@ export function findAegisTouchCueRects(layout: TouchLayout, threatSize: CueSize 
   return fallback;
 }
 
+export function touchThreatCuePlacement(slots: { aegis: Rect | null; threat: Rect | null; solo: Rect | null },
+  aegisShown: boolean): { slot: Rect | null; reserved: Rect[] } {
+  if (aegisShown && slots.aegis) return { slot: slots.threat, reserved: [slots.aegis] };
+  return { slot: slots.threat ?? slots.solo, reserved: [] };
+}
+
 export function descendingDiveWarnings<T extends {
   x: number; z: number; band: number; maneuver?: { phase: string; band: number } | null;
 }>(enemies: readonly T[], player: { x: number; z: number }, range = 125): T[] {
