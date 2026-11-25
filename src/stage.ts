@@ -777,7 +777,7 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
         xp, born: state.tick, reversal: enemy.reversalKill };
     state.pickups.push(salvage);
     events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
-    if (state.run && (enemy.sortieBoss?.role === 'leader' || enemy.carrier)) {
+    if (state.run && (enemy.sortieBoss?.role === 'leader' || enemy.carrier || enemy.elite)) {
       sortieHooks.dropMagnet(state, { sourceEventId: enemy.id,
         sourceKind: enemy.sortieBoss?.role === 'leader' ? 'midboss' : 'elite', position }, events);
     }
@@ -812,8 +812,7 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
       return false;
     }
     const baseMagnetRange = SALVAGE_RANGE.magnet * magnetScale;
-    const expandedMagnetRange = range <= baseMagnetRange
-      || range <= baseMagnetRange * (magnet?.radiusScale ?? 1) && inBand(p.altitude, pickup.alt, HIT_WINDOW);
+    const expandedMagnetRange = range <= baseMagnetRange * (magnet?.radiusScale ?? 1);
     if (pickup.collected || pickup.pulling || expandedMagnetRange) {
       capturePickup(state, pickup, range, pickup.captureRequestTicks);
       reportPickupContact(events, pickup, state.tick);

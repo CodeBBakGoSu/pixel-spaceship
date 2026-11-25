@@ -38,8 +38,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRects, isDescendingDiveWarning, screenPointObscured, touchControlOcclusionRect,
-  touchCueScreenReference, TOUCH_THREAT_CUE_SIZE, touchOcclusionCue } from './touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, findTouchCueRects, firstTouchOcclusionCue, isDescendingDiveWarning, screenPointObscured, touchControlOcclusionRect,
+  touchCueScreenReference, TOUCH_THREAT_CUE_SIZE } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -778,7 +778,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
-  const diveWarning = state.enemies.find(enemy => isDescendingDiveWarning(enemy.maneuver, enemy.band)
+  const diveWarnings = state.enemies.filter(enemy => isDescendingDiveWarning(enemy.maneuver, enemy.band)
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
@@ -800,24 +800,26 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  const diveBand = diveWarning?.maneuver?.band;
-  if (diveWarning && diveBand !== undefined && touch && phone && scene && touchThreatCueSlot
+  if (diveWarnings.length && touch && phone && scene && touchThreatCueSlot
     && state.phase === 'playing' && !state.paused) {
-    const target = { x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] };
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
-    scene.projectContact(target, projectedTarget);
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
-    if (projectedTarget.depth > 0.05) {
-      const reserved = aegisCueSlot ? [aegisCueSlot] : [];
-      const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
-      const reference = touchCueScreenReference(projectedPlayer, phone);
-      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE,
-        8, occlusion, reserved, touchThreatCueSlot);
-      if (cue) {
-        setRect('touch-threat-cue', cue.rect);
-        touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
-        touchThreatCue.hidden = false;
-      }
+    const reserved = aegisCueSlot ? [aegisCueSlot] : [];
+    const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
+    const reference = touchCueScreenReference(projectedPlayer, phone);
+    const targets = [];
+    for (const diveWarning of diveWarnings) {
+      const diveBand = diveWarning.maneuver?.band;
+      if (diveBand === undefined) continue;
+      scene.projectContact({ x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] }, projectedTarget);
+      if (projectedTarget.depth > 0.05) targets.push({ x: projectedTarget.x, y: projectedTarget.y });
+    }
+    const cue = firstTouchOcclusionCue(phone, reference, targets, TOUCH_THREAT_CUE_SIZE,
+      8, occlusion, reserved, touchThreatCueSlot);
+    if (cue) {
+      setRect('touch-threat-cue', cue.rect);
+      touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
+      touchThreatCue.hidden = false;
     }
   }
   const tag = $('#view-tag');

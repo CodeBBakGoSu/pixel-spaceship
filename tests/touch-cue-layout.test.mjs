@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
 import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, pointBehindTouchControls, screenArrowRotation,
   screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, isDescendingDiveWarning, touchCueScreenReference,
-  touchOcclusionCue } from '../src/touch-cue-layout.ts';
+  touchOcclusionCue, firstTouchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -145,4 +145,26 @@ test('cockpit cue direction uses the aiming reference when the player is behind 
     y: layout.cockpit.aiming.y + layout.cockpit.aiming.height * 0.72,
   });
   assert.deepEqual(touchCueScreenReference({ x: 14, y: 18, depth: 3 }, layout), { x: 14, y: 18 });
+});
+
+test('narrow portrait cockpits fall back to a compact Aegis cue without covering controls', () => {
+  const layout = phoneLayout(375, 667, { top: 0, right: 0, bottom: 0, left: 0 }, 'cockpit', true);
+  const [aegis, threat] = findTouchCueRects(layout, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]);
+  assert.ok(aegis);
+  assert.ok(aegis.width < AEGIS_CUE_SIZE.width, `compact width: ${aegis.width}`);
+  assert.ok(threat);
+  assert.equal(overlaps(aegis, threat), false);
+  for (const target of [layout.audio, layout.stick, layout.stickLabel, layout.loop, layout.roll, layout.boost, layout.view]) {
+    assert.equal(overlaps(aegis, target), false);
+    assert.equal(overlaps(threat, target), false);
+  }
+});
+
+test('the occlusion cue skips visible dive targets and uses a later covered warning', () => {
+  const layout = phoneLayout(390, 844, safe, 'overhead', true);
+  const visible = { x: 195, y: layout.controls.y - 24 };
+  const covered = { x: 195, y: layout.controls.y + 18 };
+  const cue = firstTouchOcclusionCue(layout, { x: 195, y: 420 }, [visible, covered], TOUCH_THREAT_CUE_SIZE);
+  assert.ok(cue);
+  assert.equal(cue.rotation, 180);
 });

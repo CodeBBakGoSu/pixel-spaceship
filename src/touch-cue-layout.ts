@@ -6,6 +6,7 @@ export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
 export const AEGIS_CUE_SIZE: CueSize = Object.freeze({ width: 160, height: 44 });
+export const AEGIS_CUE_WIDTHS = Object.freeze([AEGIS_CUE_SIZE.width, 150, 140]);
 export const TOUCH_THREAT_CUE_SIZE: CueSize = Object.freeze({ width: 48, height: 40 });
 
 type TouchLayout = Pick<PhoneLayout,
@@ -58,11 +59,20 @@ function edgeCandidates(origin: number, extent: number, size: number, obstacles:
     .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
 }
 
+function cueSizes(size: CueSize): CueSize[] {
+  if (size.width !== AEGIS_CUE_SIZE.width || size.height !== AEGIS_CUE_SIZE.height) return [size];
+  return AEGIS_CUE_WIDTHS.map(width => ({ width, height: size.height }));
+}
+
 export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[], gap = 1,
   reserved: readonly Rect[] = []): (Rect | null)[] {
   const obstacles = [...reserved];
   return sizes.map(size => {
-    const rect = findTouchCueRect(layout, size, gap, obstacles);
+    let rect: Rect | null = null;
+    for (const candidate of cueSizes(size)) {
+      rect = findTouchCueRect(layout, candidate, gap, obstacles);
+      if (rect) break;
+    }
     if (rect) obstacles.push(rect);
     return rect;
   });
@@ -116,4 +126,13 @@ export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target
   const rect = preferredSlot === undefined ? findTouchCueRect(layout, size, 4, reserved) : preferredSlot;
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
+}
+
+export function firstTouchOcclusionCue(layout: TouchLayout, from: ScreenPoint, targets: readonly ScreenPoint[],
+  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = [], preferredSlot?: Rect | null): TouchOcclusionCue | null {
+  for (const target of targets) {
+    const cue = touchOcclusionCue(layout, from, target, size, margin, occlusion, reserved, preferredSlot);
+    if (cue) return cue;
+  }
+  return null;
 }
