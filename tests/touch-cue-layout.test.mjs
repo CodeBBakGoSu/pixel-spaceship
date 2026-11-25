@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
 import { AEGIS_CUE_SIZE, descendingDiveWarnings, diveWarningTarget, findAegisTouchCueRects, findTouchCueRect,
   findTouchCueRects, firstTouchOcclusionCue, isDescendingDiveWarning, pointBehindTouchControls, screenArrowRotation,
-  screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+  screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue,
+  touchThreatCuePlacement } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -163,6 +164,18 @@ test('narrow portrait uses the largest compact Aegis slot that still fits withou
       assert.equal(overlaps(threat, target), false);
     }
   }
+});
+
+test('a hidden Aegis cue releases its space so narrow portrait still gets a dive arrow slot', () => {
+  const layout = phoneLayout(320, 667, safe, 'chase', true);
+  const [aegis, threat] = findAegisTouchCueRects(layout, TOUCH_THREAT_CUE_SIZE);
+  const solo = findTouchCueRect(layout, TOUCH_THREAT_CUE_SIZE);
+  assert.ok(aegis);
+  assert.equal(threat, null);
+  assert.ok(solo);
+  assert.deepEqual(touchThreatCuePlacement({ aegis, threat, solo }, false), { slot: solo, reserved: [] });
+  assert.deepEqual(touchThreatCuePlacement({ aegis, threat, solo }, true), { slot: null, reserved: [aegis] });
+  for (const target of layoutTargets(layout)) assert.equal(overlaps(solo, target), false);
 });
 
 function layoutTargets(layout) {

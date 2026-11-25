@@ -38,8 +38,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { diveWarningTarget, findAegisTouchCueRects, firstTouchOcclusionCue, screenPointObscured, touchControlOcclusionRect,
-  touchCueScreenReference, TOUCH_THREAT_CUE_SIZE } from './touch-cue-layout.ts';
+import { diveWarningTarget, findAegisTouchCueRects, findTouchCueRect, firstTouchOcclusionCue, screenPointObscured, touchControlOcclusionRect,
+  touchCueScreenReference, touchThreatCuePlacement, TOUCH_THREAT_CUE_SIZE } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -86,6 +86,7 @@ const aegisVolumeCue = $('#aegis-volume-cue');
 const aegisVolumeInner = $('#aegis-volume-cue-inner');
 let aegisCueSlot: Rect | null = null;
 let touchThreatCueSlot: Rect | null = null;
+let soloThreatCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -472,6 +473,7 @@ function layoutFlight(): void {
   const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE) : [];
   aegisCueSlot = cueSlots[0] ?? null;
   touchThreatCueSlot = cueSlots[1] ?? null;
+  soloThreatCueSlot = phone ? findTouchCueRect(phone, TOUCH_THREAT_CUE_SIZE) : null;
   if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
   aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
@@ -806,11 +808,12 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  if (diveTargets.length && touch && phone && scene && touchThreatCueSlot
+  const threatCue = touchThreatCuePlacement({ aegis: aegisCueSlot, threat: touchThreatCueSlot, solo: soloThreatCueSlot },
+    !aegisVolumeCue.hidden);
+  if (diveTargets.length && touch && phone && scene && threatCue.slot
     && state.phase === 'playing' && !state.paused) {
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
-    const reserved = aegisCueSlot ? [aegisCueSlot] : [];
     const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
     const reference = touchCueScreenReference(projectedPlayer, phone);
     const targets = [];
@@ -819,7 +822,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
       if (projectedTarget.depth > 0.05) targets.push({ x: projectedTarget.x, y: projectedTarget.y });
     }
     const cue = firstTouchOcclusionCue(phone, reference, targets, TOUCH_THREAT_CUE_SIZE,
-      8, occlusion, reserved, touchThreatCueSlot);
+      8, occlusion, threatCue.reserved, threatCue.slot);
     if (cue) {
       setRect('touch-threat-cue', cue.rect);
       touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
