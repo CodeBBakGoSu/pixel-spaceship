@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (`f01bc45`; base `dcca4ff`)
+- Finished the continuous-flight integration review items: Magnet Core's expanded planar radius no longer has a separate altitude gate, non-carrier elite kills can roll magnet drops, phase-director degree bearings are converted before spawning, and Survivors Ace reengagement uses the expanded flight ceiling so high-altitude frontal firing lines are reachable. Mobile Aegis slots now fall back to compact widths, and dive occlusion checks continue past visible warnings until a covered warning is found.
+- Verification: focused integration tests passed 83/83; replay hash regression passed 2/2 with only the intentional Survivors golden refreshed (`a43beef8…`) and Legacy unchanged; `npm run build` passed (132 modules, 2.63s; nonfatal chunk-size advisory). A full `npm test` rerun is in progress; browser/device evidence remains pending.
+- State: implementation complete locally on the PR #13 integration branch; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795538065-pr15-mobile-followup` (base `eed2087`; `f99d20d`, `e815833`, `b27c7e2`, `27f950c`, `5e8b123`, `0bf4b46`, `e8fb690`, `920b92c`, `a16ced3`, `e6cc023`, `48d4c71`, `4190f32`)
 - Cherry-picked PR #15 follow-ups onto the current continuous-flight base containing merged PR #15; verified the radial `radius ± halfWidth` and vertical `alt ± halfWidth` collision semantics are unchanged. Shared mobile cues now account for the full touch-panel backdrop, real controls, and distinct edge-derived Aegis/dive slots; the Aegis cue uses the overhead render plane, and the dive cue follows active descent with a cockpit fallback.
 - Verification: focused layout/Aegis tests passed 70/70; `npm run build` passed (132 modules, 2.27 s; nonfatal chunk-size advisory). No browser/device validation was performed.
