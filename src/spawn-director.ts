@@ -258,7 +258,7 @@ export function relocateStragglers(state: StageState, ground: Ground): void {
   const p = state.player, fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   let escape: number | null | undefined;
   for (const enemy of state.enemies) {
-    if (!enemy.hp || enemy.entry || enemy.formation || enemy.kind === 'gnat') continue;
+    if (!enemy.hp || enemy.entry || enemy.formation || enemy.sortieBoss || enemy.kind === 'gnat') continue;
     const dx = p.x - enemy.x, dz = p.z - enemy.z;
     const aft = dx * fx + dz * fz;
     const outside = dx * dx + dz * dz > SPAWN_WORLD.recycleDistance ** 2;

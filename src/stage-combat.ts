@@ -3,7 +3,7 @@ import type { Ace, AceTell, Effect, Enemy, Flare, Ground, KillCredit, Point, Pos
 import { ACE } from './data/ace.ts';
 import { reportDamage } from './combat-feedback.ts';
 import { aegisBlocks } from './data/roster.ts';
-import { scaleClimb } from './data/speed.ts';
+import { scaleClimb, scaleTravel } from './data/speed.ts';
 import { BOOST_SPEED } from './flight.ts';
 import { adjacentBand, bandAltitude, BANDS, canCueAltitude, contactBand, playerBand, SKIM, SKIM_BAND, skimAltitude, type FlightBand } from './bands.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
@@ -18,6 +18,7 @@ import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindo
 import { nearestBand } from './maneuvers.ts';
 import { advanceRangedShot } from './ranged-weapons.ts';
 import { rollBoltImmune, rollParryActive } from './roll.ts';
+import { segmentSphereIntersection3d } from './sortie-spatial-adapter.ts';
 
 export const TICKS_PER_SECOND = 60;
 export const STEP = 1 / TICKS_PER_SECOND;
@@ -45,7 +46,8 @@ const BOMB_HOLD_TICKS = 27;
 const BOMB_FALL_SPEED = scaleClimb(24);
 const LOCK_TICKS = 21;
 const HIT_RADIUS = 6;
-const TWIN_CONE = Math.PI / 6;
+const SORTIE_BOSS_RADIUS = scaleTravel(14);
+export const TWIN_CONE = Math.PI / 6;
 const TWIN_MUZZLE = 6;
 const LOCK_RANGE = WEAPONS.twin.tuning.range;
 const REVERSAL_WINDOW = 120;
@@ -782,6 +784,14 @@ function altitudeImpactTime(origin: Position, dx: number, dz: number, dy: number
   return from <= to ? impactTime(origin, dx, dz, target, radius, from, to) : Infinity;
 }
 
+function enemyImpactTime(origin: Position, dx: number, dz: number, dy: number, target: Enemy, window: number): number {
+  if (target.sortieBoss) {
+    return segmentSphereIntersection3d(origin,
+      { x: origin.x + dx, z: origin.z + dz, alt: origin.alt + dy }, target, SORTIE_BOSS_RADIUS) ?? Infinity;
+  }
+  return altitudeImpactTime(origin, dx, dz, dy, target, HIT_RADIUS, window);
+}
+
 export function groundImpact(origin: Position, dx: number, dz: number, ground: Ground, dy = 0): number {
   if (ground(origin.x, origin.z) >= origin.alt) return 0;
   let first = ground(origin.x + dx / 2, origin.z + dz / 2) >= origin.alt + dy / 2 ? 0.5 : 1;
@@ -814,8 +824,9 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
     let hit: Enemy | null = null;
     const ace = activeAce(state);
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow)) continue;
-      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+      if (!enemy.hp || enemy.entry || (!enemy.sortieBoss
+        && !strafeBandMatches(enemy, shot.targetBand, targetAltitude, bandWindow))) continue;
+      const time = enemyImpactTime(shot, dx, dz, dy, enemy, window);
       if (time < first) {
         first = time;
         hit = enemy;
@@ -853,11 +864,12 @@ function advancePiercingShot(
     for (const enemy of state.enemies) {
       if (!enemy.hp || enemy.entry || bolt.hits.includes(enemy.id)) continue;
       if (shot.kind === 'strafe') {
-        if (!strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
-      } else if (!dy && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
+        if (!enemy.sortieBoss && !strafeBandMatches(enemy, shot.targetBand, altitude, bandWindow)) continue;
+      } else if (!enemy.sortieBoss && !dy
+        && !inBand(altitude, enemy.alt, isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : bandWindow)) {
         continue;
       }
-      const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS,
+      const time = enemyImpactTime(shot, dx, dz, dy, enemy,
         isGroundAa(enemy) ? hitWindow(state, STRAFE_BAND_WINDOW) : window);
       if (time < first) {
         target = enemy;
@@ -1002,7 +1014,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
       for (const enemy of state.enemies) {
         if (!enemy.hp || enemy.entry) continue;
         const window = contactWindow(enemy);
-        const time = altitudeImpactTime(shot, dx, dz, dy, enemy, HIT_RADIUS, window);
+        const time = enemyImpactTime(shot, dx, dz, dy, enemy, window);
         if (time < first) {
           first = time;
           enemyHit = enemy;
