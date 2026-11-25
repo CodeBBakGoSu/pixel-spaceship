@@ -24,6 +24,18 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (temporary opening HP `7d5fa95`)
+- Added `SURVIVOR_BALANCE.openingRegularHpScale = 1.5` as a temporary experiment pending the balance bot/owner-confirmed early-growth target. Scripted Coast-opening regulars only are hardened; the post-opening random pool and Legacy mode are unchanged, and the Survivors replay golden intentionally moved to `5a5e8210…`.
+- Probe note (average seeds 1–30): first regular kill median 3 hits and Lv2 median 8.5 kills, but Lv2/Lv5 timing stayed near 23.3/46.7 s. This is not a final balance value.
+- Verification: rebased-branch focused replay/swarm/Ace tests 36/36, full `npm test` 773/773, and `npm run build` passed.
+- State: experimental/in progress; do not treat as the approved growth lever until exact targets arrive. No `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace projectile speed `366a20b`)
+- Rebased the difficulty candidate onto final PR #13 head `8d09aee2f6737679a4b8f84877d23fe7d03affcb`. The speed-only measurement SHA is `366a20b1e1fb138e2d0086ca611b12ccb77f4c76`; it adds Survivors-only `SURVIVOR_BALANCE.aceProjectileSpeedScale = 1.5`, multiplying both Ace gun and missile projectile speed while leaving warnings, cadence, damage, enemy growth, and Legacy unchanged.
+- Survivors replay golden intentionally moved for the speed change; Legacy replay hash is unchanged. Branch head also contains the separate temporary opening-HP experiment, so same-seed speed measurement must pin `366a20b`, not branch head.
+- Verification: rebased-branch focused replay/swarm/Ace tests 36/36, full `npm test` 773/773, and `npm run build` passed. Official 300-sortie outcome measurement is delegated to the balance bot.
+- State: measurement handoff in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (HUD `42ef85f`, `ef35d95`; PR #10 merge `5b1e96e`; cue slot `97330ef`)
 - Merged the final PR #10 sortie-VFX `renderer-proto` drop into the continuous-flight candidate while preserving the shared PR #16 touch-cue behavior: compact Aegis slots, later covered dive warnings, Stingray pass-end cue targeting, and the follow-up that releases the paired dive-arrow slot into solo space when the Aegis cue is hidden. Survivors HUD copy now removes fixed LOW/MID/HIGH/SKIM altitude-band labels from the numeric HUD and cockpit tape, uses `TERRAIN`/`지형 주의` for mild terrain proximity, and changes only the Survivors Ace objective to closing the altitude gap; Legacy copy is unchanged.
 - Verification: `npm test` 772/772 and `npm run build` passed after integrating `97330ef`. Fresh assisted browser validation on `ef35d95` passed portrait/landscape movement, real midboss chest + magnet payout (gross XP +100, credits +116), Ace reengagement firing/hits, Korean/English HUD copy, Legacy copy regression, and PR10 touch-cue placement; a focused `cf17b22` browser delta also passed the ordinary paired cue and the 330×740 released-slot fallback. Evidence is under `/home/ubuntu/aster-validation-ef35d95` and `/home/ubuntu/aster-validation-cf17b22` in the validating session, not natural play.
