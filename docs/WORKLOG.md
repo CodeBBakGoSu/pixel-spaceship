@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (line warning `d5ab995`)
+- Fast-forwarded the shared integration branch with the follow-up Ace lock fix: a gun/missile warning that starts during a firing line is now marked as line-started, so the end of that movement line does not cancel an otherwise valid launch. This is geometry/state ownership only; no difficulty numbers changed.
+- Survivors golden is intentionally `dce1e8a9…`; Legacy remains unchanged. Full-suite and browser evidence are being rerun on this final candidate because it superseded `f6fc1d0` before capture.
+
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (Ace firing `d69188e`)
 - Investigated the balance bot's 300-same-seed Ace signal. On the pre-fix candidate, average seed 1 had **zero attack-ready ticks**: range/altitude were available, but nose-cone geometry was not (2,334 blocked ticks; mean absolute bearing 2.54 rad). During reengagement Ace intentionally straightens ahead of the player, so requiring its nose to face backward made the 8–10 minute fight almost silent.
 - Fixed the geometry admission/lock structurally: range, altitude, threat budget, dodge cancellation and cadence are unchanged, but a committed reengagement firing line can hold and complete a target lock without the impossible backward nose cone. Survivors replay golden deliberately changed to `ee2105…`; Legacy is unchanged.
