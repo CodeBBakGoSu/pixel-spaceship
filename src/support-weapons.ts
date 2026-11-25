@@ -60,7 +60,7 @@ function advanceWake(state: StageState, level: number): void {
   const hitLanes = (target: Enemy | Ace) => {
     for (let lane = 0; lane < segments.length && target.hp > 0; lane++) {
       if (state.tick < (target.ionReadyAt?.[lane] ?? 0) || !crossesWake(segments[lane], target, width, window, plasma)) continue;
-      if (target.kind === 'ace') hurtAce(state, target, damage);
+      if (target.kind === 'ace') hurtAce(state, target, damage, 'ion');
       else hurtEnemy(state, target, damage, { weapon: 'ion' });
       (target.ionReadyAt ??= [0, 0, 0])[lane] = next;
     }
@@ -123,7 +123,7 @@ function advanceDrones(state: StageState, level: number): void {
     if (ace && aceVulnerable(ace) && inBand(drone.alt, ace.alt, window)) {
       const range = Math.hypot(drone.x - ace.x, drone.z - ace.z);
       if (range <= tuning.hitRadius && state.tick >= (ace.droneReadyAt ?? 0)) {
-        hurtAce(state, ace, damage);
+        hurtAce(state, ace, damage, 'drones');
         ace.droneReadyAt = next;
       }
       if (shotRoom && ace.hp && range < best) target = ace;
@@ -202,7 +202,7 @@ function advanceAegis(state: StageState): void {
   }
   const ace = activeAce(state);
   if (!ace || !aceVulnerable(ace) || state.tick < (ace.aegisReadyAt ?? 0) || !colliding(ace, window)) return;
-  hurtAce(state, ace, damage);
+  hurtAce(state, ace, damage, 'pods');
   ace.aegisReadyAt = next;
 }
 

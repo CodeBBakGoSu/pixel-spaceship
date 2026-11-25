@@ -198,7 +198,7 @@ export class PickupVisuals {
   }
 
   update({ tick, pickups, player }: Pick<StageState, 'tick' | 'pickups' | 'player'>,
-    flatAltitude?: number, reducedMotion = false): void {
+    flatAltitude?: number, reducedMotion = false, trailCapacity = PICKUP_LIMIT): void {
     const count = Math.min(pickups.length, PICKUP_LIMIT);
     let trailCount = 0;
     for (let i = 0; i < count; i++) {
@@ -225,7 +225,7 @@ export class PickupVisuals {
       data[offset + 4] = extent;
       data[offset + 5] = frame;
       data[offset + 6] = pulling ? reversal ? -1 : 1 : 0;
-      if (pulling) {
+      if (pulling && trailCount < trailCapacity) {
         this.writeTrail(trailCount++, pickup, altitude, size, player.x, player.z);
       }
     }

@@ -35,6 +35,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
+import { descendingDiveWarnings, findAegisTouchCueRects, TOUCH_THREAT_CUE_SIZE,
+  touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -45,6 +47,7 @@ import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
 import { FlightScene } from './scene.ts';
+import { sortieVfxMode } from './sortie-vfx.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
 import { clamp, inBand, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
@@ -75,6 +78,9 @@ const sortieStrip = $('#sortie-strip'), loadoutHud = $('#loadout-hud'), gearToas
 const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
+const touchThreatCue = $('#touch-threat-cue');
+let touchAegisCueSlot: Rect | null = null;
+let touchThreatCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -155,7 +161,9 @@ damageOption.addEventListener('change', () => {
   url.searchParams.delete('damageNumbers');
   history.replaceState(history.state, '', url);
 });
-observeDamage(state, (id, damage, critical, target) => {
+observeDamage(state, (id, damage, critical, target, weapon) => {
+  if (effectsEnabled && weapon) scene?.recordWeaponHit(weapon, target, state.tick,
+    { x: state.player.x, z: state.player.z, alt: state.player.altitude });
   if (damageNumbers && effectsEnabled) damageFeedback.hit(id, damage, critical, target, state.tick / 60);
 });
 const bulletFixture = demoBullets ? createHostileFixture(state, query, ground) : null;
@@ -287,9 +295,16 @@ const combatEvents: CombatEvents | undefined = effectsEnabled ? {
     }
   },
   aceTellFired: aceVisualEvents.aceTellFired,
-  destroyed(kind, elite) {
+  destroyed(kind, elite, id, position, tick, formationId, armored) {
     audio.play('explosion', kind === 'gnat' ? 0.25 : elite ? 1 : 0.66);
+    if (id !== undefined && position && tick !== undefined) {
+      scene?.recordEnemyDefeat({ id, tick, position, formationId, armored });
+    }
   },
+  pickupDropped(event) { scene?.recordPickupVfx({ ...event, type: 'pickupDropped' }); },
+  pickupContacted(event) { scene?.recordPickupVfx({ ...event, type: 'pickupContacted' }); },
+  pickupCollected(event) { scene?.recordPickupVfx({ ...event, type: 'pickupCollected' }); },
+  aceDefeated(event) { scene?.recordBossDefeat(event); },
   aceArrival() { audio.play('ace_alert'); },
 } : undefined;
 let helpTimer = 0, lastHelp = '';
@@ -434,6 +449,9 @@ function setRect(name: string, box: Rect): void {
 function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
+  const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE) : [];
+  touchAegisCueSlot = cueSlots[0] ?? null;
+  touchThreatCueSlot = cueSlots[1] ?? null;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
@@ -706,6 +724,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
+  const diveWarnings = descendingDiveWarnings(state.enemies, p);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -725,6 +744,28 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
+  touchThreatCue.hidden = true;
+  if (diveWarnings.length && touch && phone && scene && touchThreatCueSlot
+    && state.phase === 'playing' && !state.paused) {
+    const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
+    scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
+    const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
+    const reserved = touchAegisCueSlot ? [touchAegisCueSlot] : [];
+    const reference = touchCueScreenReference(projectedPlayer, phone);
+    for (const diveWarning of diveWarnings) {
+      const diveBand = diveWarning.maneuver?.band;
+      if (diveBand === undefined) continue;
+      scene.projectContact({ x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] }, projectedTarget);
+      if (projectedTarget.depth <= 0.05) continue;
+      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
+      if (cue) {
+        setRect('touch-threat-cue', cue.rect);
+        touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
+        touchThreatCue.hidden = false;
+        break;
+      }
+    }
+  }
   const tag = $('#view-tag');
   tag.hidden = state.viewTag <= 0 || !!message;
   if (!tag.hidden) setText('#view-tag', t('view.tag', { view: t(`view.${state.view}`) }));
@@ -1634,17 +1675,20 @@ function animate(now: number): void {
     }
   }
   if (effectsEnabled) feedback.update(state, t, feedbackAnchor, scene?.cockpitMirror ?? scene?.rearView ?? null, cueTime || now);
-  drawDamageFeedback();
+  drawDamageFeedback(now);
   if (scene && !guide && !rosterSheet) drawAceLocks(damageContext, state, scene, cockpit?.aiming ?? phone?.playfield, aceFireCue);
   requestAnimationFrame(animate);
 }
 
-function drawDamageFeedback(): void {
+function drawDamageFeedback(nowMs: number): void {
   if (damageCanvas.width !== innerWidth || damageCanvas.height !== innerHeight) {
     damageCanvas.width = innerWidth; damageCanvas.height = innerHeight;
   }
   const ctx = damageContext, now = state.tick / 60;
   ctx.clearRect(0, 0, damageCanvas.width, damageCanvas.height);
+  const mode = sortieVfxMode(state, !!guide || !!rosterSheet);
+  if (effectsEnabled && scene && mode) scene.drawSortieVfx(ctx, state, mode, nowMs);
+  else scene?.clearSortieVfx();
   const kills = damageFeedback.count(state.kills, now);
   const counter = $('#kill-counter');
   counter.hidden = state.phase !== 'playing' || kills === 0;

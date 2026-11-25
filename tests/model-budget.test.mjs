@@ -183,8 +183,8 @@ test('carrier beacons and crates share a single small world instance batch', () 
   assert.equal(batch.layers.mask, 1, 'the rear camera can see the crate batch');
 });
 
-test('hostile heads, four trail samples and full spark bursts fit two instanced world batches', () => {
-  const visuals = new HostileVisuals(() => 35);
+test('hostile heads, four trail samples and full spark bursts fit one instanced world batch', () => {
+  const visuals = new HostileVisuals();
   const state = {
     tick: 0, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
     shots: Array.from({ length: SHOT_LIMIT }, (_, i) => ({
@@ -198,15 +198,10 @@ test('hostile heads, four trail samples and full spark bursts fit two instanced 
   for (const shot of state.shots) visuals.impact(shot, shot.x, shot.z, shot.alt, state.tick - 4);
   visuals.update(state);
 
-  const [drops, glyphs] = visuals.group.children;
-  assert.equal(visuals.group.children.length, 2);
+  const [glyphs] = visuals.group.children;
+  assert.equal(visuals.group.children.length, 1);
   assert.ok(glyphs.geometry.isInstancedBufferGeometry);
-  assert.ok(drops.isLineSegments && drops.geometry.isInstancedBufferGeometry);
-  assert.equal(drops.layers.mask, 1, 'the rear camera sees the height cues');
-  assert.equal(glyphs.layers.mask, 1, 'the rear camera sees the same glyphs');
-  assert.equal(drops.geometry.instanceCount, 48);
-  const x = drops.geometry.getAttribute('dropCenter');
-  for (let i = 0; i < drops.geometry.instanceCount; i++) assert.equal(x.getX(i), i + 1, 'nearest first');
+  assert.equal(glyphs.layers.mask, 1, 'the rear camera sees the glyphs');
 
   // Legacy shot caps can exceed the survivor cap of 64. Each glyph is two triangles.
   const quadCount = glyphs.geometry.instanceCount;
@@ -215,7 +210,7 @@ test('hostile heads, four trail samples and full spark bursts fit two instanced 
 });
 
 test('hostile glyphs retain their emitted shapes across altitude and shield changes', () => {
-  const visuals = new HostileVisuals(() => 35);
+  const visuals = new HostileVisuals();
   const state = {
     tick: 20, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
     shots: [118, 119, 101].map((alt, i) => ({
@@ -226,7 +221,7 @@ test('hostile glyphs retain their emitted shapes across altitude and shield chan
     const shot = state.shots[index];
     visuals.muzzle(shot, shape, shot.x, shot.z + 4, shot.alt, state.tick - 3);
   }
-  const [drops, glyphs] = visuals.group.children;
+  const [glyphs] = visuals.group.children;
   const styles = glyphs.geometry.getAttribute('glyphStyle');
   const heads = () => {
     const result = [];
@@ -246,14 +241,12 @@ test('hostile glyphs retain their emitted shapes across altitude and shield chan
   assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
 
   visuals.setView(400, 158);
-  assert.equal(drops.visible, false);
   visuals.setView(56);
-  assert.equal(drops.visible, true);
   assert.deepEqual(heads(), [[0, 3], [1, 3], [2, 2]]);
 });
 
 test('Ace missiles keep their narrow rocket glyph when restored without a muzzle event', () => {
-  const visuals = new HostileVisuals(() => 35);
+  const visuals = new HostileVisuals();
   const state = {
     tick: 20, hull: 10, invulnerability: 0, player: { x: 0, z: 0, altitude: 110 },
     shots: [{ kind: 'hostile', hostileKind: 'ace-missile', x: 0, z: 32, alt: 110, vx: 0, vz: -200, life: 2 }],

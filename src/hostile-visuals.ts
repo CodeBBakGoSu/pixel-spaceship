@@ -1,26 +1,25 @@
 import {
   CustomBlending, DynamicDrawUsage, Float32BufferAttribute, Group, InstancedBufferGeometry,
-  InstancedInterleavedBuffer, InterleavedBufferAttribute, LineSegments, Mesh,
+  InstancedInterleavedBuffer, InterleavedBufferAttribute, Mesh,
   OneFactor, OneMinusSrcAlphaFactor, ShaderMaterial, UniformsLib, UniformsUtils,
   type IUniform,
 } from 'three';
 import { HOSTILE_HIT_RADIUS, type HostileShape } from './data/hostile-fire.ts';
 import { STEPPED_HAZE_GLSL } from './post.ts';
 import { hostileCanHit, inBand, SHOT_LIMIT, STEP } from './stage-combat.ts';
-import type { Ground, Shot, StageState } from './stage-types.ts';
+import type { Shot, StageState } from './stage-types.ts';
 
 const SHAPE = { orb: 0, needle: 1, diamond: 2 } as const satisfies Record<HostileShape, number>;
 // --- S7e lane ---
 const ACE_MISSILE_SHAPE = 4;
 const DANGER = 0, ABOVE = 1, BELOW = 2, SHIELDED = 3;
 const MUZZLE = 4, IMPACT = 5, GRAZE = 6;
-const DROP_LIMIT = 48;
 const TRAIL_SAMPLES = 4;
 const TRAIL_INTERVAL = 2;
 const BURST_LIMIT = 24;
 const SPARKS_PER_BURST = 5;
 const GLYPH_LIMIT = SHOT_LIMIT * (1 + TRAIL_SAMPLES) + BURST_LIMIT * SPARKS_PER_BURST;
-const GLYPH_STRIDE = 9, DROP_STRIDE = 5;
+const GLYPH_STRIDE = 9;
 const BULLET_RADIUS = HOSTILE_HIT_RADIUS * 0.49;
 
 const BAND_FRAGMENT = /* glsl */`
@@ -150,49 +149,6 @@ function glyphBatch(data: InstancedInterleavedBuffer, topPlane: IUniform<number>
   return glyphs;
 }
 
-function dropBatch(data: InstancedInterleavedBuffer) {
-  const geometry = new InstancedBufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3));
-  geometry.setAttribute('dropCenter', new InterleavedBufferAttribute(data, 3, 0));
-  geometry.setAttribute('dropEnd', new InterleavedBufferAttribute(data, 2, 3));
-  geometry.instanceCount = 0;
-  const material = new ShaderMaterial({
-    uniforms: UniformsUtils.clone(UniformsLib.fog),
-    fog: true, transparent: true, depthWrite: false, toneMapped: false,
-    vertexShader: /* glsl */`
-      #include <fog_pars_vertex>
-      attribute vec3 dropCenter;
-      attribute vec2 dropEnd;
-      varying float tone;
-      varying float rise;
-      void main() {
-        vec3 point = dropCenter;
-        point.y = mix(dropEnd.x, point.y, position.y);
-        vec4 mvPosition = modelViewMatrix * vec4(point, 1.0);
-        gl_Position = projectionMatrix * mvPosition;
-        tone = dropEnd.y;
-        rise = position.y;
-        #include <fog_vertex>
-      }
-    `,
-    fragmentShader: /* glsl */`
-      ${BAND_FRAGMENT}
-      varying float tone;
-      varying float rise;
-      void main() {
-        float opacity = mix(0.22, 0.82, rise) * (tone < 0.5 ? 1.0 : 0.55);
-        gl_FragColor = vec4(bandColor(tone), opacity * rangeFade());
-        #include <colorspace_fragment>
-      }
-    `,
-  });
-  const drops = new LineSegments(geometry, material);
-  drops.name = 'Hostile projectile drop lines';
-  drops.frustumCulled = false;
-  drops.renderOrder = 2;
-  return drops;
-}
-
 function publish(geometry: InstancedBufferGeometry, data: InstancedInterleavedBuffer, range: { start: number; count: number },
   count: number): void {
   geometry.instanceCount = count;
@@ -216,14 +172,9 @@ export class HostileVisuals {
   private readonly bufferHeight = { value: 1 };
   private readonly glyphData = new InstancedInterleavedBuffer(new Float32Array(GLYPH_LIMIT * GLYPH_STRIDE), GLYPH_STRIDE)
     .setUsage(DynamicDrawUsage);
-  private readonly dropData = new InstancedInterleavedBuffer(new Float32Array(DROP_LIMIT * DROP_STRIDE), DROP_STRIDE)
-    .setUsage(DynamicDrawUsage);
   private readonly glyphs = glyphBatch(this.glyphData, this.topPlane, this.bufferHeight);
-  private readonly drops = dropBatch(this.dropData);
   private readonly glyphRange = { start: 0, count: 0 };
-  private readonly dropRange = { start: 0, count: 0 };
   private glyphCount = 0;
-  private dropCount = 0;
 
   private readonly tracked = new Array<Shot | null>(SHOT_LIMIT).fill(null);
   private readonly activeIndices = new Uint16Array(SHOT_LIMIT);
@@ -235,26 +186,19 @@ export class HostileVisuals {
   private readonly sampleCursor = new Uint8Array(SHOT_LIMIT);
   private readonly sampleCount = new Uint8Array(SHOT_LIMIT);
   private readonly sampleTick = new Int32Array(SHOT_LIMIT);
-  private readonly dropSlots = new Uint16Array(DROP_LIMIT);
-  private readonly dropDistances = new Float64Array(DROP_LIMIT);
   private lastTick = -1;
 
   private readonly burstKind = new Uint8Array(BURST_LIMIT);
   private readonly burstTick = new Int32Array(BURST_LIMIT);
   private readonly burstPose = new Float32Array(BURST_LIMIT * 4);
   private nextBurst = 0;
-  private readonly ground: Ground;
-
-  constructor(ground: Ground) {
-    this.ground = ground;
-    this.group.add(this.drops, this.glyphs);
+  constructor() {
+    this.group.add(this.glyphs);
   }
 
   setView(bufferHeight: number, topPlane = -1): void {
     this.topPlane.value = topPlane;
     this.bufferHeight.value = bufferHeight;
-    // A vertical drop viewed directly from above has no visible length.
-    this.drops.visible = topPlane < 0 && this.drops.geometry.instanceCount > 0;
   }
 
   muzzle(shot: Shot, shape: HostileShape, x: number, z: number, alt: number, tick: number): void {
@@ -279,7 +223,7 @@ export class HostileVisuals {
   }
 
   update(state: StageState): boolean {
-    const { tick, shots, player } = state;
+    const { tick, shots } = state;
     if (tick < this.lastTick) {
       this.tracked.fill(null);
       this.burstKind.fill(0);
@@ -300,7 +244,7 @@ export class HostileVisuals {
       if (!this.liveSlots[slot]) this.tracked[slot] = null;
     }
 
-    this.glyphCount = this.dropCount = 0;
+    this.glyphCount = 0;
     let colorsChanged = false, nextFree = 0;
     for (let i = 0; i < count; i++) {
       const shot = shots[this.activeIndices[i]];
@@ -316,8 +260,6 @@ export class HostileVisuals {
       colorsChanged ||= this.tones[slot] >= 0 && this.tones[slot] !== tone;
       this.tones[slot] = tone;
       this.drawTrail(shot, slot, tick);
-      const dx = shot.x - player.x, dz = shot.z - player.z, dy = shot.alt - player.altitude;
-      this.considerDrop(slot, dx * dx + dz * dz + dy * dy);
     }
 
     for (let i = 0; i < count; i++) {
@@ -328,7 +270,6 @@ export class HostileVisuals {
       this.writeGlyph(shot.x, shot.z, shot.alt, shot.vx, shot.vz, shape, this.tones[slot], radius, 1);
     }
     this.drawBursts(tick);
-    this.publishDrops();
     publish(this.glyphs.geometry, this.glyphData, this.glyphRange, this.glyphCount);
     this.glyphs.visible = this.glyphCount > 0;
     return colorsChanged;
@@ -372,35 +313,6 @@ export class HostileVisuals {
       this.writeGlyph(this.history[offset], this.history[offset + 1], this.history[offset + 2], shot.vx, shot.vz,
         this.shapes[slot], this.tones[slot], BULLET_RADIUS * (0.78 - age * 0.041), 0.52 - age * 0.055);
     }
-  }
-
-  private considerDrop(slot: number, distance: number): void {
-    let i = this.dropCount;
-    if (i < DROP_LIMIT) this.dropCount++;
-    else if (distance >= this.dropDistances[--i]) return;
-    while (i > 0 && distance < this.dropDistances[i - 1]) {
-      this.dropDistances[i] = this.dropDistances[i - 1];
-      this.dropSlots[i] = this.dropSlots[i - 1];
-      i--;
-    }
-    this.dropDistances[i] = distance;
-    this.dropSlots[i] = slot;
-  }
-
-  private publishDrops(): void {
-    const data = this.dropData.array;
-    let offset = 0;
-    for (let i = 0; i < this.dropCount; i++) {
-      const slot = this.dropSlots[i], shot = this.tracked[slot]!;
-      const floor = this.ground(shot.x, shot.z) + 0.35;
-      if (floor >= shot.alt) continue;
-      data[offset++] = shot.x;
-      data[offset++] = shot.alt;
-      data[offset++] = -shot.z;
-      data[offset++] = floor;
-      data[offset++] = this.tones[slot];
-    }
-    publish(this.drops.geometry, this.dropData, this.dropRange, offset / DROP_STRIDE);
   }
 
   private addBurst(kind: number, shot: Shot, x: number, z: number, alt: number, tick: number): void {

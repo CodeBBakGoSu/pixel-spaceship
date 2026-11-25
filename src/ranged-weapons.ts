@@ -39,7 +39,7 @@ function lockedAce(state: StageState, id = state.lock?.ready ? state.lock.id : n
 }
 
 function hitTarget(state: StageState, target: Target, damage: number, weapon: WeaponId, source?: Position): void {
-  if (target.kind === 'ace') hurtAce(state, target, damage);
+  if (target.kind === 'ace') hurtAce(state, target, damage, weapon);
   else hurtEnemy(state, target, damage, { weapon }, source);
 }
 

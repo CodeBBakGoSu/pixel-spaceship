@@ -108,7 +108,7 @@ export function hurtEnemy(state: StageState, enemy: Enemy, damage: number, credi
   if (state.player.skim && enemy.kind === 'turret') damage *= SKIM.groundDamageScale;
   const dealt = criticalDamage(state, damage);
   enemy.hp = Math.max(0, enemy.hp - dealt);
-  reportDamage(state, enemy.id, dealt, dealt > damage, enemy);
+  reportDamage(state, enemy.id, dealt, dealt > damage, enemy, credit?.weapon);
   enemy.hitUntil = state.tick + 8;
   enemy.shotDown = enemy.hp === 0;
   if (state.run && enemy.shotDown && credit) enemy.killCredit = credit;
@@ -139,11 +139,11 @@ export function aceVulnerable(ace: Ace): boolean {
   return ace.hp > 0 && !ace.entry && (!ace.roll || ace.roll.elapsed >= ROLLS.barrel.iframeTicks);
 }
 
-export function hurtAce(state: StageState, ace: Ace, damage: number): void {
+export function hurtAce(state: StageState, ace: Ace, damage: number, weapon?: WeaponId): void {
   if (!aceVulnerable(ace)) return;
   const dealt = criticalDamage(state, damage);
   ace.hp = Math.max(0, ace.hp - dealt);
-  reportDamage(state, ace.id, dealt, dealt > damage, ace);
+  reportDamage(state, ace.id, dealt, dealt > damage, ace, weapon);
   ace.hits++;
   ace.hitUntil = state.tick + 8;
   state.effects.push({ kind: 'hit', x: ace.x, z: ace.z, alt: ace.alt, life: 0.16 });
@@ -497,7 +497,7 @@ function blast(state: StageState, bomb: RearBomb): void {
   }
   const ace = activeAce(state);
   if (ace && belowLaunchBand(ace) && nearBomb(bomb, ace, radius) && inBand(ace.alt, bomb.alt, window)) {
-    hurtAce(state, ace, damage);
+    hurtAce(state, ace, damage, bomb.weapon ?? 'bomb-bay');
   }
 }
 
@@ -617,7 +617,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
     }
   }
   const ace = activeAce(state);
-  if (ace && burnTick(ace, state.tick, ACE.burnInterval)) hurtAce(state, ace, ace.burnDamage ?? 1);
+  if (ace && burnTick(ace, state.tick, ACE.burnInterval)) hurtAce(state, ace, ace.burnDamage ?? 1, 'phoenix');
 
   let alive = 0;
   const window = hitWindow(state);
@@ -638,7 +638,7 @@ export function advanceFlares(state: StageState, ground: Ground): void {
       }
     }
     if (ace && aceVulnerable(ace) && altitudeImpactTime(flare, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
-      hurtAce(state, ace, flare.damage ?? 1);
+      hurtAce(state, ace, flare.damage ?? 1, flare.weapon ?? 'phoenix');
       ignite(state, ace, ACE.burnInterval, flare);
     } else if (hit) {
       const credit = rearWeaponCredit(state, hit, 'phoenix');
@@ -686,7 +686,7 @@ export function advanceRearBombs(state: StageState, ground: Ground): void {
     const ace = activeAce(state);
     if (ace && aceVulnerable(ace) && !fx.hits.includes(ace.id) && within(ace)) {
       fx.hits.push(ace.id);
-      hurtAce(state, ace, fx.damage);
+      hurtAce(state, ace, fx.damage, 'bomb-bay');
     }
   }
   if (!state.rearBombs.length) return;
@@ -836,7 +836,7 @@ function advanceStrafe(state: StageState, shot: Extract<Shot, { kind: 'strafe' }
     }
     if (ace && aceVulnerable(ace) && strafeBandMatches(ace, shot.targetBand, targetAltitude, bandWindow)
       && altitudeImpactTime(shot, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
-      hurtAce(state, ace, shot.damage);
+      hurtAce(state, ace, shot.damage, 'twin');
       shot.life = 0;
     } else if (hit) {
       hurtEnemy(state, hit, shot.damage, { weapon: 'twin' }, shot);
@@ -882,7 +882,7 @@ function advancePiercingShot(
       && altitudeImpactTime(shot, dx, dz, dy, ace, ACE.hitRadius, window) < first) {
       bolt.hits.push(ace.id);
       bolt.remaining--;
-      hurtAce(state, ace, shot.damage);
+      hurtAce(state, ace, shot.damage, 'weapon' in shot ? shot.weapon : 'twin');
       hit = true;
       continue;
     }
@@ -1042,7 +1042,7 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
         }
       }
       if (bossHit && ace) {
-        hurtAce(state, ace, shot.damage);
+        hurtAce(state, ace, shot.damage, 'weapon' in shot ? shot.weapon : 'twin');
         shot.life = 0;
         resolved.add(shot.volley);
       } else if (enemyHit) {

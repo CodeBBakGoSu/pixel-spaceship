@@ -23,6 +23,52 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`457d16e`)
+- Removed the vertical hostile-projectile drop lines 기현님 flagged before merge, keeping the projectile head/trail glyphs and burst feedback unchanged; renderer budget notes and instancing tests now reflect the single glyph batch.
+- Verification: focused model/post tests 19/19, full tests 704/704, and build passed. Mobile emulation recording and screenshots show dense/chase scenes without the vertical rods while projectile heads/short trails remain visible. State: validation complete; review/merge pending. Real-device verification remains unverified.
+
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`09696ba`; validation on `c9e7fb8`)
+- Moved short-landscape flight warnings into the left lane and lowered rear-danger cues just above the controls so multiline missile warnings stay clear of the aircraft, objective, radar, and rear cue; the stress fixture keeps the 64-hostile-shot scene observable.
+- Validation: tests 704/704 and build on `c9e7fb8`, build again after final CSS; mobile emulation verified dense 844x390, small-landscape missile warnings, and all 24 approved VFX routes. State: validation complete; review/merge pending. Real-device verification remains unverified.
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`99ea789`, `caba647`, `4db6f67`; based on `50709d0`)
+- Raised small-landscape flight warnings above the aircraft while preserving the radar-side lane; the stress fixture now suppresses draft interruption so the 64-hostile-shot mobile scene remains observable at 07:30, with an explicit `cue=missile` hold for multiline warning layout checks.
+- Full tests passed 704/704 before these fixture-only changes and builds passed after them. Browser evidence collection is in progress. State: in progress.
+
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`525adbe`; based on `870c3a1`)
+- Moved landscape non-cockpit warning/rear cues into left/right lanes so they stay clear of the centered aircraft; shared touch cue placement now falls back to narrower Aegis slots on narrow phones and scans all nearby descending warnings instead of only the first.
+- Focused touch layout tests passed 13/13; full tests passed 664/664; build passed (nonfatal chunk-size advisory). Mobile visual QA is in progress. State: in progress.
+
+### 2026-11-25 (KST) - Devin bot - devin/1795534997-pr10-mobile-safe-cues (523f801, 6e628ba, 103cdcf, 0e13095, 39da42b, 1b22743; reviewed base 26a774b)
+- Dive cue state is independent of HUD message selection, falls back to the cockpit aiming reference behind the camera, and detects the full physical touch backdrop. Shared placement accounts for audio/mute and all controls, searches obstacle edges, and reserves separate Aegis/threat slots.
+- A 1 CSS-pixel clearance lets 160x44 and 48x40 slots fit at 360x844 without overlap. Focused tests passed 61/61; build passed (122 modules, 2.87s; nonfatal chunk-size advisory). State: locally verified, push pending; visual/device QA delegated.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`, `7a6adb5`; based on PR #10 `fa45f64`)
+- Added a direction-only cue to the unused safe touch-panel area when the live dive warning's projected target is covered; the world target ring and gameplay verdict remain unchanged.
+- Mobile layout/helper tests passed 57/57; build passed (122 modules, 2.64s; nonfatal chunk-size advisory). State: PR #10 visual QA pending.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`; based on PR #10 `fa45f64`)
+- Added shared touch-safe cue placement and screen-direction helpers with 390×844 / 844×390 regression coverage; PR #10 and #15 UI wiring remains in progress.
+- Mobile layout tests passed 57/57 and build passed (122 modules, 2.64s). State: in progress.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`027fdb5`, `6c069b0`; based on `1ef2fd9`)
+- Restored ion wake continuity by connecting each live sample to its previous sample in the same normalized lane (including lane 0's omitted index). Dive-warning masks now use the scene's clipped segment projection, retaining visible corridors for offscreen targets and camera-plane crossings; added regressions for both cases.
+- Regression repros against `1ef2fd9` failed 2/2; the focused VFX suite then passed 23/23. Build passed (121 modules, 2.18s); `git diff --check` was clean. Build preceded a test-only camera-fixture adjustment; production sources were unchanged afterward.
+- State: two scoped fixes are verified and committed on the candidate branch; no gameplay changes, CI wait, merge, or visual review.
+
+### 2026-11-24 23:25 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`8660bad`, `f53b12d`, `9132b3c`, `1076849`, `f2499f7`; based on `2437b8c`)
+- Fixed five review regressions in separate commits: bomber formation IDs, authoritative Ace weapon IDs, lane-safe ion wakes, target-altitude dive masks, and camera-clipped rail/arc segments. Added focused regressions without changing gameplay state.
+- Focused VFX suite passed 22/22; build passed (121 modules, 3.58s); `git diff --check` was clean. Initial PR #10 CI snapshot: 0 passed, 0 failed, 1 pending (`Devin Review`); no post-fix CI result yet.
+- State: scoped fixes and this entry are complete on the candidate branch; no merge or public deployment. Visual/mobile comparison and physical-device verification remain unverified.
+
+### 2026-11-24 22:43 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (based on 09e2890)
+- Corrected the VFX review gaps: only damage observers create H cues, fire accents and live trails use actual projectile positions, formation grouping stays open through its tick window, reduced motion suppresses optional movement, hazard masking protects bullets/dive corridors/boss silhouette, and terminal D04 advances after simulation stops.
+- Added focused regression coverage; `node --experimental-strip-types --test tests/sortie-vfx.test.mjs` passed 17/17 and `npm run build` passed (121 modules, 2.21s).
+- State: fixes complete on this branch; no commit, push, PR, or visual comparison.
+
+### 2026-11-24 22:25 KST · 데븐 봇 · devin/1795525221-selected-sortie-vfx (based on 09e2890)
+- Implemented the selected W01–W10 fire/hit and D01–D04 defeat visuals in a bounded render-only overlay, with authoritative outcome observers, pickup adapters, and density-based readability reductions.
+- Added route, anchor, pool/cleanup, pickup-event, Ace-verdict, boss-silhouette, and replay-invariance coverage. npm test passed 637/637; npm run build passed (121 modules, 2.88s).
+- State: done on this branch; no commit, push, PR, or visual comparison.
 
 ### 2026-11-25 14:48 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge f6f84c0 + d21455a)
 - Integrated timed salvage, terminal capture settlement and magnet drops. Shared miniboss hooks now run the live magnet roll once on defeat; regular carriers and marked elites also roll on defeat. Expedition rests do not pull salvage, and altitude-independent Bill credit still uses the actual contact tick.
