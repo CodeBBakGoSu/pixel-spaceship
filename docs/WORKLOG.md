@@ -23,6 +23,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (HUD `42ef85f`, `ef35d95`; PR #10 merge `5b1e96e`)
+- Merged the final PR #10 sortie-VFX `renderer-proto` drop into the continuous-flight candidate while preserving the shared PR #16 touch-cue behavior: compact Aegis slots, later covered dive warnings, and Stingray pass-end cue targeting. Survivors HUD copy now removes fixed LOW/MID/HIGH/SKIM altitude-band labels from the numeric HUD and cockpit tape, uses `TERRAIN`/`지형 주의` for mild terrain proximity, and changes only the Survivors Ace objective to closing the altitude gap; Legacy copy is unchanged.
+- Verification: `npm test` 771/771 and `npm run build` passed. Fresh assisted browser validation on `ef35d95` passed portrait/landscape movement, real midboss chest + magnet payout (gross XP +100, credits +116), Ace reengagement firing/hits, Korean/English HUD copy, Legacy copy regression, and PR10 touch-cue placement; evidence is under `/home/ubuntu/aster-validation-ef35d95` in the validating session, not natural play.
+- State: integration candidate pushed on PR #13; no difficulty numeric tuning, no `main` change, and no public deployment.
+
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (line warning `d5ab995`)
 - Fast-forwarded the shared integration branch with the follow-up Ace lock fix: a gun/missile warning that starts during a firing line is now marked as line-started, so the end of that movement line does not cancel an otherwise valid launch. This is geometry/state ownership only; no difficulty numbers changed.
 - Survivors golden is intentionally `dce1e8a9…`; Legacy remains unchanged. Full-suite and browser evidence are being rerun on this final candidate because it superseded `f6fc1d0` before capture.
