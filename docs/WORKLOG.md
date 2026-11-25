@@ -23,6 +23,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795538065-pr15-mobile-followup (`bd67579`; based on `dcca4ff`)
+- Kept simultaneous Aegis and dive-threat slots separate while using the largest compact Aegis slot that fits narrow phones, and scanning all nearby descending warnings instead of only the first.
+- Focused touch layout tests passed 18/18; build passed (nonfatal chunk-size advisory). Mobile visual QA is in progress. State: in progress.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795538065-pr15-mobile-followup` (base `eed2087`; `f99d20d`, `e815833`, `b27c7e2`, `27f950c`, `5e8b123`, `0bf4b46`, `e8fb690`, `920b92c`, `a16ced3`, `e6cc023`, `48d4c71`, `4190f32`)
 - Cherry-picked PR #15 follow-ups onto the current continuous-flight base containing merged PR #15; verified the radial `radius ± halfWidth` and vertical `alt ± halfWidth` collision semantics are unchanged. Shared mobile cues now account for the full touch-panel backdrop, real controls, and distinct edge-derived Aegis/dive slots; the Aegis cue uses the overhead render plane, and the dive cue follows active descent with a cockpit fallback.
 - Verification: focused layout/Aegis tests passed 70/70; `npm run build` passed (132 modules, 2.27 s; nonfatal chunk-size advisory). No browser/device validation was performed.
