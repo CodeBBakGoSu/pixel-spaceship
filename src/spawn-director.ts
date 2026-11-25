@@ -192,8 +192,17 @@ export function spawnWave(state: StageState, wave: Wave, ground: Ground, rng: { 
   }
 }
 
-const COAST_OPENING = WAVES.filter(wave => wave.time <= 22);
-const COAST_OPENING_TOTAL = COAST_OPENING.reduce((count, wave) => count + wave.members.length, 0);
+export const SURVIVOR_OPENING_REINFORCEMENTS: Readonly<Record<number, readonly Spawn[]>> = {
+  22: [patrol(1, -10, 90)],
+};
+
+const SURVIVOR_OPENING_WAVES = WAVES.map((wave): Wave => {
+  const reinforcements = SURVIVOR_OPENING_REINFORCEMENTS[wave.time];
+  return reinforcements ? { ...wave, members: [...wave.members, ...reinforcements] } : wave;
+});
+const COAST_OPENING = SURVIVOR_OPENING_WAVES.filter(wave => wave.time <= 22);
+// The reinforcement is an extra opening threat outside the random regular-spawn budget.
+const COAST_OPENING_TOTAL = WAVES.filter(wave => wave.time <= 22).reduce((count, wave) => count + wave.members.length, 0);
 const COAST_OPENING_END = 23 * TICKS_PER_SECOND;
 
 // Place all groups over the active portion of a phase, including a group on its first tick.

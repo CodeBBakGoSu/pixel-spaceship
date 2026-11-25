@@ -7,7 +7,7 @@ import { spawnSwarm } from '../src/swarm.ts';
 import { SPAWN_WORLD } from '../src/data/world.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy, advanceEnemies, spawnEscortGnats } from '../src/stage-enemies.ts';
-import { advancePhaseSpawns, trimEscorts } from '../src/spawn-director.ts';
+import { advancePhaseSpawns, SURVIVOR_OPENING_REINFORCEMENTS, trimEscorts, WAVES } from '../src/spawn-director.ts';
 
 const ground = () => 35;
 const ticks = seconds => seconds * 60;
@@ -57,6 +57,14 @@ test('the Survivors opening wave uses the tunable regular HP scale', () => {
   assert.equal(patrols.length, 2);
   const expected = Math.round(ENEMY_KINDS.patrol.hp * SURVIVOR_BALANCE.openingRegularHpScale);
   assert.ok(patrols.every(enemy => enemy.hp === expected));
+});
+
+test('the Survivors opening reinforcement stays out of the Legacy wave data', () => {
+  assert.equal(WAVES.find(wave => wave.time === 22)?.members.length, 2);
+  assert.equal(SURVIVOR_OPENING_REINFORCEMENTS[22]?.length, 1);
+  const state = waveState();
+  spawnAt(state, 20.5);
+  assert.equal(state.enemies.filter(enemy => enemy.kind === 'patrol').length, 3);
 });
 
 test('the first Gnat formation approaches at the coast start beat', () => {
