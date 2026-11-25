@@ -291,7 +291,8 @@ export function advanceSortieMiniboss(state: StageState, ground: Ground, hooks: 
   }
 }
 
-export function settleSortieMiniboss(state: StageState, actor: Enemy, hooks: SortieBossHooks): void {
+export function settleSortieMiniboss(state: StageState, actor: Enemy, hooks: SortieBossHooks,
+  events?: CombatEvents): void {
   const boss = state.sortieBoss;
   if (!boss || boss.actorId !== actor.id || boss.outcome) return;
   if (actor.shotDown && actor.hp <= 0) {
@@ -300,6 +301,11 @@ export function settleSortieMiniboss(state: StageState, actor: Enemy, hooks: Sor
     hooks.finishMidbossEncounter(state, {
       id: boss.cue.id, endedAt: state.tick, outcome: 'defeated',
     });
+    hooks.dropMagnet(state, {
+      sourceEventId: actor.id,
+      sourceKind: 'midboss',
+      position: { x: actor.x, z: actor.z, alt: actor.alt },
+    }, events);
     const escorts = new Set(boss.escortIds);
     state.enemies = state.enemies.filter(enemy => !escorts.has(enemy.id));
   } else if (state.tick >= boss.cue.startTick + boss.cue.maxDurationTicks) {

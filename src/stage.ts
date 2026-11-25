@@ -571,18 +571,18 @@ export function dropMagnet(state: StageState, source: { sourceEventId: number; s
   return pickup;
 }
 
-function pickupEvent(pickup: Pickup, tick: number, sourceEventId?: number) {
-  const eventSource = sourceEventId ?? pickup.source?.eventId;
-  return { pickupId: pickup.id, kind: pickup.kind ?? 'salvage', position: { x: pickup.x, z: pickup.z, alt: pickup.alt }, tick,
-    ...(eventSource === undefined ? {} : { sourceEventId: eventSource }) };
-}
-
 export const SORTIE_BOSS_HOOKS: SortieBossHooks = {
   consumeMidbossCue,
   finishMidbossEncounter,
   trySpendThreat,
   dropMagnet,
 };
+
+function pickupEvent(pickup: Pickup, tick: number, sourceEventId?: number) {
+  const eventSource = sourceEventId ?? pickup.source?.eventId;
+  return { pickupId: pickup.id, kind: pickup.kind ?? 'salvage', position: { x: pickup.x, z: pickup.z, alt: pickup.alt }, tick,
+    ...(eventSource === undefined ? {} : { sourceEventId: eventSource }) };
+}
 
 function mergeSalvage(state: StageState): void {
   const pickups = state.pickups;
@@ -759,7 +759,7 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
   sortieHooks: SortieBossHooks): void {
   const p = state.player;
   for (const enemy of state.enemies) {
-    if (enemy.sortieBoss) settleSortieMiniboss(state, enemy, sortieHooks);
+    if (enemy.sortieBoss) settleSortieMiniboss(state, enemy, sortieHooks, events);
     if (!enemy.shotDown) continue;
     const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
     const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
@@ -777,9 +777,8 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
         xp, born: state.tick, reversal: enemy.reversalKill };
     state.pickups.push(salvage);
     events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
-    if (state.run && (enemy.sortieBoss?.role === 'leader' || enemy.carrier || enemy.elite)) {
-      sortieHooks.dropMagnet(state, { sourceEventId: enemy.id,
-        sourceKind: enemy.sortieBoss?.role === 'leader' ? 'midboss' : 'elite', position }, events);
+    if (state.run && enemy.sortieBoss?.role !== 'leader' && (enemy.carrier || enemy.elite)) {
+      sortieHooks.dropMagnet(state, { sourceEventId: enemy.id, sourceKind: 'elite', position }, events);
     }
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
     if (enemy.kind === 'gnat') gnatBursts.add(state.effects[state.effects.length - 1]);
