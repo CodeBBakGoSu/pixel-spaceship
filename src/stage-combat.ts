@@ -11,7 +11,7 @@ import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIU
   MINE_RADIUS, type HostileSourceKind } from './data/hostile-fire.ts';
 import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_PROJECTILES, PLAYER_SHOT_LIMIT, REAR_ORDNANCE, SURVIVOR_PLAYER_DAMAGE,
-  WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
+  SURVIVOR_BALANCE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { TWIN_VOLLEYS, WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, targetCaptureAngleScale, weaponCooldown, weaponDamage } from './loadout.ts';
@@ -205,7 +205,8 @@ export function fireHostile(state: StageState, source: Position & { kind?: Hosti
 // --- S7e lane ---
 export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern: readonly number[], events?: CombatEvents): void {
   const guided = tell.kind === 'missile';
-  const speed = BOOST_SPEED * (guided ? ACE.missile.speedScale : ACE.gun.speedScale);
+  const speed = BOOST_SPEED * (guided ? ACE.missile.speedScale : ACE.gun.speedScale)
+    * (state.run ? SURVIVOR_BALANCE.aceProjectileSpeedScale : 1);
   const yaw = Math.atan2(tell.x - ace.x, tell.z - ace.z);
   let room = projectileRoom(state, 'hostile');
   for (const offset of pattern) {
