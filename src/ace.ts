@@ -9,6 +9,7 @@ import { advanceBank, advanceBankDrive, advanceBankDrop, bankThrustFactor, bankY
 import { flightCeiling } from './maneuvers.ts';
 import { planFlyIn, sampleFlyIn } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
+import { DIRECTOR_CLEAR_TICK } from './phase-director.ts';
 import { findRally } from './reach.ts';
 import { rollAltitude, rollLateralStep } from './roll.ts';
 import { enemyLimit } from './spawn-director.ts';
@@ -106,7 +107,7 @@ function updatePhase(state: StageState, ace: Ace, ground: Ground, events?: Comba
   const health = ace.hp / ace.maxHp;
   const phase = health <= ACE.phaseHealth.desperate ? 3 : health <= ACE.phaseHealth.cover ? 2 : 1;
   if (phase === ace.phase) return;
-  if (ace.phase === 1 && phase >= 2 && state.run) callCover(state, ace, ground, events, observe);
+  if (ace.phase === 1 && phase >= 2 && state.run && state.tick < DIRECTOR_CLEAR_TICK) callCover(state, ace, ground, events, observe);
   ace.phase = phase;
   const tuning = ACE_PHASES[phase];
   ace.bandAt = Math.min(ace.bandAt, state.tick + ACE.flight.bandStepDelay);
