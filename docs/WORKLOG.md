@@ -24,6 +24,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (Ace firing `d69188e`)
+- Investigated the balance bot's 300-same-seed Ace signal. On the pre-fix candidate, average seed 1 had **zero attack-ready ticks**: range/altitude were available, but nose-cone geometry was not (2,334 blocked ticks; mean absolute bearing 2.54 rad). During reengagement Ace intentionally straightens ahead of the player, so requiring its nose to face backward made the 8–10 minute fight almost silent.
+- Fixed the geometry admission/lock structurally: range, altitude, threat budget, dodge cancellation and cadence are unchanged, but a committed reengagement firing line can hold and complete a target lock without the impossible backward nose cone. Survivors replay golden deliberately changed to `ee2105…`; Legacy is unchanged.
+- Verification: focused Ace reengagement 11/11; build passed; average seeds 1–5 now produce 14 real Ace salvo executions in 5 runs (2–4 each, mean 2.8) with 5 hits taken, versus zero fired tells in the inspected pre-fix seed. Full suite/browser evidence pending.
+- State: integration candidate in progress; no `main` change or public deployment.
+
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merge `33d640b`; Crosswing `6e53793`)
 - Merged PR #12 minute waves/new enemies into the continuous-flight candidate while preserving PR #10/#16 touch cues, altitude-independent Magnet Core capture, midboss magnet payout, and continuous ceilings. Removed duplicate recovery-banner logic and refreshed only the Survivors replay golden (`fcc2e805…`); Legacy remains unchanged.
 - Crosswing attack runs now leave render-only smoke derived from their planned start/crossing path, so the X remains readable without depending on frame history; the crosswing fixture spawns the intended pair.
