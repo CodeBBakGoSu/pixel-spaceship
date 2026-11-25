@@ -26,13 +26,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace hull tuning plumbing)
 - Added neutral `SURVIVOR_BALANCE.aceHullScale = 1` and applied it only when creating the Survivors Ace. Scale 1 preserves the current 1200 HP exactly; Legacy and Heat armor composition are unchanged. This completes the local handles needed for hull overshoot tests without activating them.
-- Verification: focused Ace pacing and replay hash tests 16/16 passed; replay goldens remain unchanged.
+- Verification: focused Ace pacing and replay hash tests 16/16 passed; full `npm test` 774/774 and `npm run build` passed on the combined branch; replay goldens remain unchanged.
 - State: experimental/in progress; no `main` change or public deployment.
 
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace damage tuning plumbing)
 - Added neutral `SURVIVOR_BALANCE.aceProjectileDamageScale = 1` plumbing for later overshoot tests. Ace gun shots are now explicitly tagged as `ace-gun`; in Survivors, Ace gun/missile impacts use their projectile damage value, with scale 1 preserving the existing 3-hull hit exactly. Legacy behavior and non-Ace hostile damage are unchanged.
 - This is tunability infrastructure only, not an active difficulty increase. Replay goldens are intentionally unchanged.
-- Verification: focused Ace pacing tests 13/13 and replay hash tests 2/2 passed after the change.
+- Verification: focused Ace pacing tests 13/13 and replay hash tests 2/2 passed after the change; full `npm test` 774/774 and `npm run build` passed on the combined branch.
 - State: experimental/in progress; no `main` change or public deployment.
 
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (temporary opening HP `7d5fa95`)
