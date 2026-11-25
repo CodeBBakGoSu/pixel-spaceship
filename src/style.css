@@ -728,6 +728,9 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   right: calc(100% - min(var(--radar-x), var(--arena-map-x)) + 6px);
   transform: none;
   max-width: max(96px, calc(min(var(--radar-x), var(--arena-map-x)) - 50% - 46px));
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.25;
 }
 .experience.phone-landscape:not(.cockpit-view) .rear-danger-cue {
   left: calc(50% - 118px);
@@ -741,6 +744,9 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
     right: calc(100% - min(var(--radar-x), var(--arena-map-x)) + 6px);
     transform: none;
     max-width: calc(min(var(--radar-x), var(--arena-map-x)) - 14px);
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.25;
   }
 }
 .experience.phone-portrait:not(.cockpit-view) .rear-danger-cue {
