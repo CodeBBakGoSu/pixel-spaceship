@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merged PR #10 `870c3a1`; `950de04`)
+- Kept the PR #16 shared touch-cue implementation (it already carries PR #10's dive-cue fixes) and merged PR #10 for history; `renderer-proto` conflicts were resolved in `091706f` with midboss magnets rolled once from the settle hook. The touch dive cue now also reads Stingray pass warnings (`manta.passEnd`), which previously showed `DIVE PASS` text without an arrow.
+- Verification: `npm test` 762/762 on the conflict merge; touch-cue tests 19/19 and `npm run build` after `950de04`. Browser at 390×844/844×390 on `3eb82e3`: Diver + Aegis cues separate, unclipped, clear of ship/hostile fire; render Z = −sim Z with matching forward/rear. Unassisted Twin X crossing was not readable in sampled Top-view frames; natural simultaneous cues not observed.
+- State: comparison candidate only; no final acceptance, no `main`/`renderer-proto`/Pages change.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merge `091706f`; PR #11 `d21455a`)
 - Merged the renderer-proto timed pickup/magnet integration into the continuous-flight candidate. Resolution keeps one midboss magnet roll in `settleSortieMiniboss`, adds non-carrier elite rolls outside boss leaders, and preserves altitude-independent Magnet Core outer-radius capture plus the expanded Survivors Ace ceiling.
 - Verification after resolution: focused pickup/miniboss/replay suite passed 88/88; replay golden `a43beef8…` still matched with Legacy unchanged; `npm run build` passed (132 modules, 2.24s; nonfatal chunk advisory). Full suite and browser evidence are pending.
