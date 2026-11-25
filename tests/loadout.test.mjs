@@ -62,17 +62,19 @@ test('taking Hull Plating through a real draft raises and repairs hull', () => {
   assert.equal(state.run.buffLevels['hull-plating'], card.nextLevel);
 });
 
-test('Magnet Core expands both pickup reach and its altitude window', () => {
+test('Magnet Core expands planar pickup reach independently of altitude', () => {
   const without = start(), withMagnet = start();
   for (const state of [without, withMagnet]) {
-    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 137, xp: 4, born: 0 });
+    state.pickups.push({ id: 105, x: state.player.x, z: state.player.z + scaleTravel(52), alt: 250, xp: 4, born: 0 });
   }
   withMagnet.run.buffLevels['magnet-core'] = 2;
   stepStage(without, {}, ground);
   stepStage(withMagnet, {}, ground);
-  assert.equal(without.pickups[0].pulling, false);
-  assert.equal(withMagnet.pickups[0].pulling, true);
-  assert.ok(withMagnet.pickups[0].z < without.pickups[0].z);
+  assert.equal(Boolean(without.pickups[0].pulling), false);
+  assert.equal(withMagnet.pickups[0].pulling, false);
+  assert.ok(withMagnet.pickups[0].capture);
+  assert.equal(withMagnet.pickups[0].capture.origin.alt, 250);
+  assert.ok(withMagnet.pickups[0].capture.arriveAtTick > withMagnet.tick);
 });
 
 test('Salvage Beacon carries sub-unit XP across pickups and boosts run credits', () => {

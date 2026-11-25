@@ -6,6 +6,7 @@ import { advanceEnemies, makeEnemy, spawnEscortGnats } from '../src/stage-enemie
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceSwarmEvent } from '../src/swarm-events.ts';
 import { decodeCheckpoint, encodeCheckpoint } from '../src/checkpoint.ts';
+import { rngStream } from '../src/stage-random.ts';
 
 const flat = () => 35;
 const start = (mode = 'survivors') => {
@@ -93,12 +94,12 @@ test('a saturated mobile or desktop wave makes room for a single-band, terrain-s
   }
 });
 
-test('recoveries sweep only the existing live orbs, preserving source-band rewards and normal collection', () => {
+test('wave-end recovery state leaves pickups untouched and does not sweep map salvage', () => {
   for (const event of SWARM_EVENTS) {
     const state = start();
     state.tick = (event.start + event.duration) * 60 - 1;
     const high = orb(state, 180, 2), low = orb(state, 75);
-    low.born -= 60 * 60 - 2; // Last live tick: must not expire during the pull.
+    low.born -= 60 * 60 - 2;
     const expired = { ...orb(state, 75), born: state.tick - 60 * 60 };
     state.pickups.push(high, low, expired);
     const drop = { ...orb(state, 180), id: 'first-evolution' };
@@ -106,8 +107,8 @@ test('recoveries sweep only the existing live orbs, preserving source-band rewar
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice.kind, 'recovery');
     assert.deepEqual(state.pickups.map(p => p.id), [high.id, low.id]);
-    assert.ok(high.pulling && low.pulling && high.alt < 180 && low.alt > 75);
-    assert.equal(state.salvage, 0, 'visible pull before credit');
+    assert.ok(state.pickups.every(p => !p.pulling && !p.capture && !p.recovery));
+    assert.equal(state.salvage, 0);
     const late = orb(state, 180);
     state.pickups.push(late);
     const rng = state.streams.spawn.rng;
@@ -115,27 +116,45 @@ test('recoveries sweep only the existing live orbs, preserving source-band rewar
     assert.equal(state.streams.spawn.rng, rng);
     spawnEscortGnats(state, { x: 0, z: 0, alt: 125, band: 1 }, flat, 10);
     assert.deepEqual(state.enemies, []);
-    assert.deepEqual(state.pickups, [late]);
-    assert.equal(late.recovery, undefined);
+    assert.equal(state.pickups.includes(late), true);
+    assert.ok(state.pickups.every(p => !p.recovery));
     assert.deepEqual(state.chests.drops, [drop]);
-    assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [2, 3, 3]);
-    assert.deepEqual(state.salvageBands, [1, 0, 2]);
+    assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [0, 0, 0]);
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice, undefined);
   }
 });
 
-test('full pickup pool cannot transfer a fresh drop into a recovery pulse', () => {
+test('legacy recovery still couples its notice to recent pickup recovery', () => {
+  const state = start('legacy');
+  const event = SWARM_EVENTS[0];
+  state.tick = (event.start + event.duration) * 60;
+  const pickup = orb(state, 180);
+  state.pickups.push(pickup);
+  assert.equal(advanceSwarmEvent(state, flat), true);
+  assert.equal(state.swarmNotice?.kind, 'recovery');
+  assert.equal(pickup.pulling, true);
+  assert.ok(pickup.recovery);
+});
+
+test('full pickup pool remains ordinary salvage at a wave end', () => {
   const state = start();
   state.tick = 125 * 60 - 1;
   for (let i = 0; i < 150; i++) state.pickups.push(orb(state, 180));
   stepStage(state, {}, flat);
-  const fresh = orb(state, 180, 7);
-  state.pickups.push(fresh);
-  stepStage(state, {}, flat);
   assert.equal(state.pickups.length, 150);
-  assert.deepEqual(state.pickups.filter(p => !p.recovery), [fresh]);
-  assert.equal(state.pickups.filter(p => p.recovery).reduce((n, p) => n + p.xp, 0), 150);
+  assert.ok(state.pickups.every(p => !p.recovery && !p.capture));
+  assert.equal(state.salvage, 0);
+});
+
+test('legacy checkpoints seed the isolated magnet-drop stream deterministically', () => {
+  const state = start();
+  state.tick = 120 * 60;
+  const encoded = encodeCheckpoint(state);
+  const legacy = JSON.parse(encoded);
+  delete legacy.state.streams.magnetDrop;
+  const restored = decodeCheckpoint(JSON.stringify(legacy), flat);
+  assert.equal(restored.streams.magnetDrop.rng, rngStream(state.seed, 'magnet-drop').rng);
 });
 
 test('pausing, leaving a chest uncollected, or resuming a phase checkpoint does not reschedule events', () => {

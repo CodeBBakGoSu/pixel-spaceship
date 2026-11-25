@@ -77,9 +77,9 @@ export function noteBillKill(state: StageState, enemy: Enemy): void {
 }
 
 // --- S7d lane ---
-export function noteBillPickup(state: StageState, pickup: Pick<Pickup, 'alt' | 'skim'>): void {
+export function noteBillPickup(state: StageState, pickup: Pick<Pickup, 'alt' | 'skim'>, tick = state.tick): void {
   const bill = state.bills.active;
-  if (bill?.id === 'high-recovery' && state.tick <= bill.deadline && !pickup.skim && nearestBand(pickup.alt) === 2) bill.progress++;
+  if (bill?.id === 'high-recovery' && tick <= bill.deadline && !pickup.skim && nearestBand(pickup.alt) === 2) bill.progress++;
 }
 
 export function billXpScale(state: StageState): number {
