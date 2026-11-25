@@ -723,6 +723,12 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
   top: auto;
   bottom: calc(100% - var(--controls-y) + 8px);
 }
+.experience.phone-landscape:not(.cockpit-view) .flight-message {
+  left: calc(50% + 132px);
+}
+.experience.phone-landscape:not(.cockpit-view) .rear-danger-cue {
+  left: calc(50% - 118px);
+}
 
 .rear-bomb-marker {
   position: absolute;
