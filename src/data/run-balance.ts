@@ -16,6 +16,7 @@ export const REGULAR_FIRE_INTERVAL_SCALE = 0.62;
 export const SURVIVOR_XP_SCALE = 1.15;
 export const SURVIVOR_BALANCE = {
   aceProjectileSpeedScale: 1.5,
+  openingRegularHpScale: 1.5,
 } as const;
 export const PHASE_REPAIR_HULL = 2;
 export const PHASE_REPAIR_SECONDS = [105, 225, 345, 465] as const;

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GNAT, PHASES, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS, phaseAt } from '../src/data/phases.ts';
+import { SURVIVOR_BALANCE } from '../src/data/run-balance.ts';
+import { ENEMY_KINDS } from '../src/enemy-kinds.ts';
 import { spawnSwarm } from '../src/swarm.ts';
 import { SPAWN_WORLD } from '../src/data/world.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
@@ -46,6 +48,15 @@ test('minute traffic follows the per-minute schedule and becomes boss-only in th
       `${phase.id} regular traffic`);
     assert.ok(phase.packSize === 0 ? largestPack === 0 : largestPack > 0, `${phase.id} pack size`);
   }
+});
+
+test('the Survivors opening wave uses the tunable regular HP scale', () => {
+  const state = waveState();
+  spawnAt(state, 0.5);
+  const patrols = state.enemies.filter(enemy => enemy.kind === 'patrol');
+  assert.equal(patrols.length, 2);
+  const expected = Math.round(ENEMY_KINDS.patrol.hp * SURVIVOR_BALANCE.openingRegularHpScale);
+  assert.ok(patrols.every(enemy => enemy.hp === expected));
 });
 
 test('the first Gnat formation approaches at the coast start beat', () => {

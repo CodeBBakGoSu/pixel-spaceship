@@ -1,5 +1,6 @@
 import { phaseAt, SWARM_CAPS, type RegularSpawn } from './data/phases.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import { SURVIVOR_BALANCE } from './data/run-balance.ts';
 import { scaleTravel } from './data/speed.ts';
 import { SPAWN_WORLD } from './data/world.ts';
 import { ENEMY_KINDS, type RegularEnemyKind } from './enemy-kinds.ts';
@@ -231,7 +232,7 @@ export function advancePhaseSpawns(state: StageState, ground: Ground, observeSwa
   const regularCount = phase.regularPerMinute * minutes - (isOpening ? COAST_OPENING_TOTAL : 0);
   if (isOpening && state.tick < regularStart) {
     const wave = COAST_OPENING.find(wave => state.tick === wave.time * TICKS_PER_SECOND - WAVE_FLY_IN_TICKS);
-    if (wave) spawnWave(state, wave, ground, beatStream(state.streams.spawn));
+    if (wave) spawnWave(state, wave, ground, beatStream(state.streams.spawn), SURVIVOR_BALANCE.openingRegularHpScale);
   } else if (groupAt(state.tick, regularStart, until, regularCount) >= 0) {
     const rng = beatStream(state.streams.spawn);
     const { kind, band, bearing, range } = regularPick(phase.enemies, rng);
