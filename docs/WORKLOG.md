@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (late XP tuning plumbing)
+- Added neutral `DRAFT_RULES.xpLateStartLevel = 6` and `xpLatePerLevel = 0` handles so later overshoot tests can keep the confirmed first-five-level growth targets unchanged while steepening only post-Lv5 costs. At the default slope 0 every existing XP cost and replay golden is unchanged.
+- Verification: progression and replay hash tests 14/14 passed.
+- State: experimental/in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace hull tuning plumbing)
 - Added neutral `SURVIVOR_BALANCE.aceHullScale = 1` and applied it only when creating the Survivors Ace. Scale 1 preserves the current 1200 HP exactly; Legacy and Heat armor composition are unchanged. This completes the local handles needed for hull overshoot tests without activating them.
 - Verification: focused Ace pacing and replay hash tests 16/16 passed; full `npm test` 774/774 and `npm run build` passed on the combined branch; replay goldens remain unchanged.

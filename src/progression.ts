@@ -70,7 +70,8 @@ export function updateRunSlots(run: RunProgression, tick: number, bossReady = fa
 }
 
 export function runXpCost(level: number): number {
-  return DRAFT_RULES.xpBase + Math.round(DRAFT_RULES.xpPerLevel * level);
+  const lateLevel = Math.max(0, level - DRAFT_RULES.xpLateStartLevel + 1);
+  return DRAFT_RULES.xpBase + Math.round(DRAFT_RULES.xpPerLevel * level + DRAFT_RULES.xpLatePerLevel * lateLevel);
 }
 
 export function isWeaponId(id: DraftChoiceId): id is WeaponId {

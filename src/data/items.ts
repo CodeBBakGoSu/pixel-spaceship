@@ -198,5 +198,5 @@ export const DRAFT_RULES = {
   maxWeaponLevel: 7, maxBuffLevel: 3, rerolls: 1, maxRerolls: 3, maxBanishes: 2, maxSkips: 2,
   overchargedChance: 0.08, riskyChance: 0.15, riskHull: 1, repairHull: 2,
   damagePerUpgrade: 0.05, maxDamageUpgrades: 3, creditReward: 25, cappedDamageCredit: 15,
-  xpBase: 14, xpPerLevel: 2.4,
+  xpBase: 14, xpPerLevel: 2.4, xpLateStartLevel: 6, xpLatePerLevel: 0,
 } as const;
