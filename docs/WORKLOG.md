@@ -28,10 +28,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: `npm test` 762/762 on the conflict merge; touch-cue tests 19/19 and `npm run build` after `950de04`. Browser at 390×844/844×390 on `3eb82e3`: Diver + Aegis cues separate, unclipped, clear of ship/hostile fire; render Z = −sim Z with matching forward/rear. Unassisted Twin X crossing was not readable in sampled Top-view frames; natural simultaneous cues not observed.
 - State: comparison candidate only; no final acceptance, no `main`/`renderer-proto`/Pages change.
 
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merge `091706f`; PR #11 `d21455a`)
 - Merged the renderer-proto timed pickup/magnet integration into the continuous-flight candidate. Resolution keeps one midboss magnet roll in `settleSortieMiniboss`, adds non-carrier elite rolls outside boss leaders, and preserves altitude-independent Magnet Core outer-radius capture plus the expanded Survivors Ace ceiling.
 - Verification after resolution: focused pickup/miniboss/replay suite passed 88/88; replay golden `a43beef8…` still matched with Legacy unchanged; `npm run build` passed (132 modules, 2.24s; nonfatal chunk advisory). Full suite and browser evidence are pending.
 - State: merged and pushed on PR #13's branch; no `main` change or public deployment.
+
 
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (`f01bc45`; base `dcca4ff`)
 - Finished the continuous-flight integration review items: Magnet Core's expanded planar radius no longer has a separate altitude gate, non-carrier elite kills can roll magnet drops, phase-director degree bearings are converted before spawning, and Survivors Ace reengagement uses the expanded flight ceiling so high-altitude frontal firing lines are reachable. Mobile Aegis slots now fall back to compact widths, and dive occlusion checks continue past visible warnings until a covered warning is found.
@@ -53,6 +55,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ### 2026-11-25 (KST) - Devin bot - devin/1795534997-pr10-mobile-safe-cues (523f801, 6e628ba, 103cdcf, 0e13095, 39da42b, 1b22743; reviewed base 26a774b)
 - Dive cue state is independent of HUD message selection, falls back to the cockpit aiming reference behind the camera, and detects the full physical touch backdrop. Shared placement accounts for audio/mute and all controls, searches obstacle edges, and reserves separate Aegis/threat slots.
 - A 1 CSS-pixel clearance lets 160x44 and 48x40 slots fit at 360x844 without overlap. Focused tests passed 61/61; build passed (122 modules, 2.87s; nonfatal chunk-size advisory). State: locally verified, push pending; visual/device QA delegated.
+
 
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795534997-pr10-mobile-safe-cues (`571d1b2`, `7a6adb5`; based on PR #10 `fa45f64`)
 - Added a direction-only cue to the unused safe touch-panel area when the live dive warning's projected target is covered; the world target ring and gameplay verdict remain unchanged.
@@ -776,9 +779,24 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - State: independent candidate only; no merge or deployment.
 
 
-
-
-
 ### 2026-11-25 14:26 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (merged `201cbce` into `14a13e2`)
 - Integrated the target's sortie minibosses with timed salvage. Midboss defeats roll the magnet stream once, not again as a chest carrier. Updated the combined Survivors replay golden; Legacy is unchanged.
 - Verification: focused replay/miniboss tests 19/19; `npm test` 668/668; `npm run build` passed; staged diff clean. Conflict resolution complete; no balance tuning or deployment.
+
+
+
+
+
+### 2026-11-25 14:48 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge f6f84c0 + d21455a)
+- Integrated timed salvage, terminal capture settlement and magnet drops. Shared miniboss hooks now run the live magnet roll once on defeat; regular carriers and marked elites also roll on defeat. Expedition rests do not pull salvage, and altitude-independent Bill credit still uses the actual contact tick.
+- `npm test` 699/699, `npm run build` and `git diff --check` passed. Legacy replay matches the target; the Survivors golden was updated for the combined gameplay. Desktop Heat 0 simulation (100 seeds/profile) is running; PR review pending.
+
+
+### 2026-11-25 14:40 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (review of a641975)
+- A full shared ledger incorrectly started the normal miniboss attack cooldown even though no escorts fired. Blocked volleys now retry at the shared spacing interval; an emitted volley still starts the normal cooldown.
+- The regression reproduces a denied volley and confirms a single paid volley once room opens. `npm test` 683/683, `npm run build` and `git diff --check` passed; Survivors replay golden updated. Before timed-pickup integration, desktop Heat 0 skilled/average/weak recorded wins 100/100/98, losses 0/0/2 and timeouts 0/0/0 across 100 seeds each.
+
+
+### 2026-11-25 14:30 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge 0674f91 + 201cbce)
+- Integrated `renderer-proto`'s miniboss, Ace reengagement and arena changes. Actual miniboss actors consume the shared cues, use the same threat ledger as Ace and regular enemies, and block formations during the encounter and its 15-second rest.
+- `npm test` 682/682, `npm run build` and `git diff --check` passed. The Survivors replay golden reflects the combined gameplay. The 100-seed/profile simulation is running; the PR remains open for review.

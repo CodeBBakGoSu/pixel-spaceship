@@ -365,7 +365,7 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
     twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null,
-    ...(run ? { sortieBoss: null, midbossSchedule: createMidbossSchedule() } : {}), lock: null,
+    ...(run ? { sortieBoss: null, sortieLullUntil: 0, midbossSchedule: createMidbossSchedule() } : {}), lock: null,
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options, ground);
@@ -777,7 +777,7 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
         xp, born: state.tick, reversal: enemy.reversalKill };
     state.pickups.push(salvage);
     events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
-    if (state.run && enemy.sortieBoss?.role !== 'leader' && (enemy.carrier || enemy.elite)) {
+    if (state.run && (enemy.carrier || enemy.elite) && !enemy.sortieBoss) {
       sortieHooks.dropMagnet(state, { sourceEventId: enemy.id, sourceKind: 'elite', position }, events);
     }
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
@@ -986,7 +986,8 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground, ['first-evolution', 'second-evolution']);
-    const suppressFormations = midbossSpawnsBlocked(state);
+    const suppressFormations = midbossSpawnsBlocked(state)
+      || state.sortieBoss?.outcome === null || state.tick < (state.sortieLullUntil ?? 0);
     if (suppressFormations) suppressSwarmEvent(state);
     else if (!advanceSwarmEvent(state, ground, observeSwarm)) {
       if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
@@ -1002,7 +1003,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   relocateStragglers(state, ground);
   advanceSortieMiniboss(state, ground, sortieHooks, events);
   advanceEnemies(state, ground, events, observeSwarm);
-  advanceAce(state, ground, events, observeSwarm, pendingSpace);
+  advanceAce(state, ground, events, observeSwarm, pendingSpace, sortieHooks.trySpendThreat);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {

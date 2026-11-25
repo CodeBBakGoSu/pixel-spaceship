@@ -13,12 +13,14 @@ import { findRally } from './reach.ts';
 import { rollAltitude, rollLateralStep } from './roll.ts';
 import { enemyLimit } from './spawn-director.ts';
 import { angleTo, clamp, fireAceSalvo, HIT_WINDOW, impactTime, inBand, MAX_ALTITUDE, STEP, TWIN_CONE,
-  TICKS_PER_SECOND, VERTICAL_SPEED } from './stage-combat.ts';
+  VERTICAL_SPEED } from './stage-combat.ts';
 import { makeEnemy, spawnEscortGnats } from './stage-enemies.ts';
 import { random, rngStream } from './stage-random.ts';
+import { TICKS_PER_SECOND } from './simulation-time.ts';
 import { HOSTILE_BOLT_LIFE } from './data/hostile-fire.ts';
 import { THREAT_BUDGET, trySpendThreat } from './threat-budget.ts';
 import type { Ace, AceTell, Ground, Position, StageState } from './stage-types.ts';
+import type { ThreatSpendHook } from './sortie-bosses.ts';
 import type { SwarmObserver } from './swarm.ts';
 
 function flightAltitude(band: FlightBand, floor: number): number {
@@ -271,9 +273,9 @@ function incomingFire(state: StageState, ace: Ace): boolean {
   return false;
 }
 
-export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], target: Position,
-  events?: CombatEvents): boolean {
-  if (kind !== 'roll' && !trySpendThreat(state, {
+export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], target: Position, events?: CombatEvents,
+  spendThreat: ThreatSpendHook = trySpendThreat): boolean {
+  if (state.run && kind !== 'roll' && !spendThreat(state, {
     tick: state.tick + ACE[kind].warningTicks,
     activeFromTick: state.tick,
     activeUntilTick: state.tick + ACE[kind].warningTicks + Math.ceil(
@@ -346,7 +348,7 @@ function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
 }
 
 function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
-  pendingSpace?: { active: boolean; graceTicks: number }): void {
+  pendingSpace?: { active: boolean; graceTicks: number }, spendThreat: ThreatSpendHook = trySpendThreat): void {
   const { tick, player: p } = state;
   const tuning = ACE_PHASES[ace.phase];
   const tell = ace.tell;
@@ -391,8 +393,7 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
   const kind = nextAttack % tuning.missileEvery === 0 ? 'missile' : 'gun';
   const lead = ACE.attack.leadSeconds;
   const target = { x: p.x + (p.vx ?? 0) * lead, z: p.z + (p.vz ?? 0) * lead, alt: ace.alt };
-  if (!setAceTell(state, ace, kind, target, events)) return;
-  ace.attacks = nextAttack;
+  if (setAceTell(state, ace, kind, target, events, spendThreat)) ace.attacks = nextAttack;
 }
 
 export function beginAceDefeat(state: StageState, ace: Ace, events?: CombatEvents): void {
@@ -425,7 +426,7 @@ function advanceDefeat(state: StageState, ace: Ace, ground: Ground): void {
 
 /** Flight, phase changes, and cue timing all advance once per sortie tick. */
 export function advanceAce(state: StageState, ground: Ground, events?: CombatEvents, observe?: SwarmObserver,
-  pendingSpace?: { active: boolean; graceTicks: number }): void {
+  pendingSpace?: { active: boolean; graceTicks: number }, spendThreat: ThreatSpendHook = trySpendThreat): void {
   const ace = state.boss;
   if (!ace || ace.crashed) return;
   if (ace.defeatedAt !== null) {
@@ -445,7 +446,7 @@ export function advanceAce(state: StageState, ground: Ground, events?: CombatEve
         z: state.player.z + (state.player.vz ?? 0) * ACE.attack.leadSeconds,
         alt: ace.alt,
       };
-      setAceTell(state, ace, 'gun', target, events);
+      setAceTell(state, ace, 'gun', target, events, spendThreat);
     }
   }
   updatePhase(state, ace, ground, events, observe);
@@ -453,7 +454,7 @@ export function advanceAce(state: StageState, ground: Ground, events?: CombatEve
   if (!ace.tell && !ace.roll && state.tick >= ace.bandAt
     && inBand(ace.alt, flightAltitude(ace.band, ground(ace.x, ace.z)), HIT_WINDOW)) nextBand(ace, state);
   advanceReengagement(state, ace);
-  updateTell(state, ace, events, pendingSpace);
+  updateTell(state, ace, events, pendingSpace, spendThreat);
   updateFlight(state, ace, ground);
   const p = state.player, dx = p.x - ace.x, dz = p.z - ace.z;
   markTail(state, ace, Math.hypot(dx, dz), -(dx * Math.sin(p.yaw) + dz * Math.cos(p.yaw)), angleTo(ace.yaw, dx, dz), events);

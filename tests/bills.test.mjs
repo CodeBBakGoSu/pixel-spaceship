@@ -124,16 +124,15 @@ test('Rear Guard skips a full non-rear loadout and advances to the next schedule
   assert.equal(withOpenSlot.bills.active?.id, BILLS[2].id);
 });
 
-test('High Recovery counts collected salvage with positive XP at any altitude', () => {
+test('High Recovery counts physical orb collections at every altitude', () => {
   const state = game();
   beat(state, 345);
   const pickup = { id: 60, x: 0, z: 0, alt: 125, xp: 50, born: 0 };
-  noteBillPickup(state, { ...pickup, xp: 0 });
-  assert.equal(state.bills.active.progress, 0);
+  noteBillPickup(state, pickup, state.bills.active.deadline + 1);
+  assert.equal(state.bills.active.progress, 0, 'contact after the deadline earns no credit');
+  noteBillPickup(state, pickup);
+  assert.equal(state.bills.active.progress, 1);
   for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: id % 2 ? 75 : 180 });
-  assert.equal(state.bills.active.progress, 9);
-  assert.equal(finishBillTick(state), null);
-  noteBillPickup(state, { ...pickup, id: 10, alt: 180 });
   assert.equal(state.bills.active.progress, 10);
   assert.deepEqual(finishBillTick(state), { definition: BILLS[3], paid: true });
 });

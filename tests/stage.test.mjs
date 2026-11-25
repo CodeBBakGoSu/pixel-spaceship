@@ -422,6 +422,17 @@ test('magnet drops use only the dedicated seeded stream and ordinary kills do no
   run(eliteState, 1);
   assert.ok(eliteState.pickups.some(pickup => pickup.kind === 'magnet' && pickup.source.kind === 'elite'));
 
+  const aegisState = stage('?mode=survivors&seed=19&t=0');
+  const aegis = makeEnemy(aegisState, aegisState.player.x + 300, aegisState.player.z + 300, 1, 'aegis');
+  aegis.elite = true;
+  aegis.hp = 0;
+  aegis.shotDown = true;
+  aegisState.enemies = [aegis];
+  run(aegisState, 2);
+  const magnets = aegisState.pickups.filter(pickup => pickup.kind === 'magnet');
+  assert.deepEqual(magnets.map(pickup => pickup.source), [{ eventId: aegis.id, kind: 'elite' }]);
+  assert.equal(aegisState.streams.magnetDrop.rng, eliteState.streams.magnetDrop.rng);
+
   const miss = stage('?mode=survivors&seed=1&t=0');
   assert.equal(dropMagnet(miss, { sourceEventId: 78, sourceKind: 'elite',
     position: { x: miss.player.x, z: miss.player.z, alt: miss.player.altitude } }), null);
