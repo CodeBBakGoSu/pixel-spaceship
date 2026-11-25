@@ -843,7 +843,8 @@ export class CockpitDisplay {
     clearZone(c, speed);
     drawTape(c, speed, motion.speed, false, compact, this.labels);
     clearZone(c, altitude);
-    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude, playerBand(state.player));
+    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude,
+      state.run ? undefined : playerBand(state.player));
 
     const g = Math.round((1 + 0.47 * Math.abs(motion.turn) + 0.013 * Math.abs(motion.climb)) * 10), y = bottom(speed) + 4;
     if (g !== this.lastG && aiming.height > 35 && y + 15 <= bottom(layout.glass)) {
