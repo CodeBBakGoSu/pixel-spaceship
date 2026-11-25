@@ -293,7 +293,7 @@ export class FlightScene {
   private readonly vector = new Vector3();
   private readonly up = new Vector3(0, 1, 0);
   private readonly ground = (x: number, z: number) => this.world.height(x, z);
-  private readonly hostileVisuals = new HostileVisuals(this.ground);
+  private readonly hostileVisuals = new HostileVisuals();
 
   constructor(canvas: HTMLCanvasElement, world: World, arena: StageState['arena'], options: FlightRenderOptions = {}) {
     if (options.fixture === 'damage') {

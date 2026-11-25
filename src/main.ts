@@ -38,7 +38,7 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRects, diveWarningTarget, firstTouchOcclusionCue, screenPointObscured, touchControlOcclusionRect,
+import { diveWarningTarget, findAegisTouchCueRects, firstTouchOcclusionCue, screenPointObscured, touchControlOcclusionRect,
   touchCueScreenReference, TOUCH_THREAT_CUE_SIZE } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
@@ -469,7 +469,7 @@ function setRect(name: string, box: Rect): void {
 function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
-  const cueSlots = phone ? findTouchCueRects(phone, [AEGIS_CUE_SIZE, TOUCH_THREAT_CUE_SIZE]) : [];
+  const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE) : [];
   aegisCueSlot = cueSlots[0] ?? null;
   touchThreatCueSlot = cueSlots[1] ?? null;
   if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
@@ -781,8 +781,11 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
-  const diveTargets = state.enemies.filter(enemy => Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125)
-    .map(enemy => diveWarningTarget(enemy, BANDS)).filter(target => target !== null);
+  const diveTargets = state.enemies
+    .filter(enemy => Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125)
+    .sort((a, b) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(p.x - b.x, p.z - b.z))
+    .map(enemy => diveWarningTarget(enemy, BANDS))
+    .filter(target => target !== null);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -799,7 +802,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     } else message = top ? 'hud.interceptor' : down ? 'hud.interceptorDive' : 'hud.interceptorClimb';
   } else if (mine) message = 'hud.mineWarning';
   else if (top && state.altitudeHint) message = 'hud.checkAlt';
-  else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
+  else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = state.run ? 'cockpit.terrainWarning' : 'cockpit.altLow';
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;

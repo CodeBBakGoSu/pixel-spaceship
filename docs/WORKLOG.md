@@ -23,7 +23,6 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
-
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (line warning `d5ab995`)
 - Fast-forwarded the shared integration branch with the follow-up Ace lock fix: a gun/missile warning that starts during a firing line is now marked as line-started, so the end of that movement line does not cancel an otherwise valid launch. This is geometry/state ownership only; no difficulty numbers changed.
 - Survivors golden is intentionally `dce1e8a9…`; Legacy remains unchanged. Full-suite and browser evidence are being rerun on this final candidate because it superseded `f6fc1d0` before capture.
@@ -71,6 +70,22 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Verification: focused boss/replay 19/19; pickup/loadout/stage/VFX/replay 58/58; `npm run build` passed (132 modules, 1.79s; nonfatal chunk advisory); `npm test` 753/753. Mobile moving-screen review and balance/outcome measurement remain pending; no final acceptance claimed.
 
 
+
+
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`457d16e`)
+- Removed the vertical hostile-projectile drop lines 기현님 flagged before merge, keeping the projectile head/trail glyphs and burst feedback unchanged; renderer budget notes and instancing tests now reflect the single glyph batch.
+- Verification: focused model/post tests 19/19, full tests 704/704, and build passed. Mobile emulation recording and screenshots show dense/chase scenes without the vertical rods while projectile heads/short trails remain visible. State: validation complete; review/merge pending. Real-device verification remains unverified.
+
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`09696ba`; validation on `c9e7fb8`)
+- Moved short-landscape flight warnings into the left lane and lowered rear-danger cues just above the controls so multiline missile warnings stay clear of the aircraft, objective, radar, and rear cue; the stress fixture keeps the 64-hostile-shot scene observable.
+- Validation: tests 704/704 and build on `c9e7fb8`, build again after final CSS; mobile emulation verified dense 844x390, small-landscape missile warnings, and all 24 approved VFX routes. State: validation complete; review/merge pending. Real-device verification remains unverified.
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`99ea789`, `caba647`, `4db6f67`; based on `50709d0`)
+- Raised small-landscape flight warnings above the aircraft while preserving the radar-side lane; the stress fixture now suppresses draft interruption so the 64-hostile-shot mobile scene remains observable at 07:30, with an explicit `cue=missile` hold for multiline warning layout checks.
+- Full tests passed 704/704 before these fixture-only changes and builds passed after them. Browser evidence collection is in progress. State: in progress.
+
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`525adbe`; based on `870c3a1`)
+- Moved landscape non-cockpit warning/rear cues into left/right lanes so they stay clear of the centered aircraft; shared touch cue placement now falls back to narrower Aegis slots on narrow phones and scans all nearby descending warnings instead of only the first.
+- Focused touch layout tests passed 13/13; full tests passed 664/664; build passed (nonfatal chunk-size advisory). Mobile visual QA is in progress. State: in progress.
 ### 2026-11-25 (KST) - Devin bot - devin/1795534997-pr10-mobile-safe-cues (523f801, 6e628ba, 103cdcf, 0e13095, 39da42b, 1b22743; reviewed base 26a774b)
 - Dive cue state is independent of HUD message selection, falls back to the cockpit aiming reference behind the camera, and detects the full physical touch backdrop. Shared placement accounts for audio/mute and all controls, searches obstacle edges, and reserves separate Aegis/threat slots.
 - A 1 CSS-pixel clearance lets 160x44 and 48x40 slots fit at 360x844 without overlap. Focused tests passed 61/61; build passed (122 modules, 2.87s; nonfatal chunk-size advisory). State: locally verified, push pending; visual/device QA delegated.

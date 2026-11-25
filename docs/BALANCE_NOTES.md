@@ -94,7 +94,7 @@ Heat 0, seeds 1–100 per profile and cap. The baseline is Stage 5 (`51a42c4`). 
 
 Every seed kept its terminal outcome and remaining hull. The average pilot's median kills rose from 710.5 to 711.5 on both caps. The bots stayed in their target ranges with the existing damage, fire intervals, and skill profiles.
 
-The renderer uses two instanced projectile batches per camera pass. A bolt costs two triangles for its head and up to eight for its trail. The shared burst pool holds 120 quads. At 64 hostile bolts the ceiling is 880 triangles, with 48 nearest drop lines. The 192-shot legacy ceiling is 2,160 triangles. Chromium on an RTX 4090 held 60 FPS over 300 frames per view at 1920×1080 and emulated 390×844 with the Warden, 24 regulars, full Gnat caps, 192 projectiles, and 16 mines. Frame p95 was 16.7–16.8 ms.
+The renderer uses one instanced projectile glyph batch per camera pass. A bolt costs two triangles for its head and up to eight for its trail. The shared burst pool holds 120 quads. At 64 hostile bolts the ceiling is 880 triangles, and the 192-shot legacy ceiling is 2,160 triangles. Chromium on an RTX 4090 held 60 FPS over 300 frames per view at 1920×1080 and emulated 390×844 with the Warden, 24 regulars, full Gnat caps, 192 projectiles, and 16 mines while the former 48 nearest drop lines were still present. Frame p95 was 16.7–16.8 ms.
 
 ## Stage 7a
 

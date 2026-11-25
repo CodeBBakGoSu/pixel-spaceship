@@ -6,7 +6,9 @@ export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
 export const AEGIS_CUE_SIZE: CueSize = Object.freeze({ width: 160, height: 44 });
-export const AEGIS_CUE_WIDTHS = Object.freeze([AEGIS_CUE_SIZE.width, 150, 140]);
+export const AEGIS_CUE_SIZE_OPTIONS: readonly CueSize[] = Object.freeze(
+  [160, 150, 136, 120, 104].map(width => Object.freeze({ width, height: 44 })),
+);
 export const TOUCH_THREAT_CUE_SIZE: CueSize = Object.freeze({ width: 48, height: 40 });
 
 type TouchLayout = Pick<PhoneLayout,
@@ -59,23 +61,33 @@ function edgeCandidates(origin: number, extent: number, size: number, obstacles:
     .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
 }
 
-function cueSizes(size: CueSize): CueSize[] {
-  if (size.width !== AEGIS_CUE_SIZE.width || size.height !== AEGIS_CUE_SIZE.height) return [size];
-  return AEGIS_CUE_WIDTHS.map(width => ({ width, height: size.height }));
-}
-
 export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[], gap = 1,
   reserved: readonly Rect[] = []): (Rect | null)[] {
   const obstacles = [...reserved];
   return sizes.map(size => {
-    let rect: Rect | null = null;
-    for (const candidate of cueSizes(size)) {
-      rect = findTouchCueRect(layout, candidate, gap, obstacles);
-      if (rect) break;
-    }
+    const rect = findTouchCueRect(layout, size, gap, obstacles);
     if (rect) obstacles.push(rect);
     return rect;
   });
+}
+
+export function findAegisTouchCueRects(layout: TouchLayout, threatSize: CueSize = TOUCH_THREAT_CUE_SIZE,
+  gap = 1, reserved: readonly Rect[] = []): (Rect | null)[] {
+  let fallback: (Rect | null)[] = [null, null];
+  for (const size of AEGIS_CUE_SIZE_OPTIONS) {
+    const slots = findTouchCueRects(layout, [size, threatSize], gap, reserved);
+    fallback = slots;
+    if (slots[0]) return slots;
+  }
+  return fallback;
+}
+
+export function descendingDiveWarnings<T extends {
+  x: number; z: number; band: number; maneuver?: { phase: string; band: number } | null;
+}>(enemies: readonly T[], player: { x: number; z: number }, range = 125): T[] {
+  return enemies.filter(enemy => isDescendingDiveWarning(enemy.maneuver, enemy.band)
+    && Math.hypot(player.x - enemy.x, player.z - enemy.z) < range)
+    .sort((a, b) => Math.hypot(player.x - a.x, player.z - a.z) - Math.hypot(player.x - b.x, player.z - b.z));
 }
 
 export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, margin = 0): boolean {

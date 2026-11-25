@@ -62,14 +62,19 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
     }
     state.hull = state.maxHull;
     state.xp = 0;
+    if (state.phase === 'draft' || state.draft.length) {
+      state.draft = [];
+      state.resultPending = null;
+      state.phase = 'playing';
+    }
     if (!state.boss) {
       const ace = state.boss = makeAce(state, p.x + 18, p.z + 146);
       ace.phase = 3;
       ace.hp = Math.floor(ace.maxHp / 4);
       ace.bank = 1.1;
       ace.boosting = true;
-      setAceTell(state, ace, 'missile', { x: p.x, z: p.z + 40, alt: p.altitude });
     }
+    if (cue === 'missile') setAceTell(state, state.boss, 'missile', { x: p.x, z: p.z + 40, alt: p.altitude });
     let regular = 0, gnats = 0, enemyShots = 0;
     for (const enemy of state.enemies) {
       if (enemy.kind === 'gnat') gnats++;

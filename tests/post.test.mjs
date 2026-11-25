@@ -31,7 +31,7 @@ test('stepped haze is local to the attached scene and uses the projectile materi
   const scene = new Scene();
   const material = new MeshBasicMaterial(), noFog = new MeshBasicMaterial({ fog: false });
   const untouched = new MeshBasicMaterial(), original = ShaderChunk.fog_fragment;
-  const hostile = new HostileVisuals(() => 35);
+  const hostile = new HostileVisuals();
   scene.add(new Mesh(new PlaneGeometry(1, 1), [material, noFog]), hostile.group);
 
   installSteppedHaze(scene);
