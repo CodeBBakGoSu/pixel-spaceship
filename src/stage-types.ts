@@ -92,6 +92,11 @@ export type RunSummary = { seconds: number; credits: number; unlocked: GearId[];
 
 export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
+export type PickupKind = 'salvage' | 'magnet';
+export type MagnetSourceKind = 'elite' | 'midboss';
+export type PickupEvent = { pickupId: number; kind: PickupKind; position: Position; tick: number; sourceEventId?: number };
+export type PickupCollectedEvent = PickupEvent & { xp: number; credits: number; playerPosition: Position };
+export type PickupCapture = { capturedAtTick: number; arriveAtTick: number; origin: Position; curve: { x: number; z: number; amount: number } };
 export type Ground = (x: number, z: number) => number;
 export type Band = 0 | 1 | 2;
 export type FlyIn = {
@@ -188,7 +193,8 @@ export type EnemyTell = { until: number; started?: number } & (
   { kind: 'repair'; targetId: number } |
   (Position & { kind: 'flak' })
 );
-export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true;
+export type Pickup = Position & { id: number; kind?: PickupKind; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean;
+  skim?: true; capture?: PickupCapture; captureRequestTicks?: number; source?: { eventId: number; kind: MagnetSourceKind };
   recovery?: { until: number; sourceAlt: number } };
 type ShotCommon = Position & {
   vx: number;
@@ -309,9 +315,10 @@ export type StageState = {
   phase: 'title' | 'playing' | 'draft' | 'chest' | Outcome;
   paused: boolean;
   resultPending: Outcome | null;
+  pendingFinish?: { outcome: Outcome; terminalTick: number; settlementTick: number };
   seed: number;
   rng: number;
-  streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }>;
+  streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }> & { magnetDrop?: { rng: number } };
   run: RunProgression | null;
   profile: Profile;
   daily: boolean;
@@ -328,7 +335,7 @@ export type StageState = {
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;
   phaseRepairMask?: number;
-  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'rest'; until: number };
+  swarmNotice?: { kind: SwarmEventKind; band: Band; until: number } | { kind: 'rest' | 'recovery'; until: number };
   bills: BillState;
   lastHitTick: number;
   chests: ChestState;

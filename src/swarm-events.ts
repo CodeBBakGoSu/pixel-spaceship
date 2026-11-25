@@ -45,7 +45,7 @@ function launch(state: StageState, event: SwarmEvent, ground: Ground, observe?: 
   observe?.(live.length - retire.size + requested, state.swarmCap, slots.length > state.swarmCap - live.length);
 }
 
-/** A scheduled formation and its recovery take the place of the ordinary director. */
+/** A scheduled formation takes the place of the ordinary director. */
 export function advanceSwarmEvent(state: StageState, ground: Ground, observe?: SwarmObserver): boolean {
   if (state.swarmNotice && state.tick >= state.swarmNotice.until) delete state.swarmNotice;
   const event = swarmWindowAt(state.tick / TICKS_PER_SECOND);
@@ -53,7 +53,14 @@ export function advanceSwarmEvent(state: StageState, ground: Ground, observe?: S
   if (state.suppressedSwarmEvents?.includes(event.start)) return false;
   if (state.tick === event.start * TICKS_PER_SECOND) launch(state, event, ground, observe);
   if (state.tick === (event.start + event.duration) * TICKS_PER_SECOND) {
-    state.swarmNotice = { kind: 'rest', until: state.tick + tuning.restSeconds * TICKS_PER_SECOND };
+    if (!state.run) {
+      for (const pickup of state.pickups) {
+        if (state.tick - pickup.born >= 60 * TICKS_PER_SECOND) continue;
+        pickup.recovery = { until: state.tick + tuning.legacyMagnetTicks, sourceAlt: pickup.alt };
+        pickup.pulling = true;
+      }
+    }
+    state.swarmNotice = { kind: state.run ? 'rest' : 'recovery', until: state.tick + tuning.restSeconds * TICKS_PER_SECOND };
   }
   return true;
 }

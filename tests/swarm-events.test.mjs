@@ -6,6 +6,7 @@ import { advanceEnemies, makeEnemy, spawnEscortGnats } from '../src/stage-enemie
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { advanceSwarmEvent } from '../src/swarm-events.ts';
 import { decodeCheckpoint, encodeCheckpoint } from '../src/checkpoint.ts';
+import { rngStream } from '../src/stage-random.ts';
 
 const flat = () => 35;
 const start = (mode = 'survivors') => {
@@ -71,14 +72,15 @@ test('swarm rest never pulls or collects pickups and leaves chest drops untouche
     const state = start();
     state.tick = (event.start + event.duration) * 60 - 1;
     const high = orb(state, 180, 2), low = orb(state, 75);
-    state.pickups.push(high, low);
+    low.born -= 60 * 60 - 2;
+    const expired = { ...orb(state, 75), born: state.tick - 60 * 60 };
+    state.pickups.push(high, low, expired);
     const drop = { ...orb(state, 180), id: 'first-evolution' };
     state.chests.drops.push(drop);
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice.kind, 'rest');
-    assert.deepEqual(state.pickups, [high, low]);
-    assert.equal(Boolean(high.pulling), false);
-    assert.equal(Boolean(low.pulling), false);
+    assert.deepEqual(state.pickups.map(p => p.id), [high.id, low.id]);
+    assert.ok(state.pickups.every(p => !p.pulling && !p.capture && !p.recovery));
     assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [0, 0, 0]);
     const late = orb(state, 180);
     state.pickups.push(late);
@@ -87,13 +89,45 @@ test('swarm rest never pulls or collects pickups and leaves chest drops untouche
     assert.equal(state.streams.spawn.rng, rng);
     spawnEscortGnats(state, { x: 0, z: 0, alt: 125, band: 1 }, flat, 10);
     assert.deepEqual(state.enemies, []);
-    assert.deepEqual(state.pickups, [high, low, late]);
-    assert.equal(late.recovery, undefined);
+    assert.deepEqual(state.pickups, [high, late]);
+    assert.ok(state.pickups.every(p => !p.pulling && !p.capture && !p.recovery));
     assert.deepEqual(state.chests.drops, [drop]);
     assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [0, 0, 0]);
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice, undefined);
   }
+});
+
+test('legacy recovery still couples its notice to recent pickup recovery', () => {
+  const state = start('legacy');
+  const event = SWARM_EVENTS[0];
+  state.tick = (event.start + event.duration) * 60;
+  const pickup = orb(state, 180);
+  state.pickups.push(pickup);
+  assert.equal(advanceSwarmEvent(state, flat), true);
+  assert.equal(state.swarmNotice?.kind, 'recovery');
+  assert.equal(pickup.pulling, true);
+  assert.ok(pickup.recovery);
+});
+
+test('full pickup pool remains ordinary salvage at a wave end', () => {
+  const state = start();
+  state.tick = 125 * 60 - 1;
+  for (let i = 0; i < 150; i++) state.pickups.push(orb(state, 180));
+  stepStage(state, {}, flat);
+  assert.equal(state.pickups.length, 150);
+  assert.ok(state.pickups.every(p => !p.recovery && !p.capture));
+  assert.equal(state.salvage, 0);
+});
+
+test('legacy checkpoints seed the isolated magnet-drop stream deterministically', () => {
+  const state = start();
+  state.tick = 120 * 60;
+  const encoded = encodeCheckpoint(state);
+  const legacy = JSON.parse(encoded);
+  delete legacy.state.streams.magnetDrop;
+  const restored = decodeCheckpoint(JSON.stringify(legacy), flat);
+  assert.equal(restored.streams.magnetDrop.rng, rngStream(state.seed, 'magnet-drop').rng);
 });
 
 test('pausing, leaving a chest uncollected, or resuming a phase checkpoint does not reschedule events', () => {

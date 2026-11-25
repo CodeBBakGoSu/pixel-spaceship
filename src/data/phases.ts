@@ -22,7 +22,7 @@ export const SWARM_EVENTS: readonly SwarmEvent[] = [
   { kind: 'ring', start: 110, duration: 15 }, { kind: 'ring', start: 315, duration: 10 },
 ];
 export const SWARM_EVENT = {
-  restSeconds: 15, ringSize: 72,
+  restSeconds: 15, ringSize: 72, legacyMagnetTicks: 90,
   ringRadius: scaleTravel(145), ringExitRadius: scaleTravel(12),
 } as const;
 

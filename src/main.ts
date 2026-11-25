@@ -54,6 +54,8 @@ import { BANDS, canCueAltitude } from './bands.ts';
 import { COMPARISON_DIVISOR } from './data/render-quality.ts';
 import { primeFidelityFixture } from './fidelity-fixture.ts';
 import { initialRenderQuality, parseRenderQuality, saveRenderQuality } from './render-quality.ts';
+import { shouldShowSwarmNotice } from './hud-notices.ts';
+import { stageRenderTick } from './render-cadence.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 const root = $('.experience');
@@ -230,7 +232,7 @@ let stickId: number | null = null;
 let loopPointer: { id: number; press: ManeuverPress } | null = null;
 let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
-let previousTime = 0, carry = 0, fps = 60, lastRenderTick = -1, lastRenderPhase = '';
+let previousTime = 0, carry = 0, fps = 60, lastRenderCadenceTick = -1, lastRenderPhase = '';
 const REVERSAL_HITSTOP_MS = 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const cockpitLayer = $('#cockpit-display');
@@ -584,9 +586,10 @@ function updateHud(readout: RadarReadout): void {
     setText('#bill-count b', `${state.bills.paid}/${state.bills.offered}`);
   }
   const notice = state.phaseNotice, swarm = state.swarmNotice, banner = $('#phase-banner');
-  banner.hidden = (!notice && !swarm) || state.phase !== 'playing' || state.paused;
-  if (swarm && !banner.hidden) {
-    setText('#phase-banner', swarm.kind === 'rest' ? t('phase.rest') : t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }));
+  const showSwarm = shouldShowSwarmNotice(!!state.run, swarm?.kind);
+  banner.hidden = (!notice && !showSwarm) || state.phase !== 'playing' || state.paused;
+  if (swarm && showSwarm && !banner.hidden) {
+    setText('#phase-banner', 'band' in swarm ? t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }) : t(`phase.${swarm.kind}`));
   } else if (notice && !banner.hidden) {
     const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.aceInbound') : t(`phase.${notice.phase}`);
     const lull = notice.kind === 'lull'
@@ -1248,6 +1251,7 @@ function advance(tickTime: number): void {
   if (query.get('fixture') === 'damage') { advanceDamageFixture(state); return; }
   if (flightFixture || fidelityFixture || freezeRoster || staticWorldFixture || rosterSheet || (bulletFixture && !bulletFixture.stress)) return;
   const before = state.tick, yaw = state.player.yaw;
+  const settlementBefore = state.pendingFinish?.settlementTick;
   const priorSummary = state.summary;
   const wasFlying = maneuverAllowsControl(state.maneuver);
   const previousPhase = state.phase, previouslyPaused = state.paused, previousDraft = state.draft, previousReveal = state.chestReveal;
@@ -1283,6 +1287,7 @@ function advance(tickTime: number): void {
     chestPick: pendingChest ?? control.chestPick,
     ...pendingDraft,
   }, ground, undefined, combatEvents ?? aceVisualEvents);
+  if (settlementBefore !== state.pendingFinish?.settlementTick) dirty = true;
   if (bulletFixture?.stress) bulletFixture.fillStress(combatEvents);
   pendingStart = pendingPause = false;
   pendingRetreat = false;
@@ -1420,7 +1425,7 @@ function updateRearViewCue(readout: RadarReadout): void {
 function render(now: number): boolean {
   if (layoutView !== state.view) layoutFlight();
   // The impact holds the scene and projected canopy instruments. The flight clock keeps ticking.
-  const redrawFlight = graphics.recovering || now >= visualFreezeUntil || dirty || lastRenderTick < 0;
+  const redrawFlight = graphics.recovering || now >= visualFreezeUntil || dirty || lastRenderCadenceTick < 0;
   const yaw = maneuverViewYaw(state);
   const readout = buildRadar(state, yaw);
   rearDanger = readout.rearDanger;
@@ -1621,9 +1626,10 @@ function animate(now: number): void {
     refreshRenderQuality();
     dirty = true;
   }
-  if (dirty || scene?.terrainPending || state.tick !== lastRenderTick || state.phase !== lastRenderPhase) {
+  const renderTick = stageRenderTick(state);
+  if (dirty || scene?.terrainPending || renderTick !== lastRenderCadenceTick || state.phase !== lastRenderPhase) {
     if (render(now)) {
-      lastRenderTick = state.tick;
+      lastRenderCadenceTick = renderTick;
       lastRenderPhase = state.phase;
     }
   }

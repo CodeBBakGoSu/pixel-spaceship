@@ -140,6 +140,8 @@ test('High Recovery counts physical orb collections at every altitude', () => {
   const state = game();
   beat(state, 345);
   const pickup = { id: 60, x: 0, z: 0, alt: 125, xp: 50, born: 0 };
+  noteBillPickup(state, pickup, state.bills.active.deadline + 1);
+  assert.equal(state.bills.active.progress, 0, 'contact after the deadline earns no credit');
   noteBillPickup(state, pickup);
   assert.equal(state.bills.active.progress, 1);
   for (let id = 1; id <= 9; id++) noteBillPickup(state, { ...pickup, id, alt: id % 2 ? 75 : 180 });

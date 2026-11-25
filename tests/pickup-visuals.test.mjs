@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Matrix4, NearestFilter, Vector3 } from 'three';
 import { PICKUP_LIMIT } from '../src/data/run-balance.ts';
 import { PickupVisuals } from '../src/pickup-visuals.ts';
-import { createStage, parseStageOptions } from '../src/stage.ts';
+import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 
 function pickup(id, xp, alt = 110) {
   return { id, xp, alt, x: 14, z: 30, born: 0 };
@@ -72,6 +72,37 @@ test('high-value salvage keeps its coin rim as an intermittent glint crosses the
   visuals.update(state, undefined, true);
   assert.equal(style.getZ(0), restingFrame);
   assert.equal(style.getX(0), restingWidth);
+});
+
+test('magnet drops use a distinct red-and-blue contact marker', () => {
+  const state = createStage(parseStageOptions('?t=0'));
+  state.pickups = [{ ...pickup(3, 0), kind: 'magnet' }];
+  const visuals = new PickupVisuals();
+  visuals.update(state, undefined, true);
+  const sprites = visuals.group.getObjectByName('XP orbs and salvage coins');
+  const frame = sprites.geometry.attributes.spriteStyle.getZ(0);
+  const red = pixel(sprites.material.uniforms.atlas.value, frame, 3, 1);
+  const blue = pixel(sprites.material.uniforms.atlas.value, frame, 7, 1);
+  assert.equal(frame, 2);
+  assert.ok(red[0] > red[1] && red[3] === 255);
+  assert.ok(blue[2] > blue[0] && blue[3] === 255);
+});
+
+test('salvage trail appears only during the final capture segment', () => {
+  const state = createStage(parseStageOptions('?mode=survivors&t=0'));
+  state.enemies = [];
+  const pickup = { id: 4, x: state.player.x, z: state.player.z + 60, alt: 75, xp: 1, born: 0 };
+  state.pickups = [pickup];
+  const visuals = new PickupVisuals();
+  stepStage(state);
+  const trails = visuals.group.getObjectByName('Salvage magnet trails');
+  visuals.update(state);
+  assert.equal(trails.count, 0);
+  const { capturedAtTick, arriveAtTick } = pickup.capture;
+  const tailAt = capturedAtTick + Math.ceil((arriveAtTick - capturedAtTick) * 0.75);
+  while (state.tick < tailAt) stepStage(state);
+  visuals.update(state);
+  assert.equal(trails.count, 1);
 });
 
 test('TOP and rear passes publish the correct altitude and preserve the magnet trail', () => {

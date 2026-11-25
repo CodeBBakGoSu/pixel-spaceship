@@ -7,10 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Survivors seed-1 covers minute waves, rings, minibosses/rest, production terrain, and the full-view pilot.
+// Survivors seed-1 covers minute waves, minibosses, Ace reengagement and timed pickups on production terrain.
 const terminalHashes = {
-  legacy: '644ab8cb5d115dd6819b09bd6d1760e3fb67ca79b8b79a4d0fb98c3282f3c7df',
-  survivors: '63461c3cd96addd7e0374920bab88d886a27f79a923d5add5bedcb982933845a',
+  legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
+  survivors: 'dfd304ad1389475a6f7550320d30adb6275e1fd27cdea033c085f72ea43ee4d9',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

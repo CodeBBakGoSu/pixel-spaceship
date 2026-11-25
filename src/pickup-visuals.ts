@@ -11,7 +11,7 @@ const SPRITE_STRIDE = 7;
 const SHINE_PERIOD = 84;
 const SHINE_FRAME_TICKS = 4;
 const SHINE_POINTS = [[4, 3], [6, 5], [8, 7]] as const;
-const ATLAS_FRAMES = 2 + SHINE_POINTS.length;
+const ATLAS_FRAMES = 3 + SHINE_POINTS.length;
 const TOP_COIN_DEPTH_BIAS = 0.0625;
 
 const ORB_PIXELS = [
@@ -44,6 +44,21 @@ const COIN_PIXELS = [
   '............',
 ];
 
+const MAGNET_PIXELS = [
+  '............',
+  '...rr..bb...',
+  '..rr....bb..',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rr......bb.',
+  '.rrr....bbb.',
+  '.rrr....bbb.',
+];
+
 type Palette = Record<string, readonly [color: number, alpha?: number]>;
 const ORB_PALETTE: Palette = {
   o: [0x4299a9, 63], i: [0x58e9d2, 148], d: [0x226a76],
@@ -53,14 +68,16 @@ const COIN_PALETTE: Palette = {
   s: [0x633825], r: [0xc77a36], h: [0xffda86], b: [0xf4b75c],
   o: [0xe69442], d: [0xae6032], l: [0xffe88b],
 };
+const MAGNET_PALETTE: Palette = { r: [0xff607a], b: [0x65d4ff] };
 
 function pickupAtlas(): DataTexture {
   const width = SPRITE_SIZE * ATLAS_FRAMES;
   const data = new Uint8Array(width * SPRITE_SIZE * 4);
   for (let frame = 0; frame < ATLAS_FRAMES; frame++) {
-    const pixels = frame === 0 ? ORB_PIXELS : COIN_PIXELS;
-    const palette = frame === 0 ? ORB_PALETTE : COIN_PALETTE;
-    const shine = SHINE_POINTS[frame - 2];
+    const magnet = frame === 2;
+    const pixels = frame === 0 ? ORB_PIXELS : magnet ? MAGNET_PIXELS : COIN_PIXELS;
+    const palette = frame === 0 ? ORB_PALETTE : magnet ? MAGNET_PALETTE : COIN_PALETTE;
+    const shine = frame >= 3 ? SHINE_POINTS[frame - 3] : undefined;
     for (let y = 0; y < SPRITE_SIZE; y++) {
       for (let x = 0; x < SPRITE_SIZE; x++) {
         const paint = palette[pixels[y][x]];
@@ -187,14 +204,15 @@ export class PickupVisuals {
     for (let i = 0; i < count; i++) {
       const pickup = pickups[i];
       const { pulling, reversal, xp } = pickup;
+      const magnet = pickup.kind === 'magnet';
       const pulse = pulling && !reducedMotion ? 0.4 * Math.sin(tick * 0.36 + i) : 0;
-      const size = 3 + Math.min(xp, 5) * 0.8 + pulse;
+      const size = magnet ? 7 + pulse : 3 + Math.min(xp, 5) * 0.8 + pulse;
       const altitude = flatAltitude ?? pickup.alt;
       // The amber XP tier uses a coin face. Its ten-texel diameter fits the same world size as the orb core.
-      const coin = xp >= 2;
+      const coin = !magnet && xp >= 2;
       const phase = tick + pickup.id * 11;
       const shineStep = Math.floor((phase % SHINE_PERIOD) / SHINE_FRAME_TICKS);
-      const frame = coin ? (reducedMotion || shineStep >= SHINE_POINTS.length ? 1 : 2 + shineStep) : 0;
+      const frame = magnet ? 2 : coin ? (reducedMotion || shineStep >= SHINE_POINTS.length ? 1 : 3 + shineStep) : 0;
       const width = coin && !reducedMotion ? 0.74 + 0.26 * Math.abs(Math.cos(phase / 19)) : 1;
       const extent = size * (coin ? SPRITE_SIZE / 10 : SPRITE_SIZE / 8);
       const offset = i * SPRITE_STRIDE;
@@ -222,7 +240,7 @@ export class PickupVisuals {
 
   private writeTrail(index: number, pickup: Pickup, altitude: number, size: number, playerX: number, playerZ: number): void {
     const yaw = Math.atan2(playerX - pickup.x, playerZ - pickup.z);
-    const length = pickup.reversal ? 9 : 6;
+    const length = pickup.capture ? 5 : pickup.reversal ? 9 : 6;
     const offset = (size + length) / 2;
     this.trailPose.position.set(pickup.x - Math.sin(yaw) * offset, altitude, -pickup.z + Math.cos(yaw) * offset);
     this.trailPose.rotation.y = -yaw;
