@@ -83,7 +83,7 @@ test('survivor state hashes repeat with the same seed and input stream', () => {
 const SURVIVOR_REPLAY_OUTCOMES = {
   1: 'clear',
   11: 'clear',
-  27: 'timeout',
+  27: 'clear',
   42: 'clear',
   128: 'clear',
   2026: 'lost',

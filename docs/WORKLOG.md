@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace candidate local target hit)
+- Reduced the candidate to `aceHullScale ×3.5` after corrected 30-seed local probes: hull ×3.75/fire ×0.8 was too hard (p=10.0%), while hull ×3.5/damage ×2.5/fire ×0.8 hit the target lower bound (average p=16.7%, 5 clears/15 losses/10 timeouts). XP remains untouched. Official 300-sortie balance-bot measurement is still the acceptance check.
+- Updated deterministic test expectations for the final candidate: full-autopilot seed 27 now clears, and the three-seed profile sim pins exact outcomes instead of the obsolete survival-order invariant (timeouts are failed Ace kills, not successful survival). Survivors replay golden intentionally moved to `7f0323b8…`.
+- Verification: focused tests identified the intentional golden/outcome updates; full tests and official measurement pending.
+- State: experimental/in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (remove unused late-XP handle)
 - Removed the inactive post-Lv5 XP tuning fields and restored `runXpCost` to the original formula. This keeps the final branch aligned with the balance constraint that XP values and the XP system are not part of this difficulty change.
 - Verification: covered by the same focused replay progression tests; behavior and replay golden are unchanged.
