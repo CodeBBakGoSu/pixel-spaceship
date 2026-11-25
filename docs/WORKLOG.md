@@ -24,6 +24,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace duel difficulty candidate)
+- Activated the first no-XP Ace candidate in tunables: projectile damage ×2.5, hull ×3.75, fire interval ×0.8 (speed ×1.5 and opening HP ×1.5 were already active). XP costs and XP income are unchanged. These are evidence-driven candidate values pending the balance bot's official same-seed 300-sortie measurement, not final verified values.
+- Updated the six full Survivors replay tests from "every seed clears" to pinned deterministic outcomes (four clears, one timeout, one loss) because the old assertion contradicts the owner-approved 17–20% Ace-win target; the test still runs the complete replays. Survivors replay golden intentionally moved to `f3b814cc…`.
+- Corrected the planning docs' obsolete first-level-up-in-10s target to the owner-confirmed slower opening (first enemy 3 hits, 8 kills, about 20–25 s) and noted that XP coefficients stay fixed.
+- Verification: focused tests/build are running; official balance measurement is pending.
+- State: experimental/in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (opening growth target candidate)
 - Added a Survivors-only far Patrol reinforcement to the 22 s opening wave, outside the random regular-spawn budget; Legacy wave data is unchanged. With opening regular HP ×1.5 this targets the owner-confirmed first-enemy 3-hit / Lv2 8-kill opening without touching XP values.
 - Local probe, average seeds 1–100: first kill median 3 hits, p75 7.00 s; Lv2 kill count median 8, p75 11; Lv2 p75 24.23 s; Lv5 median 46.6 s, p75 49.6 s. The Survivors replay golden intentionally moved to `376a2011…`.

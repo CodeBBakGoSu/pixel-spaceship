@@ -153,6 +153,15 @@ for (const kind of ['gun', 'missile']) {
   });
 }
 
+test('Ace refire delay uses the tunable fire interval scale', () => {
+  const state = stage('?fixture=ace&phase=2&cue=gun'), ace = state.boss;
+  const fireAt = ace.tell.until;
+  state.tick = fireAt;
+  advanceAce(state, ground);
+  const expected = Math.round(ACE_PHASES[2].fireTicks * SURVIVOR_BALANCE.aceFireIntervalScale);
+  assert.equal(ace.attackAt - fireAt, expected);
+});
+
 test('a guided Ace missile travels through the existing same-band parry path', () => {
   const state = stage('?fixture=ace&cue=missile'), ace = state.boss, p = state.player;
   state.tick = ace.tell.until;
