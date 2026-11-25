@@ -236,9 +236,11 @@ export function seekStage(options: StageOptions, ground: Ground): StageState {
 
   // Preserve late time seeks even when the replay can defeat the Ace early.
   const replay = (flight: StageState, conservative: boolean): StageState => {
-    while (flight.tick < target && (flight.phase === 'playing' || flight.phase === 'draft' || flight.phase === 'chest')) {
+    while ((flight.tick < target || flight.pendingFinish)
+      && (flight.phase === 'playing' || flight.phase === 'draft' || flight.phase === 'chest')) {
       const holding = conservative || !!activeAce(flight);
-      stepStage(flight, flight.phase === 'playing' && holding ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
+      stepStage(flight, flight.pendingFinish ? {} : flight.phase === 'playing' && holding
+        ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
     }
     return flight;
   };

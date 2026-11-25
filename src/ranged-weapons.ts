@@ -230,7 +230,7 @@ function arcNeighbours(state: StageState, from: Position, fromBand: FlightBand, 
 function fireStormCrown(state: StageState, source: Position, contacts: Target[], damage: number, ground: Ground): boolean {
   if (!state.pickups.length || !contacts.length) return false;
   const tuning = RANGED_EVOLUTION_TUNING['storm-crown'];
-  const orbs = state.pickups.filter(orb => range2(source, orb) <= tuning.range ** 2);
+  const orbs = state.pickups.filter(orb => orb.kind !== 'magnet' && range2(source, orb) <= tuning.range ** 2);
   orbs.sort((a, b) => range2(source, a) - range2(source, b) || a.id - b.id);
   const used = new Set<number>();
   let strikes = 0;

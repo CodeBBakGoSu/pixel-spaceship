@@ -594,6 +594,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
   for (let i = 0; i < count; i++) {
     const enemy = state.enemies[i];
     if (!enemy.hp) continue;
+    if (enemy.sortieBoss) continue;
     if (enemy.tell && enemy.tell.kind !== 'snipe' && enemy.tell.kind !== 'flak' && state.tick > enemy.tell.until) delete enemy.tell;
     if (enemy.entry) {
       const { yaw, ...pose } = sampleFlyIn(enemy.entry, state.tick, ground);

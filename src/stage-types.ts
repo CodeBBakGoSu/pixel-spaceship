@@ -90,6 +90,11 @@ export type RunSummary = { seconds: number; credits: number; unlocked: GearId[];
 
 export type Point = { x: number; z: number };
 export type Position = Point & { alt: number };
+export type PickupKind = 'salvage' | 'magnet';
+export type MagnetSourceKind = 'elite' | 'midboss';
+export type PickupEvent = { pickupId: number; kind: PickupKind; position: Position; tick: number; sourceEventId?: number };
+export type PickupCollectedEvent = PickupEvent & { xp: number; credits: number; playerPosition: Position };
+export type PickupCapture = { capturedAtTick: number; arriveAtTick: number; origin: Position; curve: { x: number; z: number; amount: number } };
 export type Ground = (x: number, z: number) => number;
 export type Band = 0 | 1 | 2;
 export type FlyIn = {
@@ -119,6 +124,7 @@ export type Enemy = Position & {
   leaveAt?: number;
   eventFlight?: Point;
   carrier?: ChestId;
+  sortieBoss?: { eventId: string; id: SortieMinibossKind; startTick: number; role: 'leader' | 'escort' };
   killCredit?: KillCredit;
   maneuverAt: number;
   maneuver: { phase: 'warning' | 'diving'; band: Band; diveAt: number } | null;
@@ -152,7 +158,8 @@ export type EnemyTell = { until: number; started?: number } & (
   { kind: 'gun' | 'strafe' | 'tail' | 'mine' | 'aegis' | 'carrier' | 'gnat' } |
   (Position & { kind: 'flak' })
 );
-export type Pickup = Position & { id: number; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean; skim?: true;
+export type Pickup = Position & { id: number; kind?: PickupKind; xp: number; born: number; pulling?: boolean; reversal?: boolean; collected?: boolean;
+  skim?: true; capture?: PickupCapture; captureRequestTicks?: number; source?: { eventId: number; kind: MagnetSourceKind };
   recovery?: { until: number; sourceAlt: number } };
 type ShotCommon = Position & {
   vx: number;
@@ -198,7 +205,16 @@ export type Effect = Position & (
 );
 // --- S7e lane ---
 export type AcePhase = 1 | 2 | 3;
-export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number; dodgeGraceUntil?: number };
+export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number;
+  dodgeGraceUntil?: number };
+export type AceReengagement = {
+  phase: 'evade' | 'approach' | 'line';
+  startedAt: number;
+  side: -1 | 1;
+  scheduledLineAt?: number;
+  lineStartedAt?: number;
+  lineUntil?: number;
+};
 export type Ace = Position & {
   id: number;
   kind: 'ace';
@@ -228,6 +244,8 @@ export type Ace = Position & {
   attackAt: number;
   roll: Roll | null;
   rollReadyAt: number;
+  reengageAt?: number;
+  reengagement?: AceReengagement;
   defeatedAt: number | null;
   crashed: boolean;
   burnUntil?: number;
@@ -237,14 +255,35 @@ export type Ace = Position & {
   droneReadyAt?: number;
   aegisReadyAt?: number;
 };
+export type SortieMinibossKind = 'armored-transport' | 'escort-commander';
+export type SortieMinibossCue = {
+  id: SortieMinibossKind;
+  kind: 'midboss';
+  startTick: number;
+  maxDurationTicks: number;
+  threatSource: string;
+};
+export type SortieMiniboss = {
+  cue: SortieMinibossCue;
+  actorId: number;
+  phase: 'cross' | 'turn' | 'charge' | 'recover' | 'line';
+  phaseStartedAt: number;
+  side: -1 | 1;
+  lineUntil: number | null;
+  nextThreatAt: number;
+  escortIds: [number, number];
+  endTick: number | null;
+  outcome: 'defeated' | 'retreated' | null;
+};
 export type Lock = { id: number; progress: number; ready: boolean };
 export type StageState = {
   phase: 'title' | 'playing' | 'draft' | 'chest' | Outcome;
   paused: boolean;
   resultPending: Outcome | null;
+  pendingFinish?: { outcome: Outcome; terminalTick: number; settlementTick: number };
   seed: number;
   rng: number;
-  streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }>;
+  streams: Record<'spawn' | 'chest' | 'bills' | 'combat', { rng: number }> & { magnetDrop?: { rng: number } };
   run: RunProgression | null;
   profile: Profile;
   daily: boolean;
@@ -348,6 +387,9 @@ export type StageState = {
   shots: Shot[];
   effects: Effect[];
   boss: Ace | null;
+  sortieBoss?: SortieMiniboss | null;
+  sortieLullUntil?: number;
+  suppressedSwarmEvents?: number[];
   lock: Lock | null;
   wrongLayer: { id: number; since: number } | null;
   altitudeHint: { delta: number } | null;

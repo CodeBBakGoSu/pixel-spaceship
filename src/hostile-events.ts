@@ -1,9 +1,8 @@
 import type { HostileShape } from './data/hostile-fire.ts';
 import type { EnemyKind } from './enemy-kinds.ts';
-import type { AceTell, Position, Shot } from './stage-types.ts';
+import type { AceTell, PickupCollectedEvent, PickupEvent, Position, Shot } from './stage-types.ts';
 
-export type PickupEvent = { pickupId: number; kind: 'salvage' | 'magnet'; position: Position; tick: number; sourceEventId?: number };
-export type PickupCollectedEvent = PickupEvent & { xp: number; credits: number; playerPosition: Position };
+export type { PickupCollectedEvent, PickupEvent } from './stage-types.ts';
 export type AceDefeatEvent = { id: number; position: Position; tick: number; outcome: 'defeated' };
 
 // --- S7e lane ---
@@ -26,4 +25,7 @@ export type CombatEvents = {
   pickupCollected?(event: PickupCollectedEvent): void;
   aceDefeated?(event: AceDefeatEvent): void;
   aceArrival?(): void;
+  pickupDropped?(event: PickupEvent): void;
+  pickupContacted?(event: PickupEvent): void;
+  pickupCollected?(event: PickupCollectedEvent): void;
 };
