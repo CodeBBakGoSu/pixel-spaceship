@@ -30,10 +30,12 @@ import { applyRunPick, availableEvolutions, banishRunCard, createProgression, ev
 import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
-import { advanceSwarmEvent } from './swarm-events.ts';
-import { createMidbossSchedule, midbossSpawnsBlocked } from './midboss-schedule.ts';
-import { createThreatBudget } from './threat-budget.ts';
+import { advanceSwarmEvent, suppressSwarmEvent } from './swarm-events.ts';
+import { consumeMidbossCue, createMidbossSchedule, finishMidbossEncounter, midbossSpawnsBlocked } from './midboss-schedule.ts';
+import { createThreatBudget, trySpendThreat } from './threat-budget.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
+import { advanceSortieMiniboss, settleSortieMiniboss, startSortieMiniboss,
+  STANDALONE_SORTIE_BOSS_HOOKS, type SortieBossHooks } from './sortie-bosses.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
 import { ACE } from './data/ace.ts';
@@ -351,7 +353,8 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     maneuver: null, maneuverTrail: null, maneuverReadyAt: 0, bodyGraceUntil: 0, reversal: null,
     xp: 0, xpRemainder: 0, level: 1, kills: 0, salvage: 0, salvageBands: [0, 0, 0],
     draft: [], picks: [], graceUntil: 0, boostRelease: false, twinRank: 1, podRank: 1, twinDamage: 1, podDamage: 1,
-    twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null, lock: null,
+    twinAt: 0, strafeAt: 0, podsAt: 0, score: 0, enemies: [], pickups: [], shots: [], effects: [], boss: null,
+    ...(run ? { sortieBoss: null, sortieLullUntil: 0 } : {}), lock: null,
     wrongLayer: null, altitudeHint: null,
   };
   applyFixture(state, options, ground);
@@ -573,9 +576,16 @@ function creditSalvage(state: StageState, pickup: Pick<Pickup, 'alt' | 'xp' | 's
   state.salvageBands[band] += pickup.xp;
 }
 
-function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents): void {
+const SORTIE_BOSS_HOOKS: SortieBossHooks = {
+  ...STANDALONE_SORTIE_BOSS_HOOKS,
+  consumeMidbossCue, finishMidbossEncounter, trySpendThreat,
+};
+
+function advanceSalvage(state: StageState, ground: Ground, events?: CombatEvents,
+  sortieHooks: SortieBossHooks = SORTIE_BOSS_HOOKS): void {
   const p = state.player;
   for (const enemy of state.enemies) {
+    if (enemy.sortieBoss) settleSortieMiniboss(state, enemy, sortieHooks, events);
     if (!enemy.shotDown) continue;
     const chest = enemy.carrier && CHESTS.find(chest => chest.id === enemy.carrier);
     const xp = chest ? chest.carrierXp : enemy.kind === 'gnat' ? (enemy.gnatVariant === 'armored' ? GNAT.armored.xp : GNAT.xp)
@@ -682,7 +692,8 @@ function advanceDestinations(state: StageState, ground: Ground): void {
 
 /** Advance exactly one 60 Hz tick. A modal consumes input without ticking the sortie. */
 export function stepStage(state: StageState, input: StageInput = {}, ground: Ground = seaLevel,
-  observeSwarm?: SwarmObserver, events?: CombatEvents): void {
+  observeSwarm?: SwarmObserver, events?: CombatEvents,
+  sortieHooks: SortieBossHooks = SORTIE_BOSS_HOOKS): void {
   if (state.phase === 'chest') {
     if (input.chestPick) resolveChest(state, input.chestPick);
     return;
@@ -781,11 +792,14 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
     trimEscorts(state);
     if (state.run) events?.aceArrival?.();
   }
+  startSortieMiniboss(state, ground, sortieHooks);
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
-    advanceChestSpawns(state, ground);
-    // External midboss consumers poll due cues after this tick advances and before this spawn gate.
-    if (!advanceSwarmEvent(state, ground, observeSwarm) && !midbossSpawnsBlocked(state)) {
+    advanceChestSpawns(state, ground, ['first-evolution', 'second-evolution']);
+    const suppressFormations = midbossSpawnsBlocked(state)
+      || state.sortieBoss?.outcome === null || state.tick < (state.sortieLullUntil ?? 0);
+    if (suppressFormations) suppressSwarmEvent(state);
+    else if (!advanceSwarmEvent(state, ground, observeSwarm)) {
       if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
     }
   } else {
@@ -797,8 +811,9 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   }
 
   relocateStragglers(state, ground);
+  advanceSortieMiniboss(state, ground, sortieHooks, events);
   advanceEnemies(state, ground, events, observeSwarm);
-  advanceAce(state, ground, events, observeSwarm, pendingSpace);
+  advanceAce(state, ground, events, observeSwarm, pendingSpace, sortieHooks.trySpendThreat);
   advanceRearBombs(state, ground);
   advanceFlares(state, ground);
   if (controlled) {
@@ -837,7 +852,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       }
     }
   }
-  advanceSalvage(state, ground, events);
+  advanceSalvage(state, ground, events, sortieHooks);
   if (state.run && state.hull) applyBillReward(state);
   // --- S7e lane ---
   const defeated = state.hull > 0 && state.boss?.hp === 0;

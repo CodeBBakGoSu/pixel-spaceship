@@ -1088,6 +1088,7 @@ export function advanceEnemies(state: StageState, ground: Ground, events?: Comba
   for (let i = 0; i < count; i++) {
     const enemy = state.enemies[i];
     if (!enemy.hp) continue;
+    if (enemy.sortieBoss) continue;
     const introSuppressed = introIds !== null && !introIds.has(enemy.id);
     if (introSuppressed) suppressForIntro(state, enemy, director!.isolationUntil);
     if (enemy.tell && enemy.tell.kind !== 'snipe' && enemy.tell.kind !== 'flak' && state.tick > enemy.tell.until) delete enemy.tell;
