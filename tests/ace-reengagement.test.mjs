@@ -3,10 +3,12 @@ import test from 'node:test';
 import { ACE } from '../src/data/ace.ts';
 import { TWIN_VOLLEYS, WEAPONS } from '../src/data/items.ts';
 import { CRUISE_SPEED } from '../src/flight.ts';
-import { aceReengagementCadence, advanceAce } from '../src/ace.ts';
+import { flightCeiling } from '../src/maneuvers.ts';
+import { aceReengagementCadence, advanceAce, makeAce } from '../src/ace.ts';
 import { acquireAndFire, advanceShots, angleTo, BOLT_SPEED, HIT_WINDOW, hurtAce, MAX_ALTITUDE, TICKS_PER_SECOND, TWIN_CONE } from '../src/stage-combat.ts';
-import { segmentSphereIntersection3d } from '../src/sortie-spatial-adapter.ts';
+import { segmentSphereIntersection3d } from '../src/spatial.ts';
 import { createStage, parseStageOptions, RUN_BOSS_TICK, RUN_END_TICK, stepStage } from '../src/stage.ts';
+import { trySpendThreat } from '../src/threat-budget.ts';
 
 const ground = () => 0;
 const stage = (query = '?mode=survivors&fixture=ace') => createStage(parseStageOptions(query), ground);
@@ -257,6 +259,29 @@ test('natural reengagement stays inside the arena, above terrain and below the c
   assert.ok(sampled > 3 * TICKS_PER_SECOND);
 });
 
+
+test('expanded-altitude reengagement climbs into a real frontal firing line', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 320 });
+  delete ace.entry;
+  Object.assign(ace, {
+    x: 0, z: 180, alt: 125, yaw: Math.PI, vx: 0, vz: 0, tell: null, roll: null,
+    attackAt: Number.MAX_SAFE_INTEGER, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'approach', startedAt: state.tick, side: 1 },
+  });
+  state.speed = CRUISE_SPEED;
+  for (let i = 0; i < 12 * TICKS_PER_SECOND && ace.reengagement?.phase !== 'line'; i++) {
+    state.tick++;
+    advanceAce(state, ground);
+  }
+  assert.equal(ace.reengagement?.phase, 'line');
+  assert.ok(ace.alt > MAX_ALTITUDE, `Ace follows the expanded Survivors ceiling: ${ace.alt}`);
+  assert.ok(Math.abs(ace.alt - player.altitude) <= HIT_WINDOW);
+  assert.ok(ace.alt <= flightCeiling(ground(ace.x, ace.z), true));
+});
+
 test('Ace approach follows an outside-arena pilot without extending the in-arena boundary', () => {
   const state = stage();
   const ace = state.boss, player = state.player;
@@ -315,6 +340,55 @@ test('Ace damage remains available outside reengagement windows', () => {
   const hp = ace.hp;
   hurtAce(state, ace, 1);
   assert.ok(ace.hp < hp);
+});
+
+test('Ace firing lines keep target locks without requiring its nose to face backward', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  delete ace.entry;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 125 });
+  Object.assign(ace, {
+    x: 0, z: 180, alt: 125, yaw: 0, vx: 0, vz: CRUISE_SPEED,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'line', startedAt: state.tick, side: 1, lineStartedAt: state.tick,
+      lineUntil: state.tick + ACE.reengagement.lineSeconds * TICKS_PER_SECOND },
+  });
+  const fired = [];
+  advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  assert.equal(ace.tell?.kind, 'gun', 'the line admits an attack even though the player is behind Ace');
+
+  const until = ace.tell.until;
+  while (state.tick < until) {
+    state.tick++;
+    advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  }
+  assert.equal(fired.length, 1);
+  assert.ok(state.shots.some(shot => shot.kind === 'hostile'), 'the completed warning launches real hostile shots');
+});
+
+test('an Ace warning started on a firing line survives the line ending before launch', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  delete ace.entry;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 125 });
+  Object.assign(ace, {
+    x: 0, z: 150, alt: 125, yaw: 0, vx: 0, vz: CRUISE_SPEED,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'line', startedAt: state.tick, side: 1, lineStartedAt: state.tick, lineUntil: state.tick + 1 },
+  });
+  const fired = [];
+  const events = { aceTellFired: tell => fired.push(tell) };
+  advanceAce(state, ground, events, undefined, undefined, () => true);
+  const until = ace.tell.until;
+  while (state.tick < until) {
+    state.tick++;
+    Object.assign(player, { x: ace.x, z: ace.z - 150, alt: ace.alt, altitude: ace.alt, yaw: ace.yaw });
+    advanceAce(state, ground, events, undefined, undefined, () => true);
+  }
+  assert.equal(ace.reengagement?.phase, 'evade');
+  assert.equal(fired.length, 1, 'the line-started warning launches after the line closes');
 });
 
 test('Ace attack admission shares the threat hook and denial does not telegraph or advance the attack pattern', () => {

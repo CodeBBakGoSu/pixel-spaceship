@@ -112,7 +112,9 @@ export const BUFFS = {
     { radiusScale: 1.2, extraWindow: 2 }, { radiusScale: 1.4, extraWindow: 4 }, { radiusScale: 1.6, extraWindow: 6 },
   ] },
   'band-lens': { levels: [
-    { extraWindow: 1, railExtraWindow: 0.7 }, { extraWindow: 2, railExtraWindow: 1.4 }, { extraWindow: 3, railExtraWindow: 2.1 },
+    { extraWindow: 1, railExtraWindow: 0.7, captureAngleScale: 1.15, railWidthScale: 1.15 },
+    { extraWindow: 2, railExtraWindow: 1.4, captureAngleScale: 1.3, railWidthScale: 1.35 },
+    { extraWindow: 3, railExtraWindow: 2.1, captureAngleScale: 1.45, railWidthScale: 1.55 },
   ] },
   'vector-thrusters': { levels: [{ agilityScale: 1.08 }, { agilityScale: 1.16 }, { agilityScale: 1.25 }] },
   'flare-bay': { levels: [

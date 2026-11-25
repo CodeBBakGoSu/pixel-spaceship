@@ -16,8 +16,8 @@ const cardinal = ['cockpit.north', 'cockpit.east', 'cockpit.south', 'cockpit.wes
 const heading = (degrees: number) => (degrees % 360 + 360) % 360;
 const threeDigits = (value: number) => String(value).padStart(3, '0');
 
-export function cockpitCacheKey(layout: CockpitLayout, width: number, height: number, language: Language): string {
-  return JSON.stringify([width, height, language, layout]);
+export function cockpitCacheKey(layout: CockpitLayout, width: number, height: number, language: Language, survivors = false): string {
+  return JSON.stringify([width, height, language, survivors, layout]);
 }
 
 export function cockpitMfdDue(previous: number | null, elapsed: number): boolean {

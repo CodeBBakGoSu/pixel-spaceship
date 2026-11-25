@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTranslator } from '../src/i18n.ts';
-import { altitudeBandKey, hudBoostTone, hudHullTone, hudPhaseKey, hudTimer } from '../src/numeric-hud.ts';
+import { altitudeBandHudKey, altitudeBandKey, hudBoostTone, hudHullTone, hudPhaseKey, hudTimer } from '../src/numeric-hud.ts';
 import { createStage, parseStageOptions } from '../src/stage.ts';
 
 test('the HUD distinguishes low and critical hull and warns below thirty percent boost', () => {
@@ -23,6 +23,16 @@ test('the HUD reports terrain-following SKIM even at the altitude of a fixed ban
   assert.equal(en(altitudeBandKey({ altitude: 125, skim: 'land' })), 'SKIM');
   assert.equal(ko(altitudeBandKey({ altitude: 125, skim: 'land' })), '초저');
   assert.equal(en(altitudeBandKey({ altitude: 125 })), 'MID');
+});
+
+
+test('Survivors hides fixed altitude-band names while Legacy keeps them', () => {
+  const survivors = createStage(parseStageOptions('?mode=survivors'));
+  survivors.player.altitude = 125;
+  assert.equal(altitudeBandHudKey(survivors), null);
+  const legacy = createStage(parseStageOptions(''));
+  legacy.player.altitude = 125;
+  assert.equal(altitudeBandHudKey(legacy), 'hud.bandMid');
 });
 
 test('the sortie clock counts elapsed seconds up to the correct mode duration', () => {

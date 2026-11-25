@@ -6,8 +6,10 @@ import { ROLLS } from './data/roll.ts';
 import { WORLD_SITES, WORLD_TERRAIN } from './data/world.ts';
 import { ENEMY_KINDS } from './enemy-kinds.ts';
 import { advanceBank, advanceBankDrive, advanceBankDrop, bankThrustFactor, bankYawRate, BOOST_SPEED, CRUISE_SPEED } from './flight.ts';
+import { flightCeiling } from './maneuvers.ts';
 import { planFlyIn, sampleFlyIn } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
+import { DIRECTOR_CLEAR_TICK } from './phase-director.ts';
 import { findRally } from './reach.ts';
 import { rollAltitude, rollLateralStep } from './roll.ts';
 import { enemyLimit } from './spawn-director.ts';
@@ -105,7 +107,7 @@ function updatePhase(state: StageState, ace: Ace, ground: Ground, events?: Comba
   const health = ace.hp / ace.maxHp;
   const phase = health <= ACE.phaseHealth.desperate ? 3 : health <= ACE.phaseHealth.cover ? 2 : 1;
   if (phase === ace.phase) return;
-  if (ace.phase === 1 && phase >= 2 && state.run) callCover(state, ace, ground, events, observe);
+  if (ace.phase === 1 && phase >= 2 && state.run && state.tick < DIRECTOR_CLEAR_TICK) callCover(state, ace, ground, events, observe);
   ace.phase = phase;
   const tuning = ACE_PHASES[phase];
   ace.bandAt = Math.min(ace.bandAt, state.tick + ACE.flight.bandStepDelay);
@@ -188,10 +190,11 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
     ace.bankDrive = advanceBankDrive(ace.bankDrive, 0, STEP);
     ace.bank = advanceBank(ace.bank, 0, STEP, ace.bankDrive);
     ace.boosting = false;
-    const floor = Math.min(MAX_ALTITUDE, ground(ace.x, ace.z) + data.clearance);
-    const desired = clamp(p.altitude, floor, MAX_ALTITUDE);
+    const ceiling = state.run ? flightCeiling(ground(ace.x, ace.z), true) : MAX_ALTITUDE;
+    const floor = Math.min(ceiling, ground(ace.x, ace.z) + data.clearance);
+    const desired = clamp(p.altitude, floor, ceiling);
     const change = clamp(desired - ace.alt, -VERTICAL_SPEED * STEP, VERTICAL_SPEED * STEP);
-    ace.alt = clamp(ace.alt + change, floor, MAX_ALTITUDE);
+    ace.alt = clamp(ace.alt + change, floor, ceiling);
     ace.pitch = change / (VERTICAL_SPEED * STEP) * data.pitchScale;
     ace.bankDrop = 0;
     return;
@@ -241,9 +244,10 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
 
   const groundHeight = ground(ace.x, ace.z);
   const lockedAltitude = ace.tell && ace.tell.kind !== 'roll' ? ace.tell.alt + ace.bankDrop : null;
-  const floor = Math.min(MAX_ALTITUDE, groundHeight + (ace.band === SKIM_BAND ? SKIM.minClearance : data.clearance));
+  const ceiling = state.run ? flightCeiling(groundHeight, true) : MAX_ALTITUDE;
+  const floor = Math.min(ceiling, groundHeight + (ace.band === SKIM_BAND ? SKIM.minClearance : data.clearance));
   const desired = lockedAltitude ?? (reengagement
-    ? clamp(p.altitude, floor, MAX_ALTITUDE) : flightAltitude(ace.band, groundHeight));
+    ? clamp(p.altitude, floor, ceiling) : flightAltitude(ace.band, groundHeight));
   const rate = VERTICAL_SPEED * data.verticalScale;
   const change = clamp(desired - ace.alt - ace.bankDrop, -rate * STEP, rate * STEP);
   ace.pitch = ace.roll ? 0 : change / (rate * STEP) * data.pitchScale;
@@ -257,7 +261,7 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
   const level = ace.alt + ace.bankDrop + change;
   const drop = ace.roll ? 0 : advanceBankDrop(ace.bankDrop, ace.bank, STEP);
   const nextAlt = ace.roll ? rollAltitude(ace.roll) : level - drop;
-  ace.alt = reengagement ? clamp(nextAlt, floor, MAX_ALTITUDE) : Math.max(floor, nextAlt);
+  ace.alt = reengagement ? clamp(nextAlt, floor, ceiling) : Math.max(floor, nextAlt);
   ace.bankDrop = ace.roll ? 0 : clamp(level - ace.alt, 0, drop);
 }
 
@@ -285,7 +289,8 @@ export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], t
     ace.attackAt = state.tick + THREAT_BUDGET.spacingTicks;
     return false;
   }
-  ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks };
+  ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks,
+    ...(kind !== 'roll' && reengagementLineLock(state, ace) ? { line: true as const } : {}) };
   events?.tell?.(kind, ace.x, ace.z, ace.alt);
   return true;
 }
@@ -333,11 +338,15 @@ export function aceDodgeWindow(tell: AceTell, tick: number): boolean {
   return tell.kind !== 'roll' && tick >= tell.until - ACE.lock.dodgeTicks && tick <= tell.until;
 }
 
+function reengagementLineLock(state: StageState, ace: Ace): boolean {
+  return !!state.run && ace.reengagement?.phase === 'line';
+}
+
 function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
   const { player: p, tick } = state;
   const dx = p.x - ace.x, dz = p.z - ace.z;
   if (!inBand(p.altitude, tell.alt, ACE.attack.bandWindow) || Math.hypot(dx, dz) > ACE.attack.range
-    || Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
+    || !tell.line && !reengagementLineLock(state, ace) && Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
   // Only an accepted maneuver's first tick counts, not its whole animation or a held input.
   const dodgeWindow = aceDodgeWindow(tell, tick)
     || tell.dodgeGraceUntil !== undefined && tick <= tell.dodgeGraceUntil;
@@ -384,7 +393,8 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
   }
   const dx = p.x - ace.x, dz = p.z - ace.z, range = Math.hypot(dx, dz);
   const heading = angleTo(ace.yaw, dx, dz);
-  if (tick < ace.attackAt || range > ACE.attack.range || Math.abs(heading) > ACE.attack.cone
+  if (tick < ace.attackAt || range > ACE.attack.range
+    || !reengagementLineLock(state, ace) && Math.abs(heading) > ACE.attack.cone
     || !inBand(ace.alt, p.altitude, ACE.attack.bandWindow)) return;
   const nextAttack = ace.attacks + 1;
   const kind = nextAttack % tuning.missileEvery === 0 ? 'missile' : 'gun';

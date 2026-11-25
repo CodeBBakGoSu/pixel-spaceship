@@ -33,44 +33,95 @@ const projectiles = (state, count, terrain = ground) => {
   }
 };
 
-test('Seeker vertical travel retains its per-tick rate in both directions and stops without a target', () => {
+test('Seeker turns in 3D within its climb rate and keeps momentum without a target', () => {
   for (const direction of [-1, 1]) {
     const state = setup('seeker');
     const target = contact(state, 0, 120, BANDS[direction < 0 ? 0 : 2]);
     advanceRangedWeapons(state, ground);
     const shot = state.shots[0], altitude = shot.alt;
     advanceRangedShot(state, shot, ground);
-    assert.ok(Math.abs(shot.alt - altitude - direction * 34 * STEP) < 1e-9);
+    assert.ok(direction * (shot.alt - altitude) > 0);
+    assert.ok(Math.abs(shot.alt - altitude) <= 34 * STEP);
     target.hp = 0;
     const prior = shot.alt;
+    const priorVy = shot.vy;
     advanceRangedShot(state, shot, ground);
-    assert.equal(shot.alt, prior);
-    assert.equal(shot.vy, 0);
+    assert.ok(Math.abs(shot.alt - prior - priorVy * STEP) < 1e-9);
+    assert.equal(shot.vy, priorVy);
   }
 });
 
-test('Seeker fires three guided missiles and climbs one band, leaving two-band targets alone', () => {
+test('Seeker acquires a target beyond its former altitude window using 3D range', () => {
   const state = setup('seeker', 1, low);
-  const outOfBand = contact(state, 0, 64, high);
-  advanceRangedWeapons(state, ground);
-  assert.deepEqual(state.shots, []);
-  const adjacent = contact(state, scaleTravel(3), scaleTravel(120), mid);
+  const target = contact(state, 0, scaleTravel(80), low + 10);
+  const distant = contact(state, 0, scaleTravel(180), low + 10);
   advanceRangedWeapons(state, ground);
   assert.equal(state.shots.length, 3);
-  assert.ok(state.shots.every(shot => shot.kind === 'seeker' && shot.targetId === adjacent.id));
-  projectiles(state, 30);
-  assert.ok(state.shots.every(shot => shot.alt > low && shot.alt < mid));
+  assert.ok(state.shots.every(shot => shot.kind === 'seeker' && shot.targetId === target.id));
   projectiles(state, 125);
-  assert.ok(adjacent.hp < 12);
-  assert.equal(outOfBand.hp, 12);
+  assert.ok(target.hp < 12);
+  assert.equal(distant.hp, 12);
 });
 
 test('Seeker can line up a close target on an adjacent band', () => {
   const state = setup('seeker', 1, low);
-  const adjacent = contact(state, 0, 18, mid);
+  const adjacent = contact(state, 0, 60, low + 10);
   advanceRangedWeapons(state, ground);
   projectiles(state, 125);
   assert.ok(adjacent.hp < 12);
+});
+
+test('Seeker acquires and hits a continuous-height target inside its 3D cone, but ignores one outside it', () => {
+  const aligned = setup('seeker', 1, mid);
+  const elevated = contact(aligned, 0, 55, mid + 10);
+  advanceRangedWeapons(aligned, ground);
+  assert.ok(aligned.shots.length > 0);
+  assert.ok(aligned.shots.every(shot => shot.targetId === elevated.id));
+  projectiles(aligned, 125);
+  assert.ok(elevated.hp < 12);
+
+  const outside = setup('seeker', 1, mid);
+  contact(outside, 0, 30, mid + 85);
+  advanceRangedWeapons(outside, ground);
+  assert.equal(outside.shots.length, 0);
+});
+
+test('Seeker revalidates retained targets and locked Aces against Survivors range and capture cone', () => {
+  const distant = setup('seeker');
+  const farTarget = contact(distant, 0, 80);
+  advanceRangedWeapons(distant, ground);
+  const farShot = distant.shots[0];
+  farTarget.z = 100000;
+  advanceRangedShot(distant, farShot, ground);
+  assert.equal(farShot.targetId, null);
+
+  const offAngle = setup('seeker');
+  const sideTarget = contact(offAngle, 0, 80);
+  advanceRangedWeapons(offAngle, ground);
+  sideTarget.x = 70;
+  sideTarget.z = 1;
+  advanceRangedShot(offAngle, offAngle.shots[0], ground);
+  assert.equal(offAngle.shots[0].targetId, null);
+
+  const state = setup('seeker');
+  const target = contact(state, 0, 80);
+  advanceRangedWeapons(state, ground);
+  const shot = state.shots[0];
+  state.boss = { id: 900, hp: 100, entry: false, x: 0, z: 0, alt: shot.alt + 10000 };
+  shot.lockId = 900;
+  advanceRangedShot(state, shot, ground);
+  assert.equal(shot.lockId, null);
+  assert.equal(shot.targetId, target.id);
+
+  const outsideCone = setup('seeker');
+  const aligned = contact(outsideCone, 0, 80);
+  advanceRangedWeapons(outsideCone, ground);
+  const aceLockedShot = outsideCone.shots[0];
+  outsideCone.boss = { id: 901, hp: 100, entry: false, x: 70, z: 1, alt: aceLockedShot.alt };
+  aceLockedShot.lockId = 901;
+  advanceRangedShot(outsideCone, aceLockedShot, ground);
+  assert.equal(aceLockedShot.lockId, null);
+  assert.equal(aceLockedShot.targetId, aligned.id);
 });
 
 test('Seeker level five carries six larger blasts and triggers one separate loop volley', () => {
@@ -100,7 +151,7 @@ test('Rail charges for 54 ticks, pierces a line, and ends against intervening te
   const terrain = (x, z) => z >= 118 && z <= 126 ? 150 : 35;
   const one = contact(state, 0, 45, mid + 3);
   const two = contact(state, scaleTravel(3), 100);
-  const wrongHeight = contact(state, 0, 80, mid + 3.01);
+  const wrongHeight = contact(state, 0, 80, mid + 20);
   const behindWall = contact(state, 0, 150);
   advanceRangedWeapons(state, terrain);
   assert.equal(state.railChargeAt, 54);
@@ -117,7 +168,7 @@ test('Rail charges for 54 ticks, pierces a line, and ends against intervening te
   assert.equal(state.weaponFireAt.rail, 54 + 144);
 });
 
-test('Rail level five fires wider beams in its own and the adjacent bands', () => {
+test('Rail level five widens one actual-altitude beam without bridging distant heights', () => {
   const state = setup('rail', 5, mid);
   const wide = contact(state, scaleTravel(4), 70, mid);
   const below = contact(state, 0, 75, low);
@@ -125,8 +176,10 @@ test('Rail level five fires wider beams in its own and the adjacent bands', () =
   advanceRangedWeapons(state, ground);
   state.tick = 54;
   advanceRangedWeapons(state, ground);
-  for (const target of [wide, below, above]) assert.equal(target.hp, 12 - weaponDamage(state, 'rail', WEAPONS.rail.tuning.damage));
-  assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 3);
+  assert.equal(wide.hp, 12 - weaponDamage(state, 'rail', WEAPONS.rail.tuning.damage));
+  assert.equal(below.hp, 12);
+  assert.equal(above.hp, 12);
+  assert.equal(state.weaponFx.filter(effect => effect.kind === 'rail-beam').length, 1);
 });
 
 test('Flak shell bursts at its scaled range and bridges two bands from their midpoint', () => {
@@ -154,11 +207,11 @@ test('Flak level seven sends twelve radial same-altitude fragments per shell', (
   assert.equal(new Set(state.shots.map(shot => Math.atan2(shot.vx, shot.vz))).size, 12);
 });
 
-test('Arc starts on the firing band and chains to an adjacent band with 60 percent damage', () => {
+test('Arc chains through the bounded 3D volume with reduced damage on its second link', () => {
   const state = setup('arc');
   const initial = contact(state, 0, scaleTravel(30));
-  const adjacent = contact(state, 0, scaleTravel(60), high);
-  const twoAway = contact(state, 0, scaleTravel(72), low);
+  const adjacent = contact(state, 0, scaleTravel(45), mid + 15);
+  const twoAway = contact(state, 0, scaleTravel(72), mid - 50);
   advanceRangedWeapons(state, ground);
   assert.ok(Math.abs(initial.hp - (12 - 1.8)) < 1e-9);
   assert.ok(Math.abs(adjacent.hp - (12 - 1.8 * 0.6)) < 1e-9);
@@ -172,7 +225,7 @@ test('Arc level five visits six contacts, then the last link splashes an unvisit
   const splash = contact(state, scaleTravel(15), targets.at(-1).z);
   advanceRangedWeapons(state, ground);
   assert.ok(targets.every(enemy => enemy.hp < 12));
-  assert.ok(splash.hp < 12 && splash.hp > targets.at(-1).hp);
+  assert.ok(splash.hp < 12 && splash.hp > targets[0].hp);
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'arc-link').length, 6);
   assert.equal(state.weaponFx.filter(effect => effect.kind === 'arc-blast').length, 1);
 });
@@ -223,14 +276,16 @@ test('Rail afterglow can still damage a locked Ace after barrel-roll immunity ex
 
 test('the normal fixed-step flight path fires and advances a timed shell', () => {
   const state = setup('flak');
+  state.run.weaponLevels = { flak: 1 };
   const target = makeEnemy(state, 0, scaleTravel(90), 1, 'gnat');
-  target.hp = 3;
+  target.alt = state.player.altitude;
+  target.hp = 4;
   state.enemies.push(target);
   stepStage(state, {}, ground);
   const shell = state.shots.find(shot => shot.kind === 'flak-shell');
   assert.ok(shell && shell.z > state.player.z);
   while (state.tick < shell.fuseAt) stepStage(state, {}, ground);
-  assert.equal(target.hp, 1);
+  assert.equal(target.hp, 2);
   assert.ok(state.weaponFx.some(effect => effect.kind === 'flak-blast'));
   assert.ok(!state.shots.includes(shell));
 });

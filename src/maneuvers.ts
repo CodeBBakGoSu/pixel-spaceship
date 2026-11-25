@@ -5,6 +5,9 @@ import { fixedBand, skimAltitude } from './bands.ts';
 import type { Band, Enemy, Maneuver, ManeuverKind, ManeuverTrail, StageState } from './stage-types.ts';
 
 export { CRUISE_SPEED } from './flight.ts';
+export function flightCeiling(terrain: number, survivors: boolean): number {
+  return terrain + (MAX_ALTITUDE - terrain) * (survivors ? 1.5 : 1);
+}
 export const INVERTED_FLIGHT_TICKS = 150;
 export const BODY_GRACE_TICKS = 36;
 const HALF_LOOP_TICKS = 78;
@@ -45,7 +48,14 @@ export function maneuverForKey(code: string, turn: number, climb: number): Maneu
 }
 
 // --- S7d lane ---
-export function exitAltitude(altitude: number, kind: ManeuverKind, floor?: number, skimming = false): number {
+export function exitAltitude(altitude: number, kind: ManeuverKind, floor?: number, skimming = false,
+  continuous = false, ceiling = MAX_ALTITUDE): number {
+  if (continuous) {
+    const surface = floor === undefined ? MIN_ALTITUDE : Math.max(MIN_ALTITUDE, skimAltitude(floor));
+    if (kind === 'immelmann') return Math.min(ceiling, altitude + 58);
+    if (kind === 'split-s') return skimming ? Math.min(altitude, surface) : Math.max(surface, altitude - 58);
+    return altitude;
+  }
   if (kind === 'immelmann' && skimming) return BANDS.find(height => height > altitude) ?? MAX_ALTITUDE;
   const band = nearestBand(altitude);
   if (kind === 'immelmann' && band < 2) return BANDS[band + 1];
@@ -99,8 +109,9 @@ function halfLoopFrame(m: Maneuver, tick: number): Frame {
   // Carry the half-ellipse forward and sideways. Its start and finish tangents still point in opposite directions.
   const u = loopTick / HALF_LOOP_TICKS, angle = Math.PI * u;
   const sin = Math.sin(angle), cos = Math.cos(angle), progress = ease(u);
-  const rise = exit !== altitude ? 0 : split ? Math.max(MIN_ALTITUDE, altitude - 14) - altitude
-    : Math.min(MAX_ALTITUDE, altitude + 18) - altitude;
+  const floor = m.altitudeFloor ?? MIN_ALTITUDE, ceiling = m.altitudeCeiling ?? MAX_ALTITUDE;
+  const rise = exit !== altitude ? 0 : split ? Math.max(floor, altitude - 14) - altitude
+    : Math.min(ceiling, altitude + 18) - altitude;
   const forwardTangent = HALF_LOOP_TRAVEL / 2 * sin + HALF_LOOP_RADIUS * cos;
   const pitch = Math.atan2((split ? -1 : 1) * Math.max(24, Math.abs(exit - altitude)) / 2 * sin, forwardTangent);
   return { forward: startDistance + HALF_LOOP_TRAVEL * progress + HALF_LOOP_RADIUS * sin,

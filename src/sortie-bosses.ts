@@ -1,13 +1,14 @@
-import { HIT_WINDOW, MAX_ALTITUDE, STEP, TICKS_PER_SECOND, TWIN_CONE, angleTo, clamp, fireHostile } from './stage-combat.ts';
+import { HIT_WINDOW, STEP, TICKS_PER_SECOND, TWIN_CONE, angleTo, clamp, fireHostile } from './stage-combat.ts';
 import { CARRIER_TUNING } from './data/chest-tuning.ts';
 import { HEAT_TIERS } from './data/meta.ts';
 import { HOSTILE_SHOT_LIMIT } from './data/run-balance.ts';
 import { scaleTravel } from './data/speed.ts';
+import { flightCeiling } from './maneuvers.ts';
 import { makeEnemy } from './stage-enemies.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { THREAT_BUDGET, type ThreatRequest } from './threat-budget.ts';
 import type { Enemy, Ground, Position, SortieMiniboss, SortieMinibossCue, StageState } from './stage-types.ts';
-import { add3d, distance3d, normalize3d, scale3d, type SpatialPoint, type SpatialVector } from './sortie-spatial-adapter.ts';
+import { add3d, distance3d, normalize3d, scale3d, type SpatialPoint, type SpatialVector } from './spatial.ts';
 
 export const SORTIE_MINIBOSS_CUES: readonly SortieMinibossCue[] = [
   { id: 'armored-transport', kind: 'midboss', startTick: 205 * TICKS_PER_SECOND,
@@ -17,7 +18,6 @@ export const SORTIE_MINIBOSS_CUES: readonly SortieMinibossCue[] = [
 ];
 
 export const SORTIE_REST_TICKS = 15 * TICKS_PER_SECOND;
-export const SORTIE_BOSS_HIT_RADIUS = scaleTravel(14);
 
 export type ThreatSpendRequest = ThreatRequest;
 export type ThreatSpendHook = (state: StageState, request: ThreatSpendRequest) => boolean;
@@ -33,13 +33,6 @@ export type SortieBossHooks = {
     sourceKind: 'elite' | 'midboss';
     position: Position;
   }, events?: CombatEvents): void;
-};
-
-export const STANDALONE_SORTIE_BOSS_HOOKS: SortieBossHooks = {
-  consumeMidbossCue: state => SORTIE_MINIBOSS_CUES.find(cue => cue.startTick === state.tick) ?? null,
-  finishMidbossEncounter: () => {},
-  trySpendThreat: () => true,
-  dropMagnet: () => {},
 };
 
 const DURATION = {
@@ -94,8 +87,8 @@ function escortPosition(state: StageState, actor: Enemy, side: number, ground: G
   const right = { x: Math.cos(actor.yaw), z: -Math.sin(actor.yaw), alt: 0 };
   const offset = add3d(scale3d(right, scaleTravel(29) * side), scale3d(forward, -scaleTravel(14)));
   const position = arenaPosition(state, add3d(actor, offset), actor);
-  const floor = Math.min(MAX_ALTITUDE, ground(position.x, position.z) + 22);
-  return { ...position, alt: clamp(actor.alt, floor, MAX_ALTITUDE) };
+  const terrain = ground(position.x, position.z), floor = terrain + 22;
+  return { ...position, alt: clamp(actor.alt, floor, flightCeiling(terrain, true)) };
 }
 
 function createEscorts(state: StageState, boss: SortieMiniboss, actor: Enemy, ground: Ground): [number, number] {
@@ -135,10 +128,10 @@ function moveEscorts(state: StageState, boss: SortieMiniboss, actor: Enemy, grou
     escort.z = bounded.z;
     escort.vx = (escort.x - previous.x) / STEP;
     escort.vz = (escort.z - previous.z) / STEP;
-    const floor = Math.min(MAX_ALTITUDE, ground(escort.x, escort.z) + 22);
-    const desiredAlt = clamp(state.player.altitude, floor, MAX_ALTITUDE);
+    const terrain = ground(escort.x, escort.z), floor = terrain + 22;
+    const ceiling = flightCeiling(terrain, true), desiredAlt = clamp(state.player.altitude, floor, ceiling);
     escort.alt = clamp(escort.alt + clamp(desiredAlt - escort.alt, -scaleTravel(40) * STEP, scaleTravel(40) * STEP),
-      floor, MAX_ALTITUDE);
+      floor, ceiling);
     escort.yaw = Math.atan2(state.player.x - escort.x, state.player.z - escort.z);
   }
 }
@@ -154,9 +147,9 @@ export function startSortieMiniboss(state: StageState, ground: Ground, hooks: So
   const lateral = cue.id === 'armored-transport' ? -scaleTravel(150) : scaleTravel(140);
   const ahead = cue.id === 'armored-transport' ? scaleTravel(95) : scaleTravel(120);
   const position = arenaPosition(state, add3d(playerPoint(state), add3d(scale3d(forward, ahead), scale3d(right, lateral))));
-  const floor = ground(position.x, position.z);
+  const terrain = ground(position.x, position.z), floor = terrain + 22;
   const actor = makeEnemy(state, position.x, position.z, 2, 'bomber');
-  actor.alt = clamp(p.altitude, floor + 22, MAX_ALTITUDE);
+  actor.alt = clamp(p.altitude, floor, flightCeiling(terrain, true));
   const carrierId = cue.id === 'armored-transport' ? 'first-evolution' : 'second-evolution';
   actor.hp = Math.round(CARRIER_TUNING[carrierId].hp * HEAT_TIERS[state.heat].armorScale);
   actor.carrier = carrierId;
@@ -218,10 +211,10 @@ function moveActor(state: StageState, boss: SortieMiniboss, actor: Enemy, ground
   actor.x = bounded.x;
   actor.z = bounded.z;
   const groundHeight = ground(actor.x, actor.z);
-  const floor = Math.min(MAX_ALTITUDE, groundHeight + 22);
-  const desiredAlt = clamp(state.player.altitude, floor, MAX_ALTITUDE);
+  const floor = groundHeight + 22, ceiling = flightCeiling(groundHeight, true);
+  const desiredAlt = clamp(state.player.altitude, floor, ceiling);
   actor.alt = clamp(actor.alt + clamp(desiredAlt - actor.alt, -scaleTravel(40) * STEP, scaleTravel(40) * STEP),
-    floor, MAX_ALTITUDE);
+    floor, ceiling);
   const vx = actor.x - previous.x, vz = actor.z - previous.z;
   if (Math.hypot(vx, vz) > 0) actor.yaw = Math.atan2(vx, vz);
   actor.bank = clamp((actor.vx - wanted.x) / Math.max(1, scaleTravel(45)), -0.5, 0.5);
@@ -304,7 +297,6 @@ export function settleSortieMiniboss(state: StageState, actor: Enemy, hooks: Sor
   if (actor.shotDown && actor.hp <= 0) {
     boss.outcome = 'defeated';
     boss.endTick = state.tick;
-    state.sortieLullUntil = state.tick + SORTIE_REST_TICKS;
     hooks.finishMidbossEncounter(state, {
       id: boss.cue.id, endedAt: state.tick, outcome: 'defeated',
     });
@@ -318,7 +310,6 @@ export function settleSortieMiniboss(state: StageState, actor: Enemy, hooks: Sor
   } else if (state.tick >= boss.cue.startTick + boss.cue.maxDurationTicks) {
     boss.outcome = 'retreated';
     boss.endTick = state.tick;
-    state.sortieLullUntil = state.tick + SORTIE_REST_TICKS;
     hooks.finishMidbossEncounter(state, {
       id: boss.cue.id, endedAt: state.tick, outcome: 'escaped',
     });

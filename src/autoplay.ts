@@ -1,5 +1,5 @@
 import { isBodyHazard } from './enemy-kinds.ts';
-import { canManeuver, exitAltitude, maneuverAllowsControl } from './maneuvers.ts';
+import { canManeuver, exitAltitude, flightCeiling, maneuverAllowsControl } from './maneuvers.ts';
 import { SKIM, skimAltitude, SKIM_BAND } from './bands.ts';
 import { ACE_PILOT, BOT_POLICY, BOT_PROFILES, PILOT_ROUTE, type BotProfile } from './data/bot-profiles.ts';
 import { FLIGHT_MODEL } from './data/flight-model.ts';
@@ -9,7 +9,7 @@ import { FLY_IN_WORLD, WORLD_TERRAIN } from './data/world.ts';
 import { advancePitch, CRUISE_SPEED, pitchLimitScale, pitchSpeedFactor, pitchVerticalSpeed } from './flight.ts';
 import { buffTuning } from './loadout.ts';
 import { LANDMARKS } from './reach.ts';
-import { angleTo, BANDS, BODY_RADIUS, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MAX_ALTITUDE, MINE_RADIUS,
+import { angleTo, BANDS, BODY_RADIUS, clamp, FLAK_RADIUS, HIT_WINDOW, HOSTILE_HIT_RADIUS, inBand, MINE_RADIUS,
   MIN_ALTITUDE, STEP, TICKS_PER_SECOND } from './stage-combat.ts';
 import { activeAce, beaconTick, chestEvolutions, createStage, stepStage } from './stage.ts';
 import type { Enemy, Ground, ManeuverKind, Position, StageInput, StageOptions, StageState } from './stage-types.ts';
@@ -52,7 +52,7 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   }
   const pass = state.reversal;
   if (mode === 'full' && pass && state.tick < pass.until) {
-    const former = nearest(state.enemies, p.x, p.z, enemy => !!enemy.hp && inBand(enemy.alt, p.altitude) && pass.pursuers.includes(enemy.id)
+    const former = nearest(state.enemies, p.x, p.z, enemy => !!enemy.hp && (state.run || inBand(enemy.alt, p.altitude)) && pass.pursuers.includes(enemy.id)
       && Math.abs(angleTo(p.yaw, enemy.x - p.x, enemy.z - p.z)) < Math.PI / 6);
     if (former) return { ...former, kind: 'enemy' };
   }
@@ -73,14 +73,15 @@ function routeFor(state: StageState, mode: PilotMode, tactics: AceTactics, skimU
   }
   if (enemy) return { ...enemy, kind: 'enemy' };
   if (Math.hypot(p.x - state.arena.x, p.z - state.arena.z) > state.arena.radius) {
-    return { x: p.x, z: p.z, alt: BANDS[1], kind: 'home' };
+    return { x: p.x, z: p.z, alt: state.run ? p.altitude : BANDS[1], kind: 'home' };
   }
-  return { x: state.arena.x, z: state.arena.z, alt: BANDS[1], kind: 'home' };
+  return { x: state.arena.x, z: state.arena.z, alt: state.run ? p.altitude : BANDS[1], kind: 'home' };
 }
 
 function crossesThreatBand(state: StageState, threatAltitude: number, climb: number, seconds: number,
   terrain: number, floor: number, agility: number): boolean {
   const p = state.player;
+  const ceiling = flightCeiling(terrain, !!state.run);
   let altitude = p.altitude, pitch = p.pitch;
   const side = Math.sign(threatAltitude - altitude);
   const reaches = (height: number) => (threatAltitude - height) * side <= 13;
@@ -92,10 +93,10 @@ function crossesThreatBand(state: StageState, threatAltitude: number, climb: num
   const thrust = (state.speed || CRUISE_SPEED) / pitchSpeedFactor(pitch);
   const ticks = Math.ceil(seconds * TICKS_PER_SECOND);
   for (let tick = 0; tick < ticks; tick++) {
-    pitch = advancePitch(pitch, climb * pitchLimitScale(climb, altitude, floor, MAX_ALTITUDE), STEP);
+    pitch = advancePitch(pitch, climb * pitchLimitScale(climb, altitude, floor, ceiling), STEP);
     const speed = thrust * pitchSpeedFactor(pitch);
-    const rise = pitchVerticalSpeed(speed, pitch, agility) * pitchLimitScale(pitch, altitude, floor, MAX_ALTITUDE);
-    altitude = clamp(altitude + rise * STEP, floor, MAX_ALTITUDE);
+    const rise = pitchVerticalSpeed(speed, pitch, agility) * pitchLimitScale(pitch, altitude, floor, ceiling);
+    altitude = clamp(altitude + rise * STEP, floor, ceiling);
     if (climb < -SKIM.inputThreshold && altitude <= skim) return reaches(skim);
     if (reaches(altitude)) return true;
   }
@@ -115,7 +116,9 @@ function dodgeClimb(state: StageState, mode: PilotMode, climb: number, agility: 
     const terrain = ground?.(p.x + ownX * closest, p.z + ownZ * closest) ?? WORLD_TERRAIN.seaLevel;
     const floor = Math.max(MIN_ALTITUDE, terrain + FLY_IN_WORLD.clearance);
     if (!crossesThreatBand(state, threat.alt, climb, Math.max(closest, 0.2), terrain, floor, agility)) return;
-    const up = floor > threat.alt - 12 || threat.alt < 86 || (threat.alt <= MAX_ALTITUDE - 15 && p.altitude >= threat.alt);
+    const ceiling = flightCeiling(terrain, !!state.run);
+    const up = floor > threat.alt - 12 || (state.run ? threat.alt < floor + 12 : threat.alt < 86)
+      || (threat.alt <= ceiling - 15 && p.altitude >= threat.alt);
     const safe = threat.alt + (up ? 12 : -12);
     return up ? clamp((safe - p.altitude) / 2, 0, 1) : clamp((safe - p.altitude) / 2, -1, 0);
   };
@@ -221,11 +224,12 @@ export function autopilotInput(state: StageState, mode: PilotMode = 'full', grou
   };
 }
 
-function holdAboveTraffic(state: StageState): StageInput {
+function holdAboveTraffic(state: StageState, ground: Ground): StageInput {
   const p = state.player, a = state.arena;
   const dx = a.x - p.x, dz = a.z - p.z;
   const turn = Math.hypot(dx, dz) > a.radius - PILOT_ROUTE.patrolMargin ? clamp(angleTo(p.yaw, dx, dz) * BOT_POLICY.turnGain, -1, 1) : 0.58;
-  return { turn, climb: clamp((MAX_ALTITUDE - p.altitude) / 4, 0, 1) };
+  const ceiling = flightCeiling(ground(p.x, p.z), !!state.run);
+  return { turn, climb: clamp((ceiling - p.altitude) / 4, 0, 1) };
 }
 
 export function seekStage(options: StageOptions, ground: Ground): StageState {
@@ -240,7 +244,7 @@ export function seekStage(options: StageOptions, ground: Ground): StageState {
       && (flight.phase === 'playing' || flight.phase === 'draft' || flight.phase === 'chest')) {
       const holding = conservative || !!activeAce(flight);
       stepStage(flight, flight.pendingFinish ? {} : flight.phase === 'playing' && holding
-        ? holdAboveTraffic(flight) : autopilotInput(flight, 'full', ground), ground);
+        ? holdAboveTraffic(flight, ground) : autopilotInput(flight, 'full', ground), ground);
     }
     return flight;
   };

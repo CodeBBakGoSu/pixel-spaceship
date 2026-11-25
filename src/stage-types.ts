@@ -44,6 +44,8 @@ export type Maneuver = {
   yaw: number;
   altitude: number;
   exitAltitude: number;
+  altitudeFloor?: number;
+  altitudeCeiling?: number;
   side: -1 | 1;
   skimExit?: true;
 };
@@ -241,7 +243,7 @@ export type Effect = Position & (
 // --- S7e lane ---
 export type AcePhase = 1 | 2 | 3;
 export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number;
-  dodgeGraceUntil?: number };
+  dodgeGraceUntil?: number; line?: true };
 export type AceReengagement = {
   phase: 'evade' | 'approach' | 'line';
   startedAt: number;
@@ -331,6 +333,7 @@ export type StageState = {
     sixTellUntil: number; sixCrosswingStarted: boolean; sixTwinStarted: boolean;
   };
   killBandTicks: [number, number, number];
+  killAltitudeTicks?: { tick: number; alt: number }[];
   ejectorUsed: boolean;
   summary: RunSummary | null;
   phaseNotice: { phase: RunPhase['id']; kind: 'start' | 'lull'; until: number; repaired: number } | null;

@@ -38,8 +38,17 @@ export function criticalDamage(state: StageState, damage: number): number {
 }
 
 export function hitWindow(state: StageState, base = HIT_WINDOW, rail = false): number {
+  if (state.run) return base;
   const lens = buffTuning(state, 'band-lens');
   return base + (rail ? lens?.railExtraWindow ?? 0 : lens?.extraWindow ?? 0);
+}
+
+export function targetCaptureAngleScale(state: StageState): number {
+  return state.run ? buffTuning(state, 'band-lens')?.captureAngleScale ?? 1 : 1;
+}
+
+export function railWidthScale(state: StageState): number {
+  return state.run ? buffTuning(state, 'band-lens')?.railWidthScale ?? 1 : 1;
 }
 
 function echoInterval(state: StageState, ticks: number): number {

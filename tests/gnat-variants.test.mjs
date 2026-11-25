@@ -70,7 +70,7 @@ test('Armored absorbs three base hits and drops 3 XP; Sting and standard drop 1'
   }
 });
 
-test('only same-altitude Sting contact costs hull, sharing the regular one-second hit window', () => {
+test('only overlapping Sting contact costs hull, sharing the regular one-second hit window', () => {
   const state = start();
   state.run.weaponLevels = {};
   const add = (variant, delta = 0) => {
@@ -82,7 +82,7 @@ test('only same-altitude Sting contact costs hull, sharing the regular one-secon
   add('armored'); add(undefined); add('sting', -8.01); add('sting', 8.01);
   stepStage(state, {}, ground);
   assert.equal(state.hull, initial);
-  add('sting', 8); add('sting', -8);
+  add('sting', 6); add('sting', -6);
   stepStage(state, {}, ground);
   assert.deepEqual([state.hull, state.hitsTaken, state.invulnerability, state.kills], [initial - 1, 1, 1, 0]);
   for (let i = 0; i < 59; i++) stepStage(state, {}, ground);

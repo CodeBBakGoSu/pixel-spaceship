@@ -19,6 +19,7 @@ test('cockpit artwork stays cached for equivalent layouts and invalidates for la
   assert.equal(cockpitCacheKey(structuredClone(layout), 390, 844, 'en'), original);
   assert.notEqual(cockpitCacheKey(layout, 390, 844, 'ko'), original);
   assert.notEqual(cockpitCacheKey(layout, 390, 845, 'en'), original);
+  assert.notEqual(cockpitCacheKey(layout, 390, 844, 'en', true), original);
   const inset = phoneLayout(390, 844, { ...safe, top: 24 }, 'cockpit').cockpit;
   assert.notEqual(cockpitCacheKey(inset, 390, 844, 'en'), original);
 });

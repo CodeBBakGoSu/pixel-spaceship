@@ -18,8 +18,8 @@ function beat(state, second) {
   startBillTick(state);
 }
 
-function kill(state, band = 1, kind = 'patrol', killCredit = { weapon: 'twin' }) {
-  const enemy = makeEnemy(state, 50, 10, band, kind);
+function kill(state, band = 1, kind = 'patrol', killCredit = { weapon: 'twin' }, position = { x: 50, z: 10 }) {
+  const enemy = makeEnemy(state, position.x, position.z, band, kind);
   noteBillKill(state, { ...enemy, hp: 0, shotDown: true, killCredit });
 }
 
@@ -49,15 +49,17 @@ test('the five Bills are offered on the design beats and expire at their exact d
   assert.deepEqual(state.streams, streams);
 });
 
-test('First Levy requires three forward kills at any altitude and includes the deadline tick', () => {
+test('First Levy counts forward kills at every altitude, rejects rearward kills, and includes the deadline tick', () => {
   const state = game();
   beat(state, 60);
   kill(state, 0);
   kill(state, 2);
+  kill(state, 1, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z - 10 });
   assert.equal(state.bills.active.progress, 2);
+  kill(state, 0, 'patrol', { weapon: 'twin' }, { x: state.player.x, z: state.player.z + 10 });
+  assert.equal(state.bills.active.progress, 3);
   // Combat on the last tick is eligible for settlement.
   state.tick = state.bills.active.deadline;
-  kill(state);
   assert.deepEqual(finishBillTick(state), { definition: BILLS[0], paid: true });
   assert.equal(state.bills.paid, 1);
   assert.deepEqual(state.bills.last, { id: BILLS[0].id, paid: true, tick: state.tick });
@@ -120,20 +122,6 @@ test('Rear Guard skips a full non-rear loadout and advances to the next schedule
   withOpenSlot.run.weapons = ['pods'];
   beat(withOpenSlot, 255);
   assert.equal(withOpenSlot.bills.active?.id, BILLS[2].id);
-});
-
-test('First Levy counts only forward kills, regardless of enemy altitude', () => {
-  const state = game();
-  beat(state, 60);
-  state.player.x = 0;
-  state.player.z = 0;
-  state.player.yaw = 0;
-  const behind = makeEnemy(state, 0, -10, 0, 'patrol');
-  noteBillKill(state, { ...behind, hp: 0, shotDown: true });
-  assert.equal(state.bills.active.progress, 0);
-  const ahead = makeEnemy(state, 0, 10, 2, 'patrol');
-  noteBillKill(state, { ...ahead, hp: 0, shotDown: true });
-  assert.equal(state.bills.active.progress, 1);
 });
 
 test('High Recovery counts physical orb collections at every altitude', () => {

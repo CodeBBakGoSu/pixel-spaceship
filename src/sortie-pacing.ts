@@ -24,11 +24,17 @@ export function advancePhasePacing(state: StageState): void {
 export function noteSortieKill(state: StageState, enemy: Enemy): void {
   if (!state.run) return;
   const metrics = state.metrics;
-  metrics.bandsKilled |= 1 << enemy.band;
-  state.killBandTicks[enemy.band] = state.tick;
-  const window = 5 * TICKS_PER_SECOND;
-  const distinct = state.killBandTicks.reduce((count, tick) => count + Number(tick >= 0 && state.tick - tick <= window), 0);
-  metrics.multibandWithinFive = Math.max(metrics.multibandWithinFive, distinct);
+  if (Math.abs(enemy.alt - state.player.altitude) >= 15) metrics.verticalKills++;
+  const earliest = state.tick - 5 * TICKS_PER_SECOND;
+  state.killAltitudeTicks ??= [];
+  state.killAltitudeTicks = state.killAltitudeTicks.filter(kill => kill.tick >= earliest);
+  state.killAltitudeTicks.push({ tick: state.tick, alt: enemy.alt });
+  if (state.killAltitudeTicks.length >= 2) {
+    const altitudes = state.killAltitudeTicks.map(kill => kill.alt);
+    if (Math.max(...altitudes) - Math.min(...altitudes) >= 30) {
+      metrics.heightSpreadWithinFive = Math.max(metrics.heightSpreadWithinFive, Math.min(3, state.killAltitudeTicks.length));
+    }
+  }
   if (enemy.killCredit?.locked) metrics.lockedKills++;
   if (enemy.killCredit?.rear && enemy.killCredit.weapon === 'phoenix'
     && enemy.kind !== 'gnat' && enemy.kind !== 'turret' && !enemy.carrier) metrics.rearFlareKills++;

@@ -161,6 +161,29 @@ test('old checkpoints carry manual bomb progress forward for the pilot and the c
   stepStage(restored, {}, ground);
   assert.equal(restored.metrics.bombsDropped, 5);
 });
+test('v1 checkpoints migrate altitude-task progress and retain partial Bill completion', () => {
+  const envelope = JSON.parse(encodeCheckpoint(stateAt(7200)));
+  envelope.version = 1;
+  delete envelope.state.killAltitudeTicks;
+  envelope.state.killBandTicks = [7200, 7200, -1];
+  envelope.state.metrics.multibandWithinFive = 2;
+  envelope.state.metrics.bandsKilled = 0b011;
+  delete envelope.state.metrics.heightSpreadWithinFive;
+  delete envelope.state.metrics.verticalKills;
+  envelope.state.profile.metrics.multibandWithinFive = 2;
+  envelope.state.profile.metrics.bandsKilled = 0b011;
+  delete envelope.state.profile.metrics.heightSpreadWithinFive;
+  delete envelope.state.profile.metrics.verticalKills;
+  envelope.state.bills.active = { id: 'first-levy', startedAt: 7200, deadline: 9600, progress: 2,
+    unharmedTicks: 0, bandKills: [1, 1, 0] };
+
+  const restored = decodeCheckpoint(JSON.stringify(envelope), () => 35);
+  assert.equal(restored.metrics.heightSpreadWithinFive, 2);
+  assert.equal(restored.profile.metrics.verticalKills, 2);
+  assert.equal(restored.bills.active.progress, 2);
+  assert.deepEqual(restored.killAltitudeTicks, [{ tick: 7200, alt: 75 }, { tick: 7200, alt: 125 }]);
+  assert.equal(restored.bills.paid, 0);
+});
 
 test('a legacy checkpoint migrates combat runtime without replaying elapsed introductions', () => {
   const envelope = JSON.parse(encodeCheckpoint(stateAt(240 * 60)));

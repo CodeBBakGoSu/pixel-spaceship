@@ -25,7 +25,4 @@ export type CombatEvents = {
   pickupCollected?(event: PickupCollectedEvent): void;
   aceDefeated?(event: AceDefeatEvent): void;
   aceArrival?(): void;
-  pickupDropped?(event: PickupEvent): void;
-  pickupContacted?(event: PickupEvent): void;
-  pickupCollected?(event: PickupCollectedEvent): void;
 };

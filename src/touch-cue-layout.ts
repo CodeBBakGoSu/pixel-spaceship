@@ -1,6 +1,7 @@
 import type { PhoneLayout, Rect } from './layout.ts';
 
 export type ScreenPoint = { x: number; y: number };
+export type ProjectedScreenPoint = ScreenPoint & { depth: number };
 export type CueSize = { width: number; height: number };
 export type TouchOcclusionCue = { rect: Rect; rotation: number };
 
@@ -81,6 +82,12 @@ export function findAegisTouchCueRects(layout: TouchLayout, threatSize: CueSize 
   return fallback;
 }
 
+export function touchThreatCuePlacement(slots: { aegis: Rect | null; threat: Rect | null; solo: Rect | null },
+  aegisShown: boolean): { slot: Rect | null; reserved: Rect[] } {
+  if (aegisShown && slots.aegis) return { slot: slots.threat, reserved: [slots.aegis] };
+  return { slot: slots.threat ?? slots.solo, reserved: [] };
+}
+
 export function descendingDiveWarnings<T extends {
   x: number; z: number; band: number; maneuver?: { phase: string; band: number } | null;
 }>(enemies: readonly T[], player: { x: number; z: number }, range = 125): T[] {
@@ -95,6 +102,15 @@ export function pointBehindTouchControls(point: ScreenPoint, controls: Rect, mar
     && point.y >= controls.y - margin && point.y <= controls.y + controls.height + margin;
 }
 
+export function screenPointObscured(point: ProjectedScreenPoint, viewport: { width: number; height: number },
+  obstacles: readonly Rect[]): boolean {
+  if (![point.x, point.y, point.depth, viewport.width, viewport.height].every(Number.isFinite)
+    || point.depth <= 0.05 || viewport.width <= 0 || viewport.height <= 0) return true;
+  if (point.x < 0 || point.x >= viewport.width || point.y < 0 || point.y >= viewport.height) return true;
+  return obstacles.some(rect => point.x >= rect.x && point.x <= rect.x + rect.width
+    && point.y >= rect.y && point.y <= rect.y + rect.height);
+}
+
 export function touchControlOcclusionRect(layout: Pick<PhoneLayout, 'controls'>,
   viewport: { width: number; height: number }): Rect {
   if (![layout.controls.y, viewport.width, viewport.height].every(Number.isFinite)) return { x: 0, y: 0, width: 0, height: 0 };
@@ -105,6 +121,22 @@ export function touchControlOcclusionRect(layout: Pick<PhoneLayout, 'controls'>,
 export function isDescendingDiveWarning(maneuver: { phase: string; band: number } | null | undefined,
   currentBand: number): boolean {
   return maneuver?.phase === 'warning' && Number.isFinite(maneuver.band) && maneuver.band < currentBand;
+}
+
+export type DiveWarningSource = {
+  band: number; alt: number; x: number; z: number;
+  maneuver?: { phase: string; band: number } | null;
+  manta?: { phase: string; passEnd?: { x: number; z: number; alt: number } } | null;
+};
+
+export function diveWarningTarget(enemy: DiveWarningSource, bands: readonly number[]): { x: number; z: number; alt: number } | null {
+  if (isDescendingDiveWarning(enemy.maneuver, enemy.band)) {
+    const alt = bands[enemy.maneuver!.band];
+    return Number.isFinite(alt) ? { x: enemy.x, z: enemy.z, alt } : null;
+  }
+  const passEnd = enemy.manta?.phase === 'warning' ? enemy.manta.passEnd : undefined;
+  if (passEnd && [passEnd.x, passEnd.z, passEnd.alt].every(Number.isFinite) && passEnd.alt < enemy.alt) return { ...passEnd };
+  return null;
 }
 
 export function touchCueScreenReference(projected: ScreenPoint & { depth: number },
@@ -128,4 +160,13 @@ export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target
   const rect = preferredSlot === undefined ? findTouchCueRect(layout, size, 4, reserved) : preferredSlot;
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
+}
+
+export function firstTouchOcclusionCue(layout: TouchLayout, from: ScreenPoint, targets: readonly ScreenPoint[],
+  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = [], preferredSlot?: Rect | null): TouchOcclusionCue | null {
+  for (const target of targets) {
+    const cue = touchOcclusionCue(layout, from, target, size, margin, occlusion, reserved, preferredSlot);
+    if (cue) return cue;
+  }
+  return null;
 }

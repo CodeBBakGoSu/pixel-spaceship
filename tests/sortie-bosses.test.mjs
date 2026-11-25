@@ -5,12 +5,12 @@ import { fixedBand } from '../src/bands.ts';
 import { CARRIER_TUNING } from '../src/data/chest-tuning.ts';
 import { WEAPONS } from '../src/data/items.ts';
 import { HEAT_TIERS } from '../src/data/meta.ts';
-import { MAX_ALTITUDE, HIT_WINDOW, TICKS_PER_SECOND, TWIN_CONE, advanceShots, angleTo, hurtEnemy } from '../src/stage-combat.ts';
-import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
+import { MAX_ALTITUDE, HIT_WINDOW, SORTIE_BOSS_HIT_RADIUS, TICKS_PER_SECOND, TWIN_CONE, advanceShots, angleTo, hurtEnemy } from '../src/stage-combat.ts';
+import { createStage, parseStageOptions, SORTIE_BOSS_HOOKS, stepStage } from '../src/stage.ts';
 import { advanceEnemies } from '../src/stage-enemies.ts';
 import { random, rngStream } from '../src/stage-random.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
-import { advanceSortieMiniboss, SORTIE_BOSS_HIT_RADIUS, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
+import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS } from '../src/sortie-bosses.ts';
 import { THREAT_BUDGET, trySpendThreat } from '../src/threat-budget.ts';
 import { World } from '../src/world.ts';
 
@@ -19,6 +19,7 @@ const ground = () => 0;
 function startEncounter(index, hooks) {
   const cue = SORTIE_MINIBOSS_CUES[index];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ground);
+  state.midbossSchedule.next = index;
   state.tick = cue.startTick - 1;
   state.chests.next = index === 0 ? 1 : 3;
   state.twinAt = state.podsAt = state.strafeAt = Number.MAX_SAFE_INTEGER;
@@ -48,7 +49,7 @@ test('the miniboss consumer starts only from the shared producer cue', () => {
   state.tick = cue.startTick - 1;
   const consumed = [];
   const hooks = {
-    ...STANDALONE_SORTIE_BOSS_HOOKS,
+    ...SORTIE_BOSS_HOOKS,
     consumeMidbossCue(candidate) { consumed.push(candidate); return cue; },
   };
   stepStage(state, {}, ground, undefined, undefined, hooks);
@@ -101,7 +102,7 @@ test('miniboss and escorts move continuously as an outside pilot re-enters the a
   state.player.x -= 2;
   state.player.vx = -120;
   state.tick++;
-  advanceSortieMiniboss(state, ground, STANDALONE_SORTIE_BOSS_HOOKS);
+  advanceSortieMiniboss(state, ground, SORTIE_BOSS_HOOKS);
 
   for (let index = 0; index < actors.length; index++) {
     const displacement = Math.hypot(actors[index].x - previous[index].x, actors[index].z - previous[index].z);
@@ -213,7 +214,7 @@ test('seed-1 autoplay transport rejoin sustains a real twin firing arc without a
   const options = parseStageOptions('?mode=survivors&autoplay=1&seed=1');
   const world = new World(options.seed);
   const terrain = (x, z) => world.height(x, z);
-  const hooks = { ...STANDALONE_SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
+  const hooks = { ...SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
   const state = createStage(options, terrain);
   const cue = SORTIE_MINIBOSS_CUES[0];
   let weaponsDisabled = false;
@@ -267,7 +268,7 @@ test('transport escorts are damageable enemies and only living escort hulls sour
     const living = boss.escortIds.map(id => state.enemies.find(enemy => enemy.id === id && enemy.hp > 0)).filter(Boolean);
     origins.push({ position: { x, z, alt }, living: living.map(escort => ({ x: escort.x, z: escort.z, alt: escort.alt })) });
   } };
-  run(state, 6 * TICKS_PER_SECOND, STANDALONE_SORTIE_BOSS_HOOKS, events);
+  run(state, 6 * TICKS_PER_SECOND, SORTIE_BOSS_HOOKS, events);
   assert.ok(origins.length > 0, 'the surviving escort produces a volley');
   for (const origin of origins) {
     assert.ok(origin.living.some(escort => escort.x === origin.position.x
@@ -278,7 +279,7 @@ test('transport escorts are damageable enemies and only living escort hulls sour
 });
 
 test('the commander repeatedly crosses, makes a forward three-second recovery, and re-enters the line', () => {
-  const hooks = { ...STANDALONE_SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
+  const hooks = { ...SORTIE_BOSS_HOOKS, trySpendThreat: () => false };
   const state = startEncounter(1, hooks);
   state.speed = 160;
   Object.assign(state.player, { yaw: 0, vx: 0, vz: 160 });
@@ -318,6 +319,7 @@ test('boss and escort altitude follows a rising terrain floor without crossing t
   const cue = SORTIE_MINIBOSS_CUES[1];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ridge);
   state.tick = cue.startTick - 1;
+  state.midbossSchedule.next = 1;
   state.speed = 160;
   Object.assign(state.player, { x: 0, z: 0, yaw: 0, altitude: 100, vx: 0, vz: 160 });
   state.chests.next = 3;
@@ -342,7 +344,7 @@ test('miniboss attacks spend the threat hook and denial emits no volley', () => 
   for (const [index, points] of [[0, 2], [1, 1]]) {
     const requests = [];
     const hooks = {
-      ...STANDALONE_SORTIE_BOSS_HOOKS,
+      ...SORTIE_BOSS_HOOKS,
       trySpendThreat(state, request) { requests.push({ state, request }); return false; },
     };
     const state = startEncounter(index, hooks);
@@ -379,12 +381,10 @@ test('transport escorts retry after a denied spend and keep their normal cadence
 test('either miniboss kill pays one existing evolution chest and one midboss hook, then rests from completion', () => {
   for (const [index, chestId] of [[0, 'first-evolution'], [1, 'second-evolution']]) {
     const magnetCalls = [];
-    const finishCalls = [];
     const dropEvents = { pickupDropped() {} };
     const hooks = {
-      ...STANDALONE_SORTIE_BOSS_HOOKS,
+      ...SORTIE_BOSS_HOOKS,
       trySpendThreat: () => false,
-      finishMidbossEncounter(state, result) { finishCalls.push({ state, result }); },
       dropMagnet(state, request, events) { magnetCalls.push({ state, request, events }); },
     };
     const state = startEncounter(index, hooks);
@@ -396,7 +396,7 @@ test('either miniboss kill pays one existing evolution chest and one midboss hoo
 
     assert.equal(boss.outcome, 'defeated');
     assert.equal(boss.endTick, state.tick);
-    assert.equal(state.sortieLullUntil, boss.endTick + SORTIE_REST_TICKS);
+    assert.equal(state.midbossSchedule.restUntil, boss.endTick + SORTIE_REST_TICKS);
     assert.deepEqual(state.chests.dropped, [chestId]);
     assert.equal(state.chests.drops.filter(drop => drop.id === chestId).length, 1);
     assert.equal(state.kills, 1);
@@ -405,12 +405,12 @@ test('either miniboss kill pays one existing evolution chest and one midboss hoo
     assert.equal(magnetCalls[0].request.sourceKind, 'midboss');
     assert.equal(magnetCalls[0].events, dropEvents);
     assert.deepEqual(Object.keys(magnetCalls[0].request.position).sort(), ['alt', 'x', 'z']);
-    assert.equal(finishCalls.length, 1);
-    assert.equal(finishCalls[0].state, state);
-    assert.deepEqual(finishCalls[0].result, { id: boss.cue.id, endedAt: boss.endTick, outcome: 'defeated' });
+    assert.deepEqual(state.midbossSchedule.lastResult,
+      { id: boss.cue.id, endedAt: boss.endTick, outcome: 'defeated' });
     stepStage(state, {}, ground, undefined, undefined, hooks);
     assert.equal(magnetCalls.length, 1);
-    assert.equal(finishCalls.length, 1);
+    assert.deepEqual(state.midbossSchedule.lastResult,
+      { id: boss.cue.id, endedAt: boss.endTick, outcome: 'defeated' });
     assert.equal(state.chests.dropped.length, 1);
     assert.equal(state.chests.next, index === 0 ? 2 : 4);
   }
@@ -438,11 +438,9 @@ test('a miniboss defeat rolls once through the live magnet-drop integration', ()
 
 test('a 30-second miniboss retreat returns its actual tick and pays no rewards', () => {
   const magnetCalls = [];
-  const finishCalls = [];
   const hooks = {
-    ...STANDALONE_SORTIE_BOSS_HOOKS,
+    ...SORTIE_BOSS_HOOKS,
     trySpendThreat: () => false,
-    finishMidbossEncounter(state, result) { finishCalls.push({ state, result }); },
     dropMagnet: (...args) => magnetCalls.push(args),
   };
   const state = startEncounter(1, hooks);
@@ -451,13 +449,12 @@ test('a 30-second miniboss retreat returns its actual tick and pays no rewards',
   stepStage(state, {}, ground, undefined, undefined, hooks);
   assert.equal(boss.outcome, 'retreated');
   assert.equal(boss.endTick, boss.cue.startTick + boss.cue.maxDurationTicks);
-  assert.equal(state.sortieLullUntil, boss.endTick + SORTIE_REST_TICKS);
+  assert.equal(state.midbossSchedule.restUntil, boss.endTick + SORTIE_REST_TICKS);
   assert.deepEqual(state.chests.dropped, []);
   assert.equal(state.kills, 0);
   assert.equal(magnetCalls.length, 0);
-  assert.equal(finishCalls.length, 1);
-  assert.equal(finishCalls[0].state, state);
-  assert.deepEqual(finishCalls[0].result, { id: boss.cue.id, endedAt: boss.endTick, outcome: 'escaped' });
+  assert.deepEqual(state.midbossSchedule.lastResult,
+    { id: boss.cue.id, endedAt: boss.endTick, outcome: 'escaped' });
   assert.equal(state.pickups.length, 0);
 });
 

@@ -25,6 +25,9 @@ export const shieldActive = (state: Pick<StageState, 'invulnerability' | 'roll'>
 export const altitudeBandKey = (player: Pick<StageState['player'], 'altitude' | 'skim'>) =>
   HUD_ALTITUDE_BAND_KEYS[playerBand(player)];
 
+export const altitudeBandHudKey = (state: Pick<StageState, 'player' | 'run'>) =>
+  state.run ? null : altitudeBandKey(state.player);
+
 export function clockText(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
@@ -125,19 +128,21 @@ export class NumericHud {
       this.speed = speed;
     }
     const { altitude, skim } = state.player;
-    const roundedAltitude = Math.round(altitude), band = altitudeBandKey(state.player);
+    const roundedAltitude = Math.round(altitude), band = altitudeBandHudKey(state);
     if (this.altitude !== roundedAltitude) {
       el.altitude.textContent = String(roundedAltitude);
       this.altitude = roundedAltitude;
     }
-    if (translated || this.band !== band) {
+    if (el.band.hidden !== (band === null)) el.band.hidden = band === null;
+    if (band !== null && (translated || this.band !== band)) {
       el.band.textContent = t(band);
       this.band = band;
     }
-    const markerAltitude = skim ? MIN_ALTITUDE : clamp(altitude, MIN_ALTITUDE, MAX_ALTITUDE);
+    const ceiling = MAX_ALTITUDE * (state.run ? 1.5 : 1);
+    const markerAltitude = skim ? MIN_ALTITUDE : clamp(altitude, MIN_ALTITUDE, ceiling);
     if (this.markerAltitude !== markerAltitude) {
       this.markerAltitude = markerAltitude;
-      el.altMarker.style.top = `${(MAX_ALTITUDE - markerAltitude) * 100 / (MAX_ALTITUDE - MIN_ALTITUDE)}%`;
+      el.altMarker.style.top = `${(ceiling - markerAltitude) * 100 / (ceiling - MIN_ALTITUDE)}%`;
     }
 
     this.updateProgress(state, t, translated);

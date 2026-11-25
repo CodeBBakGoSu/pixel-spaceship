@@ -404,6 +404,15 @@ test('magnet drops use only the dedicated seeded stream and ordinary kills do no
   assert.equal(state.streams.spawn.rng, spawnRng);
   assert.equal(state.streams.combat.rng, combatRng);
 
+  const eliteAegisState = stage('?mode=survivors&seed=19&t=0');
+  const eliteAegis = makeEnemy(eliteAegisState, eliteAegisState.player.x + 300, eliteAegisState.player.z + 300, 1, 'aegis');
+  eliteAegis.elite = true;
+  eliteAegis.hp = 0;
+  eliteAegis.shotDown = true;
+  eliteAegisState.enemies = [eliteAegis];
+  run(eliteAegisState, 1);
+  assert.ok(eliteAegisState.pickups.some(pickup => pickup.kind === 'magnet' && pickup.source.kind === 'elite'));
+
   const eliteState = stage('?mode=survivors&seed=19&t=0');
   const elite = makeEnemy(eliteState, eliteState.player.x + 300, eliteState.player.z + 300, 1, 'bomber');
   elite.carrier = 'coast-supply';

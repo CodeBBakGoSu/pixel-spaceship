@@ -6,10 +6,12 @@ import {
   Vector4, type BufferGeometry, type Camera,
 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { crosswingTrail, CROSSWING_TRAIL_SEGMENTS } from './attack-trail.ts';
 import { batchBursts, gnatBursts } from './combat-feedback.ts';
 import { COMBAT_FEEDBACK } from './data/combat-feedback.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
 import { chestDefinition } from './chests.ts';
+import { AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_OUTLINE, createAegisRingGeometry } from './aegis-volume-render.ts';
 import { projectCameraContact, type ContactProjection } from './contact-projection.ts';
 import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { FLIGHT_CAMERA, FLIGHT_FEEL } from './data/flight-feel.ts';
@@ -130,6 +132,7 @@ export function clipProjectSortieSegment(camera: Camera, width: number, height: 
   };
 }
 const TOP_FLIGHT = 152;
+export const OVERHEAD_EFFECT_PLANE_ALTITUDE = TOP_FLIGHT + 2.5;
 const GNAT_BAND_TINTS = [0xa9d1ff, 0xffd6a8, 0xffa89d] as const;
 const GNAT_LIVERY = {
   armored: { width: 1.75, height: 2.25, length: 1.25, tints: [0x6485aa, 0x778198, 0x886e80] },
@@ -231,7 +234,7 @@ export class FlightScene {
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
   private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), REGULAR_RENDER_CAP);
-  private readonly enemyTrails = instances(new BoxGeometry(), REGULAR_RENDER_CAP * 2, new MeshBasicMaterial({
+  private readonly enemyTrails = instances(new BoxGeometry(), REGULAR_RENDER_CAP * 2 + CROSSWING_TRAIL_SEGMENTS * 2, new MeshBasicMaterial({
     color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
   }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
@@ -276,6 +279,12 @@ export class FlightScene {
     new MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false }));
   private readonly weaponRings = instances(new RingGeometry(0.91, 1, 20).rotateX(-Math.PI / 2), WEAPON_RING_LIMIT,
     new MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
+  private readonly aegisInnerRings = instances(createAegisRingGeometry(AEGIS_INNER_RADIUS), 2,
+    new MeshBasicMaterial({ color: 0x62edff, transparent: true, opacity: 0.5, depthWrite: false }));
+  private readonly aegisOuterRings = instances(createAegisRingGeometry(AEGIS_OUTER_RADIUS), 2,
+    new MeshBasicMaterial({ color: 0x62edff, transparent: true, opacity: 0.5, depthWrite: false }));
+  private readonly aegisSupports = instances(new BoxGeometry(), 32,
+    new MeshBasicMaterial({ color: 0x62edff, transparent: true, opacity: 0.38, depthWrite: false }));
   private readonly flakColumns = instances(new CylinderGeometry(1, 1, 2, 12, 1, true), FLAK_COLUMN_LIMIT,
     new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false, side: DoubleSide, forceSinglePass: true }));
   private readonly arcMiddle: Position = { x: 0, z: 0, alt: 0 };
@@ -316,7 +325,8 @@ export class FlightScene {
     this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails,
-      this.defenseDrones, this.weaponLinks, this.weaponRings, this.flakColumns);
+      this.defenseDrones, this.weaponLinks, this.weaponRings, this.aegisInnerRings, this.aegisOuterRings,
+      this.aegisSupports, this.flakColumns);
     // The camera looking through the tail must skip the player's model and forward-facing markers.
     this.ship.traverse(object => object.layers.set(MAIN_CAMERA_LAYER));
     if (this.feelEnabled) this.atmosphere.wind.layers.set(MAIN_CAMERA_LAYER);
@@ -812,11 +822,26 @@ export class FlightScene {
   }
 
   private drawWeaponEffects(state: StageState, view: StageState['view'] | 'rear', flat: boolean, links: number): void {
-    const plane = flat ? TOP_FLIGHT + 2.5 : undefined;
-    let rings = 0, columns = 0, drones = 0;
+    const plane = flat ? OVERHEAD_EFFECT_PLANE_ALTITUDE : undefined;
+    let rings = 0, columns = 0, drones = 0, aegisInnerRingCount = 0, aegisOuterRingCount = 0, aegisSupportCount = 0;
     if (state.run?.evolutions.pods) {
-      const p = state.player, radius = CLOSE_EVOLUTIONS.aegis.radius;
-      this.write(this.weaponRings, rings++, p.x, p.z, plane ?? p.altitude, 0, radius, 1, radius, 0xb3eaff);
+      const p = state.player;
+      const centerAlt = plane ?? p.altitude, tint = 0x62edff;
+      for (const boundary of AEGIS_VOLUME_OUTLINE.rings) {
+        const alt = centerAlt + (flat ? 0 : boundary.alt);
+        if (boundary.radius === AEGIS_INNER_RADIUS) {
+          this.write(this.aegisInnerRings, aegisInnerRingCount++, p.x, p.z, alt, 0, 1, 1, 1, tint);
+        } else {
+          this.write(this.aegisOuterRings, aegisOuterRingCount++, p.x, p.z, alt, 0, 1, 1, 1, tint);
+        }
+      }
+      if (!flat) {
+        for (const support of AEGIS_VOLUME_OUTLINE.supports) {
+          const from = { x: p.x + support.from.x, z: p.z + support.from.z, alt: p.altitude + support.from.alt };
+          const to = { x: p.x + support.to.x, z: p.z + support.to.z, alt: p.altitude + support.to.alt };
+          this.connect(this.aegisSupports, aegisSupportCount++, from, to, 0.3, tint);
+        }
+      }
     }
     for (const drone of state.orbitDrones) {
       if (drones === this.defenseDrones.instanceMatrix.count) break;
@@ -891,6 +916,9 @@ export class FlightScene {
     upload(this.defenseDrones, drones);
     upload(this.weaponLinks, links);
     upload(this.weaponRings, rings);
+    upload(this.aegisInnerRings, aegisInnerRingCount);
+    upload(this.aegisOuterRings, aegisOuterRingCount);
+    upload(this.aegisSupports, aegisSupportCount);
     upload(this.flakColumns, columns);
   }
 
@@ -927,6 +955,17 @@ export class FlightScene {
         const gold = enemy.entry ? 0xe0be8a : 0xffe5a3;
         this.write(this.chestMarkers, chestMarkers++, enemy.x - 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, Math.PI / 4);
         this.write(this.chestMarkers, chestMarkers++, enemy.x + 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, -Math.PI / 4);
+      }
+      const attackTrail = enemy.kind === 'crosswing' ? crosswingTrail(enemy) : null;
+      if (attackTrail && trails + attackTrail.length - 1 <= this.enemyTrails.instanceMatrix.count) {
+        const recoveryFade = enemy.crosswing?.phase === 'recovery'
+          ? clamp(((enemy.crosswing.until ?? state.tick) - state.tick) / 60, 0, 1) : 1;
+        for (let segment = 0; segment + 1 < attackTrail.length; segment++) {
+          const recency = (segment + 1) / (attackTrail.length - 1);
+          const brightness = (0.32 + 0.68 * recency) * recoveryFade;
+          this.connect(this.enemyTrails, trails++, attackTrail[segment], attackTrail[segment + 1],
+            flat ? 1.65 : 1.1, this.color.setRGB(brightness, brightness, brightness).getHex(), flat ? TOP_FLIGHT + 1 : undefined);
+        }
       }
       if ((enemy.entry || enemy.flyby) && trails + 2 <= this.enemyTrails.instanceMatrix.count) {
         const fx = Math.sin(enemy.yaw), fz = Math.cos(enemy.yaw);

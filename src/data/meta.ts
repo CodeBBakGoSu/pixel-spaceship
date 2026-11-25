@@ -7,11 +7,11 @@ export const STARTER_BUFFS = [
 
 export const METRIC_RULES = {
   weakPointHits: 'best',
-  multibandWithinFive: 'best',
+  heightSpreadWithinFive: 'best',
+  verticalKills: 'total',
   maneuvers: 'total',
   orbs: 'total',
   peakAceWipe: 'best',
-  bandsKilled: 'bands',
   boostTicks: 'total',
   lockedKills: 'total',
   rearFlareKills: 'total',
@@ -21,11 +21,11 @@ export type RunMetric = keyof typeof METRIC_RULES;
 
 export const UNLOCK_QUESTS = [
   { id: 'rail', metric: 'weakPointHits', target: 5 },
-  { id: 'flak', metric: 'multibandWithinFive', target: 3 },
+  { id: 'flak', metric: 'heightSpreadWithinFive', target: 3 },
   { id: 'ion', metric: 'maneuvers', target: 30 },
   { id: 'drones', metric: 'orbs', target: 100 },
   { id: 'arc', metric: 'peakAceWipe', target: 6 },
-  { id: 'band-lens', metric: 'bandsKilled', target: 3 },
+  { id: 'band-lens', metric: 'verticalKills', target: 3 },
   { id: 'vector-thrusters', metric: 'boostTicks', target: 60 * 60 },
   { id: 'fire-control', metric: 'lockedKills', target: 20 },
   { id: 'flare-bay', metric: 'rearFlareKills', target: 20 },

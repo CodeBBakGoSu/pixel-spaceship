@@ -23,23 +23,25 @@ function contact(state, x, z, band = 1) {
   return enemy;
 }
 
-test('Aurora Gatling keeps the six-bolt fan and aims into both adjacent bands', () => {
+test('Aurora Gatling keeps its six-bolt fan and strafe targets at continuous heights', () => {
   const state = start();
   evolve(state, 'twin', 'aurora-gatling');
-  const low = contact(state, 4, 85, 0), middle = contact(state, 0, 64), high = contact(state, -4, 85, 2);
+  const high = contact(state, 0, 55);
+  high.alt = state.player.altitude + 18;
   acquireAndFire(state);
   const flat = state.shots.filter(shot => shot.kind === 'twin');
   assert.equal(flat.length, 6);
   assert.ok(flat.every(shot => shot.aurora));
   assert.ok(new Set(flat.map(shot => shot.vx)).size > 1);
   const strafe = state.shots.filter(shot => shot.kind === 'strafe');
-  assert.deepEqual(strafe.map(shot => shot.targetBand).sort(), [0, 2]);
+  assert.ok(strafe.some(shot => shot.targetAltitude === high.alt));
   assert.ok(strafe.every(shot => shot.aurora));
   for (let tick = 0; tick < 35; tick++) {
     state.tick++;
     advanceShots(state, sea);
   }
-  assert.ok(low.hp < 4 && middle.hp < 4 && high.hp < 4);
+  assert.ok(high.hp < 4);
+
 });
 
 test('Aurora reversal retains its distinct tracers', () => {
@@ -49,16 +51,21 @@ test('Aurora reversal retains its distinct tracers', () => {
   openReversal(state, []);
   acquireAndFire(state);
   assert.ok(state.shots.length);
-  assert.ok(state.shots.every(shot => shot.reversal && shot.aurora));
+  const twin = state.shots.filter(shot => shot.kind === 'twin');
+  assert.ok(twin.length > 0);
+  assert.ok(twin.every(shot => shot.reversal && shot.aurora));
 });
 
 test('Aegis Halo deals same-height contact damage, replaces pod fire and blocks crossing shots', () => {
   const state = start();
   evolve(state, 'pods', 'aegis-halo');
   const touching = contact(state, scaleTravel(19), 0), otherBand = contact(state, scaleTravel(-19), 0, 2);
+  const verticalOnly = contact(state, 0, 0);
+  verticalOnly.alt = state.player.altitude + CLOSE_EVOLUTIONS.aegis.radius;
   advanceSupportWeapons(state, sea);
   assert.ok(touching.hp < 4);
   assert.equal(otherBand.hp, 4);
+  assert.equal(verticalOnly.hp, 4);
   acquireAndFire(state);
   assert.ok(!state.shots.some(shot => shot.kind === 'pods'));
   const p = state.player;
@@ -67,6 +74,10 @@ test('Aegis Halo deals same-height contact damage, replaces pod fire and blocks 
   state.shots.push(bolt);
   advanceShots(state, sea);
   assert.ok(!state.shots.includes(bolt));
+  const elevatedBolt = { ...bolt, alt: p.altitude + CLOSE_EVOLUTIONS.aegis.radius, life: 2 };
+  state.shots.push(elevatedBolt);
+  advanceShots(state, sea);
+  assert.ok(state.shots.includes(elevatedBolt));
   assert.equal(state.hull, state.maxHull);
 });
 

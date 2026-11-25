@@ -14,6 +14,9 @@ import { CockpitDisplay } from './cockpit-display.ts';
 import { CockpitMarkers } from './cockpit-markers.ts';
 import { cockpitWarnings, type CockpitMotion } from './cockpit.ts';
 import { CombatAudio } from './combat-audio.ts';
+import { AEGIS_INNER_RADIUS, AEGIS_OUTER_RADIUS, AEGIS_VOLUME_CUE_OFFSETS,
+  aegisOutlineAltitude, shouldShowAegisCue } from './aegis-volume-render.ts';
+import { CLOSE_EVOLUTIONS } from './data/close-evolutions.ts';
 import { phaseAt, RUN_BOSS_SECONDS, RUN_END_SECONDS } from './data/phases.ts';
 import { ROLL_PARRY_XP } from './data/roll.ts';
 import type { Heat } from './data/meta.ts';
@@ -35,8 +38,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { descendingDiveWarnings, findAegisTouchCueRects, TOUCH_THREAT_CUE_SIZE,
-  touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from './touch-cue-layout.ts';
+import { diveWarningTarget, findAegisTouchCueRects, findTouchCueRect, firstTouchOcclusionCue, screenPointObscured, touchControlOcclusionRect,
+  touchCueScreenReference, touchThreatCuePlacement, TOUCH_THREAT_CUE_SIZE } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -46,10 +49,10 @@ import { BEACON_SIGNAL_SECONDS, isLandmarkId } from './reach.ts';
 import { rosterThreatMessage } from './roster-hud.ts';
 import { primeRosterSheet, rosterSubject } from './roster-sheet.ts';
 import { renderRunSummary } from './run-summary-display.ts';
-import { FlightScene } from './scene.ts';
+import { FlightScene, OVERHEAD_EFFECT_PLANE_ALTITUDE } from './scene.ts';
 import { sortieVfxMode } from './sortie-vfx.ts';
 import { activeAce, bossTick, endTick, parseStageOptions, stepStage } from './stage.ts';
-import { clamp, inBand, STEP,
+import { clamp, inBand, MAX_ALTITUDE, STEP,
   TICKS_PER_SECOND, WIPE_DURATION } from './stage-combat.ts';
 import type { AceTell, ChestReward, DraftId, Effect, ManeuverKind, Outcome, StageInput } from './stage-types.ts';
 import { World } from './world.ts';
@@ -79,8 +82,11 @@ const billCount = $('#bill-count');
 const checkpointPrompt = $('#checkpoint-prompt');
 const touchControls = $('#touch-controls');
 const touchThreatCue = $('#touch-threat-cue');
-let touchAegisCueSlot: Rect | null = null;
+const aegisVolumeCue = $('#aegis-volume-cue');
+const aegisVolumeInner = $('#aegis-volume-cue-inner');
+let aegisCueSlot: Rect | null = null;
 let touchThreatCueSlot: Rect | null = null;
+let soloThreatCueSlot: Rect | null = null;
 const touchPause = $<HTMLButtonElement>('#touch-pause');
 const audioToggle = $<HTMLButtonElement>('#audio-toggle');
 const audioVolume = $<HTMLInputElement>('#audio-volume');
@@ -325,6 +331,20 @@ function setText(selector: string, copy: string): void {
   if (node.textContent !== copy) node.textContent = copy;
 }
 
+function aegisBoundText(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+}
+
+function updateAegisVolumeLabels(): void {
+  const halfWidth = CLOSE_EVOLUTIONS.aegis.halfWidth;
+  const inner = aegisBoundText(AEGIS_INNER_RADIUS), outer = aegisBoundText(AEGIS_OUTER_RADIUS);
+  const half = aegisBoundText(halfWidth);
+  aegisVolumeInner.setAttribute('r', String(14 * AEGIS_INNER_RADIUS / AEGIS_OUTER_RADIUS));
+  setText('#aegis-volume-cue-radial', t('hud.aegisRadial', { inner, outer }));
+  setText('#aegis-volume-cue-altitude', t('hud.aegisAltitude', { half }));
+  aegisVolumeCue.setAttribute('aria-label', t('hud.aegisBounds', { inner, outer, half }));
+}
+
 function readPilot(): Profile {
   try {
     return normalizeProfile(JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null'));
@@ -392,6 +412,7 @@ function applyLanguage(): void {
     if (el.dataset.label) el.setAttribute('aria-label', t(el.dataset.label as MessageKey));
     if (el.dataset.tooltip) el.title = t(el.dataset.tooltip as MessageKey);
   });
+  updateAegisVolumeLabels();
   setText('#guide-boss-copy', state.run ? `${t('guide.sortieTiming', sortieTiming)} ${t('guide.bossHint')}` : t('guide.bossHint'));
   for (const button of languageButtons) button.setAttribute('aria-pressed', String(button.dataset.lang === language));
   refreshAudioControl();
@@ -450,8 +471,11 @@ function layoutFlight(): void {
   layoutView = state.view;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
   const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE) : [];
-  touchAegisCueSlot = cueSlots[0] ?? null;
+  aegisCueSlot = cueSlots[0] ?? null;
   touchThreatCueSlot = cueSlots[1] ?? null;
+  soloThreatCueSlot = phone ? findTouchCueRect(phone, TOUCH_THREAT_CUE_SIZE) : null;
+  if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
+  aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
   for (const key of ['hud', 'boss', 'radio', 'objective', 'radar', 'alt'] as const) setRect(key, hud[key]);
   if (phone) {
@@ -464,7 +488,7 @@ function layoutFlight(): void {
     if (cockpit.help) setRect('cockpit-help', cockpit.help);
     root.style.setProperty('--maneuver-center-y', `${Math.round(cockpit.aiming.y + cockpit.aiming.height * 0.42)}px`);
   }
-  cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t);
+  cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t, !!state.run);
   feedback.resize(innerWidth, innerHeight, phone, cockpit);
   radar.width = Math.max(1, hud.radar.width);
   radar.height = Math.max(1, hud.radar.height);
@@ -486,6 +510,28 @@ function layoutFlight(): void {
   root.classList.toggle('phone-portrait', phone?.orientation === 'portrait');
   root.classList.toggle('phone-landscape', phone?.orientation === 'landscape');
   dirty = true;
+}
+
+function aegisOutlineObscured(): boolean {
+  if (!phone || !scene) return false;
+  const viewport = { width: innerWidth, height: innerHeight };
+  const controls = touchControlOcclusionRect(phone, viewport);
+  const obstacles: Rect[] = [phone.hud, phone.boss, phone.radio, phone.objective, phone.radar, phone.alt, controls];
+  if (phone.dashboard) obstacles.push(phone.dashboard);
+  const aircraft = scene.projectAirframe(state, 'player');
+  if (aircraft && Number.isFinite(aircraft.radius)) {
+    const radius = aircraft.radius + 3;
+    obstacles.push({ x: aircraft.x - radius, y: aircraft.y - radius, width: radius * 2, height: radius * 2 });
+  }
+  const point = { x: 0, z: 0, alt: 0 }, projected = { x: 0, y: 0, depth: 0 };
+  for (const offset of AEGIS_VOLUME_CUE_OFFSETS) {
+    point.x = state.player.x + offset.x;
+    point.z = state.player.z + offset.z;
+    point.alt = aegisOutlineAltitude(state.view, state.player.altitude, offset.alt, OVERHEAD_EFFECT_PLANE_ALTITUDE);
+    scene.projectContact(point, projected);
+    if (screenPointObscured(projected, viewport, obstacles)) return true;
+  }
+  return false;
 }
 
 function layoutSortieHud(): void {
@@ -559,7 +605,7 @@ function objectiveText(): string {
     if (!state.run && state.tick < 40 * TICKS_PER_SECOND) return t('objective.reach');
     return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
   }
-  return t(ace.entry ? 'objective.aceInbound' : 'objective.aceFight') + navigation;
+  return t(ace.entry ? 'objective.aceInbound' : state.run ? 'objective.aceFightSurvivors' : 'objective.aceFight') + navigation;
 }
 
 function drawPortrait(hostile: boolean): void {
@@ -596,6 +642,16 @@ function updateRadio(): void {
 
 function updateHud(readout: RadarReadout): void {
   updateBillDisplay(state, t);
+  aegisVolumeCue.hidden = !shouldShowAegisCue({
+    view: state.view,
+    touch,
+    hasSlot: !!(phone && aegisCueSlot),
+    hasEvolution: !!state.run?.evolutions.pods,
+    phase: state.phase,
+    paused: state.paused,
+    outlineObscured: !!(touch && phone && aegisCueSlot && state.run?.evolutions.pods
+      && state.phase === 'playing' && !state.paused && aegisOutlineObscured()),
+  });
   sortieStrip.hidden = !state.run;
   billCount.hidden = !state.run;
   if (state.run) {
@@ -700,7 +756,10 @@ function updateManeuverCue(): void {
   const heading = String((degrees % 360 + 360) % 360).padStart(3, '0');
   const delta = Math.round((trail.actualExit ?? trail.exitAltitude) - trail.points[0].alt);
   const height = `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} m`;
-  const limit = trail.limited ? t(kind === 'immelmann' ? 'maneuver.highLimit' : 'maneuver.lowLimit')
+  const limitKey = kind === 'immelmann'
+    ? state.run ? 'maneuver.highLimitSurvivors' : 'maneuver.highLimit'
+    : state.run ? 'maneuver.lowLimitSurvivors' : 'maneuver.lowLimit';
+  const limit = trail.limited ? t(limitKey)
     : trail.actualExit !== undefined && Math.abs(trail.actualExit - trail.exitAltitude) >= 1 ? t('maneuver.terrainLimit') : '';
   const ahead = state.enemies.filter(enemy => formerPursuer(state, trail, enemy)).length;
   const details = t(pendingFlip ? 'maneuver.exitHeading' : 'maneuver.heading', { heading }) + (loop ? ` · ${height}` : '')
@@ -724,7 +783,11 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
-  const diveWarnings = descendingDiveWarnings(state.enemies, p);
+  const diveTargets = state.enemies
+    .filter(enemy => Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125)
+    .sort((a, b) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(p.x - b.x, p.z - b.z))
+    .map(enemy => diveWarningTarget(enemy, BANDS))
+    .filter(target => target !== null);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -741,29 +804,29 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     } else message = top ? 'hud.interceptor' : down ? 'hud.interceptorDive' : 'hud.interceptorClimb';
   } else if (mine) message = 'hud.mineWarning';
   else if (top && state.altitudeHint) message = 'hud.checkAlt';
-  else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = 'cockpit.altLow';
+  else if (warnings.terrain === 'altLow' && !state.altitudeHint) message = state.run ? 'cockpit.terrainWarning' : 'cockpit.altLow';
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  if (diveWarnings.length && touch && phone && scene && touchThreatCueSlot
+  const threatCue = touchThreatCuePlacement({ aegis: aegisCueSlot, threat: touchThreatCueSlot, solo: soloThreatCueSlot },
+    !aegisVolumeCue.hidden);
+  if (diveTargets.length && touch && phone && scene && threatCue.slot
     && state.phase === 'playing' && !state.paused) {
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
     const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
-    const reserved = touchAegisCueSlot ? [touchAegisCueSlot] : [];
     const reference = touchCueScreenReference(projectedPlayer, phone);
-    for (const diveWarning of diveWarnings) {
-      const diveBand = diveWarning.maneuver?.band;
-      if (diveBand === undefined) continue;
-      scene.projectContact({ x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] }, projectedTarget);
-      if (projectedTarget.depth <= 0.05) continue;
-      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
-      if (cue) {
-        setRect('touch-threat-cue', cue.rect);
-        touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
-        touchThreatCue.hidden = false;
-        break;
-      }
+    const targets = [];
+    for (const target of diveTargets) {
+      scene.projectContact(target, projectedTarget);
+      if (projectedTarget.depth > 0.05) targets.push({ x: projectedTarget.x, y: projectedTarget.y });
+    }
+    const cue = firstTouchOcclusionCue(phone, reference, targets, TOUCH_THREAT_CUE_SIZE,
+      8, occlusion, threatCue.reserved, threatCue.slot);
+    if (cue) {
+      setRect('touch-threat-cue', cue.rect);
+      touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
+      touchThreatCue.hidden = false;
     }
   }
   const tag = $('#view-tag');
@@ -1432,9 +1495,12 @@ function updateRearDangerCue(readout: RadarReadout, reversalReady: boolean): voi
     const altitude = { Above: '↑', Level: '=', Below: '↓' }[threat.height];
     position = bearing + altitude;
     description += ` · ${t(`hud.rear${threat.side}`)} ${t(`hud.rear${threat.height}`)}`;
-    const kind = (['j-turn', 'immelmann', 'split-s'] as const)
-      .find(kind => canManeuver(state, kind) && inBand(threat.alt,
-        exitAltitude(state.player.altitude, kind, ground(state.player.x, state.player.z), !!state.player.skim)));
+    const kind = (['j-turn', 'immelmann', 'split-s'] as const).find(kind => {
+      if (!canManeuver(state, kind)) return false;
+      const exit = exitAltitude(state.player.altitude, kind, ground(state.player.x, state.player.z), !!state.player.skim,
+        !!state.run, MAX_ALTITUDE * (state.run ? 1.5 : 1));
+      return inBand(threat.alt, exit);
+    });
     const seconds = Math.ceil((state.maneuverReadyAt - state.tick) / TICKS_PER_SECOND);
     if (kind) {
       const direction = kind === 'immelmann' ? '↑' : kind === 'split-s' ? '↓' : threat.lateral < 0 ? '←' : '→';

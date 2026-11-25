@@ -4,6 +4,7 @@ import { buffTuning, hitWindow, weaponCooldown, weaponDamage } from './loadout.t
 import { activeAce, aceVulnerable, clamp, HIT_WINDOW, hurtAce, hurtEnemy, inBand, projectileRoom, rearWeaponCredit, STEP,
   TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Ace, Enemy, Ground, Position, StageState } from './stage-types.ts';
+import { distanceSquared3d, pointSegmentDistanceSquared3d } from './spatial.ts';
 
 type WakePoint = StageState['ionWake'][number];
 type WakeSegment = { tail: WakePoint; head: WakePoint };
@@ -19,16 +20,18 @@ function wakeSegments(trail: StageState['ionWake']): WakeSegment[][] {
   return segments;
 }
 
-function crossesWake(trail: WakeSegment[], target: Position, width: number, window: number, plasma: boolean,
-  altitudeIndependent = false): boolean {
+function crossesWake(trail: WakeSegment[], target: Position, width: number, window: number, plasma: boolean, continuous: boolean): boolean {
   for (let i = trail.length - 1; i >= 0; i--) {
     const { tail, head } = trail[i];
-    if (!altitudeIndependent
-      && (target.alt < Math.min(tail.alt, head.alt) - window || target.alt > Math.max(tail.alt, head.alt) + window)) continue;
+    if (continuous) {
+      if (pointSegmentDistanceSquared3d(target, tail, head) <= width * width) return true;
+      continue;
+    }
+    if (target.alt < Math.min(tail.alt, head.alt) - window || target.alt > Math.max(tail.alt, head.alt) + window) continue;
     const dx = head.x - tail.x, dz = head.z - tail.z;
     const lengthSquared = dx * dx + dz * dz;
     const along = lengthSquared ? clamp(((target.x - tail.x) * dx + (target.z - tail.z) * dz) / lengthSquared, 0, 1) : 0;
-    if (!altitudeIndependent && plasma && !inBand(target.alt, tail.alt + (head.alt - tail.alt) * along, window)) continue;
+    if (plasma && !inBand(target.alt, tail.alt + (head.alt - tail.alt) * along, window)) continue;
     if ((target.x - tail.x - dx * along) ** 2 + (target.z - tail.z - dz * along) ** 2 <= width * width) return true;
   }
   return false;
@@ -59,7 +62,8 @@ function advanceWake(state: StageState, level: number): void {
   const next = state.tick + weaponCooldown(state, 'ion', plasma ? evolved.hitCooldownTicks : tuning.hitCooldownTicks);
   const hitLanes = (target: Enemy | Ace) => {
     for (let lane = 0; lane < segments.length && target.hp > 0; lane++) {
-      if (state.tick < (target.ionReadyAt?.[lane] ?? 0) || !crossesWake(segments[lane], target, width, window, plasma)) continue;
+      if (state.tick < (target.ionReadyAt?.[lane] ?? 0)
+        || !crossesWake(segments[lane], target, width, window, plasma, !!state.run)) continue;
       if (target.kind === 'ace') hurtAce(state, target, damage, 'ion');
       else hurtEnemy(state, target, damage, { weapon: 'ion' });
       (target.ionReadyAt ??= [0, 0, 0])[lane] = next;
@@ -71,16 +75,10 @@ function advanceWake(state: StageState, level: number): void {
   const ace = activeAce(state);
   if (ace && aceVulnerable(ace)) hitLanes(ace);
   if (level >= tuning.salvageAt) {
-    if (!state.run) {
-      const pickupWindow = HIT_WINDOW + (buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
-      for (const pickup of state.pickups) {
-        if (inBand(p.altitude, pickup.alt, pickupWindow)
-          && segments.some(lane => crossesWake(lane, pickup, width, pickupWindow, plasma))) pickup.pulling = true;
-      }
-    } else {
-      for (const pickup of state.pickups) {
-        if (pickup.kind !== 'magnet' && segments.some(lane => crossesWake(lane, pickup, width, HIT_WINDOW, plasma, true))) pickup.pulling = true;
-      }
+    const pickupWindow = HIT_WINDOW + (state.run ? 0 : buffTuning(state, 'magnet-core')?.extraWindow ?? 0);
+    for (const pickup of state.pickups) {
+      if (pickup.kind !== 'magnet' && inBand(p.altitude, pickup.alt, pickupWindow)
+        && segments.some(lane => crossesWake(lane, pickup, width, pickupWindow, plasma, !!state.run))) pickup.pulling = true;
     }
   }
 }
@@ -109,8 +107,8 @@ function advanceDrones(state: StageState, level: number): void {
     let target: (Position & { id: number }) | null = null;
     let best: number = tuning.fireRange;
     for (const enemy of state.enemies) {
-      if (!enemy.hp || enemy.entry || !inBand(drone.alt, enemy.alt, window)) continue;
-      const range = Math.hypot(drone.x - enemy.x, drone.z - enemy.z);
+      if (!enemy.hp || enemy.entry || (!state.run && !inBand(drone.alt, enemy.alt, window))) continue;
+      const range = state.run ? Math.sqrt(distanceSquared3d(drone, enemy)) : Math.hypot(drone.x - enemy.x, drone.z - enemy.z);
       if (range <= tuning.hitRadius && state.tick >= (enemy.droneReadyAt ?? 0)) {
         hurtEnemy(state, enemy, damage, { weapon: 'drones' });
         enemy.droneReadyAt = next;
@@ -120,8 +118,8 @@ function advanceDrones(state: StageState, level: number): void {
         target = enemy;
       }
     }
-    if (ace && aceVulnerable(ace) && inBand(drone.alt, ace.alt, window)) {
-      const range = Math.hypot(drone.x - ace.x, drone.z - ace.z);
+    if (ace && aceVulnerable(ace) && (state.run || inBand(drone.alt, ace.alt, window))) {
+      const range = state.run ? Math.sqrt(distanceSquared3d(drone, ace)) : Math.hypot(drone.x - ace.x, drone.z - ace.z);
       if (range <= tuning.hitRadius && state.tick >= (ace.droneReadyAt ?? 0)) {
         hurtAce(state, ace, damage, 'drones');
         ace.droneReadyAt = next;
@@ -130,9 +128,15 @@ function advanceDrones(state: StageState, level: number): void {
     }
     if (target && shotRoom) {
       const bearing = Math.atan2(target.x - drone.x, target.z - drone.z);
+      const dx = target.x - drone.x, dz = target.z - drone.z, dy = target.alt - drone.alt;
+      const distance = Math.hypot(dx, dy, dz);
+      const horizontalSpeed = state.run && distance > 0 ? tuning.fireSpeed / distance : tuning.fireSpeed;
       state.shots.push({
         x: drone.x, z: drone.z, alt: drone.alt, kind: 'drone-bolt', weapon: 'drones',
-        vx: Math.sin(bearing) * tuning.fireSpeed, vz: Math.cos(bearing) * tuning.fireSpeed, life: tuning.fireRange / tuning.fireSpeed,
+        vx: state.run ? dx * horizontalSpeed : Math.sin(bearing) * tuning.fireSpeed,
+        vz: state.run ? dz * horizontalSpeed : Math.cos(bearing) * tuning.fireSpeed,
+        ...(state.run && distance > 0 && dy ? { vy: dy * horizontalSpeed } : {}),
+        life: tuning.fireRange / tuning.fireSpeed,
         damage: weaponDamage(state, 'drones', tuning.fireDamage), volley: ++state.nextVolley,
         nearMiss: false, lockId: target.id === ace?.id ? target.id : null,
       });
@@ -191,9 +195,11 @@ function advanceAegis(state: StageState): void {
   const tuning = CLOSE_EVOLUTIONS.aegis, p = state.player;
   const damage = weaponDamage(state, 'pods', tuning.damage);
   const next = state.tick + weaponCooldown(state, 'pods', tuning.hitCooldownTicks);
-  const colliding = (target: Position, window: number): boolean =>
-    inBand(p.altitude, target.alt, window)
-    && Math.abs(Math.hypot(target.x - p.x, target.z - p.z) - tuning.radius) <= tuning.halfWidth;
+  const colliding = (target: Position, window: number): boolean => state.run
+    ? Math.abs(Math.hypot(target.x - p.x, target.z - p.z) - tuning.radius) <= tuning.halfWidth
+      && Math.abs(target.alt - p.altitude) <= tuning.halfWidth
+    : inBand(p.altitude, target.alt, window)
+      && Math.abs(Math.hypot(target.x - p.x, target.z - p.z) - tuning.radius) <= tuning.halfWidth;
   const window = hitWindow(state);
   for (const enemy of state.enemies) {
     if (!enemy.hp || enemy.entry || state.tick < (enemy.aegisReadyAt ?? 0) || !colliding(enemy, window)) continue;

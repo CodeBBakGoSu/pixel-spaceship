@@ -550,10 +550,10 @@ function warningCellBounds(r: Rect, index: number): Rect {
   return { x, y: r.y, width: r.x + Math.round(r.width * (index + 1) / 4) - x - 2, height: r.height };
 }
 
-function warningCells(layout: CockpitLayout, t: Translate, font: string): WarningCell[] {
+function warningCells(layout: CockpitLayout, t: Translate, font: string, survivors: boolean): WarningCell[] {
   const r = layout.warnings, { compact, panelScale } = layout;
   const names = [t(compact ? 'cockpit.cautionShort' : 'cockpit.masterCaution'),
-    t('cockpit.altLow'), t('control.boost')];
+    t(survivors ? 'cockpit.terrainWarning' : 'cockpit.altLow'), t('control.boost')];
   return names.map((label, i) => {
     const area = warningCellBounds(r, i), { x, width } = area;
     const variant = (caption: string, active: boolean, useAmber: boolean, bright: boolean) => plate(area, c => {
@@ -693,6 +693,7 @@ export class CockpitDisplay {
   private readonly markerLabels = Array.from({ length: 8 }, (): Rect => ({ x: 0, y: 0, width: 0, height: 0 }));
   private layout: CockpitLayout | null = null;
   private language: Language | null = null;
+  private survivors = false;
   private key = '';
   private labels!: GlassLabels;
   private ladder: CockpitLineRaster | null = null;
@@ -734,11 +735,12 @@ export class CockpitDisplay {
     }
   }
 
-  resize(layout: CockpitLayout | null, width: number, height: number, language: Language, t: Translate): void {
+  resize(layout: CockpitLayout | null, width: number, height: number, language: Language, t: Translate, survivors = false): void {
     this.layout = layout;
+    this.survivors = survivors;
     this.host.hidden = !layout;
     if (!layout) return;
-    const key = cockpitCacheKey(layout, width, height, language);
+    const key = cockpitCacheKey(layout, width, height, language, survivors);
     if (key === this.key) return;
     this.key = key;
     this.language = language;
@@ -774,7 +776,7 @@ export class CockpitDisplay {
       boostPrefix: row.stacked ? '' : `${t('hud.boostLabel')} `,
       speed: new Map(), boost: new Map(),
     };
-    this.caution = warningCells(layout, t, this.font);
+    this.caution = warningCells(layout, t, this.font, survivors);
     this.health = warningCellBounds(layout.warnings, 3);
     this.weapons.clear();
     this.stores.clear();
@@ -803,7 +805,10 @@ export class CockpitDisplay {
     mirror: Readonly<Rect> | null, trackAltitude: number | undefined, language: Language, t: Translate): void {
     const layout = this.layout;
     if (!layout) return;
-    if (language !== this.language) this.resize(layout, this.frame.width, this.frame.height, language, t);
+    const survivors = !!state.run;
+    if (language !== this.language || survivors !== this.survivors) {
+      this.resize(layout, this.frame.width, this.frame.height, language, t, survivors);
+    }
     const elapsed = state.tick / TICKS_PER_SECOND;
     const warnings = cockpitWarnings(state, clearance, motion.climb, this.warnings);
     this.drawGlass(layout, aim, marks, state, motion, markers, markerObstructions, trackAltitude);
@@ -838,7 +843,8 @@ export class CockpitDisplay {
     clearZone(c, speed);
     drawTape(c, speed, motion.speed, false, compact, this.labels);
     clearZone(c, altitude);
-    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude, playerBand(state.player));
+    drawTape(c, altitude, state.player.altitude, true, compact, this.labels, targetAltitude,
+      state.run ? undefined : playerBand(state.player));
 
     const g = Math.round((1 + 0.47 * Math.abs(motion.turn) + 0.013 * Math.abs(motion.climb)) * 10), y = bottom(speed) + 4;
     if (g !== this.lastG && aiming.height > 35 && y + 15 <= bottom(layout.glass)) {

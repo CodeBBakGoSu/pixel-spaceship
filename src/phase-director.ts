@@ -6,6 +6,7 @@ import type { Ground, StageState } from './stage-types.ts';
 import { WAVE_FLY_IN_TICKS } from './fly-in.ts';
 
 const S = TICKS_PER_SECOND;
+export const DIRECTOR_CLEAR_TICK = 540 * S;
 type Member = Parameters<typeof spawnWave>[1]['members'][number];
 const intros = [
   { at: 70, kinds: ['twin-chaser'], members: [{ kind: 'twin-chaser', band: 1, bearing: 180, range: scaleTravel(104) }] },
@@ -20,7 +21,8 @@ const intros = [
 function spawn(state: StageState, ground: Ground, id: string, members: Member[], leaveAt?: number,
   introKinds: readonly string[] = []): boolean {
   const before = state.nextId;
-  spawnWave(state, { time: state.tick / S, members }, ground, rngStream(state.seed, `phase-director:${id}:${state.tick}`));
+  spawnWave(state, { time: state.tick / S, members: members.map(member => ({ ...member, bearing: member.bearing * Math.PI / 180 })) },
+    ground, rngStream(state.seed, `phase-director:${id}:${state.tick}`));
   const created = state.enemies.filter(enemy => enemy.id > before);
   const expected = members.length + members.filter(member => member.kind === 'crosswing').length;
   if (created.length !== expected) {
@@ -58,13 +60,13 @@ export function advancePhaseDirector(state: StageState, ground: Ground): boolean
     sixTellUntil: 0, sixCrosswingStarted: false, sixTwinStarted: false,
   };
   state.enemies = state.enemies.filter(enemy => enemy.leaveAt === undefined || state.tick < enemy.leaveAt);
-  if (state.tick >= 540 * S) {
+  if (state.tick >= DIRECTOR_CLEAR_TICK) {
     for (const enemy of state.enemies) enemy.hp = 0;
     return true;
   }
   if (state.tick >= 480 * S) {
     for (const enemy of state.enemies) {
-      enemy.leaveAt = 540 * S;
+      enemy.leaveAt = DIRECTOR_CLEAR_TICK;
       enemy.escortClearYaw ??= enemy.yaw + (enemy.id % 2 ? 1 : -1) * 0.65;
     }
     return true;
