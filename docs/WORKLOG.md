@@ -24,6 +24,53 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review dive Twin collision fix; 26016f1)
+- Reproduced the ordinary non-piercing dive Twin hull-edge miss before the fix. Ordinary dive segments now use the shared 3D sortie-boss contact helper; the piercing path bypasses the narrow strafe-band prefilter for dedicated bosses, keeping both paths on the same hull.
+- The targeted ordinary/piercing dive regression passed 1/1; final focused tests passed 40/40, `npm test` 653/653, and `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory). No HP/firepower changes or balance sweep. Root fixes are separate commits `75f977a` and `26016f1`; push pending.
+
+### 2026-11-25 01:12 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review boundary fix; 75f977a)
+- Reproduced outside-to-inside arena projections (miniboss actor 343.299 units, Ace 107 units). Re-entry tests now assert under-10-unit movement for the miniboss, both escorts and Ace; natural in-arena bounds remain covered. Ace tests explicitly distinguish predicted Twin geometry windows from actual fire ticks, projectiles and hits.
+- Combined follow-up tree verification: focused Ace/miniboss/strafe/replay tests 40/40; `npm test` 653/653; `npm run build` passed (122 modules, 4.54s; Vite chunk-size advisory); `git diff --check` clean. HP/firepower unchanged; no balance sweep. Boundary fix is committed; the separate dive Twin collision fix and follow-up push are pending.
+
+### 2026-11-25 00:27 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (replay golden follow-up; f884192)
+- The full suite exposed one Survivors replay-hash mismatch after the reviewed transport/collision changes (`c22dfa...` → `52ac4c...`); updated only the gameplay golden, with the legacy hash retained. Focused `tests/s7f-replay.test.mjs` passed 2/2; final `npm test` passed 649/649.
+- `npm run build` passed (122 modules, 4.43s; Vite reported its >500 kB chunk advisory); source did not change after that build. `git diff --check` is clean. No balance simulation or visual/UI check. All fixes are local; push and CI verification pending.
+
+### 2026-11-25 00:26 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0005; 4b1b5ec)
+- `advancePiercingShot` used the ordinary 6-unit hit radius while non-piercing miniboss shots used the 3D sortie-boss sphere. A shared contact helper now applies the same sphere in both paths and bypasses the smaller altitude prefilter for dedicated bosses.
+- Changed the existing ordinary-shot test and added a piercing Twin edge-hit regression at a 10-unit offset; `tests/sortie-bosses.test.mjs` passed 14/14 and `git diff --check` is clean. No balance values changed.
+
+### 2026-11-25 00:24 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0004; 8259201)
+- Replayed seed 1 through the 205s cue with `autopilotInput`, then held the natural player course straight without moving the actor; baseline entered a `line` state at 214s but sustained actual Twin range/cone/same-altitude geometry for only 110 ticks, not 3 seconds. The UI note's “no line” state-label detail was not reproduced; the firing opportunity gap was.
+- Transport turn now steers to a player-local forward rejoin point and enters `line` only when Twin range/cone/altitude geometry is valid. `tests/sortie-bosses.test.mjs` passed 13/13, including the natural seed-1 flight; `git diff --check` is clean. HP/firepower unchanged.
+
+### 2026-11-25 00:22 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0003; eab27c6)
+- Reproduced seed 1 at the 205s cue with the pilot outside (x=2393, edge=1792): the transport spawned clipped near x=1653, 765 units from the pilot. `arenaPosition` now preserves player-local coordinates outside the arena and retains the existing in-arena clamp.
+- Added an external-pilot spawn regression; `tests/sortie-bosses.test.mjs` passed 12/12 and `git diff --check` was clean. No balance values changed; finding 0004 remained in progress.
+
+### 2026-11-25 00:20 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0002; 406c2bd)
+- Reproduced an outside-arena pilot (x=2392, arena edge=1792): after ten seconds of approach Ace remained at x=1761 with 631-unit separation because the rejoin target was clamped back inside. Approach now clamps only while the pilot is in-arena; existing in-arena bound coverage is retained.
+- Added the external-pilot regression; Ace/reengagement/checkpoint regressions passed 50/50 and `git diff --check` was clean. No balance values changed; findings 0004–0005 remained in progress.
+
+### 2026-11-25 00:18 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (review fix 0001; 866deba)
+- Reproduced a far transport receiving a generic fly-in entry after 156 far ticks; `advanceEnemies` skipped the sortieBoss entry for 240 ticks and `hurtEnemy` left HP unchanged. `relocateStragglers` now skips dedicated sortie-boss actors.
+- Added a regression asserting far-actor recycling cannot leave the boss invulnerable; `tests/sortie-bosses.test.mjs` passed 11/11 and `git diff --check` was clean. No balance values changed; remaining review findings are still in progress.
+
+### 2026-11-25 00:05 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; implementation commit `587683981def20f8554a2aa9df0a7321de35c581`)
+- Tightened Ace acceptance from natural 8:00 spawn: a real player twin trajectory reaches the Ace hull within five seconds, four first-minute windows sustain at least three seconds, and 9:00+ cadence is observed. The probe uses live range/cone/muzzle/lead/bolt-life/hull geometry on a forecast clone without damage or actor relocation; trimmed unused spatial exports while retaining used helper signatures.
+- Verification: Ace reengagement 6/6; `npm test` 644/644; `npm run build` `✓ 122 modules transformed.` / `✓ built in 2.00s` (source unchanged after build); `git diff --check` clean. No balance simulation or visual/UI check.
+- State: tests verified; implementation commit `587683981def20f8554a2aa9df0a7321de35c581` recorded by this log-only follow-up; push pending.
+
+### 2026-11-24 23:32 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+- Review fixes: natural Ace player-hit opportunity and 12s→10s reengagement windows; arena bounds apply while the pilot is inside the arena, with terrain/ceiling checks. Added damageable escorts, repeating commander cross/recovery, rising-ground altitude guard, and consumed 3:35/6:45 swarms. Existing HP/firepower values are unchanged; Survivors replay golden updated.
+- Read-only PR #12 contract alignment: consume exact `midboss` cue shape, send `defeated`/`escaped` completion at the actual tick, and spend threat with `{tick,source,points,bearing}`; only miniboss kills call the pickup hook with observation events. Tests exercise replaceable hooks; shared producer runtime remains separate.
+- Verification: focused 40/40; `npm test` 645/645; `npm run build` `✓ 122 modules transformed.` / `✓ built in 3.25s`. No balance simulation or visual check. State: review pending; no commit or push.
+
+### 2026-11-24 22:19 KST · 데븐 봇 · devin/1795525246-sortie-minibosses (based on `09e2890`; working tree)
+- Implemented the 205/400-second replacement minibosses with existing evolution-carrier hull/reward behavior and adapters for `consumeMidbossCue`, `finishMidbossEncounter`, `trySpendThreat`, and `dropMagnet`; routed Ace attacks through the same threat hook and added reengagement with an actual first gun line and 12s→10s cadence.
+- Added deterministic coverage for cue contracts, trajectories/collision, kill versus retreat, one-time rewards, reengagement windows, threat denial, and deadline damage. `npm test` passed 640/640; `npm run build` passed (122 modules, 3.55 s). No balance simulation or visual check was run.
+- State: done; review pending, no commit or push.
+
 ### 2026-11-24 21:47 KST · 기획 봇 · devin/1795524446-approved-sortie-plan (기준 `2d543dd`)
 - [10분 출격 승인본](wiki/SORTIE_10MIN.md)과 [검수 기준](wiki/SORTIE_10MIN.md#acceptance)을 위키·기획서에 연결했다.
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.

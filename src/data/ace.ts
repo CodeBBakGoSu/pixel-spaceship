@@ -11,6 +11,11 @@ export const ACE = {
     verticalScale: 0.8, pitchScale: 0.46, bandStepDelay: 90,
   },
   attack: { startDelay: 82, range: scaleTravel(156), cone: 0.58, leadSeconds: 0.34, bandWindow: 11 },
+  reengagement: {
+    cadenceSeconds: 12, lateCadenceSeconds: 10, lateAtSeconds: 9 * 60,
+    evadeSeconds: 1.5, approachSeconds: 3.6, lineSeconds: 3.5, lineDistance: scaleTravel(90), sideStep: scaleTravel(78),
+    turnRate: 1.8, matchAcceleration: scaleTravel(45),
+  },
   lock: { dodgeTicks: 18, releaseCone: 0.85 },
   gun: { warningTicks: 33, speedScale: 1.58 },
   missile: { warningTicks: 52, speedScale: 1.46, turnRate: 0.76, life: 2.45 },
