@@ -219,7 +219,7 @@ const keys = new Set<string>();
 const flightChord = new FlightChord();
 const steeringKeys = new Set(['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 let touch = false, phone: PhoneLayout | null = null, cockpit: CockpitLayout | null = null;
-let hud: HudLayout, layoutView: Segment | null = null;
+let hud: HudLayout, layoutView: Segment | null = null, layoutAegis = false, sharedCueSlot = false;
 let safe: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 let guide: 'launch' | 'help' | null = null;
 let guideOpener: HTMLElement | null = null;
@@ -466,12 +466,18 @@ function setRect(name: string, box: Rect): void {
   }
 }
 
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
 function layoutFlight(): void {
   layoutView = state.view;
+  layoutAegis = !!state.run?.evolutions.pods;
   phone = touch ? phoneLayout(innerWidth, innerHeight, safe, state.view, !!state.run) : null;
-  const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE) : [];
+  const cueSlots = phone ? findAegisTouchCueRects(phone, TOUCH_THREAT_CUE_SIZE, 1, [], layoutAegis) : [];
   aegisCueSlot = cueSlots[0] ?? null;
   touchThreatCueSlot = cueSlots[1] ?? null;
+  sharedCueSlot = !!(aegisCueSlot && touchThreatCueSlot && rectsOverlap(aegisCueSlot, touchThreatCueSlot));
   if (aegisCueSlot) setRect('aegis-volume-cue', aegisCueSlot);
   aegisVolumeCue.hidden = true;
   hud = phone ?? desktopLayout(innerWidth, innerHeight, safe);
@@ -649,7 +655,7 @@ function updateHud(readout: RadarReadout): void {
     paused: state.paused,
     outlineObscured: !!(touch && phone && aegisCueSlot && state.run?.evolutions.pods
       && state.phase === 'playing' && !state.paused && aegisOutlineObscured()),
-  });
+  }) || (sharedCueSlot && !touchThreatCue.hidden);
   sortieStrip.hidden = !state.run;
   billCount.hidden = !state.run;
   if (state.run) {
@@ -804,7 +810,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
     const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
-    const reserved = aegisCueSlot ? [aegisCueSlot] : [];
+    const reserved = aegisCueSlot && !sharedCueSlot ? [aegisCueSlot] : [];
     const reference = touchCueScreenReference(projectedPlayer, phone);
     for (const diveWarning of diveWarnings) {
       const diveBand = diveWarning.maneuver?.band;
@@ -816,6 +822,7 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
         setRect('touch-threat-cue', cue.rect);
         touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
         touchThreatCue.hidden = false;
+        if (sharedCueSlot) aegisVolumeCue.hidden = true;
         break;
       }
     }
@@ -1521,7 +1528,7 @@ function updateRearViewCue(readout: RadarReadout): void {
 }
 
 function render(now: number): boolean {
-  if (layoutView !== state.view) layoutFlight();
+  if (layoutView !== state.view || layoutAegis !== !!state.run?.evolutions.pods) layoutFlight();
   // The impact holds the scene and projected canopy instruments. The flight clock keeps ticking.
   const redrawFlight = graphics.recovering || now >= visualFreezeUntil || dirty || lastRenderCadenceTick < 0;
   const yaw = maneuverViewYaw(state);

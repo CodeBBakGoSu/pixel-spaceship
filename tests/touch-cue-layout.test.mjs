@@ -170,3 +170,16 @@ test('descending dive warnings include later nearby targets sorted by distance',
   const distant = { x: 126, z: 0, band: 1, maneuver: warning };
   assert.deepEqual(descendingDiveWarnings([far, climbing, distant, near], player), [near, far]);
 });
+
+test('compact Aegis slots keep the dive cue available on small phones', () => {
+  const slots = (width, height, aegis) => findAegisTouchCueRects(
+    phoneLayout(width, height, safe, 'chase', true), TOUCH_THREAT_CUE_SIZE, 1, [], aegis);
+  const [none, threatOnly] = slots(320, 568, false);
+  assert.equal(none, null);
+  assert.ok(threatOnly, '320x568 threat slot without Aegis');
+  for (const [width, height] of [[335, 800], [320, 568], [360, 667], [375, 667]]) {
+    const [aegis, threat] = slots(width, height, true);
+    assert.ok(threat, `${width}x${height} threat slot with Aegis`);
+    if (width >= 335) assert.equal(overlaps(aegis, threat), false);
+  }
+});

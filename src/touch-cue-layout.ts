@@ -72,14 +72,16 @@ export function findTouchCueRects(layout: TouchLayout, sizes: readonly CueSize[]
 }
 
 export function findAegisTouchCueRects(layout: TouchLayout, threatSize: CueSize = TOUCH_THREAT_CUE_SIZE,
-  gap = 1, reserved: readonly Rect[] = []): (Rect | null)[] {
-  let fallback: (Rect | null)[] = [null, null];
+  gap = 1, reserved: readonly Rect[] = [], aegis = true): (Rect | null)[] {
+  if (!aegis) return [null, findTouchCueRect(layout, threatSize, gap, reserved)];
+  let aegisOnly: (Rect | null)[] | null = null;
   for (const size of AEGIS_CUE_SIZE_OPTIONS) {
     const slots = findTouchCueRects(layout, [size, threatSize], gap, reserved);
-    fallback = slots;
-    if (slots[0]) return slots;
+    if (slots[0] && slots[1]) return slots;
+    aegisOnly ??= slots[0] ? slots : null;
   }
-  return fallback;
+  const threat = findTouchCueRect(layout, threatSize, gap, reserved);
+  return aegisOnly ? [aegisOnly[0], threat] : [null, threat];
 }
 
 export function descendingDiveWarnings<T extends {
