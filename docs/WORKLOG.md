@@ -25,7 +25,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 ## Log
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`457d16e`)
 - Removed the vertical hostile-projectile drop lines 기현님 flagged before merge, keeping the projectile head/trail glyphs and burst feedback unchanged; renderer budget notes and instancing tests now reflect the single glyph batch.
-- Verification: focused model/post tests 19/19, full tests 704/704, and build passed. Mobile emulation spot-checks show the dense/chase scenes without the vertical rods. State: ready for final browser evidence refresh; real-device verification remains unverified.
+- Verification: focused model/post tests 19/19, full tests 704/704, and build passed. Mobile emulation recording and screenshots show dense/chase scenes without the vertical rods while projectile heads/short trails remain visible. State: validation complete; review/merge pending. Real-device verification remains unverified.
 
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`09696ba`; validation on `c9e7fb8`)
 - Moved short-landscape flight warnings into the left lane and lowered rear-danger cues just above the controls so multiline missile warnings stay clear of the aircraft, objective, radar, and rear cue; the stress fixture keeps the 64-hostile-shot scene observable.
