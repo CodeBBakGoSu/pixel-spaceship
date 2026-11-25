@@ -73,8 +73,8 @@ export function createHostileFixture(state: StageState, query: URLSearchParams, 
       ace.hp = Math.floor(ace.maxHp / 4);
       ace.bank = 1.1;
       ace.boosting = true;
-      setAceTell(state, ace, 'missile', { x: p.x, z: p.z + 40, alt: p.altitude });
     }
+    if (cue === 'missile') setAceTell(state, state.boss, 'missile', { x: p.x, z: p.z + 40, alt: p.altitude });
     let regular = 0, gnats = 0, enemyShots = 0;
     for (const enemy of state.enemies) {
       if (enemy.kind === 'gnat') gnats++;
