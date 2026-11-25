@@ -243,7 +243,7 @@ export type Effect = Position & (
 // --- S7e lane ---
 export type AcePhase = 1 | 2 | 3;
 export type AceTell = Position & { kind: 'gun' | 'missile' | 'roll'; since: number; until: number;
-  dodgeGraceUntil?: number };
+  dodgeGraceUntil?: number; line?: true };
 export type AceReengagement = {
   phase: 'evade' | 'approach' | 'line';
   startedAt: number;

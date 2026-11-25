@@ -289,7 +289,8 @@ export function setAceTell(state: StageState, ace: Ace, kind: AceTell['kind'], t
     ace.attackAt = state.tick + THREAT_BUDGET.spacingTicks;
     return false;
   }
-  ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks };
+  ace.tell = { kind, ...target, since: state.tick, until: state.tick + ACE[kind].warningTicks,
+    ...(kind !== 'roll' && reengagementLineLock(state, ace) ? { line: true as const } : {}) };
   events?.tell?.(kind, ace.x, ace.z, ace.alt);
   return true;
 }
@@ -345,7 +346,7 @@ function lostAttackLock(state: StageState, ace: Ace, tell: AceTell): boolean {
   const { player: p, tick } = state;
   const dx = p.x - ace.x, dz = p.z - ace.z;
   if (!inBand(p.altitude, tell.alt, ACE.attack.bandWindow) || Math.hypot(dx, dz) > ACE.attack.range
-    || !reengagementLineLock(state, ace) && Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
+    || !tell.line && !reengagementLineLock(state, ace) && Math.abs(angleTo(ace.yaw, dx, dz)) > ACE.lock.releaseCone) return true;
   // Only an accepted maneuver's first tick counts, not its whole animation or a held input.
   const dodgeWindow = aceDodgeWindow(tell, tick)
     || tell.dodgeGraceUntil !== undefined && tick <= tell.dodgeGraceUntil;

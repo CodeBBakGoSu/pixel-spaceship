@@ -10,7 +10,7 @@ import { World } from '../src/world.ts';
 // Survivors seed-1 covers minute waves, minibosses, Ace reengagement and timed pickups on production terrain.
 const terminalHashes = {
   legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
-  survivors: 'ee2105e524b50d05a608a991ac322dc2e09a5451c83fa2b0e82c76cb8e198155',
+  survivors: 'dce1e8a9b1006d2e2eae684ee25304335e7e4c6f8518ab2547af446616a07fa8',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

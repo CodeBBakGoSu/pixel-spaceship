@@ -367,6 +367,30 @@ test('Ace firing lines keep target locks without requiring its nose to face back
   assert.ok(state.shots.some(shot => shot.kind === 'hostile'), 'the completed warning launches real hostile shots');
 });
 
+test('an Ace warning started on a firing line survives the line ending before launch', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  delete ace.entry;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 125 });
+  Object.assign(ace, {
+    x: 0, z: 150, alt: 125, yaw: 0, vx: 0, vz: CRUISE_SPEED,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'line', startedAt: state.tick, side: 1, lineStartedAt: state.tick, lineUntil: state.tick + 1 },
+  });
+  const fired = [];
+  const events = { aceTellFired: tell => fired.push(tell) };
+  advanceAce(state, ground, events, undefined, undefined, () => true);
+  const until = ace.tell.until;
+  while (state.tick < until) {
+    state.tick++;
+    Object.assign(player, { x: ace.x, z: ace.z - 150, alt: ace.alt, altitude: ace.alt, yaw: ace.yaw });
+    advanceAce(state, ground, events, undefined, undefined, () => true);
+  }
+  assert.equal(ace.reengagement?.phase, 'evade');
+  assert.equal(fired.length, 1, 'the line-started warning launches after the line closes');
+});
+
 test('Ace attack admission shares the threat hook and denial does not telegraph or advance the attack pattern', () => {
   const state = stage();
   const ace = state.boss;
