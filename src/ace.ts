@@ -2,6 +2,7 @@ import { ACE, ACE_PHASES } from './data/ace.ts';
 import { WEAPONS } from './data/items.ts';
 import { adjacentBand, bandAltitude, bandDistance, fixedBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import { SURVIVOR_BALANCE } from './data/run-balance.ts';
 import { ROLLS } from './data/roll.ts';
 import { WORLD_SITES, WORLD_TERRAIN } from './data/world.ts';
 import { ENEMY_KINDS } from './enemy-kinds.ts';
@@ -34,7 +35,8 @@ export function makeAce(state: StageState, x: number, z: number, ground?: Ground
   const band = playerBand(state.player);
   const alt = flightAltitude(band, ground?.(x, z) ?? WORLD_TERRAIN.seaLevel);
   const armor = state.run && HEAT_TIERS[state.heat].extraAceArmor ? ACE.hull.heatArmorScale : 1;
-  const hp = Math.round((state.run ? ACE.hull.survivors : ACE.hull.legacy) * armor);
+  const balance = state.run ? SURVIVOR_BALANCE.aceHullScale : 1;
+  const hp = Math.round((state.run ? ACE.hull.survivors : ACE.hull.legacy) * armor * balance);
   return {
     id: ++state.nextId, kind: 'ace', x, z, alt, yaw: Math.atan2(state.player.x - x, state.player.z - z),
     vx: 0, vz: 0, bank: 0, bankDrive: 0, bankDrop: 0, pitch: 0, hp, maxHp: hp, hits: 0, hitUntil: 0,

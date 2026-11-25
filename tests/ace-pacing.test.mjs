@@ -55,6 +55,13 @@ test('a distant pilot gets a local Ace intercept and cover after leaving the ori
   assert.ok(state.enemies.every(enemy => Math.hypot(enemy.x - ace.x, enemy.z - ace.z) < 130));
 });
 
+test('the Survivors Ace hull uses the tunable balance scale', () => {
+  const state = stage();
+  const expected = Math.round(ACE.hull.survivors * SURVIVOR_BALANCE.aceHullScale);
+  assert.equal(state.boss.hp, expected);
+  assert.equal(state.boss.maxHp, expected);
+});
+
 test('Ace health crosses both phase thresholds and only calls cover once', () => {
   const state = stage(), ace = state.boss;
   ace.tell = null;

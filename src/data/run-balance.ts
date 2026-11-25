@@ -17,6 +17,7 @@ export const SURVIVOR_XP_SCALE = 1.15;
 export const SURVIVOR_BALANCE = {
   aceProjectileSpeedScale: 1.5,
   aceProjectileDamageScale: 1,
+  aceHullScale: 1,
   openingRegularHpScale: 1.5,
 } as const;
 export const PHASE_REPAIR_HULL = 2;
