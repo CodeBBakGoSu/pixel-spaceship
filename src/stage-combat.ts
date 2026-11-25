@@ -214,8 +214,9 @@ export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern
     const shot: Shot = {
       kind: 'hostile', x: ace.x, z: ace.z, alt: ace.alt,
       vx: Math.sin(yaw + offset) * speed, vz: Math.cos(yaw + offset) * speed,
-      damage: 2, life: guided ? ACE.missile.life : HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
-      ...(guided ? { hostileKind: 'ace-missile' } : {}),
+      damage: (state.run ? SURVIVOR_PLAYER_DAMAGE * SURVIVOR_BALANCE.aceProjectileDamageScale : 2),
+      life: guided ? ACE.missile.life : HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
+      hostileKind: guided ? 'ace-missile' : 'ace-gun',
     };
     state.shots.push(shot);
     events?.muzzle?.(shot, guided ? 'diamond' : 'needle', ace.x, ace.z, ace.alt);
@@ -1083,7 +1084,11 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
             // Use a point back along the trajectory even when the previous pose is already inside the hit radius.
             const travel = 12;
             const source = events?.hit ? { x: shot.x - dx * travel, z: shot.z - dz * travel, alt: shot.alt } : undefined;
-            hurtPlayer(state, source, events);
+            if (state.run && (shot.hostileKind === 'ace-missile' || shot.hostileKind === 'ace-gun')) {
+              hurtPlayer(state, source, events, shot.damage);
+            } else {
+              hurtPlayer(state, source, events);
+            }
           }
           shot.life = 0;
           stopped = playerHit;

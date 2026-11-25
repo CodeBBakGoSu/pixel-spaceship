@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { ACE, ACE_PHASES } from '../src/data/ace.ts';
-import { SURVIVOR_BALANCE } from '../src/data/run-balance.ts';
+import { SURVIVOR_BALANCE, SURVIVOR_PLAYER_DAMAGE } from '../src/data/run-balance.ts';
 import { BOOST_SPEED } from '../src/flight.ts';
 import { ROLLS } from '../src/data/roll.ts';
 import { advanceAce, makeAce } from '../src/ace.ts';
@@ -142,6 +142,7 @@ for (const kind of ['gun', 'missile']) {
       (kind === 'missile') === (shot.hostileKind === 'ace-missile')));
     const expectedSpeed = BOOST_SPEED * ACE[kind].speedScale * SURVIVOR_BALANCE.aceProjectileSpeedScale;
     assert.ok(state.shots.every(shot => Math.abs(Math.hypot(shot.vx, shot.vz) - expectedSpeed) < 1e-9));
+    assert.ok(state.shots.every(shot => shot.damage === SURVIVOR_PLAYER_DAMAGE * SURVIVOR_BALANCE.aceProjectileDamageScale));
   });
 }
 

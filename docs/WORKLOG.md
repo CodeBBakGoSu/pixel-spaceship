@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace damage tuning plumbing)
+- Added neutral `SURVIVOR_BALANCE.aceProjectileDamageScale = 1` plumbing for later overshoot tests. Ace gun shots are now explicitly tagged as `ace-gun`; in Survivors, Ace gun/missile impacts use their projectile damage value, with scale 1 preserving the existing 3-hull hit exactly. Legacy behavior and non-Ace hostile damage are unchanged.
+- This is tunability infrastructure only, not an active difficulty increase. Replay goldens are intentionally unchanged.
+- Verification: focused Ace pacing tests 13/13 and replay hash tests 2/2 passed after the change.
+- State: experimental/in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (temporary opening HP `7d5fa95`)
 - Added `SURVIVOR_BALANCE.openingRegularHpScale = 1.5` as a temporary experiment pending the balance bot/owner-confirmed early-growth target. Scripted Coast-opening regulars only are hardened; the post-opening random pool and Legacy mode are unchanged, and the Survivors replay golden intentionally moved to `5a5e8210…`.
 - Probe note (average seeds 1–30): first regular kill median 3 hits and Lv2 median 8.5 kills, but Lv2/Lv5 timing stayed near 23.3/46.7 s. This is not a final balance value.
