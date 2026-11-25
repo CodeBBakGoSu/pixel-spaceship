@@ -14,6 +14,9 @@ test('four new enemy types have deterministic isolated introductions and the lat
   assert.equal(advancePhaseDirector(state, ground), true);
   assert.equal(state.enemies.filter(enemy => enemy.kind === 'twin-chaser').length, 1);
   assert.equal(state.enemies.some(enemy => enemy.kind === 'crosswing'), false);
+  const chaser = state.enemies.find(enemy => enemy.kind === 'twin-chaser');
+  const aftBearing = Math.abs(Math.atan2(chaser.x - state.player.x, chaser.z - state.player.z));
+  assert.ok(aftBearing > Math.PI - 0.25, `180° introduction enters behind the pilot: ${aftBearing}`);
 
   for (const [seconds, kind] of [[140, 'crosswing'], [260, 'manta'], [300, 'mender']]) {
     const before = state.nextId;

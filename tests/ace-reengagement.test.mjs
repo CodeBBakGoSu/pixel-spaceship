@@ -3,6 +3,7 @@ import test from 'node:test';
 import { ACE } from '../src/data/ace.ts';
 import { TWIN_VOLLEYS, WEAPONS } from '../src/data/items.ts';
 import { CRUISE_SPEED } from '../src/flight.ts';
+import { flightCeiling } from '../src/maneuvers.ts';
 import { aceReengagementCadence, advanceAce, makeAce } from '../src/ace.ts';
 import { acquireAndFire, advanceShots, angleTo, BOLT_SPEED, HIT_WINDOW, hurtAce, MAX_ALTITUDE, TICKS_PER_SECOND, TWIN_CONE } from '../src/stage-combat.ts';
 import { segmentSphereIntersection3d } from '../src/spatial.ts';
@@ -256,6 +257,29 @@ test('natural reengagement stays inside the arena, above terrain and below the c
     assert.ok(ace.alt <= MAX_ALTITUDE);
   }
   assert.ok(sampled > 3 * TICKS_PER_SECOND);
+});
+
+
+test('expanded-altitude reengagement climbs into a real frontal firing line', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 320 });
+  delete ace.entry;
+  Object.assign(ace, {
+    x: 0, z: 180, alt: 125, yaw: Math.PI, vx: 0, vz: 0, tell: null, roll: null,
+    attackAt: Number.MAX_SAFE_INTEGER, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'approach', startedAt: state.tick, side: 1 },
+  });
+  state.speed = CRUISE_SPEED;
+  for (let i = 0; i < 12 * TICKS_PER_SECOND && ace.reengagement?.phase !== 'line'; i++) {
+    state.tick++;
+    advanceAce(state, ground);
+  }
+  assert.equal(ace.reengagement?.phase, 'line');
+  assert.ok(ace.alt > MAX_ALTITUDE, `Ace follows the expanded Survivors ceiling: ${ace.alt}`);
+  assert.ok(Math.abs(ace.alt - player.altitude) <= HIT_WINDOW);
+  assert.ok(ace.alt <= flightCeiling(ground(ace.x, ace.z), true));
 });
 
 test('Ace approach follows an outside-arena pilot without extending the in-arena boundary', () => {

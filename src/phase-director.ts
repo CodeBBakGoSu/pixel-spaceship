@@ -20,7 +20,8 @@ const intros = [
 function spawn(state: StageState, ground: Ground, id: string, members: Member[], leaveAt?: number,
   introKinds: readonly string[] = []): boolean {
   const before = state.nextId;
-  spawnWave(state, { time: state.tick / S, members }, ground, rngStream(state.seed, `phase-director:${id}:${state.tick}`));
+  spawnWave(state, { time: state.tick / S, members: members.map(member => ({ ...member, bearing: member.bearing * Math.PI / 180 })) },
+    ground, rngStream(state.seed, `phase-director:${id}:${state.tick}`));
   const created = state.enemies.filter(enemy => enemy.id > before);
   const expected = members.length + members.filter(member => member.kind === 'crosswing').length;
   if (created.length !== expected) {

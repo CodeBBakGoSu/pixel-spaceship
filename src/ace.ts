@@ -6,6 +6,7 @@ import { ROLLS } from './data/roll.ts';
 import { WORLD_SITES, WORLD_TERRAIN } from './data/world.ts';
 import { ENEMY_KINDS } from './enemy-kinds.ts';
 import { advanceBank, advanceBankDrive, advanceBankDrop, bankThrustFactor, bankYawRate, BOOST_SPEED, CRUISE_SPEED } from './flight.ts';
+import { flightCeiling } from './maneuvers.ts';
 import { planFlyIn, sampleFlyIn } from './fly-in.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { findRally } from './reach.ts';
@@ -186,10 +187,11 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
     ace.bankDrive = advanceBankDrive(ace.bankDrive, 0, STEP);
     ace.bank = advanceBank(ace.bank, 0, STEP, ace.bankDrive);
     ace.boosting = false;
-    const floor = Math.min(MAX_ALTITUDE, ground(ace.x, ace.z) + data.clearance);
-    const desired = clamp(p.altitude, floor, MAX_ALTITUDE);
+    const ceiling = state.run ? flightCeiling(ground(ace.x, ace.z), true) : MAX_ALTITUDE;
+    const floor = Math.min(ceiling, ground(ace.x, ace.z) + data.clearance);
+    const desired = clamp(p.altitude, floor, ceiling);
     const change = clamp(desired - ace.alt, -VERTICAL_SPEED * STEP, VERTICAL_SPEED * STEP);
-    ace.alt = clamp(ace.alt + change, floor, MAX_ALTITUDE);
+    ace.alt = clamp(ace.alt + change, floor, ceiling);
     ace.pitch = change / (VERTICAL_SPEED * STEP) * data.pitchScale;
     ace.bankDrop = 0;
     return;
@@ -239,9 +241,10 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
 
   const groundHeight = ground(ace.x, ace.z);
   const lockedAltitude = ace.tell && ace.tell.kind !== 'roll' ? ace.tell.alt + ace.bankDrop : null;
-  const floor = Math.min(MAX_ALTITUDE, groundHeight + (ace.band === SKIM_BAND ? SKIM.minClearance : data.clearance));
+  const ceiling = state.run ? flightCeiling(groundHeight, true) : MAX_ALTITUDE;
+  const floor = Math.min(ceiling, groundHeight + (ace.band === SKIM_BAND ? SKIM.minClearance : data.clearance));
   const desired = lockedAltitude ?? (reengagement
-    ? clamp(p.altitude, floor, MAX_ALTITUDE) : flightAltitude(ace.band, groundHeight));
+    ? clamp(p.altitude, floor, ceiling) : flightAltitude(ace.band, groundHeight));
   const rate = VERTICAL_SPEED * data.verticalScale;
   const change = clamp(desired - ace.alt - ace.bankDrop, -rate * STEP, rate * STEP);
   ace.pitch = ace.roll ? 0 : change / (rate * STEP) * data.pitchScale;
@@ -255,7 +258,7 @@ function updateFlight(state: StageState, ace: Ace, ground: Ground): void {
   const level = ace.alt + ace.bankDrop + change;
   const drop = ace.roll ? 0 : advanceBankDrop(ace.bankDrop, ace.bank, STEP);
   const nextAlt = ace.roll ? rollAltitude(ace.roll) : level - drop;
-  ace.alt = reengagement ? clamp(nextAlt, floor, MAX_ALTITUDE) : Math.max(floor, nextAlt);
+  ace.alt = reengagement ? clamp(nextAlt, floor, ceiling) : Math.max(floor, nextAlt);
   ace.bankDrop = ace.roll ? 0 : clamp(level - ace.alt, 0, drop);
 }
 

@@ -23,6 +23,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (`f01bc45`; base `dcca4ff`)
+- Finished the continuous-flight integration review items: Magnet Core's expanded planar radius no longer has a separate altitude gate, non-carrier elite kills can roll magnet drops, phase-director degree bearings are converted before spawning, and Survivors Ace reengagement uses the expanded flight ceiling so high-altitude frontal firing lines are reachable. Mobile Aegis slots now fall back to compact widths, and dive occlusion checks continue past visible warnings until a covered warning is found.
+- Verification: focused integration tests passed 83/83; replay hash regression passed 2/2 with only the intentional Survivors golden refreshed (`a43beef8…`) and Legacy unchanged; `npm run build` passed (132 modules, 2.63s; nonfatal chunk-size advisory). A full `npm test` rerun is in progress; browser/device evidence remains pending.
+- State: implementation complete locally on the PR #13 integration branch; no `main` change or public deployment.
+
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795538065-pr15-mobile-followup (`bd67579`; based on `dcca4ff`)
 - Kept simultaneous Aegis and dive-threat slots separate while using the largest compact Aegis slot that fits narrow phones, and scanning all nearby descending warnings instead of only the first.
 - Focused touch layout tests passed 18/18; build passed (nonfatal chunk-size advisory). The stress fixture can force the Aegis evolution plus one visible and one control-occluded descent warning for mobile QA; portrait warnings/rear cues are moved off the aircraft. Build passed. State: in progress.
