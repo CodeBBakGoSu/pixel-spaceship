@@ -24,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (independent balance confirmation)
+- 밸런스 봇 independent comparison confirmed the PR candidate (`b283efe` → `79a332b`, desktop/Heat 0/seeds 1–100 per profile): baseline skilled/average/weak 100/0/0, 100/0/0, 99/1/0; candidate 82/1/17, 20/55/25, 0/77/23. Candidate skilled and weak rows were independently rerun; the average row reuses the identical-behavior PR aggregate, matching the implementation-session result.
+- Target check: average Ace win rate is 20.0%, expected first Ace win 5.0 sorties. The result is an Ace difficulty bundle (damage ×2.5, hull ×3.5, fire interval ×0.8), not an isolated hull-only measurement.
+- Verification: PR #17 measurement table updated with independent provenance; no game code changed in this entry.
+- State: PR #17 open against `renderer-proto`; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace candidate local target hit)
 - Reduced the candidate to `aceHullScale ×3.5` after corrected 30-seed local probes: hull ×3.75/fire ×0.8 was too hard (p=10.0%), while hull ×3.5/damage ×2.5/fire ×0.8 hit the target lower bound (average p=16.7%, 5 clears/15 losses/10 timeouts). XP remains untouched. Same-seed 300-sortie local measurement (100 seeds/profile): skilled 82/1/17, average 20/55/25 (p=20.0%, expected first win 5.0 sorties), weak 0/77/23. Official balance-bot confirmation was requested.
 - Updated deterministic test expectations for the final candidate: full-autopilot seed 27 now clears, and the three-seed profile sim pins exact outcomes instead of the obsolete survival-order invariant (timeouts are failed Ace kills, not successful survival). Survivors replay golden intentionally moved to `7f0323b8…`.
