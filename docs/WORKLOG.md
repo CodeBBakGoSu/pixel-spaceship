@@ -24,6 +24,11 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace fire-interval tuning plumbing)
+- Added neutral `SURVIVOR_BALANCE.aceFireIntervalScale = 1` and routed both post-volley refire delay and phase-transition first delay through it. Heat scaling still composes normally, Legacy is unchanged, and scale 1 preserves all current timings exactly.
+- Verification: Ace pacing and replay hash tests 16/16 passed; replay goldens remain unchanged.
+- State: experimental/in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (late XP tuning plumbing)
 - Added neutral `DRAFT_RULES.xpLateStartLevel = 6` and `xpLatePerLevel = 0` handles so later overshoot tests can keep the confirmed first-five-level growth targets unchanged while steepening only post-Lv5 costs. At the default slope 0 every existing XP cost and replay golden is unchanged.
 - Verification: progression and replay hash tests 14/14 passed.
