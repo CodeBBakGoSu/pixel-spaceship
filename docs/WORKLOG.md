@@ -23,6 +23,9 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`09696ba`; validation on `c9e7fb8`)
+- Moved short-landscape flight warnings into the left lane and lowered rear-danger cues just above the controls so multiline missile warnings stay clear of the aircraft, objective, radar, and rear cue; the stress fixture keeps the 64-hostile-shot scene observable.
+- Validation: tests 704/704 and build on `c9e7fb8`, build again after final CSS; mobile emulation verified dense 844x390, small-landscape missile warnings, and all 24 approved VFX routes. State: validation complete; review/merge pending. Real-device verification remains unverified.
 ### 2026-11-25 (KST) · 데븐 봇 · devin/1795525221-selected-sortie-vfx (`99ea789`, `caba647`, `4db6f67`; based on `50709d0`)
 - Raised small-landscape flight warnings above the aircraft while preserving the radar-side lane; the stress fixture now suppresses draft interruption so the 64-hostile-shot mobile scene remains observable at 07:30, with an explicit `cue=missile` hold for multiline warning layout checks.
 - Full tests passed 704/704 before these fixture-only changes and builds passed after them. Browser evidence collection is in progress. State: in progress.
