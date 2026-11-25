@@ -67,19 +67,20 @@ test('minute swarm events remain rings and do not mutate spawn streams', () => {
   }
 });
 
-test('Survivors rest never pulls or collects pickups and leaves chest drops untouched', () => {
+test('swarm rest never pulls or collects pickups and leaves chest drops untouched', () => {
   for (const event of SWARM_EVENTS) {
     const state = start();
     state.tick = (event.start + event.duration) * 60 - 1;
     const high = orb(state, 180, 2), low = orb(state, 75);
-    state.pickups.push(high, low);
+    low.born -= 60 * 60 - 2;
+    const expired = { ...orb(state, 75), born: state.tick - 60 * 60 };
+    state.pickups.push(high, low, expired);
     const drop = { ...orb(state, 180), id: 'first-evolution' };
     state.chests.drops.push(drop);
     stepStage(state, {}, flat);
     assert.equal(state.swarmNotice.kind, 'rest');
-    assert.deepEqual(state.pickups, [high, low]);
-    assert.equal(Boolean(high.pulling), false);
-    assert.equal(Boolean(low.pulling), false);
+    assert.deepEqual(state.pickups.map(p => p.id), [high.id, low.id]);
+    assert.ok(state.pickups.every(p => !p.pulling && !p.capture && !p.recovery));
     assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [0, 0, 0]);
     const late = orb(state, 180);
     state.pickups.push(late);
@@ -88,8 +89,8 @@ test('Survivors rest never pulls or collects pickups and leaves chest drops unto
     assert.equal(state.streams.spawn.rng, rng);
     spawnEscortGnats(state, { x: 0, z: 0, alt: 125, band: 1 }, flat, 10);
     assert.deepEqual(state.enemies, []);
-    assert.deepEqual(state.pickups, [high, low, late]);
-    assert.equal(late.recovery, undefined);
+    assert.deepEqual(state.pickups, [high, late]);
+    assert.ok(state.pickups.every(p => !p.pulling && !p.capture && !p.recovery));
     assert.deepEqual(state.chests.drops, [drop]);
     assert.deepEqual([state.metrics.orbs, state.salvage, state.xp], [0, 0, 0]);
     stepStage(state, {}, flat);

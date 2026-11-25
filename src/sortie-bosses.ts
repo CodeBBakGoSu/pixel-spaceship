@@ -6,6 +6,7 @@ import { scaleTravel } from './data/speed.ts';
 import { flightCeiling } from './maneuvers.ts';
 import { makeEnemy } from './stage-enemies.ts';
 import type { CombatEvents } from './hostile-events.ts';
+import { THREAT_BUDGET, type ThreatRequest } from './threat-budget.ts';
 import type { Enemy, Ground, Position, SortieMiniboss, SortieMinibossCue, StageState } from './stage-types.ts';
 import { add3d, distance3d, normalize3d, scale3d, type SpatialPoint, type SpatialVector } from './spatial.ts';
 
@@ -18,7 +19,7 @@ export const SORTIE_MINIBOSS_CUES: readonly SortieMinibossCue[] = [
 
 export const SORTIE_REST_TICKS = 15 * TICKS_PER_SECOND;
 
-export type ThreatSpendRequest = { tick: number; source: string; points: 1 | 2; bearing: number };
+export type ThreatSpendRequest = ThreatRequest;
 export type ThreatSpendHook = (state: StageState, request: ThreatSpendRequest) => boolean;
 
 export type SortieBossHooks = {
@@ -258,18 +259,19 @@ function advancePhase(state: StageState, boss: SortieMiniboss, actor: Enemy): vo
 const WEAPON_RANGE = 175;
 
 function fireEscortVolley(state: StageState, boss: SortieMiniboss, actor: Enemy, hooks: SortieBossHooks,
-  events?: CombatEvents): void {
+  events?: CombatEvents): boolean {
   const points: 1 | 2 = boss.cue.id === 'armored-transport' ? 2 : 1;
   const escorts = boss.cue.id === 'armored-transport'
     ? boss.escortIds.map(id => state.enemies.find(enemy => enemy.id === id && enemy.hp > 0)).filter((enemy): enemy is Enemy => !!enemy)
     : [];
   const sources = boss.cue.id === 'armored-transport' ? escorts : [actor];
-  if (!sources.length || state.shots.filter(shot => shot.kind === 'hostile').length + sources.length > HOSTILE_SHOT_LIMIT) return;
-  const bearing = angleTo(state.player.yaw, actor.x - state.player.x, actor.z - state.player.z);
-  if (!hooks.trySpendThreat(state, { tick: state.tick, source: boss.cue.threatSource, points, bearing })) return;
+  if (!sources.length || state.shots.filter(shot => shot.kind === 'hostile').length + sources.length > HOSTILE_SHOT_LIMIT) return false;
+  const bearing = Math.atan2(actor.x - state.player.x, actor.z - state.player.z);
+  if (!hooks.trySpendThreat(state, { tick: state.tick, source: boss.cue.threatSource, points, bearing })) return false;
   for (const source of sources) {
     fireHostile(state, { x: source.x, z: source.z, alt: source.alt, kind: 'bomber' }, scaleTravel(90), 0, events);
   }
+  return true;
 }
 
 export function advanceSortieMiniboss(state: StageState, ground: Ground, hooks: SortieBossHooks,
@@ -283,11 +285,8 @@ export function advanceSortieMiniboss(state: StageState, ground: Ground, hooks: 
   moveEscorts(state, boss, actor, ground);
   const attackDelay = boss.cue.id === 'armored-transport' ? DURATION.transportCross : TICKS_PER_SECOND;
   if (state.tick >= boss.nextThreatAt && state.tick >= boss.cue.startTick + attackDelay) {
-    const count = state.shots.filter(shot => shot.kind === 'hostile').length;
-    const expectedCount = boss.cue.id === 'armored-transport' ? 2 : 1;
-    fireEscortVolley(state, boss, actor, hooks, events);
-    boss.nextThreatAt = state.tick + (count + expectedCount <= HOSTILE_SHOT_LIMIT
-      ? DURATION.attackCadence : TICKS_PER_SECOND / 2);
+    const fired = fireEscortVolley(state, boss, actor, hooks, events);
+    boss.nextThreatAt = state.tick + (fired ? DURATION.attackCadence : THREAT_BUDGET.spacingTicks);
   }
 }
 

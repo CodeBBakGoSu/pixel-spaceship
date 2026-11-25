@@ -7,11 +7,10 @@ import { AdaptiveQuality } from '../src/render-quality.ts';
 import { createStage, parseStageOptions, RUN_END_TICK, stepStage } from '../src/stage.ts';
 import { World } from '../src/world.ts';
 
-// Survivors seed-1 uses desktop Gnat floors 22/44/90/130/166 and rates 70/160/320/480/600; mobile values do not affect this hash.
-// Seed-1 terminal hashes cover Survivors pickup rules, minibosses, Ace reengagement, and the full-view pilot on production terrain.
+// Survivors seed-1 covers minute waves, minibosses, Ace reengagement and timed pickups on production terrain.
 const terminalHashes = {
   legacy: '1ba96a2d9956f3bcb8c10a6ccf51a4db02e523d41d6132b8fa2f4658a12942d5',
-  survivors: 'a43beef8bf2fa56fab466fa545dbbe7b0fe334b0f1aea7242bf26747f848b87a',
+  survivors: 'ee2105e524b50d05a608a991ac322dc2e09a5451c83fa2b0e82c76cb8e198155',
 };
 const world = new World();
 const ground = (x, z) => world.height(x, z);

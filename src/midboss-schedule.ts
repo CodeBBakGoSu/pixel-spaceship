@@ -37,6 +37,7 @@ export function createMidbossScheduleAtTick(tick: number): MidbossScheduleState 
 export function consumeMidbossCue(state: StageState): MidbossCue | null {
   const midboss = state.midbossSchedule;
   if (!state.run || !midboss || midboss.active) return null;
+  while (midboss.next < startTicks.length && startTicks[midboss.next] < state.tick) midboss.next++;
   const entry = schedule[midboss.next];
   const startTick = startTicks[midboss.next];
   if (!entry || state.tick !== startTick) return null;

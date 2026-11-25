@@ -6,6 +6,7 @@ import {
   Vector4, type BufferGeometry, type Camera,
 } from 'three';
 import { bakeVoxels } from '../proto/three/src/voxel-geometry.ts';
+import { crosswingTrail, CROSSWING_TRAIL_SEGMENTS } from './attack-trail.ts';
 import { batchBursts, gnatBursts } from './combat-feedback.ts';
 import { COMBAT_FEEDBACK } from './data/combat-feedback.ts';
 import { cockpitFov, frameCockpit, type PitchMark } from './camera.ts';
@@ -233,7 +234,7 @@ export class FlightScene {
   private readonly ghost = new Mesh(this.ship.geometry, new MeshBasicMaterial({ transparent: true, opacity: 0.25, depthWrite: false }));
   private readonly ribbon = instances(new BoxGeometry(), TRAIL_LIMIT, this.trailMaterial);
   private readonly pursuitRings = instances(new TorusGeometry(1, 0.064, 4, 24), REGULAR_RENDER_CAP);
-  private readonly enemyTrails = instances(new BoxGeometry(), REGULAR_RENDER_CAP * 2, new MeshBasicMaterial({
+  private readonly enemyTrails = instances(new BoxGeometry(), REGULAR_RENDER_CAP * 2 + CROSSWING_TRAIL_SEGMENTS * 2, new MeshBasicMaterial({
     color: 0xa6e5f0, transparent: true, opacity: 0.48, depthWrite: false,
   }));
   private readonly trailTip: Position = { x: 0, z: 0, alt: 0 };
@@ -954,6 +955,17 @@ export class FlightScene {
         const gold = enemy.entry ? 0xe0be8a : 0xffe5a3;
         this.write(this.chestMarkers, chestMarkers++, enemy.x - 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, Math.PI / 4);
         this.write(this.chestMarkers, chestMarkers++, enemy.x + 1.9, enemy.z, alt, 0, 1.6, 6.8, 2, gold, -Math.PI / 4);
+      }
+      const attackTrail = enemy.kind === 'crosswing' ? crosswingTrail(enemy) : null;
+      if (attackTrail && trails + attackTrail.length - 1 <= this.enemyTrails.instanceMatrix.count) {
+        const recoveryFade = enemy.crosswing?.phase === 'recovery'
+          ? clamp(((enemy.crosswing.until ?? state.tick) - state.tick) / 60, 0, 1) : 1;
+        for (let segment = 0; segment + 1 < attackTrail.length; segment++) {
+          const recency = (segment + 1) / (attackTrail.length - 1);
+          const brightness = (0.32 + 0.68 * recency) * recoveryFade;
+          this.connect(this.enemyTrails, trails++, attackTrail[segment], attackTrail[segment + 1],
+            flat ? 1.65 : 1.1, this.color.setRGB(brightness, brightness, brightness).getHex(), flat ? TOP_FLIGHT + 1 : undefined);
+        }
       }
       if ((enemy.entry || enemy.flyby) && trails + 2 <= this.enemyTrails.instanceMatrix.count) {
         const fx = Math.sin(enemy.yaw), fz = Math.cos(enemy.yaw);

@@ -342,42 +342,57 @@ test('Ace damage remains available outside reengagement windows', () => {
   assert.ok(ace.hp < hp);
 });
 
-test('Ace attacks spend one shared threat slot and denial does not advance the attack pattern', () => {
-  const readyAce = () => {
-    const state = createStage(parseStageOptions('?mode=survivors&autoplay=1'), ground);
-    const player = state.player;
-    const ace = state.boss = makeAce(state, player.x, player.z + 100, ground);
-    state.tick = 8 * 60 * TICKS_PER_SECOND;
-    Object.assign(ace, {
-      x: player.x, z: player.z + 100, alt: player.altitude, yaw: Math.PI,
-      tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
-      bandAt: Number.MAX_SAFE_INTEGER, reengagement: undefined,
-    });
-    return state;
-  };
+test('Ace firing lines keep target locks without requiring its nose to face backward', () => {
+  const state = stage();
+  const ace = state.boss, player = state.player;
+  delete ace.entry;
+  Object.assign(player, { x: 0, z: 0, yaw: 0, vx: 0, vz: CRUISE_SPEED, altitude: 125 });
+  Object.assign(ace, {
+    x: 0, z: 180, alt: 125, yaw: 0, vx: 0, vz: CRUISE_SPEED,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER,
+    reengagement: { phase: 'line', startedAt: state.tick, side: 1, lineStartedAt: state.tick,
+      lineUntil: state.tick + ACE.reengagement.lineSeconds * TICKS_PER_SECOND },
+  });
+  const fired = [];
+  advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  assert.equal(ace.tell?.kind, 'gun', 'the line admits an attack even though the player is behind Ace');
 
-  const denied = readyAce();
-  const deniedAce = denied.boss;
-  const deniedAttacks = deniedAce.attacks;
-  const requestTick = denied.tick + ACE.gun.warningTicks;
-  assert.equal(trySpendThreat(denied, {
-    tick: requestTick, source: 'regular:fixture', points: 2, bearing: 0,
-  }), true);
-  const existingSpends = denied.threatBudget.spends.length;
-  advanceAce(denied, ground);
-  assert.equal(denied.threatBudget.spends.length, existingSpends);
-  assert.equal(deniedAce.tell, null);
-  assert.equal(deniedAce.attacks, deniedAttacks);
+  const until = ace.tell.until;
+  while (state.tick < until) {
+    state.tick++;
+    advanceAce(state, ground, { aceTellFired: tell => fired.push(tell) }, undefined, undefined, () => true);
+  }
+  assert.equal(fired.length, 1);
+  assert.ok(state.shots.some(shot => shot.kind === 'hostile'), 'the completed warning launches real hostile shots');
+});
 
-  const admitted = readyAce();
-  const admittedAce = admitted.boss;
-  const admittedAttacks = admittedAce.attacks;
-  advanceAce(admitted, ground);
-  assert.deepEqual(admitted.threatBudget.spends.map(({ source, points }) => ({ source, points })),
-    [{ source: 'ace', points: 2 }]);
-  assert.equal(admitted.threatBudget.spends[0].tick, admitted.tick + ACE.gun.warningTicks);
-  assert.equal(admittedAce.tell?.kind, 'gun');
-  assert.equal(admittedAce.attacks, admittedAttacks + 1);
+test('Ace attack admission shares the threat hook and denial does not telegraph or advance the attack pattern', () => {
+  const state = stage();
+  const ace = state.boss;
+  const player = state.player;
+  delete ace.entry;
+  state.tick = 8 * 60 * TICKS_PER_SECOND;
+  Object.assign(ace, {
+    x: player.x, z: player.z + 100, alt: player.altitude, yaw: Math.PI,
+    tell: null, roll: null, attackAt: state.tick, rollReadyAt: Number.MAX_SAFE_INTEGER,
+    bandAt: Number.MAX_SAFE_INTEGER, reengagement: undefined,
+  });
+  const attacks = ace.attacks;
+  const requests = [];
+  advanceAce(state, ground, undefined, undefined, undefined, (requestState, request) => {
+    assert.equal(requestState, state);
+    requests.push(request);
+    return false;
+  });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].activeFromTick, state.tick);
+  assert.ok(requests[0].tick > state.tick);
+  assert.equal(requests[0].source, 'ace');
+  assert.equal(requests[0].points, 2);
+  assert.ok(Number.isFinite(requests[0].bearing));
+  assert.equal(ace.tell, null);
+  assert.equal(ace.attacks, attacks);
 });
 
 test('a lethal Ace hit on the 10:00 deadline tick still clears the sortie', () => {

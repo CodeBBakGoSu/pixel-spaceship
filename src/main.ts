@@ -663,11 +663,11 @@ function updateHud(readout: RadarReadout): void {
     if (!billCount.firstElementChild?.classList.contains('gear-icon')) billCount.prepend(createGearIcon('bill', 14));
     setText('#bill-count b', `${state.bills.paid}/${state.bills.offered}`);
   }
-  const notice = state.phaseNotice, swarm = state.swarmNotice, showSwarm = shouldShowSwarmNotice(!!state.run, state.swarmNotice?.kind), banner = $('#phase-banner');
+  const notice = state.phaseNotice, swarm = state.swarmNotice, banner = $('#phase-banner');
+  const showSwarm = shouldShowSwarmNotice(!!state.run, swarm?.kind);
   banner.hidden = (!notice && !showSwarm) || state.phase !== 'playing' || state.paused;
   if (swarm && showSwarm && !banner.hidden) {
-    setText('#phase-banner', swarm.kind === 'rest' ? t('phase.rest') : swarm.kind === 'recovery'
-      ? t('phase.recovery') : t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }));
+    setText('#phase-banner', 'band' in swarm ? t(`phase.${swarm.kind}`, { alt: BANDS[swarm.band] }) : t(`phase.${swarm.kind}`));
   } else if (notice && !banner.hidden) {
     const context = notice.phase === 'storm' && notice.kind === 'lull' ? t('phase.aceInbound') : t(`phase.${notice.phase}`);
     const lull = notice.kind === 'lull'
