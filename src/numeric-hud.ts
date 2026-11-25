@@ -25,6 +25,9 @@ export const shieldActive = (state: Pick<StageState, 'invulnerability' | 'roll'>
 export const altitudeBandKey = (player: Pick<StageState['player'], 'altitude' | 'skim'>) =>
   HUD_ALTITUDE_BAND_KEYS[playerBand(player)];
 
+export const altitudeBandHudKey = (state: Pick<StageState, 'player' | 'run'>) =>
+  state.run ? null : altitudeBandKey(state.player);
+
 export function clockText(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
@@ -125,12 +128,13 @@ export class NumericHud {
       this.speed = speed;
     }
     const { altitude, skim } = state.player;
-    const roundedAltitude = Math.round(altitude), band = altitudeBandKey(state.player);
+    const roundedAltitude = Math.round(altitude), band = altitudeBandHudKey(state);
     if (this.altitude !== roundedAltitude) {
       el.altitude.textContent = String(roundedAltitude);
       this.altitude = roundedAltitude;
     }
-    if (translated || this.band !== band) {
+    if (el.band.hidden !== (band === null)) el.band.hidden = band === null;
+    if (band !== null && (translated || this.band !== band)) {
       el.band.textContent = t(band);
       this.band = band;
     }

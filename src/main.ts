@@ -486,7 +486,7 @@ function layoutFlight(): void {
     if (cockpit.help) setRect('cockpit-help', cockpit.help);
     root.style.setProperty('--maneuver-center-y', `${Math.round(cockpit.aiming.y + cockpit.aiming.height * 0.42)}px`);
   }
-  cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t);
+  cockpitDisplay.resize(cockpit, innerWidth, innerHeight, language, t, !!state.run);
   feedback.resize(innerWidth, innerHeight, phone, cockpit);
   radar.width = Math.max(1, hud.radar.width);
   radar.height = Math.max(1, hud.radar.height);
@@ -603,7 +603,7 @@ function objectiveText(): string {
     if (!state.run && state.tick < 40 * TICKS_PER_SECOND) return t('objective.reach');
     return t('objective.survivors', { time: clockText(bossTick(state) / TICKS_PER_SECOND) });
   }
-  return t(ace.entry ? 'objective.aceInbound' : 'objective.aceFight') + navigation;
+  return t(ace.entry ? 'objective.aceInbound' : state.run ? 'objective.aceFightSurvivors' : 'objective.aceFight') + navigation;
 }
 
 function drawPortrait(hostile: boolean): void {
@@ -754,7 +754,10 @@ function updateManeuverCue(): void {
   const heading = String((degrees % 360 + 360) % 360).padStart(3, '0');
   const delta = Math.round((trail.actualExit ?? trail.exitAltitude) - trail.points[0].alt);
   const height = `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)} m`;
-  const limit = trail.limited ? t(kind === 'immelmann' ? 'maneuver.highLimit' : 'maneuver.lowLimit')
+  const limitKey = kind === 'immelmann'
+    ? state.run ? 'maneuver.highLimitSurvivors' : 'maneuver.highLimit'
+    : state.run ? 'maneuver.lowLimitSurvivors' : 'maneuver.lowLimit';
+  const limit = trail.limited ? t(limitKey)
     : trail.actualExit !== undefined && Math.abs(trail.actualExit - trail.exitAltitude) >= 1 ? t('maneuver.terrainLimit') : '';
   const ahead = state.enemies.filter(enemy => formerPursuer(state, trail, enemy)).length;
   const details = t(pendingFlip ? 'maneuver.exitHeading' : 'maneuver.heading', { heading }) + (loop ? ` · ${height}` : '')
