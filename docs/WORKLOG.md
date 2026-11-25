@@ -23,6 +23,13 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merge `33d640b`; Crosswing `6e53793`)
+- Merged PR #12 minute waves/new enemies into the continuous-flight candidate while preserving PR #10/#16 touch cues, altitude-independent Magnet Core capture, midboss magnet payout, and continuous ceilings. Removed duplicate recovery-banner logic and refreshed only the Survivors replay golden (`fcc2e805…`); Legacy remains unchanged.
+- Crosswing attack runs now leave render-only smoke derived from their planned start/crossing path, so the X remains readable without depending on frame history; the crosswing fixture spawns the intended pair.
+- Verification so far: `npm run build` passed; focused replay 2/2; sortie-bosses 18/18; attack-trail/crosswing/new-enemy focused tests 17/17. Full suite and final browser evidence pending.
+- State: integration candidate in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (merged PR #10 `870c3a1`; `950de04`)
 - Kept the PR #16 shared touch-cue implementation (it already carries PR #10's dive-cue fixes) and merged PR #10 for history; `renderer-proto` conflicts were resolved in `091706f` with midboss magnets rolled once from the settle hook. The touch dive cue now also reads Stingray pass warnings (`manta.passEnd`), which previously showed `DIVE PASS` text without an arrow.
 - Verification: `npm test` 762/762 on the conflict merge; touch-cue tests 19/19 and `npm run build` after `950de04`. Browser at 390×844/844×390 on `3eb82e3`: Diver + Aegis cues separate, unclipped, clear of ship/hostile fire; render Z = −sim Z with matching forward/rear. Unassisted Twin X crossing was not readable in sampled Top-view frames; natural simultaneous cues not observed.
