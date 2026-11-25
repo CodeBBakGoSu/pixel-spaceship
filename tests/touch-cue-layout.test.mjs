@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, isDescendingDiveWarning, pointBehindTouchControls,
-  screenArrowRotation, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, descendingDiveWarnings, findAegisTouchCueRects, findTouchCueRect, findTouchCueRects,
+  isDescendingDiveWarning, pointBehindTouchControls, screenArrowRotation, TOUCH_THREAT_CUE_SIZE,
+  touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -105,4 +106,28 @@ test('cockpit cue direction uses the aiming reference when the player is behind 
     y: layout.cockpit.aiming.y + layout.cockpit.aiming.height * 0.72,
   });
   assert.deepEqual(touchCueScreenReference({ x: 14, y: 18, depth: 3 }, layout), { x: 14, y: 18 });
+});
+
+test('narrow portrait uses the largest compact Aegis slot that still fits', () => {
+  const compact = (width, height) => findAegisTouchCueRects(
+    phoneLayout(width, height, safe, 'chase', true), TOUCH_THREAT_CUE_SIZE);
+  assert.equal(compact(375, 667)[0]?.width, 150);
+  assert.equal(compact(360, 667)[0]?.width, 136);
+  assert.equal(compact(320, 667)[0]?.width, 104);
+  for (const [width, height] of [[375, 667], [360, 667]]) {
+    const [aegis, threat] = compact(width, height);
+    assert.ok(aegis, `${width}x${height} compact Aegis slot`);
+    assert.ok(threat, `${width}x${height} threat slot`);
+    assert.equal(overlaps(aegis, threat), false);
+  }
+});
+
+test('descending dive warnings include later nearby targets sorted by distance', () => {
+  const player = { x: 0, z: 0 };
+  const warning = { phase: 'warning', band: 0 };
+  const far = { x: 30, z: 0, band: 1, maneuver: warning };
+  const near = { x: 10, z: 0, band: 1, maneuver: warning };
+  const climbing = { x: 5, z: 0, band: 0, maneuver: warning };
+  const distant = { x: 126, z: 0, band: 1, maneuver: warning };
+  assert.deepEqual(descendingDiveWarnings([far, climbing, distant, near], player), [near, far]);
 });
