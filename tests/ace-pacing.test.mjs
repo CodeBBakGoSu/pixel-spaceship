@@ -71,6 +71,19 @@ test('Ace health crosses both phase thresholds and only calls cover once', () =>
   assert.equal(cues.filter(kind => kind === 'carrier').length, 1);
 });
 
+test('Ace skips cover once the nine-minute clear-out has removed escorts', () => {
+  const state = stage(), ace = state.boss;
+  ace.tell = null;
+  state.tick = 9 * 60 * 60;
+  const cues = [];
+  hurtAce(state, ace, ace.maxHp * 0.36);
+  state.tick++;
+  advanceAce(state, ground, { tell(kind) { cues.push(kind); } });
+  assert.equal(ace.phase, 2);
+  assert.equal(state.enemies.length, 0);
+  assert.equal(cues.includes('carrier'), false);
+});
+
 test('Ace rolls are telegraphed and followed by a punish window', () => {
   const state = stage('?fixture=ace&phase=1&cue=roll'), ace = state.boss;
   assert.equal(ace.tell.kind, 'roll');

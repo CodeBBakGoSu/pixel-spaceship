@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
-import { AEGIS_CUE_SIZE, descendingDiveWarnings, findAegisTouchCueRects, findTouchCueRect, findTouchCueRects,
-  isDescendingDiveWarning, pointBehindTouchControls, screenArrowRotation, screenPointObscured, TOUCH_THREAT_CUE_SIZE,
-  touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from '../src/touch-cue-layout.ts';
+import { AEGIS_CUE_SIZE, descendingDiveWarnings, diveWarningTarget, findAegisTouchCueRects, findTouchCueRect,
+  findTouchCueRects, firstTouchOcclusionCue, isDescendingDiveWarning, pointBehindTouchControls, screenArrowRotation,
+  screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, touchCueScreenReference,
+  touchOcclusionCue } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -182,4 +183,16 @@ test('compact Aegis slots keep the dive cue available on small phones', () => {
     assert.ok(threat, `${width}x${height} threat slot with Aegis`);
     if (width >= 335) assert.equal(overlaps(aegis, threat), false);
   }
+});
+
+test('Stingray pass warnings point the dive cue at their descending pass end', () => {
+  const bands = [30, 60, 90, 120];
+  const passEnd = { x: 12, z: -40, alt: 48 };
+  assert.deepEqual(diveWarningTarget({ x: 0, z: 0, alt: 110, band: 2, maneuver: null,
+    manta: { phase: 'warning', passEnd } }, bands), passEnd);
+  assert.equal(diveWarningTarget({ x: 0, z: 0, alt: 110, band: 2, manta: { phase: 'pass', passEnd } }, bands), null);
+  assert.equal(diveWarningTarget({ x: 0, z: 0, alt: 40, band: 0, manta: { phase: 'warning', passEnd } }, bands), null);
+  assert.deepEqual(diveWarningTarget({ x: 5, z: 6, alt: 95, band: 2, maneuver: { phase: 'warning', band: 1 } }, bands),
+    { x: 5, z: 6, alt: 60 });
+  assert.equal(diveWarningTarget({ x: 5, z: 6, alt: 95, band: 2, maneuver: { phase: 'warning', band: 3 } }, bands), null);
 });

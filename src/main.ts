@@ -38,8 +38,8 @@ import { altitudeDeltaText, beaconTrack, buildRadar, drawArenaMap, RadarDisplay,
   type RadarReadout, type RearDanger } from './instruments.ts';
 import { cockpitLayout, desktopLayout, guideLayout, phoneLayout, type CockpitLayout, type HudLayout, type Insets, type PhoneLayout, type Rect } from './layout.ts';
 import { renderDraftCard, renderLoadoutHud } from './loadout-display.ts';
-import { descendingDiveWarnings, findAegisTouchCueRects, screenPointObscured, TOUCH_THREAT_CUE_SIZE,
-  touchControlOcclusionRect, touchCueScreenReference, touchOcclusionCue } from './touch-cue-layout.ts';
+import { diveWarningTarget, findAegisTouchCueRects, firstTouchOcclusionCue, screenPointObscured, TOUCH_THREAT_CUE_SIZE,
+  touchControlOcclusionRect, touchCueScreenReference } from './touch-cue-layout.ts';
 import { activeTrail, canManeuver, chooseManeuver, exitAltitude, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverAttitude,
   maneuverForKey, maneuverViewYaw, trailEnd } from './maneuvers.ts';
 import { dailySeed, normalizeHeat, normalizeProfile, purchaseUpgrade, type Profile } from './meta.ts';
@@ -784,7 +784,8 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   }
   const warning = state.enemies.find(enemy => enemy.maneuver?.phase === 'warning'
     && Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125);
-  const diveWarnings = descendingDiveWarnings(state.enemies, p);
+  const diveTargets = state.enemies.filter(enemy => Math.hypot(p.x - enemy.x, p.z - enemy.z) < 125)
+    .map(enemy => diveWarningTarget(enemy, BANDS)).filter(target => target !== null);
   const rosterWarning = rosterThreatMessage(state, RADAR_RANGE);
   const mine = !top && state.enemyMines.some(mine => Math.hypot(p.x - mine.x, p.z - mine.z) < 46);
   let message: MessageKey | null = null;
@@ -805,26 +806,25 @@ function describeFlight(readout: RadarReadout, clearance: number): void {
   flightMessage.hidden = !message;
   if (message) setText('#flight-message', t(message, { name: threat }));
   touchThreatCue.hidden = true;
-  if (diveWarnings.length && touch && phone && scene && touchThreatCueSlot
+  if (diveTargets.length && touch && phone && scene && touchThreatCueSlot
     && state.phase === 'playing' && !state.paused) {
     const projectedTarget = { x: 0, y: 0, depth: 0 }, projectedPlayer = { x: 0, y: 0, depth: 0 };
     scene.projectContact({ x: p.x, z: p.z, alt: p.altitude }, projectedPlayer);
     const occlusion = touchControlOcclusionRect(phone, { width: innerWidth, height: innerHeight });
     const reserved = aegisCueSlot && !sharedCueSlot ? [aegisCueSlot] : [];
     const reference = touchCueScreenReference(projectedPlayer, phone);
-    for (const diveWarning of diveWarnings) {
-      const diveBand = diveWarning.maneuver?.band;
-      if (diveBand === undefined) continue;
-      scene.projectContact({ x: diveWarning.x, z: diveWarning.z, alt: BANDS[diveBand] }, projectedTarget);
-      if (projectedTarget.depth <= 0.05) continue;
-      const cue = touchOcclusionCue(phone, reference, projectedTarget, TOUCH_THREAT_CUE_SIZE, 8, occlusion, reserved, touchThreatCueSlot);
-      if (cue) {
-        setRect('touch-threat-cue', cue.rect);
-        touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
-        touchThreatCue.hidden = false;
-        if (sharedCueSlot) aegisVolumeCue.hidden = true;
-        break;
-      }
+    const targets = [];
+    for (const target of diveTargets) {
+      scene.projectContact(target, projectedTarget);
+      if (projectedTarget.depth > 0.05) targets.push({ x: projectedTarget.x, y: projectedTarget.y });
+    }
+    const cue = firstTouchOcclusionCue(phone, reference, targets, TOUCH_THREAT_CUE_SIZE,
+      8, occlusion, reserved, touchThreatCueSlot);
+    if (cue) {
+      setRect('touch-threat-cue', cue.rect);
+      touchThreatCue.style.setProperty('--touch-threat-cue-rotation', `${cue.rotation}deg`);
+      touchThreatCue.hidden = false;
+      if (sharedCueSlot) aegisVolumeCue.hidden = true;
     }
   }
   const tag = $('#view-tag');

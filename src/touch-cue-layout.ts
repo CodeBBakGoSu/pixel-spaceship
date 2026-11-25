@@ -119,6 +119,22 @@ export function isDescendingDiveWarning(maneuver: { phase: string; band: number 
   return maneuver?.phase === 'warning' && Number.isFinite(maneuver.band) && maneuver.band < currentBand;
 }
 
+export type DiveWarningSource = {
+  band: number; alt: number; x: number; z: number;
+  maneuver?: { phase: string; band: number } | null;
+  manta?: { phase: string; passEnd?: { x: number; z: number; alt: number } } | null;
+};
+
+export function diveWarningTarget(enemy: DiveWarningSource, bands: readonly number[]): { x: number; z: number; alt: number } | null {
+  if (isDescendingDiveWarning(enemy.maneuver, enemy.band)) {
+    const alt = bands[enemy.maneuver!.band];
+    return Number.isFinite(alt) ? { x: enemy.x, z: enemy.z, alt } : null;
+  }
+  const passEnd = enemy.manta?.phase === 'warning' ? enemy.manta.passEnd : undefined;
+  if (passEnd && [passEnd.x, passEnd.z, passEnd.alt].every(Number.isFinite) && passEnd.alt < enemy.alt) return { ...passEnd };
+  return null;
+}
+
 export function touchCueScreenReference(projected: ScreenPoint & { depth: number },
   layout: Pick<PhoneLayout, 'cockpit' | 'playfield'>): ScreenPoint {
   if (projected.depth > 0.05 && Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
@@ -140,4 +156,13 @@ export function touchOcclusionCue(layout: TouchLayout, from: ScreenPoint, target
   const rect = preferredSlot === undefined ? findTouchCueRect(layout, size, 4, reserved) : preferredSlot;
   const rotation = screenArrowRotation(from, target);
   return rect && rotation !== null ? { rect, rotation } : null;
+}
+
+export function firstTouchOcclusionCue(layout: TouchLayout, from: ScreenPoint, targets: readonly ScreenPoint[],
+  size: CueSize, margin = 8, occlusion = layout.controls, reserved: readonly Rect[] = [], preferredSlot?: Rect | null): TouchOcclusionCue | null {
+  for (const target of targets) {
+    const cue = touchOcclusionCue(layout, from, target, size, margin, occlusion, reserved, preferredSlot);
+    if (cue) return cue;
+  }
+  return null;
 }

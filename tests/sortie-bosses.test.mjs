@@ -8,6 +8,7 @@ import { HEAT_TIERS } from '../src/data/meta.ts';
 import { MAX_ALTITUDE, HIT_WINDOW, SORTIE_BOSS_HIT_RADIUS, TICKS_PER_SECOND, TWIN_CONE, advanceShots, angleTo, hurtEnemy } from '../src/stage-combat.ts';
 import { createStage, parseStageOptions, SORTIE_BOSS_HOOKS, stepStage } from '../src/stage.ts';
 import { advanceEnemies } from '../src/stage-enemies.ts';
+import { random, rngStream } from '../src/stage-random.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS } from '../src/sortie-bosses.ts';
 import { World } from '../src/world.ts';
@@ -417,6 +418,26 @@ test('either miniboss kill pays one existing evolution chest and one midboss hoo
     assert.equal(state.chests.dropped.length, 1);
     assert.equal(state.chests.next, index === 0 ? 2 : 4);
   }
+});
+
+test('a miniboss defeat rolls once through the live magnet-drop integration', () => {
+  const state = startEncounter(0);
+  const actor = state.enemies.find(enemy => enemy.id === state.sortieBoss.actorId);
+  const stream = rngStream(19, 'magnet-drop');
+  state.streams.magnetDrop = { ...stream };
+  random(stream);
+  const drops = [];
+  const events = { pickupDropped: event => drops.push(event) };
+  actor.hp = 1;
+  hurtEnemy(state, actor, 2);
+  stepStage(state, {}, ground, undefined, events);
+  stepStage(state, {}, ground, undefined, events);
+
+  assert.deepEqual(state.streams.magnetDrop, stream, 'the chest-carrying boss does not also roll as an elite');
+  const magnets = drops.filter(event => event.kind === 'magnet');
+  assert.equal(magnets.length, 1);
+  assert.equal(magnets[0].sourceEventId, actor.id);
+  assert.deepEqual(magnets[0].position, { x: actor.x, z: actor.z, alt: actor.alt });
 });
 
 test('a 30-second miniboss retreat returns its actual tick and pays no rewards', () => {
