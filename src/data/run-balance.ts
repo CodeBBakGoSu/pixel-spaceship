@@ -15,6 +15,7 @@ export const SURVIVOR_PLAYER_DAMAGE = 3;
 export const REGULAR_FIRE_INTERVAL_SCALE = 0.62;
 export const SURVIVOR_XP_SCALE = 1.15;
 export const PHASE_REPAIR_HULL = 2;
+export const PHASE_REPAIR_SECONDS = [105, 225, 345, 465] as const;
 export const CARRIER_REPAIR_HULL = 1;
 export const PHASE_CREDIT_BONUS = 25;
 export const BILL_CREDIT_BONUS = 25;

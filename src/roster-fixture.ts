@@ -80,7 +80,19 @@ export function stageRosterFixture(state: StageState, ground: Ground, cue?: stri
     placeSkimEnemy(enemy, ground);
     enemy.yaw = depth < 0 ? 0 : Math.PI + (key === 'aegis' ? 0.23 : 0);
     const warn = (kind: Exclude<NonNullable<Enemy['tell']>['kind'], 'snipe' | 'flak'>, ticks: number) => {
-      enemy.tell = { kind, started: t - Math.floor(ticks / 3), until: t + Math.ceil(ticks * 2 / 3) };
+      const timing = { started: t - Math.floor(ticks / 3), until: t + Math.ceil(ticks * 2 / 3) };
+      switch (kind) {
+        case 'repair':
+          enemy.tell = { ...timing, kind, targetId: state.enemies.find(candidate => candidate.kind === 'aegis')?.id ?? enemy.id };
+          break;
+        case 'charge':
+        case 'crossing':
+        case 'pass':
+          enemy.tell = { ...timing, kind, target: origin };
+          break;
+        default:
+          enemy.tell = { ...timing, kind };
+      }
     };
     switch (key) {
       case 'spotter':

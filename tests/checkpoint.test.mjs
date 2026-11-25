@@ -5,6 +5,7 @@ import { SKIM_BAND } from '../src/bands.ts';
 import { createStage, parseStageOptions, stepStage } from '../src/stage.ts';
 import { makeEnemy } from '../src/stage-enemies.ts';
 import { advanceSupportWeapons } from '../src/support-weapons.ts';
+import { trySpendThreat } from '../src/threat-budget.ts';
 
 const ground = () => 35;
 const stateAt = (tick, mode = 'survivors', input = {}) => {
@@ -159,4 +160,46 @@ test('old checkpoints carry manual bomb progress forward for the pilot and the c
   restored.run.weaponLevels['bomb-bay'] = 1;
   stepStage(restored, {}, ground);
   assert.equal(restored.metrics.bombsDropped, 5);
+});
+
+test('a legacy checkpoint migrates combat runtime without replaying elapsed introductions', () => {
+  const envelope = JSON.parse(encodeCheckpoint(stateAt(240 * 60)));
+  delete envelope.state.threatBudget;
+  delete envelope.state.midbossSchedule;
+  delete envelope.state.phaseDirector;
+  delete envelope.state.phaseRepairMask;
+  const restored = decodeCheckpoint(JSON.stringify(envelope), ground);
+  assert.ok(restored.threatBudget);
+  assert.equal(restored.midbossSchedule.next, 1);
+  assert.equal(restored.phaseDirector.intro, 2);
+  assert.deepEqual(restored.phaseRepairMask, 3);
+
+  const spend = offset => trySpendThreat(restored, {
+    tick: restored.tick + offset, source: `resumed:${offset}`, points: 2, bearing: 0,
+  });
+  assert.equal(spend(60), true);
+  assert.equal(spend(120), true);
+  assert.equal(spend(180), true);
+  assert.equal(spend(240), false);
+
+  const nextId = restored.nextId;
+  stepStage(restored, {}, ground);
+  assert.equal(restored.phaseDirector.intro, 2);
+  assert.equal(restored.enemies.some(enemy => enemy.id > nextId && enemy.directorIntro), false);
+});
+
+test('a legacy checkpoint exactly at minute six leaves the combined formation pending', () => {
+  const legacy = createStage(parseStageOptions('?autoplay=1&mode=survivors&seed=11'), ground);
+  legacy.tick = 360 * 60;
+  const envelope = JSON.parse(encodeCheckpoint(legacy));
+  delete envelope.state.phaseDirector;
+  const restored = decodeCheckpoint(JSON.stringify(envelope), ground);
+  assert.equal(restored.phaseDirector.six, false);
+
+  const before = restored.nextId;
+  stepStage(restored, {}, ground);
+  assert.equal(restored.phaseDirector.six, true);
+  const formation = restored.enemies.filter(enemy => enemy.id > before);
+  assert.equal(formation.filter(enemy => enemy.kind === 'crosswing').length, 2);
+  assert.ok(formation.some(enemy => enemy.kind === 'twin-chaser'));
 });

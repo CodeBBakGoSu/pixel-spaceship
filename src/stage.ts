@@ -14,6 +14,7 @@ import { advanceManeuver, BODY_GRACE_TICKS, canManeuver, exitAltitude, MANEUVERS
 import { ENEMY_KINDS, isBodyHazard, isNewEnemyKind, type NewEnemyKind } from './enemy-kinds.ts';
 import { addBomberEscort, advanceEnemies, makeEnemy, placeSkimEnemy, postponeEnemyShot, warnHarrier } from './stage-enemies.ts';
 import { advancePhaseSpawns, relocateStragglers, spawnWave, trimEscorts, WAVES } from './spawn-director.ts';
+import { advancePhaseDirector } from './phase-director.ts';
 import { random, rngStream } from './stage-random.ts';
 import { GNAT, RUN_BOSS_SECONDS, RUN_END_SECONDS, SWARM_CAPS } from './data/phases.ts';
 import { BILL_CREDIT_BONUS, CARRIER_REPAIR_HULL, LEGACY_BOSS_SECONDS, LEGACY_END_SECONDS, PICKUP_LIMIT,
@@ -31,9 +32,10 @@ import { advanceRangedWeapons } from './ranged-weapons.ts';
 import { advanceSupportWeapons } from './support-weapons.ts';
 import type { SwarmObserver } from './swarm.ts';
 import { advanceSwarmEvent, suppressSwarmEvent } from './swarm-events.ts';
+import { consumeMidbossCue, createMidbossSchedule, finishMidbossEncounter, midbossSpawnsBlocked } from './midboss-schedule.ts';
+import { createThreatBudget, trySpendThreat } from './threat-budget.ts';
 import { advancePhasePacing, noteSortieKill } from './sortie-pacing.ts';
-import { advanceSortieMiniboss, settleSortieMiniboss, startSortieMiniboss,
-  STANDALONE_SORTIE_BOSS_HOOKS, type SortieBossHooks } from './sortie-bosses.ts';
+import { advanceSortieMiniboss, settleSortieMiniboss, startSortieMiniboss, type SortieBossHooks } from './sortie-bosses.ts';
 // --- S7e lane ---
 import { advanceAce, beginAceDefeat, deployAce } from './ace.ts';
 import { ACE } from './data/ace.ts';
@@ -223,7 +225,8 @@ function applyGearEffects(state: StageState, card: DraftCard): void {
 }
 
 const fixtureBands: Record<NewEnemyKind, Band> = {
-  skimmer: 0, spotter: 2, hound: 1, flanker: 2, harrier: 1, diver: 2, bomber: 1, turret: 1,
+  skimmer: 0, spotter: 2, hound: 1, 'twin-chaser': 1, flanker: 2, crosswing: 1,
+  harrier: 1, diver: 2, manta: 2, mender: 1, bomber: 1, turret: 1,
 };
 
 function applyFixture(state: StageState, options: StageOptions, ground: Ground): void {
@@ -336,7 +339,9 @@ export function createStage(options: StageOptions = parseStageOptions(''), groun
     phase: options.fixture || options.autoplay || options.time !== null ? 'playing' : 'title',
     paused: false, resultPending: null, seed: options.seed, rng: options.seed, nextId: 0, nextVolley: 0, tick: 0, nextWave: 0,
     run, profile, daily, hangar, metrics: createRunMetrics(), killBandTicks: [-1, -1, -1],
-    ejectorUsed: false, summary: null, phaseNotice: null, bills: createBillState(), lastHitTick: -1,
+    ejectorUsed: false, summary: null, phaseNotice: null,
+    ...(run ? { phaseRepairMask: 0 } : {}), bills: createBillState(), lastHitTick: -1,
+    ...(run ? { threatBudget: createThreatBudget(), midbossSchedule: createMidbossSchedule() } : {}),
     chests: createChestState(), chestReveal: null,
     swarmCap: (options.mobile ?? options.touch) ? SWARM_CAPS.mobile : SWARM_CAPS.desktop,
     aceRank: rank,
@@ -554,7 +559,9 @@ export function dropMagnet(state: StageState, source: { sourceEventId: number; s
   return pickup;
 }
 
-const SORTIE_BOSS_HOOKS: SortieBossHooks = { ...STANDALONE_SORTIE_BOSS_HOOKS, dropMagnet };
+const SORTIE_BOSS_HOOKS: SortieBossHooks = {
+  consumeMidbossCue, finishMidbossEncounter, trySpendThreat, dropMagnet,
+};
 
 function pickupEvent(pickup: Pickup, tick: number, sourceEventId?: number) {
   const eventSource = sourceEventId ?? pickup.source?.eventId;
@@ -754,7 +761,7 @@ function advanceSalvage(state: StageState, ground: Ground, events: CombatEvents 
         xp, born: state.tick, reversal: enemy.reversalKill };
     state.pickups.push(salvage);
     events?.pickupDropped?.(pickupEvent(salvage, state.tick, enemy.id));
-    if (state.run && enemy.carrier && !enemy.sortieBoss) {
+    if (state.run && (enemy.carrier || enemy.elite) && !enemy.sortieBoss) {
       dropMagnet(state, { sourceEventId: enemy.id, sourceKind: 'elite', position }, events);
     }
     state.effects.push({ kind: 'burst', x: enemy.x, z: enemy.z, alt: enemy.alt, life: 0.42 });
@@ -878,6 +885,7 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
       // --- S7d lane ---
       delete state.rally;
       delete state.claimedSites;
+      delete state.phaseDirector;
       Object.assign(state, createStage({ ...parseStageOptions(''), seed: launch?.seed ?? state.seed,
         view: state.initialView, time: 0, mode: state.run ? 'survivors' : 'legacy', mobile: state.swarmCap === SWARM_CAPS.mobile,
         profile: launch?.profile ?? state.profile, daily: launch?.daily ?? state.daily, heat: launch?.heat ?? state.heat,
@@ -959,10 +967,11 @@ export function stepStage(state: StageState, input: StageInput = {}, ground: Gro
   if (state.run) {
     updateRunSlots(state.run, state.tick, !!state.boss);
     advanceChestSpawns(state, ground, ['first-evolution', 'second-evolution']);
-    const suppressFormations = state.sortieBoss?.outcome === null || state.tick < (state.sortieLullUntil ?? 0);
+    const suppressFormations = midbossSpawnsBlocked(state)
+      || state.sortieBoss?.outcome === null || state.tick < (state.sortieLullUntil ?? 0);
     if (suppressFormations) suppressSwarmEvent(state);
     else if (!advanceSwarmEvent(state, ground, observeSwarm)) {
-      advancePhaseSpawns(state, ground, observeSwarm);
+      if (!advancePhaseDirector(state, ground)) advancePhaseSpawns(state, ground, observeSwarm);
     }
   } else {
     const wave = WAVES[state.nextWave];

@@ -24,6 +24,18 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 14:48 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge f6f84c0 + d21455a)
+- Integrated timed salvage, terminal capture settlement and magnet drops. Shared miniboss hooks now run the live magnet roll once on defeat; regular carriers and marked elites also roll on defeat. Expedition rests do not pull salvage, and altitude-independent Bill credit still uses the actual contact tick.
+- `npm test` 699/699, `npm run build` and `git diff --check` passed. Legacy replay matches the target; the Survivors golden was updated for the combined gameplay. Desktop Heat 0 simulation (100 seeds/profile) is running; PR review pending.
+
+### 2026-11-25 14:40 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (review of a641975)
+- A full shared ledger incorrectly started the normal miniboss attack cooldown even though no escorts fired. Blocked volleys now retry at the shared spacing interval; an emitted volley still starts the normal cooldown.
+- The regression reproduces a denied volley and confirms a single paid volley once room opens. `npm test` 683/683, `npm run build` and `git diff --check` passed; Survivors replay golden updated. Before timed-pickup integration, desktop Heat 0 skilled/average/weak recorded wins 100/100/98, losses 0/0/2 and timeouts 0/0/0 across 100 seeds each.
+
+### 2026-11-25 14:30 KST · 데븐 봇 · devin/1795524682-minute-waves-enemies (merge 0674f91 + 201cbce)
+- Integrated `renderer-proto`'s miniboss, Ace reengagement and arena changes. Actual miniboss actors consume the shared cues, use the same threat ledger as Ace and regular enemies, and block formations during the encounter and its 15-second rest.
+- `npm test` 682/682, `npm run build` and `git diff --check` passed. The Survivors replay golden reflects the combined gameplay. The 100-seed/profile simulation is running; the PR remains open for review.
+
 ### 2026-11-25 14:26 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (merged `201cbce` into `14a13e2`)
 - Integrated the target's sortie minibosses with timed salvage. Midboss defeats roll the magnet stream once, not again as a chest carrier. Updated the combined Survivors replay golden; Legacy is unchanged.
 - Verification: focused replay/miniboss tests 19/19; `npm test` 668/668; `npm run build` passed; staged diff clean. Conflict resolution complete; no balance tuning or deployment.
@@ -94,6 +106,15 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Implemented the 205/400-second replacement minibosses with existing evolution-carrier hull/reward behavior and adapters for `consumeMidbossCue`, `finishMidbossEncounter`, `trySpendThreat`, and `dropMagnet`; routed Ace attacks through the same threat hook and added reengagement with an actual first gun line and 12s→10s cadence.
 - Added deterministic coverage for cue contracts, trajectories/collision, kill versus retreat, one-time rewards, reengagement windows, threat denial, and deadline damage. `npm test` passed 640/640; `npm run build` passed (122 modules, 3.55 s). No balance simulation or visual check was run.
 - State: done; review pending, no commit or push.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795524682-minute-waves-enemies (independent candidate based on `09e2890`)
+- Review fixes: deterministic isolated introductions and 6:00–9:00 cleanup; only Crosswing pairs; continuous-altitude Manta; delayed/interrupted 3D Mender repair with dotted tether; reservation-first Diver; danger-interval threat budgets; increasing elite Aegis share/volley without changing Gnat HP.
+- Delivery fixes: Manta captures player height, warns on a frozen 3D crossing, and exits horizontally at that altitude. Intro isolation cancels other tells/volleys, removes prior intro types, and retains an intro actor until its first accepted attack. Minute-six Crosswing/Twin Chaser warnings share a serialized slot even when threat reservation is delayed. Repair-only compatibility remains 2 hull at 105/225/345/465 seconds; those ticks no longer create phase spawn lulls or lull announcements.
+- Replay terminal hashes were rebaselined for the intentional phase-spawn cadence change; the existing fidelity-on/off parity checks remain in the suite.
+- Midboss call order: after the fixed tick advances and before regular spawns, the external owner polls `consumeMidbossCue(state)`; on a cue it starts the encounter, then calls `finishMidbossEncounter(state, {id, endedAt, outcome})` exactly once on the actual terminal tick. The owner checks `midbossSpawnsBlocked(state)` while the 15-second post-result rest runs. Threat callers pass `activeFromTick`/`activeUntilTick` for their tell and danger span; the API default covers the 3.75-second bolt lifetime. No carrier/reward path was changed.
+- Red Kite is the Ace: first encounter remains 8:00 and its reengagement intensifies at 9:00; there is no boss-timing conflict.
+- Verification: focused regressions 41/41; `npm test` 647/647; `npm run build` `✓ 124 modules transformed.` / `✓ built in 3.01s` (non-blocking >500 kB chunk advisory); `git diff --check` clean.
+- Renderer visuals/screenshots, balance simulation, external cue consumption, and balance-bot handoff remain unverified. No merge or deployment.
 
 ### 2026-11-24 22:01 KST · 데븐 봇 · devin/1795525052-timed-pickup-magnet (based on `09e2890`)
 - Implemented approved pickup §3 on the independent candidate: altitude-independent timed salvage, direct magnet drops and collection; public `main` remains untouched.
@@ -486,3 +507,25 @@ Desktop Heat 0, seeds 1–100. Each cell is clear / Ace kill / timeout / surviva
 - Ace-lock warning uses one 1125Hz, 32ms band-limited square-like beep; the pulse gaps shorten. The final 1650/2200Hz accent is unchanged.
 - Verification: focused audio/Ace/input tests 68/68; build 120 modules. Trusted C canceled the Ace attack with 0 shots. In the mixed WAV, the accent measures −17.4/−17.5dBFS with off-tone residual −45.9/−41.2dBFS; the preceding pulse ends 1.333ms before the accent, with peak −13.35dBFS and 0 clipped samples. Automated subjective flags for distortion/accent clarity were not corroborated by these measurements. The 57s viewer capture is silent; its separate WAV is unsynchronized: https://app.devin.ai/sessions/f995748a1f3c4f929eeb74e526d39a42?testRecording=ccdecfff-5e94-4857-9ae3-6fda9fb76db9
 - State: renderer-proto-only update; no PR, main merge, or deployment.
+
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (review corrections; base `8e1c805`)
+- Corrected candidate regressions: reset the phase director on restart; integrate escort clear-out movement; migrate legacy checkpoint threat/director/schedule/repair state; align Crosswing side frames and verify both paths cross; keep pending midboss cues from blocking spawns while preserving active/rest gates; and raise Manta above its captured player-height endpoint with terrain-aware climb ownership.
+- Seed-3 `stepStage` Manta trace: reservation 260s (tick 15600), actual spawn tick 15600, first pass warning/attack tick 16246 (270.77s); pass start altitude 249.12, captured endpoint altitude 189.12, horizontal exit starts tick 16325 and completes tick 16380 at the captured height. The regression uses the natural seed-3 spawn and full stage loop, with firing/crossfire suppressed after the scheduled spawn to isolate its flight path; scheduled intro time is not asserted as actual spawn/attack time.
+- Focused tests: new enemies 10/10, phase director 6/6, checkpoint 10/10, Crosswing path 1/1, midboss schedule 2/2, replay 2/2, swarm events 5/5.
+- Full `npm test`: 652/653 passed. Remaining failure is the bot-sim survival-order assertion (`average` median 515.23s, `weak` median 552.72s); no balance retuning or weakened assertion was applied. `npm run build`: 124 modules transformed, built in 4.25s; existing >500 kB chunk advisory remains. `git diff --check` is clean.
+- Reviewed the repo blueprint (`npm install` maintenance); no dependency or setup changes were made. Visual/UI rendering was not checked.
+- State: independent candidate only; no merge or deployment.
+
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (Crosswing termination review)
+- Reproduced the terrain stall with safe terrain until one fighter reached `finished` and its mate remained in `exit` (tick 108), then blocked the route; both phases remained `finished`/`exit` through tick 508. Reproduced mate-loss stall at the same split: after the exiting mate died, the finished survivor remained `finished` for 100 ticks.
+- Added a finite path deadline aligned with the existing 258-tick threat window; a blocked attack aborts both active FSM paths instead of leaving a finished partner waiting forever. A finished fighter now enters its 60-tick recovery when its mate is absent.
+- Focused Crosswing regressions: 4/4, including blocked-terrain abort and dead-mate recovery.
+- State: independent candidate only; no merge or deployment.
+
+### 2026-11-24 · Devin · devin/1795524682-minute-waves-enemies (Crosswing geometry and minute-six resume)
+- Replaced Crosswing side-frame targets with tell-time position snapshots, one shared crossing point, and fixed opposite exits. Fighters now follow the warned crossing path, finish independently, and enter pair recovery only after both exit; a fighter whose mate dies before the shared point cancels its path.
+- Seed-4 regression uses the natural seed-4 stage spawn and full `stepStage` loop, traces actual per-tick fighter segments, and asserts the traces intersect. Trace: reservation tick 8400 (140s), actual spawn tick 8400, first warning tick 8550 (142.5s), finish ticks 8666/8672, pair recovery tick 8672. Friendly weapons are disabled in this regression only so the pair survives long enough to exercise both paths.
+- Legacy checkpoint migration now leaves the minute-six combined formation pending at exactly 360 seconds; the regression resumes that boundary and verifies the Crosswing pair and Twin Chaser spawn.
+- Focused checks: Crosswing path 2/2; checkpoint 11/11. Full `npm test`: 655/655. `npm run build`: 124 modules transformed, built in 4.08s; the existing >500 kB chunk advisory remains. `git diff --check`: clean.
+- Bot-sim investigation: the prior average/weak median-order failure is absent with the unchanged assertion after this correction. Same-seed traces show no hull-hit event while a Crosswing is active; late hits occur after the pairs are gone. The indirect reason the deterministic profile medians changed remains unverified; no balance tuning or assertion change was made.
+- State: independent candidate only; no merge or deployment.

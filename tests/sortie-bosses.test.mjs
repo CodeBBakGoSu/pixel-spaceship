@@ -11,11 +11,12 @@ import { advanceEnemies } from '../src/stage-enemies.ts';
 import { random, rngStream } from '../src/stage-random.ts';
 import { relocateStragglers } from '../src/spawn-director.ts';
 import { advanceSortieMiniboss, SORTIE_BOSS_HIT_RADIUS, SORTIE_MINIBOSS_CUES, SORTIE_REST_TICKS, STANDALONE_SORTIE_BOSS_HOOKS } from '../src/sortie-bosses.ts';
+import { THREAT_BUDGET, trySpendThreat } from '../src/threat-budget.ts';
 import { World } from '../src/world.ts';
 
 const ground = () => 0;
 
-function startEncounter(index, hooks = STANDALONE_SORTIE_BOSS_HOOKS) {
+function startEncounter(index, hooks) {
   const cue = SORTIE_MINIBOSS_CUES[index];
   const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ground);
   state.tick = cue.startTick - 1;
@@ -356,6 +357,25 @@ test('miniboss attacks spend the threat hook and denial emits no volley', () => 
   }
 });
 
+test('transport escorts retry after a denied spend and keep their normal cadence after firing', () => {
+  const state = startEncounter(0);
+  const boss = state.sortieBoss;
+  const firstAttempt = boss.nextThreatAt;
+  const retryAt = firstAttempt + THREAT_BUDGET.spacingTicks;
+  for (const tick of [retryAt - THREAT_BUDGET.windowTicks, firstAttempt - 180, firstAttempt - 60]) {
+    assert.ok(trySpendThreat(state, { tick, source: 'regular-escort', points: 2, bearing: 0 }));
+  }
+  const volleys = [];
+  const events = { muzzle(shot) { if (shot.kind === 'hostile') volleys.push(state.tick); } };
+  run(state, firstAttempt - state.tick, undefined, events);
+  assert.deepEqual(volleys, []);
+  assert.equal(boss.nextThreatAt, retryAt);
+  run(state, THREAT_BUDGET.spacingTicks, undefined, events);
+  assert.deepEqual(volleys, [retryAt, retryAt]);
+  assert.equal(boss.nextThreatAt, retryAt + 5 * TICKS_PER_SECOND);
+  assert.equal(state.threatBudget.spends.filter(spend => spend.source === boss.cue.threatSource).length, 1);
+});
+
 test('either miniboss kill pays one existing evolution chest and one midboss hook, then rests from completion', () => {
   for (const [index, chestId] of [[0, 'first-evolution'], [1, 'second-evolution']]) {
     const magnetCalls = [];
@@ -441,17 +461,28 @@ test('a 30-second miniboss retreat returns its actual tick and pays no rewards',
   assert.equal(state.pickups.length, 0);
 });
 
-test('the 3:35 and 6:45 swarm events are consumed during boss/rest and never launch afterward', () => {
+test('shared boss cues replace the 3:35 and 6:45 swarms without deferred spawns', () => {
   for (const [index, eventStart] of [[0, 215], [1, 405]]) {
-    const state = startEncounter(index);
-    const hooks = STANDALONE_SORTIE_BOSS_HOOKS;
-    run(state, 45 * TICKS_PER_SECOND, hooks);
-    assert.ok(state.suppressedSwarmEvents.includes(eventStart));
+    const cue = SORTIE_MINIBOSS_CUES[index];
+    const state = createStage(parseStageOptions('?mode=survivors&autoplay=1&seed=27'), ground);
+    state.tick = cue.startTick - 1;
+    state.chests.next = index === 0 ? 1 : 3;
+    state.twinAt = state.podsAt = state.strafeAt = Number.MAX_SAFE_INTEGER;
+    stepStage(state, {}, ground);
+    assert.deepEqual(state.midbossSchedule.active, cue);
+    assert.deepEqual(state.sortieBoss.cue, cue);
+    run(state, (eventStart - cue.startTick / TICKS_PER_SECOND) * TICKS_PER_SECOND);
+    assert.ok(state.threatBudget.spends.some(spend => spend.source === cue.threatSource));
     assert.equal(state.enemies.filter(enemy => enemy.eventFlight).length, 0);
-    assert.ok(state.tick >= (eventStart === 215 ? 250 : 445) * TICKS_PER_SECOND);
-    run(state, 15 * TICKS_PER_SECOND, hooks);
-    assert.equal(state.enemies.filter(enemy => enemy.eventFlight).length, 0,
-      `suppressed ${eventStart}s event did not appear as a deferred crossing after rest`);
+    const boss = state.sortieBoss;
+    const actor = state.enemies.find(enemy => enemy.id === boss.actorId);
+    actor.hp = 0;
+    actor.shotDown = true;
+    stepStage(state, {}, ground);
+    assert.equal(state.midbossSchedule.active, null);
+    assert.deepEqual(state.midbossSchedule.lastResult, { id: cue.id, endedAt: state.tick, outcome: 'defeated' });
+    assert.equal(state.midbossSchedule.restUntil, state.tick + SORTIE_REST_TICKS);
+    assert.equal(state.enemies.filter(enemy => enemy.eventFlight).length, 0);
     assert.equal(state.swarmNotice?.kind, undefined);
   }
 });

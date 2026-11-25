@@ -1,6 +1,5 @@
 import { BILLS, BILL_UNPAID_XP_SCALE, type BillDefinition } from './data/items.ts';
-import { nearestBand } from './maneuvers.ts';
-import { inBand, TICKS_PER_SECOND } from './stage-combat.ts';
+import { TICKS_PER_SECOND } from './stage-combat.ts';
 import type { Enemy, Pickup, StageState } from './stage-types.ts';
 
 export type BillId = typeof BILLS[number]['id'];
@@ -10,7 +9,6 @@ export type ActiveBill = {
   deadline: number;
   progress: number;
   unharmedTicks: number;
-  bandKills: [number, number, number];
 };
 export type BillState = {
   next: number;
@@ -47,7 +45,7 @@ export function startBillTick(state: StageState): void {
       && (run.weaponLevels.pods ?? 0) <= 0 && (run.weaponLevels.phoenix ?? 0) <= 0
       && (run.weaponLevels['bomb-bay'] ?? 0) <= 0
       && Object.keys(run.weaponLevels).length >= run.weaponSlots) continue;
-    bills.active = { id: definition.id, startedAt, deadline, progress: 0, unharmedTicks: 0, bandKills: [0, 0, 0] };
+    bills.active = { id: definition.id, startedAt, deadline, progress: 0, unharmedTicks: 0 };
     bills.offered++;
     bills.interest = false;
     return;
@@ -58,12 +56,11 @@ export function noteBillKill(state: StageState, enemy: Enemy): void {
   const bill = state.bills.active;
   if (!bill || state.tick > bill.deadline || !enemy.shotDown || enemy.entry) return;
   switch (billDefinition(bill.id).demand.kind) {
-    case 'same-band-kills':
-      if (inBand(state.player.altitude, enemy.alt)) {
-        const band = nearestBand(enemy.alt);
-        bill.progress = Math.max(bill.progress, ++bill.bandKills[band]);
-      }
+    case 'front-kills': {
+      const dx = enemy.x - state.player.x, dz = enemy.z - state.player.z;
+      if (dx * Math.sin(state.player.yaw) + dz * Math.cos(state.player.yaw) > 0) bill.progress++;
       break;
+    }
     case 'pursuer-kills': {
       const credit = enemy.killCredit;
       if (credit?.rear && credit.weapon && REAR_WEAPONS.has(credit.weapon)
@@ -77,9 +74,9 @@ export function noteBillKill(state: StageState, enemy: Enemy): void {
 }
 
 // --- S7d lane ---
-export function noteBillPickup(state: StageState, pickup: Pick<Pickup, 'alt' | 'skim'>, tick = state.tick): void {
+export function noteBillPickup(state: StageState, pickup: Pick<Pickup, 'xp'>, tick = state.tick): void {
   const bill = state.bills.active;
-  if (bill?.id === 'high-recovery' && tick <= bill.deadline && !pickup.skim && nearestBand(pickup.alt) === 2) bill.progress++;
+  if (bill?.id === 'high-recovery' && tick <= bill.deadline && pickup.xp > 0) bill.progress++;
 }
 
 export function billXpScale(state: StageState): number {

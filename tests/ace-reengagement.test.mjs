@@ -336,9 +336,10 @@ test('Ace attack admission shares the threat hook and denial does not telegraph 
     return false;
   });
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].tick, state.tick);
+  assert.equal(requests[0].activeFromTick, state.tick);
+  assert.ok(requests[0].tick > state.tick);
   assert.equal(requests[0].source, 'ace');
-  assert.equal(requests[0].points, 1);
+  assert.equal(requests[0].points, 2);
   assert.ok(Number.isFinite(requests[0].bearing));
   assert.equal(ace.tell, null);
   assert.equal(ace.attacks, attacks);

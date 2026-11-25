@@ -17,6 +17,10 @@ const ROSTER_WARNINGS: Record<EnemyTell['kind'], { key: MessageKey; priority: nu
   aegis: { key: 'hud.rosterAegis', priority: 2 },
   carrier: { key: 'hud.rosterCarrier', priority: 1 },
   gnat: { key: 'hud.rosterGnat', priority: 1 },
+  charge: { key: 'hud.rosterCharge', priority: 5 },
+  crossing: { key: 'hud.rosterCross', priority: 5 },
+  pass: { key: 'hud.rosterPass', priority: 5 },
+  repair: { key: 'hud.rosterRepair', priority: 2 },
   tail: null,
 };
 
