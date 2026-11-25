@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { phoneLayout } from '../src/layout.ts';
 import { AEGIS_CUE_SIZE, findTouchCueRect, findTouchCueRects, pointBehindTouchControls, screenArrowRotation,
   screenPointObscured, TOUCH_THREAT_CUE_SIZE, touchControlOcclusionRect, isDescendingDiveWarning, touchCueScreenReference,
-  touchOcclusionCue, firstTouchOcclusionCue } from '../src/touch-cue-layout.ts';
+  touchOcclusionCue, firstTouchOcclusionCue, diveWarningTarget } from '../src/touch-cue-layout.ts';
 
 const sizes = [[390, 844], [844, 390]];
 const safe = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -167,4 +167,16 @@ test('the occlusion cue skips visible dive targets and uses a later covered warn
   const cue = firstTouchOcclusionCue(layout, { x: 195, y: 420 }, [visible, covered], TOUCH_THREAT_CUE_SIZE);
   assert.ok(cue);
   assert.equal(cue.rotation, 180);
+});
+
+test('Stingray pass warnings point the dive cue at their descending pass end', () => {
+  const bands = [30, 60, 90, 120];
+  const passEnd = { x: 12, z: -40, alt: 48 };
+  assert.deepEqual(diveWarningTarget({ x: 0, z: 0, alt: 110, band: 2, maneuver: null,
+    manta: { phase: 'warning', passEnd } }, bands), passEnd);
+  assert.equal(diveWarningTarget({ x: 0, z: 0, alt: 110, band: 2, manta: { phase: 'pass', passEnd } }, bands), null);
+  assert.equal(diveWarningTarget({ x: 0, z: 0, alt: 40, band: 0, manta: { phase: 'warning', passEnd } }, bands), null);
+  assert.deepEqual(diveWarningTarget({ x: 5, z: 6, alt: 95, band: 2, maneuver: { phase: 'warning', band: 1 } }, bands),
+    { x: 5, z: 6, alt: 60 });
+  assert.equal(diveWarningTarget({ x: 5, z: 6, alt: 95, band: 2, maneuver: { phase: 'warning', band: 3 } }, bands), null);
 });
