@@ -25,9 +25,10 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
-### 2026-11-26 KST · 데븐 봇 · `devin/1764185000-cockpit-stability` (`f0677e5`)
+### 2026-11-26 KST · 데븐 봇 · `devin/1764185000-cockpit-stability` (`f0677e5`, review fixes `d95f7c1`/`7fa351d`/`46c7c79`/`899b1b2`)
 - 콕핏 기본 롤을 chase와 같은 15% 지평선 고정으로 바꾸고 1:1 롤 복귀 체크박스를 추가했다. tremble/head bob/FOV pumping을 줄이고 pitch에 따라 view offset이 흔들리던 보정을 제거했다.
 - 화면 흔들림 슬라이더(0–100%, 기본 50%, reduced-motion 기본 0%)를 추가하고 플레이어 폭탄·flak·작은 burst의 카메라 shock을 제거했다. 실제 피격 shock은 남기고 hit freeze는 30 ms로 줄였다. 새 한국어 설정 문구용 Galmuri subset도 갱신했다.
+- Review 후속으로 화면 밖 조준점을 중앙에 가짜로 그리지 않고 가장자리 방향 화살표/비표시로 두게 했고, 후방 화면 롤은 cockpit view에서만 지평선 고정을 따르며, reduced-motion에서도 사용자가 올린 흔들림 값은 shock에 적용되게 했다.
 - Verification: `npm test` 796/796, `npm run build` 통과. 브라우저 desktop 및 500×759 portrait에서 콕핏 배럴롤·부스트·사격/폭탄, 설정 토글/슬라이더, chase/overhead 렌더링을 확인했다. flak shock filtering과 정확한 30 ms freeze는 별도 runtime 측정으로 분리하지 못했다.
 - State: 구현·검증 완료; [PR #18](https://github.com/CodeBBakGoSu/pixel-spaceship/pull/18)은 review 대기. 기존 미리보기 https://aster-wing--61hvcert.preview.devinapps.com 는 `f0677e5` production build를 서빙한다. `main`은 변경하지 않았다.
 
