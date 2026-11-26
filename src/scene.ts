@@ -1197,7 +1197,7 @@ export class FlightScene {
     let ignitionShake = 0, rearBank = 0;
     if (this.feelEnabled) {
       const spinning = !!state.roll;
-      if (!reduceMotion) this.noteBlasts(state);
+      this.noteBlasts(state);
       const p = state.player, controlled = !state.roll && maneuverAllowsControl(state.maneuver);
       this.motion.advance(state, yaw, spinning ? this.rollPose.roll : bank, spinning, phone, reduceMotion,
         { altitude: p.altitude, pitch: p.pitch, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
