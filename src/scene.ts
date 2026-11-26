@@ -453,7 +453,7 @@ export class FlightScene {
   }
 
   shock(kind: 'hit' | 'parry', tick: number): void {
-    if (this.feelEnabled && !this.reducedMotion.matches) this.motion.shock(kind, tick);
+    if (this.feelEnabled) this.motion.shock(kind, tick);
   }
 
   setMotionOptions(options: { cockpitHorizonLock?: boolean; shakeScale?: number }): void {

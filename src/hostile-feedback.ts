@@ -226,7 +226,7 @@ export class HostileFeedback {
     const reduced = this.reduced.matches;
     this.animations.push(this.edge.animate(reduced ? SOFT_FLASH : FLASH, 440),
       this.hull.animate(reduced ? PIP_GLOW : PIP_BLINK, 480));
-    if (reduced || this.shakeScale <= 0) return;
+    if (this.shakeScale <= 0) return;
     this.animations.push(this.screen.animate(scaledShake(this.shakeScale), 175));
     if (state.view === 'cockpit') {
       this.animations.push(this.glass.animate(scaledShake(this.shakeScale), 175));

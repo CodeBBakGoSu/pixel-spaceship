@@ -1714,7 +1714,6 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
 function showReversalImpact(): void {
   if (reducedMotion.matches) {
     reversalFlash.animate([{ opacity: 0.24 }, { opacity: 0 }], { duration: 120, easing: 'ease-out' });
-    return;
   }
   // Move the view and its projected markings together while the rest of the HUD stays still.
   const scale = shakeScale();

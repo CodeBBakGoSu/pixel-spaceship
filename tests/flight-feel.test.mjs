@@ -89,7 +89,7 @@ test('chase roll eases in and back out while a same-tick phone resize applies th
   close(motion.chaseBank, 0, 0.001);
 });
 
-test('shake decays at 4.5/s and reduced motion clears both boost and camera movement', () => {
+test('shake decays at 4.5/s and reduced motion keeps tremble off while shake scale stays explicit', () => {
   close(feel.shockEnvelope(1, 0.25), Math.exp(-4.5 * 0.25));
   const motion = new feel.FlightMotion();
   const stage = { tick: 90, speed: BOOST_SPEED, boosting: true, boostTicks: 30 };
@@ -99,8 +99,15 @@ test('shake decays at 4.5/s and reduced motion clears both boost and camera move
   assert.equal(motion.boost, 1);
   assert.ok(Math.hypot(motion.shake, motion.shakeVertical) > 0.02);
   close(motion.chaseBank, -1.4 * 0.15);
+  motion.shakeScale = 0;
   motion.advance(stage, 0.6, -1.4, false, false, true);
   assert.deepEqual([motion.boost, motion.shake, motion.shakeVertical, motion.chaseBank], [0, 0, 0, 0]);
+
+  const explicit = new feel.FlightMotion();
+  explicit.shock('parry', stage.tick);
+  explicit.advance(stage, 0.6, -1.4, false, false, true);
+  assert.equal(explicit.boost, 0);
+  assert.ok(Math.abs(explicit.shake) > 0.5);
   assert.deepEqual(stage, original);
 });
 
