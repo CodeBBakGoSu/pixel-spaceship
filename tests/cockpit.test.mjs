@@ -68,10 +68,11 @@ test('the HUD zero line matches projected terrain through upright, vertical and 
           const error = Math.abs(dx * (point.y - ay) - dy * (point.x - ax)) / Math.hypot(dx, dy);
           assert.ok(error < 0.4, `${width} px ${maneuver} tick ${tick}: horizon error ${error} px`);
         }
-        const top = framing.cockpit.aiming.y;
-        const bottom = top + framing.cockpit.aiming.height;
-        assert.ok(points.some(point => point.y >= top && point.y < bottom),
-          `${width} px ${maneuver} tick ${tick} keeps the horizon in the aiming field`);
+        const center = (framing.cockpit.aiming.y + framing.cockpit.aiming.height * 0.48) / height;
+        const shift = Math.max(0.29, Math.min(0.64, center));
+        assert.equal(Math.round(camera.view.offsetX), 0);
+        assert.equal(Math.round(camera.view.offsetY), Math.round(height * (0.5 - shift)),
+          `${width} px ${maneuver} tick ${tick} keeps the cockpit projection anchored`);
         const above = marks.find(mark => mark.angle === 10);
         const below = marks.find(mark => mark.angle === -10);
         const signedSide = point => dx * (point.y - ay) - dy * (point.x - ax);

@@ -143,6 +143,11 @@
         <!-- --- S7f lane --- -->
         <div class="render-quality-settings">
           <label><input id="damage-numbers" type="checkbox" checked /> <span id="damage-numbers-label">Damage numbers</span></label>
+          <label><input id="cockpit-horizon-lock" type="checkbox" checked /> <span data-i18n="motion.horizonLock"></span></label>
+          <label class="shake-slider" for="screen-shake"><span data-i18n="motion.screenShake"></span>
+            <input id="screen-shake" type="range" min="0" max="100" step="1" value="50" />
+            <output id="screen-shake-value" for="screen-shake">50%</output>
+          </label>
           <label for="render-quality" data-i18n="quality.label"></label>
           <select id="render-quality">
             <option value="high" data-i18n="quality.high"></option>

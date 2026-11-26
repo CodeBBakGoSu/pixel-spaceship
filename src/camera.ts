@@ -16,12 +16,7 @@ const WORLD_UP = new Vector3(0, 1, 0);
 
 export function cockpitFov(aspect: number, pitch: number, widening = 0): number {
   const minimum = 2 * Math.atan(Math.tan(20 * Math.PI / 180) / aspect) * 180 / Math.PI;
-  return Math.max(60 + Math.abs(pitch) * 66, minimum) + widening;
-}
-
-function lensAdjustment(first: number, last: number, min: number, max: number, sweep = 0): number {
-  const low = last - max, high = first - min;
-  return Math.round(low <= high ? clamp(sweep, low, high) : (low + high) / 2);
+  return Math.max(60 + Math.abs(pitch) * 18, minimum) + widening;
 }
 
 export function frameCockpit(camera: PerspectiveCamera, player: StageState['player'], frame: CockpitFraming,
@@ -29,18 +24,13 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   lens?: CockpitLens): PitchMark[] {
   const { width, height, cockpit } = frame;
   const pitch = attitude?.cameraPitch ?? 0, bank = attitude?.cameraBank ?? 0;
-  const bankCos = Math.cos(bank), visualPitch = pitch * bankCos;
+  const bankCos = Math.cos(bank);
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const center = cockpit ? (cockpit.aiming.y + cockpit.aiming.height * 0.48) / height : 0.45;
   camera.fov = cockpitFov(width / height, attitude?.fovPitch ?? pitch, lens?.widening);
-  let shift = clamp(center, 0.29, 0.64);
-  if (cockpit && Math.abs(visualPitch) > 0.001) {
-    const { y, height: glassHeight } = cockpit.aiming;
-    const margin = Math.min(0.19, glassHeight / height * 0.42);
-    const horizonOffset = bankCos * Math.tan(pitch) / (2 * Math.tan(camera.fov * Math.PI / 360));
-    const edge = visualPitch > 0 ? (y + glassHeight) / height - margin : y / height + margin;
-    shift = clamp(visualPitch > 0 ? Math.min(shift, edge - horizonOffset) : Math.max(shift, edge - horizonOffset), 0.14, 0.82);
-  }
+  // Keep the projection anchored to the cockpit glass. Pitch-dependent view-offset
+  // correction made the fixed reticle slide across the world while the player aimed.
+  const shift = clamp(center, 0.29, 0.64);
   const viewOffset = Math.round(height * (0.5 - shift));
   camera.setViewOffset(width, height, 0, viewOffset, width, height);
   const reach = 5 - (lens?.pullback ?? 0), shake = lens?.shake ?? 0;
@@ -54,22 +44,7 @@ export function frameCockpit(camera: PerspectiveCamera, player: StageState['play
   const columns = pitchColumns(camera, frame, ground, visibleDepth);
   if (bankCos < 0) columns.reverse();
   const marks = projectPitchLadder(camera, width, height, columns);
-  const zero = marks.find(mark => mark.angle === 0);
-  if (!zero) return marks;
-  const area = cockpit.aiming;
-  const points = [...zero.left, ...zero.right].flatMap(line => [line.from, line.to]);
-  const xs = points.map(point => point.x), ys = points.map(point => point.y);
-  const top = Math.min(...ys), bottom = Math.max(...ys);
-  const strength = Math.min(1, Math.abs(visualPitch) / (24 * Math.PI / 180));
-  const desired = area.y + area.height * (visualPitch > 0 ? 0.78 : 0.22);
-  const adjustY = lensAdjustment(top, bottom, area.y + 6, area.y + area.height - 6, ((top + bottom) / 2 - desired) * strength);
-  const adjustX = Math.abs(Math.sin(bank)) > 0.001
-    ? lensAdjustment(Math.min(...xs), Math.max(...xs), area.x + 6, area.x + area.width - 6) : 0;
-  if (!adjustY && !adjustX) return marks;
-
-  // Move the lens rather than clamping the bar, so both scene and HUD keep the same skyline.
-  camera.setViewOffset(width, height, adjustX, viewOffset + adjustY, width, height);
-  return projectPitchLadder(camera, width, height, columns);
+  return marks;
 }
 
 export const cockpitLadderSpan = (layout: CockpitLayout): number =>

@@ -63,6 +63,8 @@ import { COMPARISON_DIVISOR } from './data/render-quality.ts';
 import { primeFidelityFixture } from './fidelity-fixture.ts';
 import { initialRenderQuality, parseRenderQuality, saveRenderQuality } from './render-quality.ts';
 import { shouldShowSwarmNotice } from './hud-notices.ts';
+import { initialCockpitHorizonLock, initialScreenShake, normalizeScreenShake,
+  saveCockpitHorizonLock, saveScreenShake } from './motion-settings.ts';
 import { stageRenderTick } from './render-cadence.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -115,6 +117,7 @@ const cockpitDisplay = new CockpitDisplay($<HTMLCanvasElement>('#cockpit-overlay
 const cockpitMarkers = new CockpitMarkers();
 const feedback = new HostileFeedback(root);
 const coarse = matchMedia('(pointer: coarse)'), portrait = matchMedia('(orientation: portrait)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const query = new URLSearchParams(location.search);
 const graphics = new GraphicsRecovery();
 const graphicsOverlay = $<HTMLElement>('#graphics-recovery');
@@ -165,6 +168,9 @@ const impactBatch = new ImpactBatch();
 const damageCanvas = $<HTMLCanvasElement>('#damage-feedback');
 const damageContext = damageCanvas.getContext('2d')!;
 const damageOption = $<HTMLInputElement>('#damage-numbers');
+const horizonLockOption = $<HTMLInputElement>('#cockpit-horizon-lock');
+const screenShakeOption = $<HTMLInputElement>('#screen-shake');
+const screenShakeValue = $<HTMLOutputElement>('#screen-shake-value');
 let damageNumbers = true;
 try { damageNumbers = localStorage.getItem('aster-damage-numbers') !== '0'; } catch { /* In-memory option. */ }
 if (query.has('damageNumbers')) damageNumbers = query.get('damageNumbers') !== '0';
@@ -190,6 +196,9 @@ const storage = {
   getItem: (key: string) => localStorage.getItem(key),
   setItem: (key: string, value: string) => localStorage.setItem(key, value),
 };
+let cockpitHorizonLock = initialCockpitHorizonLock(storage);
+let screenShakePercent = initialScreenShake(storage, reducedMotion.matches);
+const shakeScale = () => screenShakePercent / 100;
 // --- S7f lane ---
 const renderQualitySetting = $<HTMLSelectElement>('#render-quality');
 const renderQualityStatus = $('#render-quality-status');
@@ -221,6 +230,7 @@ let scene: FlightScene | null = null;
 function createFlightScene(): FlightScene {
   return new FlightScene(canvas, world, state.arena, {
     enabled: effectsEnabled, fixture: query.get('fixture'), quality: preferredRenderQuality, comparisonScale,
+    cockpitHorizonLock, shakeScale: shakeScale(),
   });
 }
 try {
@@ -261,12 +271,11 @@ let stickX = 0, stickY = 0, mouseX = 0, mouseY = 0, mouseActive = false;
 let touchBoost = false;
 let previousTime = 0, carry = 0, fps = 60, lastRenderCadenceTick = -1, lastRenderPhase = '';
 const REVERSAL_HITSTOP_MS = 60;
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 reducedMotion.addEventListener('change', () => { dirty = true; });
 const cockpitLayer = $('#cockpit-display');
 const reversalFlash = $('#reversal-flash');
 let hitstopUntil = -Infinity;
-const HIT_FREEZE_MS = 60;
+const HIT_FREEZE_MS = 30;
 let visualFreezeUntil = -Infinity, frameNow = 0, cueTime = 0, primingBullets = false;
 let parryNoticeUntil = 0;
 const projectedShip = { x: 0, y: 0, depth: 0 };
@@ -475,6 +484,29 @@ renderQualitySetting.addEventListener('change', () => {
   dirty = true;
 });
 document.addEventListener('visibilitychange', () => scene?.observeRenderFrame(null));
+
+function refreshMotionSettings(): void {
+  horizonLockOption.checked = cockpitHorizonLock;
+  screenShakeOption.value = String(screenShakePercent);
+  screenShakeValue.value = `${screenShakePercent}%`;
+  feedback.setShakeScale(shakeScale());
+  scene?.setMotionOptions({ cockpitHorizonLock, shakeScale: shakeScale() });
+}
+
+horizonLockOption.addEventListener('change', () => {
+  cockpitHorizonLock = horizonLockOption.checked;
+  saveCockpitHorizonLock(cockpitHorizonLock, storage);
+  refreshMotionSettings();
+  dirty = true;
+});
+
+screenShakeOption.addEventListener('input', () => {
+  screenShakePercent = normalizeScreenShake(screenShakeOption.value) ?? screenShakePercent;
+  saveScreenShake(screenShakePercent, storage);
+  refreshMotionSettings();
+  dirty = true;
+});
+refreshMotionSettings();
 
 function setRect(name: string, box: Rect): void {
   for (const [part, value] of Object.entries({ x: box.x, y: box.y, w: box.width, h: box.height })) {
@@ -1669,6 +1701,7 @@ Object.defineProperty(window, '__game', { get: () => Object.freeze({
   wipe: state.wipe, missedVolleys: state.effects.filter(effect => effect.kind === 'miss').length,
   // --- S7f lane ---
   renderQuality: { preferred: preferredRenderQuality, active: scene?.renderQuality, width: canvas.width, height: canvas.height },
+  motionSettings: { cockpitHorizonLock, screenShakePercent },
   ...(p1Fixture ? {
     chestRewards: state.chestReveal?.map(item => ({ ...item })),
     projectileTraces: scene?.projectileTraceCount,
@@ -1686,9 +1719,13 @@ function showReversalImpact(): void {
     return;
   }
   // Move the view and its projected markings together while the rest of the HUD stays still.
-  const keyframes = ['-1px 1px', '1px -1px', '-1px 0px', '0px 0px'].map(translate => ({ translate, easing: 'steps(1, end)' }));
-  canvas.animate(keyframes, 120);
-  if (state.view === 'cockpit') cockpitLayer.animate(keyframes, 120);
+  const scale = shakeScale();
+  if (scale > 0) {
+    const keyframes = [[-1, 1], [1, -1], [-1, 0], [0, 0]]
+      .map(([x, y]) => ({ translate: `${x * scale}px ${y * scale}px`, easing: 'steps(1, end)' }));
+    canvas.animate(keyframes, 120);
+    if (state.view === 'cockpit') cockpitLayer.animate(keyframes, 120);
+  }
 }
 
 function animate(now: number): void {

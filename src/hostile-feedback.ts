@@ -63,6 +63,20 @@ const GLITCH = [
   { translate: '1px 0px', filter: 'none', easing: 'steps(1, end)' },
   { translate: '0px 0px', filter: 'none' },
 ];
+function scaledTranslate(translate: string, scale: number): string {
+  return translate.replace(/(-?\d+(?:\.\d+)?)px/g, (_match, px) => `${Number(px) * scale}px`);
+}
+function scaledShake(scale: number): Keyframe[] {
+  return SHAKE.map(frame => ({ ...frame, translate: scaledTranslate(frame.translate, scale) }));
+}
+function scaledGlitch(scale: number): Keyframe[] {
+  const split = `drop-shadow(${-scale}px 0 #fa5568) drop-shadow(${scale}px 0 #5ee7ec)`;
+  return GLITCH.map(frame => ({
+    ...frame,
+    translate: scaledTranslate(frame.translate, scale),
+    filter: frame.filter === RGB_SPLIT ? split : frame.filter,
+  }));
+}
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 const right = (rect: Readonly<Rect>): number => rect.x + rect.width;
 const bottom = (rect: Readonly<Rect>): number => rect.y + rect.height;
@@ -133,6 +147,7 @@ export class HostileFeedback {
   private translate: Translate | null = null;
   private grazeCount = 0;
   private damage = 0;
+  private shakeScale = 1;
   private damageDirty = false;
   private hitAt = -Infinity;
   private hitX = 0;
@@ -159,6 +174,10 @@ export class HostileFeedback {
     const window = doc.defaultView!;
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     this.font = '13px ' + window.getComputedStyle(doc.documentElement).getPropertyValue('--game-font').trim();
+  }
+
+  setShakeScale(scale: number): void {
+    this.shakeScale = clamp(scale, 0, 1);
   }
 
   resize(width: number, height: number, phone: PhoneLayout | null, cockpit: CockpitLayout | null): void {
@@ -207,11 +226,11 @@ export class HostileFeedback {
     const reduced = this.reduced.matches;
     this.animations.push(this.edge.animate(reduced ? SOFT_FLASH : FLASH, 440),
       this.hull.animate(reduced ? PIP_GLOW : PIP_BLINK, 480));
-    if (reduced) return;
-    this.animations.push(this.screen.animate(SHAKE, 175));
+    if (reduced || this.shakeScale <= 0) return;
+    this.animations.push(this.screen.animate(scaledShake(this.shakeScale), 175));
     if (state.view === 'cockpit') {
-      this.animations.push(this.glass.animate(SHAKE, 175));
-      if (this.panels) this.animations.push(this.panels.animate(GLITCH, 160));
+      this.animations.push(this.glass.animate(scaledShake(this.shakeScale), 175));
+      if (this.panels) this.animations.push(this.panels.animate(scaledGlitch(this.shakeScale), 160));
     }
   }
 
