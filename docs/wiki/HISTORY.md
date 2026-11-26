@@ -17,6 +17,7 @@ XP 곡선, Seeker의 잠정 조준/피해/속도, Twin Lv7 피해 1.988→2 변�
 
 | 시기 (KST) | 시도 → 결정 | 이유·근거 |
 |---|---|---|
+| 11/26 | [`f0677e5`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/f0677e5) 콕핏 지평선 고정·흔들림 조절 구현 | 콕핏 롤을 기본 15%로 댐핑하고 1:1 롤은 설정에서 복귀할 수 있게 했다. 미세 진동·FOV pumping·view-offset 추적을 줄이고, 화면 흔들림 0–100% 슬라이더와 플레이어 폭탄/flak/작은 burst shock 제거를 넣었다. `npm test` 796/796·빌드 통과, desktop과 500×759 portrait 브라우저 검증 완료. flak별 runtime 분리와 정확한 30 ms freeze 측정은 미검증. [작업 로그](../WORKLOG.md#log) |
 | 11/24 | `dev1.0` `4dcddfd` 데스크톱 Heat 0, 시드 1–100 시뮬을 재실행 | 숙련/평균/초보 클리어 **100%/74%/44%**, Ace **100%/74%/4%**, 격추 중앙값 **3,199.5/3,195.5/2,979**. [`9d677b5`](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/9d677b5) 대비 초보 클리어는 시간 초과로 올랐고(Ace는 4%), 격추 중앙값은 약 400–500 줄었다. [작업 로그](../WORKLOG.md#log) |
 | 11/18–20 | [Courier Run 공개](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/801ff22) / [Survivors 개발 시작](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/ee94755) | 기존 3뷰 아케이드 루프를 공개판에 유지했다. 개발판은 한 출격 안에서 무기 조합과 성장을 느끼는 3D 복셀 생존 슈팅으로 분기했다. |
 | 11/21–22 | 비행·고도 읽기, Red Kite, 스트리밍 지형 → [Forge 카메라·지형 통합](https://github.com/CodeBBakGoSu/pixel-spaceship/commit/8265c4e) | 상승·하강과 기울기가 CHASE·콕핏에서 보이도록 카메라·그림자·지형 재질을 조정했다. [당시 비행기게임봇 기록](../WORKLOG.md#log) |

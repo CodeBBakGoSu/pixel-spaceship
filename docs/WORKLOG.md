@@ -25,6 +25,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-26 KST · 데븐 봇 · `devin/1764185000-cockpit-stability` (`f0677e5`)
+- 콕핏 기본 롤을 chase와 같은 15% 지평선 고정으로 바꾸고 1:1 롤 복귀 체크박스를 추가했다. tremble/head bob/FOV pumping을 줄이고 pitch에 따라 view offset이 흔들리던 보정을 제거했다.
+- 화면 흔들림 슬라이더(0–100%, 기본 50%, reduced-motion 기본 0%)를 추가하고 플레이어 폭탄·flak·작은 burst의 카메라 shock을 제거했다. 실제 피격 shock은 남기고 hit freeze는 30 ms로 줄였다. 새 한국어 설정 문구용 Galmuri subset도 갱신했다.
+- Verification: `npm test` 796/796, `npm run build` 통과. 브라우저 desktop 및 500×759 portrait에서 콕핏 배럴롤·부스트·사격/폭탄, 설정 토글/슬라이더, chase/overhead 렌더링을 확인했다. flak shock filtering과 정확한 30 ms freeze는 별도 runtime 측정으로 분리하지 못했다.
+- State: 구현·검증 완료; PR과 기존 dev1.2 미리보기 주소 갱신 진행 중. `main`은 변경하지 않았다.
+
 ### 2026-11-26 KST · 데븐 봇 · `dev1.2` (merge `renderer-proto` `2befca5` + `dev1.0` `d7feaf5`)
 - Created the cumulative dev1.2 candidate: current renderer-proto gameplay (10-minute continuous flight, minute waves/new enemies, minibosses, sortie VFX, mobile cue fixes, Ace difficulty) plus the dev1.0-only P1 hit audio, cache reveal audio, projectile trails, Korean glyph update, and diagnostic tools. XP/Seeker/Twin experiments remain non-default and `main` is untouched.
 - Resolved the only code conflict in `src/main.ts` by preserving both actual-hit audio batching and sortie weapon-hit VFX; documentation conflicts were merged as current dev1.2 guidance.
