@@ -212,7 +212,7 @@ type ShotCommon = Position & {
   pierce?: { remaining: number; hits: number[] };
 };
 export type Shot = ShotCommon & (
-  { kind: 'twin' | 'pods' | 'hostile'; hostileKind?: 'ace-missile'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
+  { kind: 'twin' | 'pods' | 'hostile'; hostileKind?: 'ace-missile' | 'ace-gun'; reversal?: { remaining: number; hits: number[] }; reversalTick?: number } |
   { kind: 'strafe'; targetBand: FlightBand; targetAltitude?: number; vy: number; reversal?: never; reversalTick?: never } |
   { kind: 'drone-bolt'; weapon: 'drones'; reversal?: never; reversalTick?: never } |
   (RangedShotFields & { reversal?: never; reversalTick?: never })

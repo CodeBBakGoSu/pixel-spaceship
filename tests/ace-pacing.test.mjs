@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { ACE, ACE_PHASES } from '../src/data/ace.ts';
+import { SURVIVOR_BALANCE, SURVIVOR_PLAYER_DAMAGE } from '../src/data/run-balance.ts';
+import { BOOST_SPEED } from '../src/flight.ts';
 import { ROLLS } from '../src/data/roll.ts';
 import { advanceAce, makeAce } from '../src/ace.ts';
 import { SKIM_BAND } from '../src/bands.ts';
@@ -51,6 +53,13 @@ test('a distant pilot gets a local Ace intercept and cover after leaving the ori
   assert.ok(state.enemies.some(enemy => enemy.kind === 'interceptor'));
   assert.ok(state.enemies.some(enemy => enemy.kind === 'gnat'));
   assert.ok(state.enemies.every(enemy => Math.hypot(enemy.x - ace.x, enemy.z - ace.z) < 130));
+});
+
+test('the Survivors Ace hull uses the tunable balance scale', () => {
+  const state = stage();
+  const expected = Math.round(ACE.hull.survivors * SURVIVOR_BALANCE.aceHullScale);
+  assert.equal(state.boss.hp, expected);
+  assert.equal(state.boss.maxHp, expected);
 });
 
 test('Ace health crosses both phase thresholds and only calls cover once', () => {
@@ -138,8 +147,20 @@ for (const kind of ['gun', 'missile']) {
     assert.equal(state.shots.length, ACE_PHASES[2][kind].length);
     assert.ok(state.shots.every(shot => shot.kind === 'hostile' &&
       (kind === 'missile') === (shot.hostileKind === 'ace-missile')));
+    const expectedSpeed = BOOST_SPEED * ACE[kind].speedScale * SURVIVOR_BALANCE.aceProjectileSpeedScale;
+    assert.ok(state.shots.every(shot => Math.abs(Math.hypot(shot.vx, shot.vz) - expectedSpeed) < 1e-9));
+    assert.ok(state.shots.every(shot => shot.damage === SURVIVOR_PLAYER_DAMAGE * SURVIVOR_BALANCE.aceProjectileDamageScale));
   });
 }
+
+test('Ace refire delay uses the tunable fire interval scale', () => {
+  const state = stage('?fixture=ace&phase=2&cue=gun'), ace = state.boss;
+  const fireAt = ace.tell.until;
+  state.tick = fireAt;
+  advanceAce(state, ground);
+  const expected = Math.round(ACE_PHASES[2].fireTicks * SURVIVOR_BALANCE.aceFireIntervalScale);
+  assert.equal(ace.attackAt - fireAt, expected);
+});
 
 test('a guided Ace missile travels through the existing same-band parry path', () => {
   const state = stage('?fixture=ace&cue=missile'), ace = state.boss, p = state.player;

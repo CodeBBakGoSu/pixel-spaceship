@@ -24,6 +24,69 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Log
 
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (independent balance confirmation)
+- 밸런스 봇 independent comparison confirmed the PR candidate (`b283efe` → `79a332b`, desktop/Heat 0/seeds 1–100 per profile): baseline skilled/average/weak 100/0/0, 100/0/0, 99/1/0; candidate 82/1/17, 20/55/25, 0/77/23. Candidate skilled and weak rows were independently rerun; the average row reuses the identical-behavior PR aggregate, matching the implementation-session result.
+- Target check: average Ace win rate is 20.0%, expected first Ace win 5.0 sorties. The result is an Ace difficulty bundle (damage ×2.5, hull ×3.5, fire interval ×0.8), not an isolated hull-only measurement.
+- Verification: PR #17 measurement table updated with independent provenance; no game code changed in this entry.
+- State: PR #17 open against `renderer-proto`; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace candidate local target hit)
+- Reduced the candidate to `aceHullScale ×3.5` after corrected 30-seed local probes: hull ×3.75/fire ×0.8 was too hard (p=10.0%), while hull ×3.5/damage ×2.5/fire ×0.8 hit the target lower bound (average p=16.7%, 5 clears/15 losses/10 timeouts). XP remains untouched. Same-seed 300-sortie local measurement (100 seeds/profile): skilled 82/1/17, average 20/55/25 (p=20.0%, expected first win 5.0 sorties), weak 0/77/23. Official balance-bot confirmation was requested.
+- Updated deterministic test expectations for the final candidate: full-autopilot seed 27 now clears, and the three-seed profile sim pins exact outcomes instead of the obsolete survival-order invariant (timeouts are failed Ace kills, not successful survival). Survivors replay golden intentionally moved to `7f0323b8…`.
+- Verification: `npm test` 776/776 passed, `npm run build` passed, and browser validation passed (first-minute Survivors flow, opening reinforcement, Ace warning/missile, -7.5 damage).
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (remove unused late-XP handle)
+- Removed the inactive post-Lv5 XP tuning fields and restored `runXpCost` to the original formula. This keeps the final branch aligned with the balance constraint that XP values and the XP system are not part of this difficulty change.
+- Verification: covered by the same focused replay progression tests; behavior and replay golden are unchanged.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace duel difficulty candidate)
+- Activated the first no-XP Ace candidate in tunables: projectile damage ×2.5, hull ×3.75, fire interval ×0.8 (speed ×1.5 and opening HP ×1.5 were already active). XP costs and XP income are unchanged. These are evidence-driven candidate values pending the balance bot's official same-seed 300-sortie measurement, not final verified values.
+- Updated the six full Survivors replay tests from "every seed clears" to pinned deterministic outcomes (four clears, one timeout, one loss) because the old assertion contradicts the owner-approved 17–20% Ace-win target; the test still runs the complete replays. Survivors replay golden intentionally moved to `f3b814cc…`.
+- Corrected the planning docs' obsolete first-level-up-in-10s target to the owner-confirmed slower opening (first enemy 3 hits, 8 kills, about 20–25 s) and noted that XP coefficients stay fixed.
+- Verification: focused tests/build are running; official balance measurement is pending.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (opening growth target candidate)
+- Added a Survivors-only far Patrol reinforcement to the 22 s opening wave, outside the random regular-spawn budget; Legacy wave data is unchanged. With opening regular HP ×1.5 this targets the owner-confirmed first-enemy 3-hit / Lv2 8-kill opening without touching XP values.
+- Local probe, average seeds 1–100: first kill median 3 hits, p75 7.00 s; Lv2 kill count median 8, p75 11; Lv2 p75 24.23 s; Lv5 median 46.6 s, p75 49.6 s. The Survivors replay golden intentionally moved to `376a2011…`.
+- Verification: focused swarm tests passed including the new reinforcement regression test; replay hash was updated deliberately. Full tests/build still pending final difficulty values.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace fire-interval tuning plumbing)
+- Added neutral `SURVIVOR_BALANCE.aceFireIntervalScale = 1` and routed both post-volley refire delay and phase-transition first delay through it. Heat scaling still composes normally, Legacy is unchanged, and scale 1 preserves all current timings exactly.
+- Verification: Ace pacing and replay hash tests 16/16 passed; replay goldens remain unchanged.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (late XP tuning plumbing)
+- Added neutral `DRAFT_RULES.xpLateStartLevel = 6` and `xpLatePerLevel = 0` handles so later overshoot tests can keep the confirmed first-five-level growth targets unchanged while steepening only post-Lv5 costs. At the default slope 0 every existing XP cost and replay golden is unchanged.
+- Verification: progression and replay hash tests 14/14 passed.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace hull tuning plumbing)
+- Added neutral `SURVIVOR_BALANCE.aceHullScale = 1` and applied it only when creating the Survivors Ace. Scale 1 preserves the current 1200 HP exactly; Legacy and Heat armor composition are unchanged. This completes the local handles needed for hull overshoot tests without activating them.
+- Verification: focused Ace pacing and replay hash tests 16/16 passed; full `npm test` 774/774 and `npm run build` passed on the combined branch; replay goldens remain unchanged.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace damage tuning plumbing)
+- Added neutral `SURVIVOR_BALANCE.aceProjectileDamageScale = 1` plumbing for later overshoot tests. Ace gun shots are now explicitly tagged as `ace-gun`; in Survivors, Ace gun/missile impacts use their projectile damage value, with scale 1 preserving the existing 3-hull hit exactly. Legacy behavior and non-Ace hostile damage are unchanged.
+- This is tunability infrastructure only, not an active difficulty increase. Replay goldens are intentionally unchanged.
+- Verification: focused Ace pacing tests 13/13 and replay hash tests 2/2 passed after the change; full `npm test` 774/774 and `npm run build` passed on the combined branch.
+- State: experimental/in progress; no `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (temporary opening HP `7d5fa95`)
+- Added `SURVIVOR_BALANCE.openingRegularHpScale = 1.5` as a temporary experiment pending the balance bot/owner-confirmed early-growth target. Scripted Coast-opening regulars only are hardened; the post-opening random pool and Legacy mode are unchanged, and the Survivors replay golden intentionally moved to `5a5e8210…`.
+- Probe note (average seeds 1–30): first regular kill median 3 hits and Lv2 median 8.5 kills, but Lv2/Lv5 timing stayed near 23.3/46.7 s. This is not a final balance value.
+- Verification: rebased-branch focused replay/swarm/Ace tests 36/36, full `npm test` 773/773, and `npm run build` passed.
+- State: experimental/in progress; do not treat as the approved growth lever until exact targets arrive. No `main` change or public deployment.
+
+### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (Ace projectile speed `366a20b`)
+- Rebased the difficulty candidate onto final PR #13 head `8d09aee2f6737679a4b8f84877d23fe7d03affcb`. The speed-only measurement SHA is `366a20b1e1fb138e2d0086ca611b12ccb77f4c76`; it adds Survivors-only `SURVIVOR_BALANCE.aceProjectileSpeedScale = 1.5`, multiplying both Ace gun and missile projectile speed while leaving warnings, cadence, damage, enemy growth, and Legacy unchanged.
+- Survivors replay golden intentionally moved for the speed change; Legacy replay hash is unchanged. Branch head also contains the separate temporary opening-HP experiment, so same-seed speed measurement must pin `366a20b`, not branch head.
+- Verification: rebased-branch focused replay/swarm/Ace tests 36/36, full `npm test` 773/773, and `npm run build` passed. Official 300-sortie outcome measurement is delegated to the balance bot.
+- State: measurement handoff in progress; no `main` change or public deployment.
+
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795524980-continuous-flight-10min` (HUD `42ef85f`, `ef35d95`; PR #10 merge `5b1e96e`; cue slot `97330ef`)
 - Merged the final PR #10 sortie-VFX `renderer-proto` drop into the continuous-flight candidate while preserving the shared PR #16 touch-cue behavior: compact Aegis slots, later covered dive warnings, Stingray pass-end cue targeting, and the follow-up that releases the paired dive-arrow slot into solo space when the Aegis cue is hidden. Survivors HUD copy now removes fixed LOW/MID/HIGH/SKIM altitude-band labels from the numeric HUD and cockpit tape, uses `TERRAIN`/`지형 주의` for mild terrain proximity, and changes only the Survivors Ace objective to closing the altitude gap; Legacy copy is unchanged.
 - Verification: `npm test` 772/772 and `npm run build` passed after integrating `97330ef`. Fresh assisted browser validation on `ef35d95` passed portrait/landscape movement, real midboss chest + magnet payout (gross XP +100, credits +116), Ace reengagement firing/hits, Korean/English HUD copy, Legacy copy regression, and PR10 touch-cue placement; a focused `cf17b22` browser delta also passed the ordinary paired cue and the 330×740 released-slot fallback. Evidence is under `/home/ubuntu/aster-validation-ef35d95` and `/home/ubuntu/aster-validation-cf17b22` in the validating session, not natural play.

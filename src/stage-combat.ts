@@ -11,7 +11,7 @@ import { FLAK_RADIUS, HOSTILE_BOLT_LIFE, HOSTILE_GRAZE_RADIUS, HOSTILE_HIT_RADIU
   MINE_RADIUS, type HostileSourceKind } from './data/hostile-fire.ts';
 import { ROLLS, ROLL_PARRY_XP } from './data/roll.ts';
 import { HOSTILE_SHOT_LIMIT, PLAYER_PROJECTILES, PLAYER_SHOT_LIMIT, REAR_ORDNANCE, SURVIVOR_PLAYER_DAMAGE,
-  WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
+  SURVIVOR_BALANCE, WEAPON_PROJECTILE_LIMITS } from './data/run-balance.ts';
 import { TWIN_VOLLEYS, WEAPONS, type WeaponId } from './data/items.ts';
 import type { CombatEvents } from './hostile-events.ts';
 import { advanceEchoDeadlines, buffTuning, criticalDamage, familyBonus, hitWindow, targetCaptureAngleScale, weaponCooldown, weaponDamage } from './loadout.ts';
@@ -205,7 +205,8 @@ export function fireHostile(state: StageState, source: Position & { kind?: Hosti
 // --- S7e lane ---
 export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern: readonly number[], events?: CombatEvents): void {
   const guided = tell.kind === 'missile';
-  const speed = BOOST_SPEED * (guided ? ACE.missile.speedScale : ACE.gun.speedScale);
+  const speed = BOOST_SPEED * (guided ? ACE.missile.speedScale : ACE.gun.speedScale)
+    * (state.run ? SURVIVOR_BALANCE.aceProjectileSpeedScale : 1);
   const yaw = Math.atan2(tell.x - ace.x, tell.z - ace.z);
   let room = projectileRoom(state, 'hostile');
   for (const offset of pattern) {
@@ -213,8 +214,9 @@ export function fireAceSalvo(state: StageState, ace: Ace, tell: AceTell, pattern
     const shot: Shot = {
       kind: 'hostile', x: ace.x, z: ace.z, alt: ace.alt,
       vx: Math.sin(yaw + offset) * speed, vz: Math.cos(yaw + offset) * speed,
-      damage: 2, life: guided ? ACE.missile.life : HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
-      ...(guided ? { hostileKind: 'ace-missile' } : {}),
+      damage: (state.run ? SURVIVOR_PLAYER_DAMAGE * SURVIVOR_BALANCE.aceProjectileDamageScale : 2),
+      life: guided ? ACE.missile.life : HOSTILE_BOLT_LIFE, volley: 0, nearMiss: false, lockId: null,
+      hostileKind: guided ? 'ace-missile' : 'ace-gun',
     };
     state.shots.push(shot);
     events?.muzzle?.(shot, guided ? 'diamond' : 'needle', ace.x, ace.z, ace.alt);
@@ -1082,7 +1084,11 @@ export function advanceShots(state: StageState, ground: Ground, events?: CombatE
             // Use a point back along the trajectory even when the previous pose is already inside the hit radius.
             const travel = 12;
             const source = events?.hit ? { x: shot.x - dx * travel, z: shot.z - dz * travel, alt: shot.alt } : undefined;
-            hurtPlayer(state, source, events);
+            if (state.run && (shot.hostileKind === 'ace-missile' || shot.hostileKind === 'ace-gun')) {
+              hurtPlayer(state, source, events, shot.damage);
+            } else {
+              hurtPlayer(state, source, events);
+            }
           }
           shot.life = 0;
           stopped = playerHit;

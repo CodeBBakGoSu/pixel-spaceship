@@ -2,6 +2,7 @@ import { ACE, ACE_PHASES } from './data/ace.ts';
 import { WEAPONS } from './data/items.ts';
 import { adjacentBand, bandAltitude, bandDistance, fixedBand, playerBand, SKIM, SKIM_BAND, type FlightBand } from './bands.ts';
 import { HEAT_TIERS } from './data/meta.ts';
+import { SURVIVOR_BALANCE } from './data/run-balance.ts';
 import { ROLLS } from './data/roll.ts';
 import { WORLD_SITES, WORLD_TERRAIN } from './data/world.ts';
 import { ENEMY_KINDS } from './enemy-kinds.ts';
@@ -28,13 +29,20 @@ function flightAltitude(band: FlightBand, floor: number): number {
   return band === SKIM_BAND ? bandAltitude(band, floor) : Math.max(bandAltitude(band, floor), floor + ACE.flight.clearance);
 }
 
+function aceFireTicks(state: StageState, tuning: (typeof ACE_PHASES)[keyof typeof ACE_PHASES]): number {
+  const heatScale = state.run ? HEAT_TIERS[state.heat].shotIntervalScale : 1;
+  const balanceScale = state.run ? SURVIVOR_BALANCE.aceFireIntervalScale : 1;
+  return Math.max(1, Math.round(tuning.fireTicks * heatScale * balanceScale));
+}
+
 export function makeAce(state: StageState, x: number, z: number, ground?: Ground): Ace {
   const rng = rngStream(state.seed, 'ace');
   const side = random(rng) < 0.5 ? -1 : 1;
   const band = playerBand(state.player);
   const alt = flightAltitude(band, ground?.(x, z) ?? WORLD_TERRAIN.seaLevel);
   const armor = state.run && HEAT_TIERS[state.heat].extraAceArmor ? ACE.hull.heatArmorScale : 1;
-  const hp = Math.round((state.run ? ACE.hull.survivors : ACE.hull.legacy) * armor);
+  const balance = state.run ? SURVIVOR_BALANCE.aceHullScale : 1;
+  const hp = Math.round((state.run ? ACE.hull.survivors : ACE.hull.legacy) * armor * balance);
   return {
     id: ++state.nextId, kind: 'ace', x, z, alt, yaw: Math.atan2(state.player.x - x, state.player.z - z),
     vx: 0, vz: 0, bank: 0, bankDrive: 0, bankDrop: 0, pitch: 0, hp, maxHp: hp, hits: 0, hitUntil: 0,
@@ -111,7 +119,7 @@ function updatePhase(state: StageState, ace: Ace, ground: Ground, events?: Comba
   ace.phase = phase;
   const tuning = ACE_PHASES[phase];
   ace.bandAt = Math.min(ace.bandAt, state.tick + ACE.flight.bandStepDelay);
-  ace.attackAt = Math.min(ace.attackAt, state.tick + tuning.fireTicks);
+  ace.attackAt = Math.min(ace.attackAt, state.tick + aceFireTicks(state, tuning));
   ace.rollReadyAt = Math.min(ace.rollReadyAt, state.tick + tuning.rollTicks);
 }
 
@@ -375,8 +383,7 @@ function updateTell(state: StageState, ace: Ace, events?: CombatEvents,
       ace.rollReadyAt = tick + Math.max(tuning.rollTicks, ROLLS.barrel.ticks + ACE.roll.recoverTicks);
       ace.attackAt = Math.max(ace.attackAt, tick + ROLLS.barrel.ticks);
     } else {
-      const fireScale = state.run ? HEAT_TIERS[state.heat].shotIntervalScale : 1;
-      const fireTicks = Math.round(tuning.fireTicks * fireScale);
+      const fireTicks = aceFireTicks(state, tuning);
       if (!lost) {
         events?.aceTellFired?.(tell);
         fireAceSalvo(state, ace, tell, tuning[tell.kind], events);

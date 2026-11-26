@@ -14,6 +14,13 @@ export const SURVIVOR_START_HULL = 10;
 export const SURVIVOR_PLAYER_DAMAGE = 3;
 export const REGULAR_FIRE_INTERVAL_SCALE = 0.62;
 export const SURVIVOR_XP_SCALE = 1.15;
+export const SURVIVOR_BALANCE = {
+  aceProjectileSpeedScale: 1.5,
+  aceProjectileDamageScale: 2.5,
+  aceHullScale: 3.5,
+  aceFireIntervalScale: 0.8,
+  openingRegularHpScale: 1.5,
+} as const;
 export const PHASE_REPAIR_HULL = 2;
 export const PHASE_REPAIR_SECONDS = [105, 225, 345, 465] as const;
 export const CARRIER_REPAIR_HULL = 1;
