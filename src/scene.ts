@@ -40,6 +40,7 @@ import { activeTrail, formerPursuer, MANEUVERS, maneuverAllowsControl, maneuverA
 import { enemyAirframe, gnatGeometry, playerAirframe } from './models.ts';
 import { aceAirframe } from './models-roster.ts';
 import { choosePostTier, FlightPost, installSteppedHaze, visibleHazeCutoff } from './post.ts';
+import { PROJECTILE_TRAIL_CAP, ProjectileTrails, TRAIL_LIFETIME, trailBudget } from './projectile-trails.ts';
 import { RosterVisuals } from './roster-visuals.ts';
 import { ROSTER_SHEET_CAMERA } from './roster-sheet.ts';
 import { frameRearCamera, glimpseWipe, layoutRearInset, layoutRearMirror,
@@ -264,6 +265,9 @@ export class FlightScene {
   private readonly sortieVfx = new SortieVfx(TICKS_PER_SECOND);
   private readonly chestMarkers = makeChestBatch();
   private readonly bullets = instances(new BoxGeometry(), SHOT_LIMIT);
+  private readonly projectileTrail = new ProjectileTrails();
+  private readonly shotTraces = instances(new BoxGeometry(), PROJECTILE_TRAIL_CAP,
+    new MeshBasicMaterial({ transparent: true, opacity: 0.44, depthWrite: false }));
   private readonly sparks = instances(new BoxGeometry(), 240);
   private readonly gnatBatch = { x: 0, z: 0, alt: 0, life: 0, count: 0 };
   private readonly shadows = instances(new PlaneGeometry(2, 2).rotateX(-Math.PI / 2), REGULAR_RENDER_CAP + 2,
@@ -322,7 +326,8 @@ export class FlightScene {
     if (this.atmosphere.cloudShadow) this.terrain.lookMaterial?.setCloudShadow(this.atmosphere.cloudShadow);
     this.scene.add(this.terrain.group, this.atmosphere.group);
     if (this.feelEnabled) this.scene.add(makeSky());
-    this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.sparks,
+    this.shotTraces.renderOrder = -1;
+    this.scene.add(this.ship, this.drones, this.gnats, this.rosterVisuals.group, this.pickupVisuals.group, this.chestMarkers, this.bullets, this.shotTraces, this.sparks,
       this.shadows, this.bombs, this.blast, this.mines, this.flak, this.ghost, this.ribbon, this.pursuitRings, this.bodyShimmer,
       this.flareVisuals.group, this.hostileVisuals.group, this.enemyTrails,
       this.defenseDrones, this.weaponLinks, this.weaponRings, this.aegisInnerRings, this.aegisOuterRings,
@@ -411,6 +416,7 @@ export class FlightScene {
   }
 
   get renderQuality(): RenderQuality { return this.quality.tier; }
+  get projectileTraceCount(): number { return this.shotTraces.count; }
 
   get contextLost(): boolean { return this.renderer.getContext().isContextLost(); }
 
@@ -1009,6 +1015,24 @@ export class FlightScene {
 
     let bullets = 0, weaponLinks = 0;
     const eye = view === 'cockpit' ? this.cockpit.position : null;
+    const trailCap = this.feelEnabled ? trailBudget(!!this.framing.phone, this.renderQuality === 'low', this.reducedMotion.matches) : 0;
+    this.projectileTrail.advance(state.shots, state.tick, state.run?.weaponLevels.twin ?? 1, trailCap > 0);
+    let traces = 0;
+    for (let i = 0; i < trailCap; i++) {
+      const segment = this.projectileTrail.newest(i, state.tick);
+      if (!segment) break;
+      const { from, to, born, style } = segment;
+      if (eye) {
+        const halfLength = Math.hypot(from.x - to.x, from.alt - to.alt, from.z - to.z) / 2;
+        const distance = Math.hypot((from.x + to.x) / 2 - eye.x, (from.alt + to.alt) / 2 - eye.y, (from.z + to.z) / 2 + eye.z);
+        if (distance < COCKPIT_TRACER_CLEARANCE + halfLength) continue;
+      }
+      const freshness = 1 - (state.tick - born) / TRAIL_LIFETIME;
+      const width = style === 'rocket' ? 0.7 + 0.8 * freshness : 0.38 + 0.31 * freshness;
+      const tint = style === 'rocket' ? freshness > 0.5 ? 0xc0cdd3 : 0x85939d : 0xe5bd78;
+      this.connect(this.shotTraces, traces++, from, to, width, tint, flat ? TOP_FLIGHT + 1 : undefined);
+    }
+    upload(this.shotTraces, traces);
     for (const shot of state.shots) {
       if (shot.kind === 'hostile') continue;
       const yaw = Math.atan2(shot.vx, shot.vz);
@@ -1027,7 +1051,7 @@ export class FlightScene {
           : shot.pierce ? 0xffb65d : 0xf6ffad);
       this.write(this.bullets, bullets++, shot.x, shot.z, flat ? TOP_FLIGHT + 2 : shot.alt, yaw,
         width, width, length, tint, 0, pitch);
-      if (shot.kind === 'seeker' && weaponLinks < WEAPON_LINK_LIMIT) {
+      if (shot.kind === 'seeker' && (!shot.rack || !trailCap) && weaponLinks < WEAPON_LINK_LIMIT) {
         const tail = 8 / Math.max(1, Math.hypot(shot.vx, shot.vz, vy));
         this.write(this.weaponLinks, weaponLinks++, shot.x - shot.vx * tail, shot.z - shot.vz * tail,
           flat ? TOP_FLIGHT + 2 : shot.alt - vy * tail, yaw, 1.25, 1.25, 11, 0xc5bcae, 0, pitch);

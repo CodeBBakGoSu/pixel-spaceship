@@ -13,6 +13,7 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 
 ## Current state
 - [한국어 위키](wiki/README.md): 공개판·개발판·실험을 구분하는 진입점. 아래 수치와 작업 번호는 각 기준 커밋 당시 기록이며, 계획 작업 #7(스웜)은 GitHub PR #7(Ace 회피)과 다르다.
+- `dev1.2` 통합 후보는 `renderer-proto` `2befca5`(PR #10–#17의 10분 연속 비행 개편·분별 적/중간보스·선택 VFX·모바일 cue·Ace 난도)와 `dev1.0` `d7feaf5`(P1 타격음·상자 연출·탄 궤적, 진단 도구)를 합친다. XP/Seeker/Twin 실험은 dev1.0과 같이 기본값으로 되살리지 않으며 `main`은 그대로다. 통합본 검증: `npm test` 793/793, `npm run build` 통과. 이 병합만의 100시드 시뮬과 실기기 FPS는 미측정이다.
 - 다음 기능(설계만 완료): P0 무기 자체의 강점과 약점 → P1 타격음·상자 잭팟·탄 궤적 → P2 패배 후 격납고 강화·일반 무기 풀 확장. [담당별 인수 기준](SURVIVORS_PLAN.md#pillars). 기존 #1·2·4·8 검증은 병행하며 세 기능의 체감·수치는 아직 측정하지 않음.
 - Historical candidate code baseline: `renderer-proto` `0bc1f99` includes weapon Lv7 (`7446be4`), damage/mass-kill feedback (`e46b813`), horde (`8f41122`), Armored/Sting variants (`82c19c6`), and swarm events/recovery magnet (`77163bc`). The current continuous-flight candidate is isolated on `devin/1795524980-continuous-flight-10min` from `09e2890`; public `main` is unchanged.
 - #7 is implemented and integrated by `0bc1f99`; timing, event geometry, and magnet rules are documented in both plans. On the combined tree based on this code, `npm test` passed 567/567 and `npm run build` passed (119 modules, 1.45 s). Actual 200/120-cap PC/phone FPS remains unverified.
@@ -23,6 +24,12 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - Stage C and its pursuit follow-up are merged; the latest integrated pilot pursuit result is in `docs/BALANCE_NOTES.md`. Current plan order: #5 damage/mass-kill feedback merged; #6 Armored/Sting Gnat merged; #7 swarm event/recovery magnet merged.
 
 ## Log
+
+### 2026-11-26 KST · 데븐 봇 · `dev1.2` (merge `renderer-proto` `2befca5` + `dev1.0` `d7feaf5`)
+- Created the cumulative dev1.2 candidate: current renderer-proto gameplay (10-minute continuous flight, minute waves/new enemies, minibosses, sortie VFX, mobile cue fixes, Ace difficulty) plus the dev1.0-only P1 hit audio, cache reveal audio, projectile trails, Korean glyph update, and diagnostic tools. XP/Seeker/Twin experiments remain non-default and `main` is untouched.
+- Resolved the only code conflict in `src/main.ts` by preserving both actual-hit audio batching and sortie weapon-hit VFX; documentation conflicts were merged as current dev1.2 guidance.
+- Verification: `npm test` 793/793 passed; `npm run build` passed (136 modules, nonfatal chunk-size advisory). This merge's own 100-seed sims and real-device FPS were not run.
+- State: integration verified locally; existing ASTER WING app deployment is next.
 
 ### 2026-11-25 KST · 데븐 봇 · `devin/1795591941-ace-growth-harder-8d09aee` (independent balance confirmation)
 - 밸런스 봇 independent comparison confirmed the PR candidate (`b283efe` → `79a332b`, desktop/Heat 0/seeds 1–100 per profile): baseline skilled/average/weak 100/0/0, 100/0/0, 99/1/0; candidate 82/1/17, 20/55/25, 0/77/23. Candidate skilled and weak rows were independently rerun; the average row reuses the identical-behavior PR aggregate, matching the implementation-session result.
@@ -402,6 +409,22 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - State: done (문서). 첨부 결정·수치와 링크 대조. 게임 코드·현행 도감 수치·공개판은 변경하지 않았다.
 
 
+### 2026-11-24 (KST) · 비행기게임봇 · dev1.0 (`4dcddfd`)
+- 4090 작업 트리를 `origin/dev1.0` `4dcddfd`로 맞추고, 병합이 끝난 PR1 워크트리·5185 미리보기를 정리한 뒤 `npm ci` / `npm test` 645/645 / `npm run build`(123 modules, 1.25s)를 재실행했다. 5181 미리보기를 이 빌드로 갱신했다.
+- 데스크톱 Heat 0, 시드 1–100 시뮬을 skilled/average/weak로 돌렸다. 클리어 100%/74%/44%, Ace 100%/74%/4%, 시간 초과 0%/0%/40%, 격추 중앙값 3,199.5/3,195.5/2,979, 생존 중앙값 600.0/600.0/586.9초, 최대 생존 Gnat 200. `9d677b5` 대비 평균 클리어는 거의 같고, 초보 클리어 상승분은 거의 전부 10분 생존(Ace는 4%), 격추 중앙값은 약 400–500 줄었다.
+- 시드 15 자동비행으로 37.9초 하이라이트(1280×720, H.264, 60fps, 무음)를 찍어 상자 영상은 커밋하지 않았다. 구성: 섬 상공 상승·하강(추격, 0:00–0:03) · 6:43 횡단 스웜 대량 격추(0:03–0:11) · 오로라 개틀링 진화 릴(0:11–0:17) · 잭팟 ×5(0:17–0:23) · 8:00 Ace 등장(0:23–0:29) · 콕핏 락온·고도 맞추기(0:29–0:38).
+- 검증: 위 테스트·빌드·100시드 시뮬. 하이라이트는 1280×720 yuv420p 37.9초·2274프레임이며 검은 화면은 없었다. 소프트웨어 WebGL(SwiftShader)이라 스웜·Ace 구간 게임 FPS가 20대로 떨어질 수 있고, 실기기 FPS는 여전히 미계측이다. 미리보기: http://100.92.76.1:5181/
+- State: done. main은 그대로이며 배포하지 않았다.
+
+### 2026-11-24 (KST) · 데븐 봇 · dev1.0 (`6c66fc07`)
+- Synced the root README/wiki/catalog to code baseline `dev1.0` `6c66fc07`, aligned the preview disclosure, corrected automatic Flare/Bomb Bay effects and the Bomb Bay quest metric, retained XP/Seeker/Twin experiments as non-default, and added the shop proposal as planning-only. No game source files changed.
+- Checks: `check_docs.py` (16 files, 0 errors/warnings), focused data/source/link audit, standalone HTML offline-assets audit, and final-package static render. The integrator-reported 645-test/build result was not rerun for this docs-only update. State: complete.
+
+### 2026-11-24 (KST) · 데븐 봇 · devin/1795498866-all-features-playtest (base `2d543dd`, P1 `2bad3c4`…`61154f5`)
+- Integrated the inspected P1 candidate: batched actual-hit audio, reveals only already-awarded cache rewards, and Twin/Rack projectile trails with static SFX and Korean jackpot glyphs. Latest renderer-proto gameplay/regressions are preserved; Seeker balance and P2 are excluded.
+- Verification: `npm test` 639/639; Ace seeds 1/11/27/42/128/2026 all cleared with phase 3 and crashed boss; `npm run build` passed (123 modules, 3.45 s). No new simulation; the all-features preview/browser check is pending the testing agent, and real-hardware FPS is unverified.
+- State: code integration done on the playtest branch; preview/browser verification pending.
+
 ### 2026-11-24 (KST) · 데븐 봇 · devin/1795438662-ace-lock-dodge (`2cc10e4`, based on `7da5db6`)
 - Strengthened the 120Hz fire-tick regression: C must leave an accepted roll and zero hostile projectiles, while the deterministic phase-2 no-C twin reaches the same tick, clears the tell normally, and spawns both Ace missiles.
 - Focused fire-tick test passed 1/1; test-only change, so no full-suite, build, or UI rerun.
@@ -595,6 +618,16 @@ Owner: 홍기현. Current bots: **비행기게임봇** (Grok Bot) and **데븐 �
 - 검증: 테스트 574/574, 프로덕션 빌드 통과. 수동 병기 상태·입력 제거에 맞춰 Legacy/Survivors 골든을 갱신하고 두 모드에서 렌더링 유무에 따른 해시 일치를 확인했다.
 - 데스크톱 Heat 0, 시드 1–100: 숙련/평균/초보 생존(시간 종료 포함) 100%/69%/26%, 에이스 격추 100%/69%/1%, 격추 수 중앙값 3,155/3,193.5/2,806. State: done (구현·로컬 검증).
 
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `fb6412a`)
+- 한국어 ‘잭팟 ×5’가 ‘×5’로만 보이던 글꼴 누락을 수정. Galmuri11을 현재 한국어 번역으로 다시 생성했고, 보상 로직은 그대로다.
+- 검증: 기존 글리프 유지, 현재 번역의 한글 410자 포함, 프로덕션 빌드 통과. State: done (후보, renderer-proto 미통합).
+
+### 2026-11-23 (KST) · 데븐 봇 · devin/1795438499-p1-combat-feedback (base `81a0e2a`, code `2bad3c4` + `96bd079`)
+- P1: 실제 아군 피해를 80ms 단위로 모아 타격음을 겹친다. 이미 지급된 상자의 보상 1/3/5개·진화만 공개하고, 고랭크 Twin·Swarm Rack의 실제 탄 위치에서 장식 잔상을 그린다.
+- 정적 ElevenLabs 효과음 7종. 밸런스·난수·Seeker P0 후보는 변경 또는 포함하지 않았다.
+- 검증: 테스트 587/587, 프로덕션 빌드, Legacy/Survivors seed 1 해시 동일. PC/폰 Heat 0의 세 프로필 × 시드 1–3 시뮬레이션 결과가 기준 브랜치와 동일.
+- Chrome에서 상자 전 결과·건너뛰기·모션 줄이기·FX off·첫 클릭 잭팟음·실제 명중음·탄 궤적 확인. 고음 타격층은 자동 테스트만 확인. State: done (후보 검증, renderer-proto 통합 대기).
 
 ### 2026-11-23 (KST) · 기획 봇 · devin/1795432111-first-clear-hangar (base `cfb3abf`)
 - 일반 첫 클리어: 횟수 잠금 없이 후반 사격 압박과 선체·회수·XP 강화 차이로 조율한다. 무강화/강화 동일 시드 비교와 정산을 잇는 첫 승리 추적은 별개다.

@@ -1,6 +1,6 @@
 # ASTER WING
 
-**[한국어 위키](docs/wiki/README.md)** · [무기·버프·격납고·해금 퀘스트](docs/wiki/CATALOG.md) · [개발판과 공개판의 차이](docs/wiki/README.md#versions). 아래 실행·조작 안내는 `renderer-proto` 개발판 기준입니다.
+**[현재 개발 기준: dev1.2](https://github.com/CodeBBakGoSu/pixel-spaceship/tree/dev1.2)** · **[한국어 위키](docs/wiki/README.md)** · [무기·버프·격납고·해금 퀘스트](docs/wiki/CATALOG.md) · [개발판과 공개판의 차이](docs/wiki/README.md#versions). 아래 실행·조작 안내는 `dev1.2` 통합 개발판 기준입니다.
 
 > Bots working on this repo log what they did in [docs/WORKLOG.md](docs/WORKLOG.md). Read it before starting, add an entry after finishing.
 
@@ -55,6 +55,8 @@ pyftsubset Galmuri11.ttf --text-file=glyphs.txt --flavor=woff2 \
 - `?fixture=roster-sheet&kind=hound` frames a single enemy at an 88 m distance in CHASE. Set `kind` to any enemy name, `carrier` or `ace`.
 - `?fixture=roster-sheet&kind=gnat-variants` compares Armored (broad slate hull), standard and Sting (narrow red dart), left to right.
 - `?fixture=bullets&stress=1&flight=boost` keeps the Ace, 24 regular enemies, a capped Gnat swarm, and capped projectile pools active while crossing tiles at 182 m/s. Use `?fixture=boost` for a fixed boost pose.
+- Vite dev only: `?fixture=p1-cache&seed=1|6|18` stages a real 1/3/5-reward roll. Use `cache=evolution` or `cache=fallback` to stage the evolution cache with or without an eligible weapon. Add `fx=0` to compare the immediate reveal.
+- Vite dev only: `?fixture=p1-combat&view=chase` starts paused with Twin Lv7 and Swarm Rack; use `build=starter` for Twin Lv1 on the same course. Resume to fire on the incoming targets, or use `view=cockpit` / `touch=1` to check the other layouts.
 - `?fixture=pursuit` starts in CHASE at 0:30 with four pursuers behind at three heights.
 - `?fixture=reversal` puts a high-band pack behind you for **W + Space**. `?fixture=flyby` stages two overtakes on a straight course. `?fixture=rear-threat` demonstrates a closing bolt. `?fixture=strafe` puts targets one and two bands below you.
 - `?fixture=flare` lines up pursuers behind the player. Phoenix Flares are equipped and fire automatically; watch the fan and impacts in the rear view.

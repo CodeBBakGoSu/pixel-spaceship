@@ -78,5 +78,61 @@
   "sampleRate": 44100,
   "durationSec": 2.00247,
   "bytes": 16552
+ },
+ "impact_tick": {
+  "source_take": "impact_tick_1",
+  "loop": false,
+  "samples": 6174,
+  "sampleRate": 44100,
+  "durationSec": 0.14,
+  "bytes": 2135
+ },
+ "impact_body": {
+  "source_take": "impact_body_1",
+  "loop": false,
+  "samples": 7497,
+  "sampleRate": 44100,
+  "durationSec": 0.17,
+  "bytes": 2396
+ },
+ "impact_spark": {
+  "source_take": "impact_spark_1",
+  "loop": false,
+  "samples": 7938,
+  "sampleRate": 44100,
+  "durationSec": 0.18,
+  "bytes": 2396
+ },
+ "cache_single": {
+  "source_take": "cache_single_1",
+  "loop": false,
+  "samples": 14333,
+  "sampleRate": 44100,
+  "durationSec": 0.32501,
+  "bytes": 3963
+ },
+ "cache_triple": {
+  "source_take": "cache_triple_1",
+  "loop": false,
+  "samples": 23373,
+  "sampleRate": 44100,
+  "durationSec": 0.53,
+  "bytes": 6053
+ },
+ "cache_jackpot": {
+  "source_take": "cache_jackpot_1",
+  "loop": false,
+  "samples": 42336,
+  "sampleRate": 44100,
+  "durationSec": 0.96,
+  "bytes": 10233
+ },
+ "cache_evolution": {
+  "source_take": "cache_evolution_1",
+  "loop": false,
+  "samples": 42777,
+  "sampleRate": 44100,
+  "durationSec": 0.97,
+  "bytes": 10494
  }
 }

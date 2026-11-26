@@ -837,30 +837,27 @@
       "code": "B06",
       "name": "플레어 베이",
       "en": "Flare Bay",
-      "copy": "플레어 보유량과 연소 시간을 늘리고 재장전을 단축합니다.",
+      "copy": "플레어가 자동으로 더 자주 발사되고 연소 시간이 늘어납니다.",
       "w": "phoenix",
       "b": "flare-bay",
       "e": "phoenix-rising",
       "family": "병기",
       "tag": "플레어 보급",
-      "note": "플레어 보유량과 연소 시간을 늘리고 재장전을 단축합니다.",
+      "note": "플레어가 자동으로 더 자주 발사되고 연소 시간이 늘어납니다.",
       "unlock": "후방 플레어로 추격기를 총 20기 격추하세요.",
       "start": false,
       "levels": [
         {
-          "수동 보유 한도": "+1회",
-          "재장전 시간": "−15%",
-          "연소 지속": "+0.3 초"
+          "자동 발사 간격": "×0.85",
+          "연소 지속": "+0.3초"
         },
         {
-          "수동 보유 한도": "+2회",
-          "재장전 시간": "−25%",
-          "연소 지속": "+0.6 초"
+          "자동 발사 간격": "×0.75",
+          "연소 지속": "+0.6초"
         },
         {
-          "수동 보유 한도": "+3회",
-          "재장전 시간": "−35%",
-          "연소 지속": "+0.9 초"
+          "자동 발사 간격": "×0.65",
+          "연소 지속": "+0.9초"
         }
       ],
       "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABpElEQVR42s1XPUvDQBh+ErI16V8Qi9DFQYQuASehgTq04Nji1iHgJNjVzaGDi4UIXST4AxRUqNA1S0Gk6FAoiv9AmjjXodyZtE1yl88+EN679z7e5557L8cJAFCptufIAaOXviBVqu35UeMYADCsaTh8HmTJYS6R0rCmUfu6t5165PPLGwCA6A5OsP/2hZJSAIDULIEIYEX2n4NdfNq/KCmFVOwKAQBUdt7gjqpyk1hLIGpwANwkfAlEmsSwucf7EuAJ7qjqf3DDpmpkokAQMlHAs3rXVrDmQmwFZMsCdGXxEegKZMviVkCKogAlAcDRVVrO9BTQlTTeucnHzoF1K0n8P0DqQXYZQf2ZcsA9qGfeM91qtwB6Zni/05PGWvKS3wDjuo+dcjmRq3c6mfi2SWGDH+6uaNnpFiF3Zp72MF+9dRY4v8i6CqdbBLStheX0BUFiDg4Ag29vncHXHCO+AssSy50Zsy8MzFtAJnNPyuqLtQXuJGqOgXrL287qi0Qg6PgkBRE5w1eBj9FTJgRyU+Di0dyMLdicHCBvtbSk9oOQ9/P8DwlKEaDmV+WAAAAAAElFTkSuQmCC"
@@ -942,29 +939,26 @@
       "code": "B07",
       "name": "폭장 랙",
       "en": "Ordnance Rack",
-      "copy": "폭탄 보유량과 폭발 반경을 늘리고 재장전을 단축합니다.",
+      "copy": "폭탄창이 자동으로 폭탄을 더 자주 투하하고 폭발 반경을 넓힙니다.",
       "w": "bomb-bay",
       "b": "ordnance-rack",
       "e": "carpet-annihilator",
       "family": "병기",
       "tag": "폭탄 보급",
-      "note": "폭탄 보유량과 폭발 반경을 늘리고 재장전을 단축합니다.",
-      "unlock": "수동 폭탄을 총 10번 투하하세요.",
+      "note": "폭탄창이 자동으로 폭탄을 더 자주 투하하고 폭발 반경을 넓힙니다.",
+      "unlock": "폭탄창으로 폭탄을 총 10발 투하하세요.",
       "start": false,
       "levels": [
         {
-          "수동 보유 한도": "+1발",
-          "재장전 시간": "−15%",
+          "자동 투하 간격": "×0.85",
           "폭탄 폭발 반경": "+10%"
         },
         {
-          "수동 보유 한도": "+2발",
-          "재장전 시간": "−25%",
+          "자동 투하 간격": "×0.75",
           "폭탄 폭발 반경": "+20%"
         },
         {
-          "수동 보유 한도": "+3발",
-          "재장전 시간": "−35%",
+          "자동 투하 간격": "×0.65",
           "폭탄 폭발 반경": "+30%"
         }
       ],
@@ -1253,21 +1247,21 @@
     ]
   },
   "snapshot": {
-    "branch": "renderer-proto",
-    "sha": "69f81c80c1f412cd4c98207ac53cc966222d4ee4",
-    "shortSha": "69f81c8",
-    "capturedAt": "2026-11-23 22:59 KST",
-    "repoBase": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/",
+    "branch": "dev1.0",
+    "sha": "6c66fc07d1560495a96aa3b9fcab395d45ab88db",
+    "shortSha": "6c66fc0",
+    "capturedAt": "2026-11-24 15:33 KST",
+    "repoBase": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/",
     "sources": {
-      "items": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/data/items.ts",
-      "metaData": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/data/meta.ts",
-      "metaRuntime": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/meta.ts",
-      "progression": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/progression.ts",
-      "hangarDisplay": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/hangar-display.ts",
-      "entry": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/src/main.ts",
-      "metaTests": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/tests/meta.test.mjs",
-      "hangarPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치",
-      "firstClearPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+      "items": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/data/items.ts",
+      "metaData": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/data/meta.ts",
+      "metaRuntime": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/meta.ts",
+      "progression": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/progression.ts",
+      "hangarDisplay": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/hangar-display.ts",
+      "entry": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/src/main.ts",
+      "metaTests": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/tests/meta.test.mjs",
+      "hangarPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치",
+      "firstClearPlan": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
     }
   },
   "hangar": [
@@ -1633,9 +1627,9 @@
       "id": "ordnance-rack",
       "gearId": "ordnance-rack",
       "gearName": "폭장 랙",
-      "metric": "manualBombs",
+      "metric": "bombsDropped",
       "target": 10,
-      "targetText": "수동 폭탄 10회 투하",
+      "targetText": "폭탄창으로 폭탄을 총 10발 투하",
       "aggregation": "출격 간 누적 합계",
       "aggregationRule": "total"
     }
@@ -1723,58 +1717,57 @@
     "daily": "일일 출격은 위험도 0과 기본 장비를 사용하며 격납고 강화 효과를 받지 않습니다."
   },
   "status": {
-    "current": "개발 통합판(renderer-proto)의 무기·버프·진화, 크레딧 구매형 격납고 강화, 조건 해금 퀘스트는 현재 코드에 연결되어 있습니다. 개인별 잔액·구매·해금 진행률은 이 정적 도감에 표시하지 않습니다.",
+    "current": "dev1.0 (6c66fc0)에는 무기·버프·진화, 영구 격납고 구매와 해금 퀘스트가 연결돼 있습니다. P1 화면·음향 후보도 포함되며, P0 기준선 도구와 일반 XP 관측 계측은 개발용 진단으로 기본 게임플레이를 바꾸지 않습니다. 개인별 잔액·구매·해금 진행률은 이 정적 도감에 표시하지 않습니다.",
     "experiments": [
       {
-        "number": 7,
-        "title": "에이스 상호 락온과 발사 직전 기동 회피",
-        "status": "열림 · 현재 스냅샷에 미병합",
-        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/pull/7"
+        "number": "XP",
+        "title": "XP 후보 E 곡선",
+        "status": "기본 플레이 미반영 · 약한 휴대전화 프로필의 처치 중앙값 2,448.5기로 2,500기 하한 미달; 엄격 전체 빌드 중앙값 515.8–548초로 목표 450–480초 초과 · 승인 대기",
+        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/tree/devin/1795426514-xp-progression"
       },
       {
-        "number": 8,
-        "title": "플레어·폭탄 장착형 자동 무기 통합 및 C 배럴롤",
-        "status": "열림 · 현재 스냅샷에 미병합",
-        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/pull/8"
+        "number": "P0",
+        "title": "Seeker 역할·Twin Lv7 후보",
+        "status": "기본 플레이 미반영 · Seeker 변경은 잠정·미승인; Twin Lv7 1.988→2는 피해와 재현 해시를 바꿈",
+        "url": "https://github.com/CodeBBakGoSu/pixel-spaceship/tree/devin/1795427585-p0-weapon-roles"
       }
     ],
     "plannedTargets": [
       {
         "title": "Hawk 복셀 미리보기 및 구매 전후 수치 비교 화면",
         "status": "계획 항목 · 미구현 시각화",
-        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치"
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#104-격납고--지금-타는-hawk와-다음-출격의-능력치"
       },
       {
         "title": "선체 첫 구매가 가능해지는 시점: 중앙값 3판 이내",
         "status": "기획 목표 · 실제 구매 시점/달성 여부 미측정",
-        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
       },
       {
         "title": "첫 Ace 격파: 보통 파일럿 중앙값 3~6판",
         "status": "기획 목표 · 미측정",
-        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
       },
       {
         "title": "첫 무기 해금: 1~2판 목표, 최초 자연 제시는 별도 측정",
         "status": "기획 목표 · 미측정",
-        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/69f81c80c1f412cd4c98207ac53cc966222d4ee4/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
+        "source": "https://github.com/CodeBBakGoSu/pixel-spaceship/blob/6c66fc07d1560495a96aa3b9fcab395d45ab88db/docs/WEAPONS_BUFFS_PLAN.md#109-첫-클리어-곡선--후반에서-격추되던-hawk가-강화-후-ace를-잡는다"
       }
     ]
   },
   "sourceAudit": {
-    "checkedAt": "2026-11-23 22:59 KST",
-    "checkedRevision": "69f81c80c1f412cd4c98207ac53cc966222d4ee4",
-    "sourcePathsUnchangedSinceOriginalPin": [
+    "checkedAt": "2026-11-24 15:33 KST",
+    "checkedRevision": "6c66fc07d1560495a96aa3b9fcab395d45ab88db",
+    "originalEquipmentAudit": "무기 10종·버프 10종·진화 10쌍의 ID와 조합은 유지됩니다. 이후 플레어 베이와 폭장 랙은 보유량/재장전 방식에서 자동 발사·투하 간격 효과로 바뀌었고, 폭장 랙 퀘스트는 bombsDropped 누적을 셉니다. normalizeMetrics는 기존 저장값 manualBombs를 bombsDropped로 이어 기존 프로필의 진행을 보존합니다.",
+    "additions": "격납고 강화 8종과 해금 퀘스트 10종은 현재 UI·저장·정산 흐름에 연결되어 있습니다. 통합판에는 P0 기준선 도구와 일반 XP 관측 계측도 포함되지만 진단 기능이며 XP 밸런스 기본값은 바꾸지 않습니다.",
+    "sourcePathsChangedSincePreviousPin": [
       "src/data/items.ts",
       "src/data/meta.ts",
       "src/meta.ts",
       "src/progression.ts",
-      "src/hangar-display.ts",
       "src/main.ts",
       "src/i18n.ts"
-    ],
-    "originalEquipmentAudit": "기존 장비 30개의 식별자·종류·시작 장비 여부·계열, 무기 7단계·버프 3단계, 진화 10쌍이 현재 소스와 일치합니다. 원본 기준 cfb3abf부터 이 스냅샷까지 점검한 게임 소스 경로에는 변경이 없습니다.",
-    "additions": "현재 코드에 구현된 격납고 강화 8종과 해금 퀘스트 10종을 런 중 장비와 구분해 추가했습니다."
+    ]
   },
   "fontSupplement": {
     "family": "AW Hangul Supplement",
