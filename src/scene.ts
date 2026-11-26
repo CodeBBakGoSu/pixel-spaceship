@@ -1203,8 +1203,11 @@ export class FlightScene {
         { altitude: p.altitude, pitch: p.pitch, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
       if (!attitude) this.cockpitPose.cameraPitch = this.motion.pitch;
       this.boostLens = this.motion.boost;
-      rearBank = this.cockpitPose.cameraBank = cameraBank(attitude?.cameraBank ?? bank, 'cockpit', phone, reduceMotion,
+      const attitudeBank = attitude?.cameraBank ?? bank;
+      this.cockpitPose.cameraBank = cameraBank(attitudeBank, 'cockpit', phone, reduceMotion,
         spinning, this.cockpitHorizonLock);
+      rearBank = state.view === 'cockpit' ? this.cockpitPose.cameraBank
+        : cameraBank(attitudeBank, 'cockpit', phone, reduceMotion, spinning, false);
     } else {
       if (delta < 0 || reduceMotion) this.boostLens = 0;
       const target = reduceMotion ? 0 : Number(state.boosting);
