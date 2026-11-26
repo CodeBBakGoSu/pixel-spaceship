@@ -1627,9 +1627,7 @@ function render(now: number): boolean {
     deltaIndicator.setAttribute('aria-label', `${t('hud.altitude')} ${cockpitDelta}`);
   }
   if (cockpit && scene && redrawFlight) {
-    const settling = Math.cos(yaw - p.yaw) < 0.999;
-    const aim = scene.project({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude }) ??
-      (settling ? null : { x: innerWidth / 2, y: cockpit.aiming.y + cockpit.aiming.height / 2 });
+    const aim = scene.projectAim({ x: p.x + Math.sin(p.yaw) * 100, z: p.z + Math.cos(p.yaw) * 100, alt: p.altitude });
     const mirror = scene.cockpitMirror;
     const markers = cockpitMarkers.update(state, cockpit, scene, mirror, rearDanger, readout.rearPursuit);
     const impact = state.invulnerability > 0.72 ? (state.invulnerability - 0.72) * 3.6 : 0;

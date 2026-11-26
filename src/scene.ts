@@ -768,6 +768,16 @@ export class FlightScene {
   project(target: Position): Projection | null {
     this.vector.set(target.x, target.alt, -target.z).project(this.camera);
     if (this.vector.z < -1 || this.vector.z > 1 || Math.abs(this.vector.x) > 1 || Math.abs(this.vector.y) > 1) return null;
+    return this.projectedPoint();
+  }
+
+  projectAim(target: Position): Projection | null {
+    this.vector.set(target.x, target.alt, -target.z).project(this.camera);
+    if (this.vector.z < -1 || this.vector.z > 1) return null;
+    return this.projectedPoint();
+  }
+
+  private projectedPoint(): Projection {
     return {
       x: (this.vector.x + 1) * this.framing.width / 2,
       y: (1 - this.vector.y) * this.framing.height / 2,
