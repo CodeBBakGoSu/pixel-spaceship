@@ -1031,3 +1031,6 @@ button:focus-visible { outline: 2px solid #bceff0; outline-offset: 2px; }
 
 .phone-layout #render-quality { min-height: 44px; }
 #render-quality-status { color: #ffcf86; }
+.shake-slider { display: flex; align-items: center; gap: 6px; }
+.shake-slider input { width: 96px; accent-color: #f5c06f; }
+.shake-slider output { min-width: 38px; margin-right: 8px; color: #f0e7c9; text-align: right; }

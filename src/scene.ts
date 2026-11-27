@@ -159,6 +159,11 @@ const TRAIL_COLORS = { immelmann: 0xafffd1, 'split-s': 0xffbe87, 'j-turn': 0x9ee
 const COCKPIT_TRACER_CLEARANCE = 17;
 const MAIN_CAMERA_LAYER = 1;
 const shieldFlash = (tick: number): boolean => Math.floor(tick * 16 / TICKS_PER_SECOND) % 2 === 0;
+
+export function shockworthyBlast(effect: Effect): boolean {
+  return effect.kind === 'burst' && effect.life >= FLIGHT_FEEL.largeBurstMinimumLife;
+}
+
 type Framing = {
   width: number;
   height: number;
@@ -171,6 +176,8 @@ export type FlightRenderOptions = {
   fixture?: string | null;
   quality?: RenderQuality;
   comparisonScale?: number;
+  cockpitHorizonLock?: boolean;
+  shakeScale?: number;
 };
 
 export class FlightScene {
@@ -211,6 +218,7 @@ export class FlightScene {
   private readonly surface: FlightSurface | null;
   private readonly post: FlightPost | null;
   private readonly motion = new FlightMotion();
+  private cockpitHorizonLock: boolean;
   private readonly seenBlasts = new WeakSet<Effect>();
   private lastMotionTick = -1;
   private boostLens = 0;
@@ -312,6 +320,8 @@ export class FlightScene {
     // The binary silhouette supplies coverage. Its translucent ink can fall below a 0.5 alpha test.
     if (!this.feelEnabled) this.shadows.material.alphaTest = 0.5;
     this.fixture = options.fixture ?? null;
+    this.cockpitHorizonLock = options.cockpitHorizonLock ?? true;
+    this.motion.shakeScale = clamp(options.shakeScale ?? 1, 0, 1);
     this.atmosphere = new FlightAtmosphere(arena, this.feelEnabled);
     this.surface = this.feelEnabled ? new FlightSurface(this.ground) : null;
     this.post = this.feelEnabled ? new FlightPost(this.target.texture) : null;
@@ -443,7 +453,12 @@ export class FlightScene {
   }
 
   shock(kind: 'hit' | 'parry', tick: number): void {
-    if (this.feelEnabled && !this.reducedMotion.matches) this.motion.shock(kind, tick);
+    if (this.feelEnabled) this.motion.shock(kind, tick);
+  }
+
+  setMotionOptions(options: { cockpitHorizonLock?: boolean; shakeScale?: number }): void {
+    if (options.cockpitHorizonLock !== undefined) this.cockpitHorizonLock = options.cockpitHorizonLock;
+    if (options.shakeScale !== undefined) this.motion.shakeScale = clamp(options.shakeScale, 0, 1);
   }
 
   get terrainPending(): boolean {
@@ -692,7 +707,7 @@ export class FlightScene {
       const { cameraPitch: pitch, fovPitch, cameraBank: bank } = this.cockpitPose;
       const cockpitLens = this.cockpitLens;
       const widening = cockpitLens.widening = (feel ? FLIGHT_FEEL.cockpitWidening : 4) * lens;
-      const pullback = cockpitLens.pullback = 1.4 * lens;
+      const pullback = cockpitLens.pullback = 0.5 * lens;
       cockpitLens.shake = shake + (feel ? this.motion.headX : 0);
       cockpitLens.shakeVertical = shakeVertical + (feel ? this.motion.headY : 0);
       view.fov = cockpitFov(aspect, fovPitch, widening);
@@ -753,6 +768,16 @@ export class FlightScene {
   project(target: Position): Projection | null {
     this.vector.set(target.x, target.alt, -target.z).project(this.camera);
     if (this.vector.z < -1 || this.vector.z > 1 || Math.abs(this.vector.x) > 1 || Math.abs(this.vector.y) > 1) return null;
+    return this.projectedPoint();
+  }
+
+  projectAim(target: Position): Projection | null {
+    this.vector.set(target.x, target.alt, -target.z).project(this.camera);
+    if (this.vector.z < -1 || this.vector.z > 1) return null;
+    return this.projectedPoint();
+  }
+
+  private projectedPoint(): Projection {
     return {
       x: (this.vector.x + 1) * this.framing.width / 2,
       y: (1 - this.vector.y) * this.framing.height / 2,
@@ -1131,12 +1156,11 @@ export class FlightScene {
     const p = state.player, range = FLIGHT_FEEL.explosionRange;
     let strength = 0;
     for (const effect of state.effects) {
-      if (effect.kind !== 'bomb-blast' && effect.kind !== 'flak' && effect.kind !== 'burst') continue;
+      if (!shockworthyBlast(effect)) continue;
       if (this.seenBlasts.has(effect)) continue;
       this.seenBlasts.add(effect);
       const distance = Math.hypot(effect.x - p.x, effect.alt - p.altitude, effect.z - p.z);
-      const scale = effect.kind === 'burst' ? FLIGHT_FEEL.burstSize : 1;
-      if (distance < range) strength = Math.max(strength, (1 - distance / range) * scale);
+      if (distance < range) strength = Math.max(strength, (1 - distance / range) * FLIGHT_FEEL.burstSize);
     }
     if (strength > 0) this.motion.shock('explosion', state.tick, strength);
   }
@@ -1173,13 +1197,17 @@ export class FlightScene {
     let ignitionShake = 0, rearBank = 0;
     if (this.feelEnabled) {
       const spinning = !!state.roll;
-      if (!reduceMotion) this.noteBlasts(state);
+      this.noteBlasts(state);
       const p = state.player, controlled = !state.roll && maneuverAllowsControl(state.maneuver);
       this.motion.advance(state, yaw, spinning ? this.rollPose.roll : bank, spinning, phone, reduceMotion,
         { altitude: p.altitude, pitch: p.pitch, climbRate: state.climbRate, controlled, turn: p.bank / 1.5 });
       if (!attitude) this.cockpitPose.cameraPitch = this.motion.pitch;
       this.boostLens = this.motion.boost;
-      rearBank = this.cockpitPose.cameraBank = cameraBank(attitude?.cameraBank ?? bank, 'cockpit', phone, reduceMotion, spinning);
+      const attitudeBank = attitude?.cameraBank ?? bank;
+      this.cockpitPose.cameraBank = cameraBank(attitudeBank, 'cockpit', phone, reduceMotion,
+        spinning, this.cockpitHorizonLock);
+      rearBank = state.view === 'cockpit' ? this.cockpitPose.cameraBank
+        : cameraBank(attitudeBank, 'cockpit', phone, reduceMotion, spinning, false);
     } else {
       if (delta < 0 || reduceMotion) this.boostLens = 0;
       const target = reduceMotion ? 0 : Number(state.boosting);

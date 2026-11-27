@@ -35,18 +35,30 @@ test('the boost lens eases to full in 15 ticks and returns to level in 30 ticks'
   assert.equal(feel.easedBoost(0.45, false, 0), 0.45);
 });
 
-test('bank mapping uses the full cockpit attitude, a partial chase roll and a phone cap', () => {
+test('bank mapping damps cockpit roll by default while full roll can be opted back in', () => {
   const bank = -85 * degree;
-  close(feel.cameraBank(bank, 'cockpit', false), bank);
+  close(feel.cameraBank(bank, 'cockpit', false), bank * 0.15);
+  close(feel.cameraBank(bank, 'cockpit', false, false, false, false), bank);
   close(feel.cameraBank(bank, 'chase', false), bank * 0.15);
-  for (const view of ['cockpit', 'chase']) {
-    const capped = view === 'cockpit' ? 25 * degree : -bank * 0.15;
-    close(feel.cameraBank(bank, view, true), -capped);
-    close(feel.cameraBank(-bank, view, true), capped);
-    close(feel.cameraBank(bank, view, false, true), 0);
-  }
+  close(feel.cameraBank(Math.PI / 2, 'cockpit', false), Math.PI / 2 * 0.15);
+  close(feel.cameraBank(Math.PI / 2, 'cockpit', false, false, true), 0.15);
+  close(feel.cameraBank(Math.PI / 2, 'cockpit', false, false, true, false), Math.PI / 2);
+  for (const view of ['cockpit', 'chase']) close(feel.cameraBank(bank, view, false, true), 0);
+  close(feel.cameraBank(bank, 'cockpit', true, false, false, false), -25 * degree);
+  close(feel.cameraBank(-bank, 'cockpit', true, false, false, false), 25 * degree);
   close(feel.cameraBank(2 * Math.PI, 'chase', false, false, true), 0);
   close(feel.cameraBank(2 * Math.PI, 'cockpit', true, false, true), 0);
+});
+
+test('screen shake scales hit shock and reaches zero at the off setting', () => {
+  const sample = { tick: 10, boosting: false, boostTicks: 0, speed: 0 };
+  for (const [scale, expected] of [[1, 0.86], [0.5, 0.43], [0, 0]]) {
+    const motion = new feel.FlightMotion();
+    motion.shakeScale = scale;
+    motion.shock('hit', 10);
+    motion.advance(sample, 0, 0, false, false, false);
+    close(motion.shake, expected);
+  }
 });
 
 test('chase yaw crosses the signed angle boundary on the short arc', () => {
@@ -77,7 +89,7 @@ test('chase roll eases in and back out while a same-tick phone resize applies th
   close(motion.chaseBank, 0, 0.001);
 });
 
-test('shake decays at 4.5/s and reduced motion clears both boost and camera movement', () => {
+test('shake decays at 4.5/s and reduced motion keeps tremble off while shake scale stays explicit', () => {
   close(feel.shockEnvelope(1, 0.25), Math.exp(-4.5 * 0.25));
   const motion = new feel.FlightMotion();
   const stage = { tick: 90, speed: BOOST_SPEED, boosting: true, boostTicks: 30 };
@@ -87,8 +99,15 @@ test('shake decays at 4.5/s and reduced motion clears both boost and camera move
   assert.equal(motion.boost, 1);
   assert.ok(Math.hypot(motion.shake, motion.shakeVertical) > 0.02);
   close(motion.chaseBank, -1.4 * 0.15);
+  motion.shakeScale = 0;
   motion.advance(stage, 0.6, -1.4, false, false, true);
   assert.deepEqual([motion.boost, motion.shake, motion.shakeVertical, motion.chaseBank], [0, 0, 0, 0]);
+
+  const explicit = new feel.FlightMotion();
+  explicit.shock('parry', stage.tick);
+  explicit.advance(stage, 0.6, -1.4, false, false, true);
+  assert.equal(explicit.boost, 0);
+  assert.ok(Math.abs(explicit.shake) > 0.5);
   assert.deepEqual(stage, original);
 });
 

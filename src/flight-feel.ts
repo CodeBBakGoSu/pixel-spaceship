@@ -16,11 +16,12 @@ export function easedBoost(from: number, active: boolean, elapsed: number): numb
 }
 
 export function cameraBank(roll: number, view: 'chase' | 'cockpit', phone: boolean, reducedMotion = false,
-  spinning = false): number {
+  spinning = false, cockpitHorizonLock = true): number {
   if (reducedMotion) return 0;
+  const horizonLocked = view === 'cockpit' && cockpitHorizonLock;
   // Keep the following view upright again when a complete barrel roll ends.
-  const follow = spinning && (phone || view === 'chase') ? Math.sin(roll) : roll;
-  const amount = view === 'chase' ? follow * FLIGHT_FEEL.chaseBankScale : follow;
+  const follow = spinning && (phone || view === 'chase' || horizonLocked) ? Math.sin(roll) : roll;
+  const amount = view === 'chase' || horizonLocked ? follow * FLIGHT_FEEL.chaseBankScale : follow;
   const limit = FLIGHT_FEEL.phoneBankLimit;
   return phone ? clamp(amount, -limit, limit) : amount;
 }
@@ -60,6 +61,7 @@ export class FlightMotion {
   private boostGoal = false;
   private shockAt = 0;
   private shockAmplitude = 0;
+  shakeScale = 1;
 
   shock(kind: Shock, tick: number, strength = 1): void {
     this.shockAmplitude = Math.max(FLIGHT_FEEL.shockSize[kind] * strength, this.shockAtTick(tick));
@@ -81,9 +83,17 @@ export class FlightMotion {
     this.chaseBank = phone ? clamp(bank, -limit, limit) : bank;
     if (flight) this.advanceAttitude(flight, speed, seconds, snap || reducedMotion, reducedMotion);
 
+    if (tick < this.shockAt) this.shockAmplitude = 0;
+    const { tremble, shockVertical } = FLIGHT_FEEL;
+    const time = tick * STEP;
+    const shock = this.shockAtTick(tick) * clamp(this.shakeScale, 0, 1);
+    const phase = (tick - this.shockAt) * STEP * FLIGHT_FEEL.shockRate;
+
     if (reducedMotion) {
-      this.boost = this.boostFrom = this.shake = this.shakeVertical = this.shockAmplitude = 0;
+      this.boost = this.boostFrom = 0;
       this.boostGoal = false;
+      this.shake = shock * Math.cos(phase);
+      this.shakeVertical = shockVertical.size * shock * Math.sin(phase * shockVertical.rate);
       return;
     }
     if (snap || this.boostGoal !== boosting) {
@@ -93,11 +103,6 @@ export class FlightMotion {
     }
     this.boost = easedBoost(this.boostFrom, this.boostGoal, (tick - this.boostAt) * STEP);
 
-    if (tick < this.shockAt) this.shockAmplitude = 0;
-    const { tremble, shockVertical } = FLIGHT_FEEL;
-    const time = tick * STEP;
-    const shock = this.shockAtTick(tick);
-    const phase = (tick - this.shockAt) * STEP * FLIGHT_FEEL.shockRate;
     const trembleSize = clamp(speed / BOOST_SPEED, 0, tremble.speedLimit) * tremble.size;
     this.shake = trembleSize * Math.sin(time * tremble.rate) + shock * Math.cos(phase);
     this.shakeVertical = tremble.sizeVertical * trembleSize * Math.sin(time * tremble.rateVertical)
